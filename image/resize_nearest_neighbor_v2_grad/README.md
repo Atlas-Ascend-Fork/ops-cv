@@ -92,5 +92,6 @@
 
 | 调用方式 | 样例代码 | 说明 |
 | :---- | :---- | :---- |
-| aclnn接口 | [test_aclnn_upsample_nearest2d_backward](../upsample_nearest2d_grad/examples/test_aclnn_upsample_nearest2d_backward.cpp) | 通过[aclnnUpsampleNearest2dBackward](../upsample_nearest2d_grad/docs/aclnnUpsampleNearest2dBackward.md)接口方式调用ResizeNearestNeighborV2Grad算子。 |
+| aclnn接口 | [test_aclnn_upsample_nearest2d_backward](examples/test_aclnn_upsample_nearest2d_backward.cpp) | 通过[aclnnUpsampleNearest2dBackward](../upsample_nearest2d_grad/docs/aclnnUpsampleNearest2dBackward.md)接口方式调用ResizeNearestNeighborV2Grad算子。 |
+| aclnn接口 | [test_aclnn_upsample_nearest1d_backward](examples/test_aclnn_upsample_nearest1d_backward.cpp) | 通过[aclnnUpsampleNearest1dBackward](../upsample_nearest2d_grad/docs/aclnnUpsampleNearest1dBackward.md)接口方式调用ResizeNearestNeighborV2Grad算子。 |
 | 图模式 | - | 通过[算子IR](op_graph/resize_nearest_neighbor_v2_grad_proto.h)构图方式调用ResizeNearestNeighborV2Grad算子。 |
