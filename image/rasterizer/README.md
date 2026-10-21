@@ -151,28 +151,28 @@
     <tr>
       <td>height</td>
       <td>输入</td>
-      <td><ul><li>表示屏幕高度。</li><li>默认值为0。</li></ul></td>
+      <td><ul><li>表示屏幕高度。</li><li>取值范围为[1,4096]。</li></ul></td>
       <td>INT64</td>
       <td>-</td>
     </tr>
     <tr>
       <td>width</td>
       <td>输入</td>
-      <td><ul><li>表示屏幕宽度。</li><li>默认值为0。</li></ul></td>
+      <td><ul><li>表示屏幕宽度。</li><li>取值范围为[1,4096]。</li></ul></td>
       <td>INT64</td>
       <td>-</td>
     </tr>
     <tr>
       <td>occlusion_truncation</td>
       <td>输入</td>
-      <td><ul><li>遮挡截断，用于计算深度阈值，此参数不生效。</li><li>默认值为0.0。</li></ul></td>
+      <td><ul><li>遮挡截断，用于计算深度阈值，此参数不生效但需要传入。</li><li>默认值为0.0，当前仅支持取值为0.0。</li></ul></td>
       <td>DOUBLE</td>
       <td>-</td>
     </tr>
     <tr>
       <td>use_depth_prior</td>
       <td>输入</td>
-      <td><ul><li>表示是否应用深度先验，此参数不生效。</li><li>默认值为0。</li></ul></td>
+      <td><ul><li>表示是否应用深度先验，此参数不生效但需要传入。</li><li>默认值为0，当前仅支持取值为0。</li></ul></td>
       <td>INT64</td>
       <td>-</td>
     </tr>
