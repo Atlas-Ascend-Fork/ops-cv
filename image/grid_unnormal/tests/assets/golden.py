@@ -80,6 +80,17 @@ def _prepare_grid_unnormal_inputs(grid_tensor, assist_tensor):
     return out_dtype, grid_compute, assist_compute
 
 
+def _grid_unnormal_native_position(grid_tensor, assist_tensor, align_corners):
+    grid_compute = grid_tensor.to(torch.float32)
+    assist_compute = assist_tensor.to(torch.float32)
+    normalized = torch.mul(torch.add(grid_compute, 1.0), 0.5)
+    if align_corners:
+        pos_base = torch.mul(normalized, torch.sub(assist_compute, 1.0))
+    else:
+        pos_base = torch.sub(torch.mul(normalized, assist_compute), 0.5)
+    return torch.floor(pos_base).to(torch.int32)
+
+
 def _grid_unnormal_golden_compute(grid_tensor, assist_tensor, align_corners):
     out_dtype, grid_compute, assist_compute = _prepare_grid_unnormal_inputs(
         grid_tensor, assist_tensor
@@ -89,15 +100,26 @@ def _grid_unnormal_golden_compute(grid_tensor, assist_tensor, align_corners):
     else:
         pos_base = ((grid_compute + 1.0) * assist_compute - 1.0) / 2.0
     floor = torch.floor(pos_base)
-    position = floor.to(torch.int32)
     diff = (pos_base - floor).to(out_dtype)
+
+    # TTK promotes fp32 golden inputs to fp64 for the continuous cross-check
+    # output. Position is a discrete output whose contract uses the native
+    # fp16/fp32 operator domain (FP32 arithmetic) before floor. Computing floor
+    # in promoted fp64 changes the adjacent integer at rounding boundaries.
+    position = _grid_unnormal_native_position(grid_tensor, assist_tensor, align_corners)
     return [diff, position]
 
 
 def _grid_unnormal_third_party_compute(grid_tensor, assist_tensor, align_corners):
-    out_dtype, grid_compute, assist_compute = _prepare_grid_unnormal_inputs(
-        grid_tensor, assist_tensor
+    # Keep the GPU benchmark implementation independent from the CPU golden.
+    out_dtype = grid_tensor.dtype
+    compute_dtype = (
+        torch.float32
+        if grid_tensor.dtype in (torch.float16, torch.bfloat16)
+        else grid_tensor.dtype
     )
+    grid_compute = grid_tensor.to(compute_dtype)
+    assist_compute = assist_tensor.to(compute_dtype)
     normalized = (grid_compute + 1.0) * 0.5
     if align_corners:
         pos_base = normalized * (assist_compute - 1.0)
