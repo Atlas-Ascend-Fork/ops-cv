@@ -598,9 +598,7 @@ REG_OP(RoiExtractor)
 * @li score_sigmoid: bool, mark of score_sigmoid. Defaults to "false"
 
 *@par Outputs:
-* @li sorted_rois: A Tensor. Must be float16. N-D with shape [N, 4].
-* @li sorted_scores: A Tensor. Must be float16. N-D with shape [N, 1].
-* @li sorted_classes: A Tensor. Must be float16. N-D with shape [N, 1] . \n
+* @li sorted_box: A Tensor. Must be float16. \n
 
 * @par Third-party framework compatibility
 * Compatible with the TensorFlow operator Unpack.
