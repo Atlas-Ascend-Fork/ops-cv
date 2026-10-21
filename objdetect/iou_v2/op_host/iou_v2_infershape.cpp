@@ -81,6 +81,9 @@ static ge::graphStatus InferShapeForIouV2(gert::InferShapeContext* context)
 static ge::graphStatus InferDataTypeForIouV2(gert::InferDataTypeContext* context)
 {
     const ge::DataType feature_dtype = context->GetInputDataType(INPUT_INDEX_BBOXES);
+    OP_CHECK_IF(context->GetInputDataType(INPUT_INDEX_GTBOXES) != feature_dtype,
+                OP_LOGE(context->GetNodeName(), "bboxes and gtboxes must have the same data type"),
+                return ge::GRAPH_FAILED);
     context->SetOutputDataType(OUTPUT_INDEX_OVERLAP, feature_dtype);
     return GRAPH_SUCCESS;
 }

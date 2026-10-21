@@ -12,6 +12,7 @@
 #include "infershape_context_faker.h"
 #include "infershape_case_executor.h"
 #include "base/registry/op_impl_space_registry_v2.h"
+#include "base/context_builder/op_infer_datatype_context_builder.h"
 
 class IouV2 : public testing::Test {
 protected:
@@ -104,6 +105,47 @@ TEST_F(IouV2, IouV2_infershape_unknown_dim_is_accepted)
          gert::InfershapeContextPara::OpAttr("eps", Ops::Cv::AnyValue::CreateFrom<float>(1.0)),
          gert::InfershapeContextPara::OpAttr("aligned", Ops::Cv::AnyValue::CreateFrom<bool>(false))});
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{2, -1}});
+}
+
+TEST_F(IouV2, IouV2_inferdatatype_rejects_mixed_input_dtype)
+{
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    const auto* opImpl = registry->GetOpImpl("IouV2");
+    ASSERT_NE(opImpl, nullptr);
+    ASSERT_NE(opImpl->infer_datatype, nullptr);
+
+    gert::OpInferDataTypeContextBuilder builder;
+    builder.OpType("IouV2").OpName("IouV2").IONum(2, 1);
+    builder.InputTensorDesc(0, ge::DT_FLOAT16, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.InputTensorDesc(1, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.OutputTensorDesc(0, ge::FORMAT_ND, ge::FORMAT_ND);
+    auto holder = builder.Build();
+    auto* context = holder.GetContext();
+    ASSERT_NE(context, nullptr);
+
+    EXPECT_EQ(opImpl->infer_datatype(context), ge::GRAPH_FAILED);
+}
+
+TEST_F(IouV2, IouV2_inferdatatype_accepts_matching_input_dtype)
+{
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    const auto* opImpl = registry->GetOpImpl("IouV2");
+    ASSERT_NE(opImpl, nullptr);
+    ASSERT_NE(opImpl->infer_datatype, nullptr);
+
+    gert::OpInferDataTypeContextBuilder builder;
+    builder.OpType("IouV2").OpName("IouV2").IONum(2, 1);
+    builder.InputTensorDesc(0, ge::DT_FLOAT16, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.InputTensorDesc(1, ge::DT_FLOAT16, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.OutputTensorDesc(0, ge::FORMAT_ND, ge::FORMAT_ND);
+    auto holder = builder.Build();
+    auto* context = holder.GetContext();
+    ASSERT_NE(context, nullptr);
+
+    EXPECT_EQ(opImpl->infer_datatype(context), ge::GRAPH_SUCCESS);
+    EXPECT_EQ(context->GetOutputDataType(0), ge::DT_FLOAT16);
 }
 
 // TEST_F(IouV2, IouV2_infershape_iof_false_case_2)
