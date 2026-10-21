@@ -65,6 +65,16 @@ static bool CheckThresholdSize(const aclFloatArray* iouThreshold, const aclFloat
     return true;
 }
 
+static bool CheckMaxOutputSize(const aclIntArray* maxOutputBoxesPerClass)
+{
+    if (maxOutputBoxesPerClass->Size() != 1) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "maxOutputBoxesPerClass size [%ld] should be equal to 1.",
+                static_cast<int64_t>(maxOutputBoxesPerClass->Size()));
+        return false;
+    }
+    return true;
+}
+
 static bool CheckDtypeValid(const aclTensor* boxes, const aclTensor* scores, const aclFloatArray* iouThreshold)
 {
     // 检查输入的数据类型是否在算子的支持列表内
@@ -134,16 +144,19 @@ static aclnnStatus CheckParams(const aclTensor* boxes, const aclTensor* scores, 
     // 2. 检查阈值数组长度
     CHECK_RET(CheckThresholdSize(iouThreshold, scoreThreshold), ACLNN_ERR_PARAM_INVALID);
 
-    // 3. 检查输入的数据类型是否在API支持的数据类型范围之内、且满足约束，需要根据api定义校验
+    // 3. 检查每类最大输出框数数组长度
+    CHECK_RET(CheckMaxOutputSize(maxOutputBoxesPerClass), ACLNN_ERR_PARAM_INVALID);
+
+    // 4. 检查输入的数据类型是否在API支持的数据类型范围之内、且满足约束，需要根据api定义校验
     CHECK_RET(CheckDtypeValid(boxes, scores, iouThreshold), ACLNN_ERR_PARAM_INVALID);
 
-    // 4. 检查输入的数据格式是否在API支持范围之内
+    // 5. 检查输入的数据格式是否在API支持范围之内
     CHECK_RET(CheckFormatValid(boxes, scores, selectedIndices), ACLNN_ERR_PARAM_INVALID);
 
-    // 5. 检查shape是否支持
+    // 6. 检查shape是否支持
     CHECK_RET(CheckShape(boxes, scores), ACLNN_ERR_PARAM_INVALID);
 
-    // 6. 检查属性数据是否合法
+    // 7. 检查属性数据是否合法
     CHECK_RET(CheckAttr(centerPointBox), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;

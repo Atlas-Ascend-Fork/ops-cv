@@ -367,6 +367,25 @@ TEST_F(l2_non_max_suppression_v6_test, case_maxoutput_invalid)
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
 
+// maxOutputBoxesPerClass 必须为单元素数组
+TEST_F(l2_non_max_suppression_v6_test, case_maxoutput_size_invalid)
+{
+    auto boxes = TensorDesc({1, 6, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto scores = TensorDesc({1, 1, 6}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto maxOutputBoxesPerClass = IntArrayDesc(vector<int64_t>{3, 999});
+    auto iouThreshold = FloatArrayDesc(vector<float>{0.5});
+    auto scoreThreshold = FloatArrayDesc(vector<float>{0.0});
+    auto out = TensorDesc({3, 3}, ACL_INT64, ACL_FORMAT_ND);
+    auto centerPointBox = 0;
+
+    auto ut = OP_API_UT(aclnnNonMaxSuppression,
+                        INPUT(boxes, scores, maxOutputBoxesPerClass, iouThreshold, scoreThreshold, centerPointBox),
+                        OUTPUT(out));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
 // 检查精度
 TEST_F(l2_non_max_suppression_v6_test, case_normal_1)
 {
