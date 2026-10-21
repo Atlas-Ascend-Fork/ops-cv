@@ -157,11 +157,9 @@ static void FillTilingData(CropTilingData* tiling, int32_t needCoreNum, int64_t 
 
 static ge::graphStatus GetWorkspaceSize(gert::TilingContext* context)
 {
-    auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
-    uint64_t sysWorkspaceSize = ascendcPlatform.GetLibApiWorkSpaceSize();
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
-    currentWorkspace[0] = static_cast<size_t>(sysWorkspaceSize);
+    currentWorkspace[0] = 0;
     return ge::GRAPH_SUCCESS;
 }
 

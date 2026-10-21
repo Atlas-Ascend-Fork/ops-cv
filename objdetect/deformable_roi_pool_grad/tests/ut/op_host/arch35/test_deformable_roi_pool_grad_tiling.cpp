@@ -37,7 +37,7 @@ protected:
     static void TearDownTestCase() { std::cout << "DeformableRoiPoolGradTiling TearDown" << std::endl; }
 };
 
-std::map<std::string, std::string> soc_version_infos = {{"Short_SoC_version", "Ascend950"}};
+static std::map<std::string, std::string> soc_version_infos = {{"Short_SoC_version", "Ascend950"}};
 
 // 构建属性列表的辅助函数
 static std::vector<gert::TilingContextPara::OpAttr> BuildAttrs(int64_t pooledH, int64_t pooledW, float spatialScale,

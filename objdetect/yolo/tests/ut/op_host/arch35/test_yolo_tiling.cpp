@@ -28,7 +28,7 @@ protected:
 
 static std::map<std::string, std::string> soc_versions_infos = {{"Short_SoC_version", "Ascend950"}};
 
-constexpr size_t YOLO_SYS_WORKSPACE_SIZE = 16777216;
+constexpr size_t YOLO_EXPECT_WORKSPACE_SIZE = 0;
 
 TEST_F(YoloTiling, yolo_v3_mode1_fp32)
 {
@@ -59,7 +59,7 @@ TEST_F(YoloTiling, yolo_v3_mode1_fp32)
         4096);                    // max tiling data size
     uint64_t expectTilingKey = 0; // YOLO_MODE_1
     string expectTilingData = "12884901889 80 169 192 528 ";
-    std::vector<size_t> expectWorkspaces = {YOLO_SYS_WORKSPACE_SIZE};
+    std::vector<size_t> expectWorkspaces = {YOLO_EXPECT_WORKSPACE_SIZE};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
@@ -88,7 +88,7 @@ TEST_F(YoloTiling, yolo_v2_mode1_fp16)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 0; // YOLO_MODE_1
     string expectTilingData = "21474836481 20 169 192 864 ";
-    std::vector<size_t> expectWorkspaces = {YOLO_SYS_WORKSPACE_SIZE};
+    std::vector<size_t> expectWorkspaces = {YOLO_EXPECT_WORKSPACE_SIZE};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
@@ -117,7 +117,7 @@ TEST_F(YoloTiling, yolo_v2_mode2_fp32)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 1; // YOLO_MODE_2
     string expectTilingData = "21474836481 20 169 192 864 ";
-    std::vector<size_t> expectWorkspaces = {YOLO_SYS_WORKSPACE_SIZE};
+    std::vector<size_t> expectWorkspaces = {YOLO_EXPECT_WORKSPACE_SIZE};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
@@ -146,7 +146,7 @@ TEST_F(YoloTiling, yolo_v2_mode3_fp16)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 2; // YOLO_MODE_3
     string expectTilingData = "21474836481 20 169 192 864 ";
-    std::vector<size_t> expectWorkspaces = {YOLO_SYS_WORKSPACE_SIZE};
+    std::vector<size_t> expectWorkspaces = {YOLO_EXPECT_WORKSPACE_SIZE};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
@@ -175,7 +175,7 @@ TEST_F(YoloTiling, yolo_v2_mode4_fp32)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 3; // YOLO_MODE_4
     string expectTilingData = "21474836481 20 169 192 864 ";
-    std::vector<size_t> expectWorkspaces = {YOLO_SYS_WORKSPACE_SIZE};
+    std::vector<size_t> expectWorkspaces = {YOLO_EXPECT_WORKSPACE_SIZE};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 

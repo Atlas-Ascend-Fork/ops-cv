@@ -311,11 +311,9 @@ static void FillTilingData(ExtractImagePatchesTilingData* t, const ParsedInput& 
 
 static ge::graphStatus GetWorkspaceSize(gert::TilingContext* context)
 {
-    auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
-    uint64_t sysWorkspaceSize = ascendcPlatform.GetLibApiWorkSpaceSize();
     size_t* currentWorkspace = context->GetWorkspaceSizes(WORKSPACE_NUM);
     OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
-    currentWorkspace[IDX_0] = static_cast<size_t>(sysWorkspaceSize);
+    currentWorkspace[IDX_0] = 0;
     return ge::GRAPH_SUCCESS;
 }
 

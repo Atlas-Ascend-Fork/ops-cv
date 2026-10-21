@@ -35,7 +35,7 @@ protected:
     static void TearDownTestCase() { std::cout << "RoiAlignRotatedGradTiling TearDown" << std::endl; }
 };
 
-std::map<std::string, std::string> soc_version_infos = {{"Short_SoC_version", "Ascend950"}};
+static std::map<std::string, std::string> soc_version_infos = {{"Short_SoC_version", "Ascend950"}};
 
 // 用例1：常规场景 float32（唯一 dtype 组合）
 // x_grad[10,2,2,6] + rois[6,10] + y_grad_shape=[5,8,8,6]，pooled 2x2，scale 0.0625，ratio 1，aligned/clockwise 开

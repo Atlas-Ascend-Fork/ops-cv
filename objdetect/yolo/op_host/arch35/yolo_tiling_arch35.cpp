@@ -263,12 +263,10 @@ static ge::graphStatus YoloTilingFunc(gert::TilingContext* context)
     context->SetBlockDim(static_cast<uint32_t>(needCoreNum));
     context->SetTilingKey(GET_TPL_TILING_KEY(static_cast<uint64_t>(yoloMode)));
 
-    // Workspace (must include system workspace)
-    auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
-    uint64_t sysWorkspaceSize = ascendcPlatform.GetLibApiWorkSpaceSize();
+    // Workspace
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
-    currentWorkspace[0] = static_cast<size_t>(sysWorkspaceSize);
+    currentWorkspace[0] = 0;
 
     // LocalMemory (DCache + dynamic UB)
     OP_CHECK_IF(ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE,

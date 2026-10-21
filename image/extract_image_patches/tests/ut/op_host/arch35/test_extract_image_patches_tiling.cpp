@@ -38,7 +38,7 @@ TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_valid_fp32)
          gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
         &compileInfo);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, 4, "1 16 16 8 16 4 4 2 4 2 3 3 1 1 1 1 0 0 9 3 1 1 1024 16 ",
-                    {4294967295});
+                    {0});
 }
 
 TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_same_fp16)
@@ -54,7 +54,7 @@ TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_same_fp16)
          gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("SAME"))},
         &compileInfo);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, 4, "1 16 16 8 16 4 4 2 4 2 4 4 2 2 1 1 0 0 16 4 1 1 1024 16 ",
-                    {4294967295});
+                    {0});
 }
 
 TEST_F(ExtractImagePatchesTiling, extract_image_patches_nchw_valid_fp32)
@@ -70,7 +70,7 @@ TEST_F(ExtractImagePatchesTiling, extract_image_patches_nchw_valid_fp32)
          gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
         &compileInfo);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, 5,
-                    "1 144 144 36 144 12 12 3 6 3 9 10 2 3 2 1 0 0 180 10 1 90 1024 144 ", {4294967295});
+                    "1 144 144 36 144 12 12 3 6 3 9 10 2 3 2 1 0 0 180 10 1 90 1024 144 ", {0});
 }
 
 TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_dilation_fp32)
@@ -86,5 +86,5 @@ TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_dilation_fp32)
          gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
         &compileInfo);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, 4,
-                    "1 36 36 12 36 9 4 3 4 2 5 5 1 1 2 2 0 0 25 5 1 1 1024 36 ", {4294967295});
+                    "1 36 36 12 36 9 4 3 4 2 5 5 1 1 2 2 0 0 25 5 1 1 1024 36 ", {0});
 }
