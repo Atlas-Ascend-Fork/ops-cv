@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 # ---------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of 
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, 
-# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. 
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 # ---------------------------------------------------------------------------------------------------------
 
@@ -24,7 +24,7 @@ def merge_ini_files(ini_files, output_file):
     if not ini_files:
         print("[ERROR] No ini files input.")
         return
-    
+
     merged_config = configparser.RawConfigParser()
     merged_config.optionxform = str
 
@@ -36,7 +36,7 @@ def merge_ini_files(ini_files, output_file):
         try:
             temp_config = configparser.RawConfigParser()
             temp_config.optionxform = str
-            temp_config.read(ini_file, encoding='utf-8')
+            temp_config.read(ini_file, encoding="utf-8")
 
             for section in temp_config.sections():
                 if not merged_config.has_section(section):
@@ -44,13 +44,15 @@ def merge_ini_files(ini_files, output_file):
                     for key, value in temp_config.items(section):
                         merged_config.set(section, key, value)
                 else:
-                    print(f"[Info] ini file {ini_file} section {section} has existed, skip")
+                    print(
+                        f"[Info] ini file {ini_file} section {section} has existed, skip"
+                    )
         except Exception as e:
-            print(f"[ERROR] read ini file {ini_file} failed, skip")
+            print(f"[ERROR] read ini file {ini_file} failed, skip: {e}")
             continue
 
     try:
-        with open(output_file, "w", encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             merged_config.write(f)
         print(f"[Info] ini files success merged to {output_file}")
     except Exception as e:
@@ -59,16 +61,17 @@ def merge_ini_files(ini_files, output_file):
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument("argv", nargs='+')
+    parser.add_argument("argv", nargs="+")
     parser.add_argument("--output-file", nargs=1, default=None)
     return parser.parse_args(argv)
+
 
 if __name__ == "__main__":
     args = parse_args(sys.argv)
 
     if len(args.argv) <= 1:
         raise RuntimeError("ini files must greater equal than 1")
-    
+
     ini_files = args.argv[1:]
     output_file = args.output_file[0]
     merge_ini_files(ini_files, output_file)
