@@ -272,7 +272,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
 ## 约束说明
 
 - 确定性计算：
-  - aclnnRoiAlignV2Backward默认非确定性实现，支持通过aclrtCtxSetSysParamOpt开启确定性。
+  - aclnnRoiAlignV2Backward默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。
 
 ## 调用示例
 

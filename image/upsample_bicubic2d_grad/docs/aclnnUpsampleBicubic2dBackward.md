@@ -348,7 +348,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
 
 - 确定性计算：
 
-  aclnnUpsampleBicubic2dBackward默认非确定性实现，支持通过aclrtCtxSetSysParamOpt开启确定性。当满足如下条件时不支持确定性计算：
+  aclnnUpsampleBicubic2dBackward默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。当满足如下条件时不支持确定性计算：
   - $inputSize\_W$ > 130000
   - $inputSize\_H$/$outputSize\_H$ >=50
   - $inputSize\_W$/$outputSize\_W$ >=50 && $inputSize\_N$ \* $inputSize\_C$ \* $inputSize\_H$ > $inputSize\_W$ \* 0.5

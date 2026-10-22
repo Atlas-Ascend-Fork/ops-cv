@@ -525,7 +525,7 @@ aclnnStatus aclnnGridSampler2DBackward(
 ## 约束说明
 
 - 确定性计算：
-  - aclnnGridSampler2DBackward默认非确定性实现，支持通过aclrtCtxSetSysParamOpt开启确定性。确定性实现需同时满足如下条件：
+  - aclnnGridSampler2DBackward默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。确定性实现需同时满足如下条件：
     - 输入和输出的数据类型不为DOUBLE。
     - 输入和输出的C轴取值小于等于2048。
 

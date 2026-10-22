@@ -272,7 +272,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
 ## 约束说明
 
 - 确定性计算：
-  - aclnnRoiAlignV2Backward默认非确定性实现，支持通过aclrtCtxSetSysParamOpt开启确定性。
+  - aclnnRoiAlignV2Backward默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。
 - boxes：坐标需满足 `0 <= x1 <= x2`、`0 <= y1 <= y2`，由调用方保证；反转框（`x1 > x2` 或 `y1 > y2`）不报错，对应 ROI 对 `gradInput` 的贡献为全 0。
 - inputShape：B、C、inputHeight、inputWidth 均需大于 0。
 - spatialScale：需为有限值且大于 0。

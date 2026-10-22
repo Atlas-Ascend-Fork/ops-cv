@@ -363,7 +363,7 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
   - <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>、<term>Atlas推理系列产品</term>、<term>Atlas训练系列产品</term>：aclnnUpsampleBilinear2dBackward默认确定性实现。
   <!-- end id9 -->
   <!-- npu="950" id10 -->
-  - <term>Ascend 950PR&950DT系列产品</term>：aclnnUpsampleBilinear2dBackward默认非确定性实现，支持通过aclrtCtxSetSysParamOpt开启确定性。
+  - <term>Ascend 950PR&950DT系列产品</term>：aclnnUpsampleBilinear2dBackward默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。
   <!-- end id10 -->
 
 ## 调用示例

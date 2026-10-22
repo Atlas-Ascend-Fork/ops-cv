@@ -347,7 +347,7 @@ aclnnStatus aclnnUpsampleBicubic2dAAGrad(
   - <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>：aclnnUpsampleBicubic2dAAGrad默认确定性实现。
   <!-- end id8 -->
   <!-- npu="950" id9 -->
-  - <term>Ascend 950PR&950DT系列产品</term>：aclnnUpsampleBicubic2dAAGrad默认非确定性实现，支持通过aclrtCtxSetSysParamOpt开启确定性。
+  - <term>Ascend 950PR&950DT系列产品</term>：aclnnUpsampleBicubic2dAAGrad默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。
   <!-- end id9 -->
 
 ## 调用示例

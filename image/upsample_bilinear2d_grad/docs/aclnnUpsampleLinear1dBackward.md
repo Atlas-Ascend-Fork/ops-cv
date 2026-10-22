@@ -347,7 +347,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
   - <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>、<term>Atlas训练系列产品</term>：aclnnUpsampleLinear1dBackward默认确定性实现。
   <!-- end id10 -->
   <!-- npu="950" id11 -->
-  - <term>Ascend 950PR&950DT系列产品</term>：aclnnUpsampleLinear1dBackward默认非确定性实现，支持通过aclrtCtxSetSysParamOpt开启确定性。
+  - <term>Ascend 950PR&950DT系列产品</term>：aclnnUpsampleLinear1dBackward默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。
   <!-- end id11 -->
 
 ## 调用示例
