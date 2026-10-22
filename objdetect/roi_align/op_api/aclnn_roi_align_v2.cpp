@@ -91,10 +91,11 @@ static bool CheckShape(const aclTensor* self, const aclTensor* boxes, const aclT
     auto const& selfShape = self->GetViewShape();
     auto const& boxesShape = boxes->GetViewShape();
     auto const& outShape = out->GetViewShape();
-    if (selfShape.GetDim(DIM_ZERO) == DIM_ZERO || selfShape.GetDim(DIM_TWO) == DIM_ZERO ||
-        selfShape.GetDim(DIM_THREE) == DIM_ZERO) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "self shape [%ld,%ld,%ld,%ld] contains 0 in N/H/W", selfShape.GetDim(DIM_ZERO),
-                selfShape.GetDim(DIM_ONE), selfShape.GetDim(DIM_TWO), selfShape.GetDim(DIM_THREE));
+    if (selfShape.GetDim(DIM_ZERO) == DIM_ZERO || selfShape.GetDim(DIM_ONE) == DIM_ZERO ||
+        selfShape.GetDim(DIM_TWO) == DIM_ZERO || selfShape.GetDim(DIM_THREE) == DIM_ZERO) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "self shape [%ld,%ld,%ld,%ld] contains 0 in N/C/H/W",
+                selfShape.GetDim(DIM_ZERO), selfShape.GetDim(DIM_ONE), selfShape.GetDim(DIM_TWO),
+                selfShape.GetDim(DIM_THREE));
         return false;
     }
     if (boxesShape.GetDim(DIM_ONE) != DIM_FIVE) { // 5: boxes dim 1

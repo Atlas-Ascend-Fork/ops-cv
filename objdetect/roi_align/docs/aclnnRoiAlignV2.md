@@ -84,7 +84,7 @@ aclnnStatus aclnnRoiAlignV2(
       <td class="tg-0pky">必须与boxes、out数据类型一致。</td>
       <td class="tg-0pky">FLOAT、FLOAT16</td>
       <td class="tg-0pky">NCHW</td>
-      <td class="tg-0pky">4维，为（B, C, inputHeight, inputWidth）<br>表示输入张量一个batch内有B张图像，每个图像有C个尺寸为inputHeight * inputWidth的特征图。<br>B、inputHeight、inputWidth不支持0维。</td>
+      <td class="tg-0pky">4维，为（B, C, inputHeight, inputWidth）<br>表示输入张量一个batch内有B张图像，每个图像有C个尺寸为inputHeight * inputWidth的特征图。<br>B、C、inputHeight、inputWidth不支持0维。</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
@@ -262,6 +262,7 @@ aclnnStatus aclnnRoiAlignV2(
 
 - 确定性计算：
   - aclnnRoiAlignV2默认确定性实现。
+- self：B、C、inputHeight、inputWidth 均不支持 0 维。
 
 ## 调用示例
 
