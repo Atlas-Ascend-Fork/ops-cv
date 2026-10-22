@@ -9,6 +9,7 @@
  */
 #include "aclnn_roi_align_v2_backward.h"
 #include "roi_align_grad.h"
+#include <cmath>
 #include "aclnn_kernels/contiguous.h"
 #include "aclnn_kernels/transdata.h"
 #include "aclnn_kernels/cast.h"
@@ -85,6 +86,12 @@ static bool CheckInputShape(const aclTensor* gradOutput, const aclTensor* boxes,
         OP_LOGE(ACLNN_ERR_PARAM_INVALID, "inputShape should contain 4 ints, but got %lu", inputShape->Size());
         return false;
     }
+    for (size_t i = 0; i < inputShape->Size(); ++i) {
+        if ((*inputShape)[i] <= 0) {
+            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "inputShape[%zu] [%ld] should be greater than 0", i, (*inputShape)[i]);
+            return false;
+        }
+    }
     if (boxesShape.GetDim(DIM_ZERO) != gradOutputShape.GetDim(DIM_ZERO)) {
         OP_LOGE(ACLNN_ERR_PARAM_INVALID, "boxes shape dim0 [%ld] and gradOutput shape dim0 [%ld] should be equal",
                 boxesShape.GetDim(DIM_ZERO), gradOutputShape.GetDim(DIM_ZERO));
@@ -133,8 +140,8 @@ static bool CheckAttr(int64_t samplingRatio, float spatialScale)
         OP_LOGE(ACLNN_ERR_PARAM_INVALID, "samplingRatio [%ld] should be greater than or equal to 0", samplingRatio);
         return false;
     }
-    if (spatialScale <= std::numeric_limits<float>::min()) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "spatialScale [%f] should be greater than 0", spatialScale);
+    if (!std::isfinite(spatialScale) || spatialScale <= 0.0f) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "spatialScale [%f] should be finite and greater than 0", spatialScale);
         return false;
     }
     return true;
