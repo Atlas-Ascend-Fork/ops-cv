@@ -10,6 +10,7 @@
 
 #include "aclnn_roi_align.h"
 #include "roi_align.h"
+#include <cmath>
 #include "aclnn_kernels/contiguous.h"
 #include "aclnn_kernels/transdata.h"
 #include "aclnn_kernels/cast.h"
@@ -130,8 +131,8 @@ static bool CheckAttr(const char* mode, int samplingRatio, float spatialScale)
         OP_LOGE(ACLNN_ERR_PARAM_INVALID, "samplingRatio [%d] should be greater than or equal to 0", samplingRatio);
         return false;
     }
-    if (spatialScale <= 0) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "spatialScale [%f] should be greater than 0", spatialScale);
+    if (!std::isfinite(spatialScale) || spatialScale <= 0.0f) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "spatialScale [%f] should be finite and greater than 0", spatialScale);
         return false;
     }
     return true;

@@ -102,7 +102,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">batchIndices（aclTensor*）</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">表示每batch对应图像的索引。</td>
-      <td class="tg-0lax">-</td>
+      <td class="tg-0lax">元素需满足 0 &lt;= v &lt; self.shape[0]，由调用方保证；算子不对索引取值做运行时校验。</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">ND</td>
       <td class="tg-0lax">1维，为(numRois,)</td>
@@ -245,7 +245,7 @@ aclnnStatus aclnnRoiAlign(
       <td>samplingRatio需大于等于0。</td>
     </tr>
     <tr>
-      <td>spatialScale需大于0。</td>
+      <td>spatialScale需为有限值且大于0。</td>
     </tr>
   </tbody>
   </table>
@@ -297,6 +297,8 @@ aclnnStatus aclnnRoiAlign(
 
 - 确定性计算：
   - aclnnRoiAlign默认确定性实现。
+- batchIndices：每个元素需满足 `0 <= v < self.shape[0]`，由调用方保证合法；算子不对索引取值做运行时校验。
+- spatialScale：需为有限值且大于 0。
 
 ## 调用示例
 
