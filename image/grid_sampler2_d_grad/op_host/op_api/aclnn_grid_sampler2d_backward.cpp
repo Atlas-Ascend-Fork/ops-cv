@@ -60,10 +60,12 @@ static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST_910B = {
 static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST = {op::DataType::DT_FLOAT, op::DataType::DT_FLOAT16,
                                                                        op::DataType::DT_DOUBLE};
 
+static inline bool Is960SocVersion(const NpuArch curArch) { return curArch == NpuArch::DAV_9201; }
+
 static inline bool CheckSocVersionGe910B(void)
 {
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
-    return curArch == NpuArch::DAV_2201 || IsRegBase(curArch);
+    return curArch == NpuArch::DAV_2201 || Is960SocVersion(curArch) || IsRegBase(curArch);
 }
 
 static inline const std::initializer_list<op::DataType>& GetDtypeSupportList()
@@ -184,11 +186,11 @@ static bool CheckDtypeAndChannelCanTranspose(const aclTensor* input, int64_t pad
         deterministicValue = 0;
         OP_LOGD("Unable to get system param deterministic = %ld.", deterministicValue);
     }
-    bool regbaseTranspose = (curArch == NpuArch::DAV_3510) && input->GetDataType() == op::DataType::DT_FLOAT &&
-                            deterministicValue == 0 &&
+    bool regbaseTranspose = (curArch == NpuArch::DAV_3510 || Is960SocVersion(curArch)) &&
+                            input->GetDataType() == op::DataType::DT_FLOAT && deterministicValue == 0 &&
                             (channel >= REGBASE_MAX_CHANNEL_NUM && paddingMode == BORDER ||
                              channel >= REGBASE_BIG_CHANNEL_NUM && paddingMode == REFLECTION);
-    bool transposeArch = curArch != NpuArch::DAV_1001 && curArch != NpuArch::DAV_3510;
+    bool transposeArch = curArch != NpuArch::DAV_1001 && curArch != NpuArch::DAV_3510 && !Is960SocVersion(curArch);
     return (input->GetDataType() != op::DataType::DT_DOUBLE && transposeArch || regbaseTranspose) &&
            channel <= MAX_CHANNEL_SIZE;
 }
@@ -313,7 +315,8 @@ aclnnStatus aclnnGridSampler2DBackwardGetWorkspaceSize(const aclTensor* gradOutp
             gridContiguous = l0op::Cast(gridContiguous, op::DataType::DT_FLOAT, uniqueExecutor.get());
             CHECK_RET(gridContiguous != nullptr, ACLNN_ERR_INNER_NULLPTR);
         }
-        if (curArch == NpuArch::DAV_3510 && input->GetDataType() != op::DataType::DT_DOUBLE) {
+        if ((curArch == NpuArch::DAV_3510 || Is960SocVersion(curArch)) &&
+            input->GetDataType() != op::DataType::DT_DOUBLE) {
             gridSampler2DBackwardOut = l0op::GridSamplerGrad(gradOutputContiguous, inputContiguous, gridContiguous,
                                                              interpolationMode, paddingMode, alignCorners,
                                                              uniqueExecutor.get());
