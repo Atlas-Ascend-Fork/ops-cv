@@ -73,6 +73,11 @@ static ge::graphStatus CheckParam(gert::TilingContext* context, const gert::Stor
     OP_CHECK_IF(vShape->GetStorageShape().GetDim(IDX_1) != DIM_VAL4,
                 OP_LOGE(context, "dim1 of v should be 4, please check"), return ge::GRAPH_FAILED);
 
+    OP_CHECK_IF(vShape->GetStorageShape().GetDim(IDX_0) < MIN_SHAPE_VALUE ||
+                    fShape->GetStorageShape().GetDim(IDX_0) < MIN_SHAPE_VALUE,
+                OP_LOGE(context, "numVertices and numFaces should be greater than 0, please check"),
+                return ge::GRAPH_FAILED);
+
     OP_CHECK_IF(
         *height > MAX_SHAPE_VALUE || *width > MAX_SHAPE_VALUE || *height < MIN_SHAPE_VALUE || *width < MIN_SHAPE_VALUE,
         OP_LOGE(context, "height/width should be no greater than 4096 and greater than 0, please check"),

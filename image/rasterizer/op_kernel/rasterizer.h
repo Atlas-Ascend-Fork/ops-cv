@@ -31,7 +31,6 @@ constexpr uint32_t PIXEL_COORDINATE_DIM = 2;
 constexpr uint32_t BARYCENTRIC_COORDINATE_DIM = 3;
 constexpr int32_t NUM_BIT_UINT8 = 8;
 constexpr int32_t LOGIC_COUNT = NUM_PIXEL / NUM_BIT_UINT8 * sizeof(uint8_t) / sizeof(uint16_t);
-constexpr float MAGN = static_cast<float>(2 << 17);
 constexpr size_t RESERVE_SIZE = 64;
 
 template <typename T>
@@ -408,10 +407,6 @@ __aicore__ inline void Rasterizer<T>::CalcPixelDepth(T z0, T z1, T z2, int32_t c
     Muls(signedAreaTempLocal, baryCoLocal[NUM_PIXEL * 2], z2, count);
     PipeBarrier<PIPE_V>();
     Add(pixelDepthLocal, pixelDepthLocal, signedAreaTempLocal, count);
-    PipeBarrier<PIPE_V>();
-    Muls(pixelDepthLocal, pixelDepthLocal, MAGN, count);
-    PipeBarrier<PIPE_V>();
-    Cast(pixelDepthLocal, pixelDepthLocal, RoundMode::CAST_TRUNC, count);
 }
 
 template <typename T>
