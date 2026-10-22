@@ -111,6 +111,19 @@ TEST_F(l2_upsamplenearest1dv2_test, l2_upsamplenearest1dv2_test_size_valid)
     EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
 }
 
+// outputSize must contain exactly one element
+TEST_F(l2_upsamplenearest1dv2_test, l2_upsamplenearest1dv2_test_output_size_extra_element)
+{
+    auto selfDesc = TensorDesc({1, 1, 2}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto outDesc = TensorDesc({1, 1, 6}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto sizeDesc = IntArrayDesc(std::vector<int64_t>{6, 99});
+    float scaleL = -99.0;
+    auto ut = OP_API_UT(aclnnUpsampleNearest1dV2, INPUT(selfDesc, sizeDesc, scaleL), OUTPUT(outDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
 // invalid dtype int32
 TEST_F(l2_upsamplenearest1dv2_test, l2_upsamplenearest1dv2_test_dtype_int32)
 {

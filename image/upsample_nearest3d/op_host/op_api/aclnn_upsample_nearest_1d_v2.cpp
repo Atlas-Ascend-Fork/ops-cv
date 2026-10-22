@@ -85,8 +85,7 @@ static bool CheckDtypeEqual(const aclTensor* self, const aclTensor* out)
 static bool CheckShape(const aclTensor* self, const aclTensor* out, const aclIntArray* outputSize)
 {
     uint64_t size = outputSize->Size();
-    OP_CHECK(size > ZERO,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "The size of outputSize should be greater than 0, but got %zu", size),
+    OP_CHECK(size == ONE, OP_LOGE(ACLNN_ERR_PARAM_INVALID, "The size of outputSize should be 1, but got %zu", size),
              return false);
     auto outShape = out->GetViewShape();
     if (self->GetViewShape().GetDimNum() != THREEDIMS) {
