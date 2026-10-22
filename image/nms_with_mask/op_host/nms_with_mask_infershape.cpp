@@ -47,6 +47,25 @@ static graphStatus InferShape4NMSWithMask(gert::InferShapeContext* context)
     return ge::GRAPH_SUCCESS;
 }
 
-IMPL_OP_INFERSHAPE(NMSWithMask).InferShape(InferShape4NMSWithMask);
+static ge::graphStatus InferDataType4NMSWithMask(gert::InferDataTypeContext* context)
+{
+    OP_LOGD(context->GetNodeName(), "Begin to do NMSWithMaskInferDataType");
+    const ge::DataType inputDtype = context->GetInputDataType(0);
+    constexpr size_t outputNum = 3;
+    for (size_t i = 0; i < outputNum; i++) {
+        if (i == 0) {
+            context->SetOutputDataType(i, inputDtype);
+        } else if (i == 1) {
+            context->SetOutputDataType(i, ge::DT_INT32);
+        } else {
+            context->SetOutputDataType(i, ge::DT_UINT8);
+        }
+    }
+
+    OP_LOGD(context->GetNodeName(), "End to do NMSWithMaskInferDataType");
+    return ge::GRAPH_SUCCESS;
+}
+
+IMPL_OP_INFERSHAPE(NMSWithMask).InferShape(InferShape4NMSWithMask).InferDataType(InferDataType4NMSWithMask);
 // ---------------- NMSWithMask Op END---------------------
 } //  namespace ops
