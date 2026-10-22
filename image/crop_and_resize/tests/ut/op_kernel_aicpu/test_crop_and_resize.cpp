@@ -18,8 +18,10 @@
 #include "utils/aicpu_read_file.h"
 #undef private
 #undef protected
+#include <cmath>
 #include <fstream>
 #include <limits>
+#include <vector>
 #include "Eigen/Core"
 
 using namespace std;
@@ -752,4 +754,135 @@ TEST_F(TEST_CropAndResize_UTest, CropAndResizeKernel_BilinearV2_SmallBox)
     EXPECT_EQ(ctx.Init(nodeDef.get()), KERNEL_STATUS_OK);
     uint32_t ret = CpuKernelRegister::Instance().RunCpuKernel(ctx);
     EXPECT_EQ(ret, KERNEL_STATUS_OK);
+}
+
+TEST_F(TEST_CropAndResize_UTest, CropAndResizeKernel_BilinearV2_FullFrame)
+{
+    float inputs[1][4][4][1] = {{{{1.0f}, {2.0f}, {3.0f}, {4.0f}},
+                                 {{5.0f}, {6.0f}, {7.0f}, {8.0f}},
+                                 {{9.0f}, {10.0f}, {11.0f}, {12.0f}},
+                                 {{13.0f}, {14.0f}, {15.0f}, {16.0f}}}};
+    float boxes[1][4] = {{0.0f, 0.0f, 1.0f, 1.0f}};
+    int32_t box_index[1] = {0};
+    int32_t crop_size[2] = {2, 2};
+    float output[1][2][2][1] = {};
+
+    auto nodeDef = CpuKernelUtils::CreateNodeDef();
+    nodeDef->SetOpType("CropAndResize");
+
+    auto method = CpuKernelUtils::CreateAttrValue();
+    method->SetString("bilinear_v2");
+    nodeDef->AddAttrs("method", method.get());
+    auto extrapolation_value = CpuKernelUtils::CreateAttrValue();
+    extrapolation_value->SetFloat(-1.0f);
+    nodeDef->AddAttrs("extrapolation_value", extrapolation_value.get());
+
+    auto input = nodeDef->AddInputs();
+    input->GetTensorShape()->SetDimSizes({1, 4, 4, 1});
+    input->SetDataType(DT_FLOAT);
+    input->SetData(inputs);
+    input->SetDataSize(sizeof(inputs));
+
+    auto boxesInput = nodeDef->AddInputs();
+    boxesInput->GetTensorShape()->SetDimSizes({1, 4});
+    boxesInput->SetDataType(DT_FLOAT);
+    boxesInput->SetData(boxes);
+    boxesInput->SetDataSize(sizeof(boxes));
+
+    auto boxIndexInput = nodeDef->AddInputs();
+    boxIndexInput->GetTensorShape()->SetDimSizes({1});
+    boxIndexInput->SetDataType(DT_INT32);
+    boxIndexInput->SetData(box_index);
+    boxIndexInput->SetDataSize(sizeof(box_index));
+
+    auto cropSizeInput = nodeDef->AddInputs();
+    cropSizeInput->GetTensorShape()->SetDimSizes({2});
+    cropSizeInput->SetDataType(DT_INT32);
+    cropSizeInput->SetData(crop_size);
+    cropSizeInput->SetDataSize(sizeof(crop_size));
+
+    auto outputTensor = nodeDef->AddOutputs();
+    outputTensor->GetTensorShape()->SetDimSizes({1, 2, 2, 1});
+    outputTensor->SetDataType(DT_FLOAT);
+    outputTensor->SetData(output);
+    outputTensor->SetDataSize(sizeof(output));
+
+    CpuKernelContext ctx(DEVICE);
+    ASSERT_EQ(ctx.Init(nodeDef.get()), KERNEL_STATUS_OK);
+    EXPECT_EQ(CpuKernelRegister::Instance().RunCpuKernel(ctx), KERNEL_STATUS_OK);
+
+    EXPECT_FLOAT_EQ(output[0][0][0][0], 3.5f);
+    EXPECT_FLOAT_EQ(output[0][0][1][0], 5.5f);
+    EXPECT_FLOAT_EQ(output[0][1][0][0], 11.5f);
+    EXPECT_FLOAT_EQ(output[0][1][1][0], 13.5f);
+}
+
+TEST_F(TEST_CropAndResize_UTest, CropAndResizeKernel_BilinearV2_IntegerBoundaryExtrapolation)
+{
+    constexpr int32_t kCropSize = 4096;
+    constexpr int64_t kImageLongSide = 16385;
+    constexpr int32_t kBoundaryOutput = 1024;
+    const float beyondOne = std::nextafter(1.0f, 2.0f);
+
+    for (bool vertical : {true, false}) {
+        int64_t imageHeight = vertical ? kImageLongSide : 1;
+        int64_t imageWidth = vertical ? 1 : kImageLongSide;
+        std::vector<float> image(static_cast<size_t>(imageHeight * imageWidth), 7.0f);
+        std::vector<float> output(kCropSize, 0.0f);
+        float boxes[1][4] = {};
+        if (vertical) {
+            boxes[0][0] = 1.0f;
+            boxes[0][2] = beyondOne;
+        } else {
+            boxes[0][1] = 1.0f;
+            boxes[0][3] = beyondOne;
+        }
+        int32_t box_index[1] = {0};
+        int32_t crop_size[2] = {vertical ? kCropSize : 1, vertical ? 1 : kCropSize};
+
+        auto nodeDef = CpuKernelUtils::CreateNodeDef();
+        nodeDef->SetOpType("CropAndResize");
+
+        auto method = CpuKernelUtils::CreateAttrValue();
+        method->SetString("bilinear_v2");
+        nodeDef->AddAttrs("method", method.get());
+        auto extrapolationValue = CpuKernelUtils::CreateAttrValue();
+        extrapolationValue->SetFloat(-1.0f);
+        nodeDef->AddAttrs("extrapolation_value", extrapolationValue.get());
+
+        auto input = nodeDef->AddInputs();
+        input->GetTensorShape()->SetDimSizes({1, imageHeight, imageWidth, 1});
+        input->SetDataType(DT_FLOAT);
+        input->SetData(image.data());
+        input->SetDataSize(image.size() * sizeof(float));
+
+        auto boxesInput = nodeDef->AddInputs();
+        boxesInput->GetTensorShape()->SetDimSizes({1, 4});
+        boxesInput->SetDataType(DT_FLOAT);
+        boxesInput->SetData(boxes);
+        boxesInput->SetDataSize(sizeof(boxes));
+
+        auto boxIndexInput = nodeDef->AddInputs();
+        boxIndexInput->GetTensorShape()->SetDimSizes({1});
+        boxIndexInput->SetDataType(DT_INT32);
+        boxIndexInput->SetData(box_index);
+        boxIndexInput->SetDataSize(sizeof(box_index));
+
+        auto cropSizeInput = nodeDef->AddInputs();
+        cropSizeInput->GetTensorShape()->SetDimSizes({2});
+        cropSizeInput->SetDataType(DT_INT32);
+        cropSizeInput->SetData(crop_size);
+        cropSizeInput->SetDataSize(sizeof(crop_size));
+
+        auto outputTensor = nodeDef->AddOutputs();
+        outputTensor->GetTensorShape()->SetDimSizes({1, crop_size[0], crop_size[1], 1});
+        outputTensor->SetDataType(DT_FLOAT);
+        outputTensor->SetData(output.data());
+        outputTensor->SetDataSize(output.size() * sizeof(float));
+
+        CpuKernelContext ctx(DEVICE);
+        ASSERT_EQ(ctx.Init(nodeDef.get()), KERNEL_STATUS_OK);
+        ASSERT_EQ(CpuKernelRegister::Instance().RunCpuKernel(ctx), KERNEL_STATUS_OK);
+        EXPECT_FLOAT_EQ(output[kBoundaryOutput], -1.0f);
+    }
 }

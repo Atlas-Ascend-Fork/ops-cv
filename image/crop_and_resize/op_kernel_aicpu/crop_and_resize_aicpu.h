@@ -47,13 +47,19 @@ constexpr size_t kInputIndex3 = 3;
 
 namespace {
 
+inline int64_t MapV2Coordinate(float coord, int64_t imgSize)
+{
+    int64_t pixel = static_cast<int64_t>(std::floor(coord * imgSize));
+    return coord == 1.0f ? imgSize - 1 : pixel;
+}
+
 inline void CalcCropWindow(float y1, float x1, float y2, float x2, int64_t imgH, int64_t imgW, int64_t& y1o,
                            int64_t& x1o, int64_t& y2o, int64_t& x2o, int64_t& wo, int64_t& ho)
 {
-    y1o = static_cast<int64_t>(y1 * imgH);
-    x1o = static_cast<int64_t>(x1 * imgW);
-    y2o = static_cast<int64_t>(y2 * imgH);
-    x2o = static_cast<int64_t>(x2 * imgW);
+    y1o = MapV2Coordinate(y1, imgH);
+    x1o = MapV2Coordinate(x1, imgW);
+    y2o = MapV2Coordinate(y2, imgH);
+    x2o = MapV2Coordinate(x2, imgW);
     wo = 1;
     ho = 1;
     if ((x2o - x1o + 1) > 1) {
@@ -64,16 +70,17 @@ inline void CalcCropWindow(float y1, float x1, float y2, float x2, int64_t imgH,
     }
 }
 
-inline void GetV2Indices(int64_t pos, int64_t cropSz, int64_t winSz, int64_t& lower, int64_t& upper, float& ratio)
+inline void GetV2Indices(int64_t pos, int64_t cropSz, int64_t winSz, int64_t& lower, int64_t& upper, float& ratio,
+                         float& windowPos)
 {
-    float ratioVal = (pos + 0.5f) * (winSz / static_cast<float>(cropSz)) - 0.5f;
-    lower = static_cast<int64_t>(std::floor(ratioVal));
+    windowPos = (pos + 0.5f) * (winSz / static_cast<float>(cropSz)) - 0.5f;
+    lower = static_cast<int64_t>(std::floor(windowPos));
     lower = std::max(static_cast<int64_t>(0), lower);
     lower = std::min(lower, winSz - 1);
-    upper = static_cast<int64_t>(std::ceil(ratioVal));
+    upper = static_cast<int64_t>(std::ceil(windowPos));
     upper = std::max(static_cast<int64_t>(0), upper);
     upper = std::min(upper, winSz - 1);
-    ratio = ratioVal - lower;
+    ratio = windowPos - lower;
 }
 
 inline void GetInterpolateIndices(float inPos, int64_t imgSize, int64_t& lower, int64_t& upper, float& ratio)
@@ -101,23 +108,53 @@ inline void MapOutputToInput(float coord1, float coord2, int64_t cropSz, int64_t
 }
 
 template <typename T>
+inline void FillWithExtrapolation(typename TTypes<float, kDimNumFour>::Tensor crops, int64_t b, int64_t y,
+                                  int64_t cropWidth, int64_t depth, float extrapolation_value);
+
+template <typename T>
+inline void FillWithExtrapolationSingle(typename TTypes<float, kDimNumFour>::Tensor crops, int64_t b, int64_t y,
+                                        int64_t x, int64_t depth, float extrapolation_value);
+
+template <typename T>
 inline void ComputeBilinearV2(typename TTypes<T, kDimNumFour>::Tensor image,
                               typename TTypes<float, kDimNumFour>::Tensor crops, int64_t b, int32_t b_in, int64_t y1,
-                              int64_t x1, int64_t cropHeight, int64_t cropWidth, int64_t depth, int64_t w, int64_t h)
+                              int64_t x1, int64_t cropHeight, int64_t cropWidth, int64_t depth, int64_t w, int64_t h,
+                              int64_t imageHeight, int64_t imageWidth, bool extrapolateTop, bool extrapolateLeft,
+                              bool extrapolateBottom, bool extrapolateRight, float extrapolation_value)
 {
     for (int64_t y = 0; y < cropHeight; ++y) {
         int64_t y_base, y_top;
-        float y_ratio;
-        GetV2Indices(y, cropHeight, h, y_base, y_top, y_ratio);
+        float y_ratio, y_window_pos;
+        GetV2Indices(y, cropHeight, h, y_base, y_top, y_ratio, y_window_pos);
+        int64_t y_base_index = y1 + y_base;
+        int64_t y_top_index = y1 + y_top;
+        float y_image_pos = static_cast<float>(y1) + y_window_pos;
+        bool y_index_out_of_bounds = y_base_index < 0 || y_top_index < 0 || y_base_index >= imageHeight ||
+                                     y_top_index >= imageHeight;
+        if (y_index_out_of_bounds ||
+            ((y_image_pos < 0 && extrapolateTop) || (y_image_pos > imageHeight - 1 && extrapolateBottom))) {
+            FillWithExtrapolation<T>(crops, b, y, cropWidth, depth, extrapolation_value);
+            continue;
+        }
         for (int64_t x = 0; x < cropWidth; ++x) {
             int64_t x_base, x_top;
-            float x_ratio;
-            GetV2Indices(x, cropWidth, w, x_base, x_top, x_ratio);
+            float x_ratio, x_window_pos;
+            GetV2Indices(x, cropWidth, w, x_base, x_top, x_ratio, x_window_pos);
+            int64_t x_base_index = x1 + x_base;
+            int64_t x_top_index = x1 + x_top;
+            float x_image_pos = static_cast<float>(x1) + x_window_pos;
+            bool x_index_out_of_bounds = x_base_index < 0 || x_top_index < 0 || x_base_index >= imageWidth ||
+                                         x_top_index >= imageWidth;
+            if (x_index_out_of_bounds ||
+                ((x_image_pos < 0 && extrapolateLeft) || (x_image_pos > imageWidth - 1 && extrapolateRight))) {
+                FillWithExtrapolationSingle<T>(crops, b, y, x, depth, extrapolation_value);
+                continue;
+            }
             for (int64_t d = 0; d < depth; ++d) {
-                float v00 = static_cast<float>(image(b_in, y1 + y_base, x1 + x_base, d));
-                float v01 = static_cast<float>(image(b_in, y1 + y_base, x1 + x_top, d));
-                float v10 = static_cast<float>(image(b_in, y1 + y_top, x1 + x_base, d));
-                float v11 = static_cast<float>(image(b_in, y1 + y_top, x1 + x_top, d));
+                float v00 = static_cast<float>(image(b_in, y_base_index, x_base_index, d));
+                float v01 = static_cast<float>(image(b_in, y_base_index, x_top_index, d));
+                float v10 = static_cast<float>(image(b_in, y_top_index, x_base_index, d));
+                float v11 = static_cast<float>(image(b_in, y_top_index, x_top_index, d));
                 float result = v00 * (1 - y_ratio) * (1 - x_ratio) + v11 * y_ratio * x_ratio +
                                v01 * (1 - y_ratio) * x_ratio + v10 * y_ratio * (1 - x_ratio);
                 crops(b, y, x, d) = result;
@@ -272,7 +309,13 @@ private:
                         int64_t y1, x1, y2, x2, w, h;
                         CalcCropWindow(boxes(b, 0), boxes(b, 1), boxes(b, 2), boxes(b, 3), imageHeight, imageWidth, y1,
                                        x1, y2, x2, w, h);
-                        ComputeBilinearV2<T>(image, crops, b, box_index(b), y1, x1, cropHeight, cropWidth, depth, w, h);
+                        bool extrapolateTop = std::min(boxes(b, 0), boxes(b, 2)) < 0;
+                        bool extrapolateBottom = std::max(boxes(b, 0), boxes(b, 2)) > 1;
+                        bool extrapolateLeft = std::min(boxes(b, 1), boxes(b, 3)) < 0;
+                        bool extrapolateRight = std::max(boxes(b, 1), boxes(b, 3)) > 1;
+                        ComputeBilinearV2<T>(image, crops, b, box_index(b), y1, x1, cropHeight, cropWidth, depth, w, h,
+                                             imageHeight, imageWidth, extrapolateTop, extrapolateLeft,
+                                             extrapolateBottom, extrapolateRight, extrapolation_value);
                     } else {
                         const float y1 = boxes(b, 0);
                         const float x1 = boxes(b, 1);

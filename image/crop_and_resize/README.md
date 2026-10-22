@@ -77,7 +77,7 @@
 
   - method = bilinear_v2时：
 
-    1. 首先将归一化框坐标映射为输入图像上的像素坐标，计算裁剪窗口。令$y_{1o} = \lfloor y_1 \times image\_height \rfloor$，$x_{1o} = \lfloor x_1 \times image\_width \rfloor$，$y_{2o} = \lfloor y_2 \times image\_height \rfloor$，$x_{2o} = \lfloor x_2 \times image\_width \rfloor$，则裁剪窗口的高$h$和宽$w$为：
+    1. 首先将归一化框坐标映射为输入图像上的像素坐标，计算裁剪窗口。令$map(c, n) = \lfloor c \times n \rfloor$（当$c = 1$时取$n - 1$），$y_{1o} = map(y_1, image\_height)$，$x_{1o} = map(x_1, image\_width)$，$y_{2o} = map(y_2, image\_height)$，$x_{2o} = map(x_2, image\_width)$，则裁剪窗口的高$h$和宽$w$为：
 
        $$
        h = \max(y_{2o} - y_{1o} + 1,\; 1), \quad w = \max(x_{2o} - x_{1o} + 1,\; 1)
@@ -106,6 +106,8 @@
        $$
        y\_ratio = r_y - lower\_y, \quad x\_ratio = r_x - lower\_x
        $$
+
+       当归一化框坐标超出`[0, 1]`且对应采样位置超出输入图像边界时，输出使用`extrapolation_value`；框坐标在`[0, 1]`内时，窗口边缘的采样下标按上述公式钳制。
 
     4. 双线性插值：
 
@@ -146,7 +148,7 @@
     <tr>
       <td>boxes</td>
       <td>输入</td>
-      <td>二维Tensor，其shape为(num_boxes, 4)。第i行指定了box_index[i]在图像中一个框的位置，并且使用归一化坐标[y1, x1, y2, x2]进行表示。归一化后的y坐标值通过y*(image_height - 1)映射到图像坐标系中，因此归一化图像的高度[0, 1]区间会被映射到原始图像高度的[0，image_height - 1]区间。我们允许y1 > y2, 在这种情况下，采样的裁剪区域会是原始图像的上下翻转版。宽度维度的处理方式相似，归一化坐标值超出[0, 1]范围时，使用extrapolation_value外插值进行补齐。</td>
+      <td>二维Tensor，其shape为(num_boxes, 4)。第i行指定了box_index[i]在图像中一个框的位置，并且使用归一化坐标[y1, x1, y2, x2]进行表示。对于bilinear和nearest方法，归一化y坐标通过y*(image_height - 1)映射到图像坐标系；bilinear_v2按其专属公式映射。宽度维度的处理方式相似，坐标超出[0, 1]范围的对应输出使用extrapolation_value。</td>
       <td>FLOAT、FLOAT16</td>
       <td>ND</td>
     </tr>
