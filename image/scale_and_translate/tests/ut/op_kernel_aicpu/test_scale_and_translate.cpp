@@ -18,6 +18,7 @@
 #undef private
 #undef protected
 #include "Eigen/Core"
+#include <limits>
 #include <random>
 
 using namespace std;
@@ -121,6 +122,38 @@ TEST_F(TEST_SCALEANDTRANSLATE_UT, DATA_TYPE_FLOAT_BOX_SUCC)
 
     bool compare = CompareResult(output, output_exp, 24);
     EXPECT_EQ(compare, true);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, TINY_POSITIVE_SCALE_WITH_IN_BOUNDS_TRANSLATION_SUCC)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_INT32, DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{1, 2, 2, 1}, {2}, {2}, {2}, {1, 1, 2, 1}};
+    float image_data[4] = {1.0f, 2.0f, 3.0f, 4.0f};
+    int32_t size_data[2] = {1, 2};
+    float scale_data[2] = {1.0e-30f, 1.0f};
+    float translate_data[2] = {0.5f, 0.0f};
+    float output[2] = {-1.0f, -1.0f};
+    vector<void*> datas = {(void*)image_data, (void*)size_data, (void*)scale_data, (void*)translate_data,
+                           (void*)output};
+    CREATE_NODEDEF(shapes, data_types, datas, "lanczos3", true);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+    EXPECT_NEAR(output[0], 2.0f, 1.0e-4f);
+    EXPECT_NEAR(output[1], 3.0f, 1.0e-4f);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, SUBNORMAL_POSITIVE_SCALE_FAIL)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_INT32, DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{1, 2, 2, 1}, {2}, {2}, {2}, {1, 1, 2, 1}};
+    float image_data[4] = {1.0f, 2.0f, 3.0f, 4.0f};
+    int32_t size_data[2] = {1, 2};
+    float scale_data[2] = {std::numeric_limits<float>::denorm_min(), 1.0f};
+    float translate_data[2] = {0.5f, 0.0f};
+    float output[2] = {-1.0f, -1.0f};
+    vector<void*> datas = {(void*)image_data, (void*)size_data, (void*)scale_data, (void*)translate_data,
+                           (void*)output};
+    CREATE_NODEDEF(shapes, data_types, datas, "lanczos3", true);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
 }
 
 TEST_F(TEST_SCALEANDTRANSLATE_UT, DATA_TYPE_FLOAT_KEYSCUBIC_SUCC)

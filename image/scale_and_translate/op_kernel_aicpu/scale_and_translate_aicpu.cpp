@@ -10,7 +10,9 @@
 
 #include "scale_and_translate_aicpu.h"
 
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <type_traits>
 
 #include "cpu_kernel_utils.h"
@@ -143,8 +145,10 @@ uint32_t InitSpans(const Kernel& kernel, int64_t output_size, int64_t input_size
                    Spans* spans, float& kernel_scale)
 {
     kernel_scale = antialias ? std::max(inv_scale, 1.0f) : 1.0f;
-    spans->span_size = std::min(2 * static_cast<int>(std::ceil(kernel.Radius() * kernel_scale)) + 1,
-                                static_cast<int>(input_size));
+    const int64_t max_span_size = std::min<int64_t>(input_size, std::numeric_limits<int>::max());
+    const float capped_radius = std::min(kernel.Radius() * kernel_scale, static_cast<float>(max_span_size));
+    const int64_t radius_span_size = static_cast<int64_t>(std::ceil(capped_radius));
+    spans->span_size = static_cast<int>(std::min(2 * radius_span_size + 1, max_span_size));
 
     spans->starts = new (std::nothrow) Eigen::Tensor<int32_t, 1>(output_size);
     KERNEL_CHECK_NULLPTR(spans->starts, KERNEL_STATUS_PARAM_INVALID, "New spans starts failed.")
@@ -185,10 +189,13 @@ uint32_t ComputeSpansCore(CpuKernelContext& context, const Kernel& kernel, const
                 starts_vec(x) = 0;
                 continue;
             }
-            int64_t span_start = std::ceil(sample_f - kernel.Radius() * kernel_scale - 0.5f);
-            int64_t span_end = std::floor(sample_f + kernel.Radius() * kernel_scale - 0.5f);
-            span_start = Clamp(static_cast<int64_t>(0), input_size - 1, span_start);
-            span_end = Clamp(static_cast<int64_t>(0), input_size - 1, span_end) + 1;
+            const float support = kernel.Radius() * kernel_scale;
+            const double max_span_index = static_cast<double>(
+                std::min<int64_t>(input_size - 1, std::numeric_limits<int>::max() - 1));
+            const double span_start_f = static_cast<double>(std::ceil(sample_f - support - 0.5f));
+            const double span_end_f = static_cast<double>(std::floor(sample_f + support - 0.5f));
+            int64_t span_start = static_cast<int64_t>(Clamp(0.0, max_span_index, span_start_f));
+            int64_t span_end = static_cast<int64_t>(Clamp(0.0, max_span_index, span_end_f)) + 1;
             const int this_span_size = span_end - span_start;
             if (this_span_size > spans->span_size) {
                 KERNEL_LOG_ERROR("Span is too large: [%d] vs [%d].", this_span_size, spans->span_size);
@@ -326,6 +333,8 @@ static uint32_t ParseScaleAndTranslateParams(CpuKernelContext& ctx, ScaleAndTran
 
     KERNEL_CHECK_FALSE((p.row_scale > 0 && p.col_scale > 0), KERNEL_STATUS_PARAM_INVALID,
                        "row_scale = [%d] and col_scale = [%d] must be greater than zero.", p.row_scale, p.col_scale)
+    KERNEL_CHECK_FALSE((std::isfinite(1.0f / p.row_scale) && std::isfinite(1.0f / p.col_scale)),
+                       KERNEL_STATUS_PARAM_INVALID, "The reciprocal of scale must be finite.")
 
     p.row_translation = input_translation[0];
     p.col_translation = input_translation[1];
