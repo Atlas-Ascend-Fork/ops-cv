@@ -213,32 +213,17 @@ static const aclTensor* CreateSizesV35(const aclTensor* out, aclOpExecutor* exec
     return sizes;
 }
 
-static const aclTensor* CreateSizesRegBase(const aclTensor* self, const aclFloatArray* scales, aclOpExecutor* executor)
+static const aclTensor* CreateSizesRegBase(const aclTensor* out, aclOpExecutor* executor)
 {
-    uint64_t size = 0;
-    auto ret = aclGetFloatArraySize(scales, &size);
-    if (ret != 0) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "scales is null, please check input arguments of scales");
-        return nullptr;
-    }
-    if (self->GetViewShape().GetDimNum() != size) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "dim num of self should be equal to size of scales, self DimNum=%zu, size=%lu",
-                self->GetViewShape().GetDimNum(), size);
-        return nullptr;
-    }
-    auto selfShape = self->GetViewShape();
+    auto outShape = out->GetViewShape();
     std::vector<int64_t> sizesList(SCALES_SIZE);
-    auto xFormat = self->GetStorageFormat();
-    if (xFormat == op::Format::FORMAT_NCHW) {
-        sizesList[0] = static_cast<int64_t>(static_cast<double>(selfShape.GetDim(DIM_HEIGHT_NCHW)) *
-                                            static_cast<double>((*scales)[DIM_HEIGHT_NCHW]));
-        sizesList[1] = static_cast<int64_t>(static_cast<double>(selfShape.GetDim(DIM_WIDTH_NCHW)) *
-                                            static_cast<double>((*scales)[DIM_WIDTH_NCHW]));
+    auto outFormat = out->GetStorageFormat();
+    if (outFormat == op::Format::FORMAT_NCHW) {
+        sizesList[0] = outShape.GetDim(DIM_HEIGHT_NCHW);
+        sizesList[1] = outShape.GetDim(DIM_WIDTH_NCHW);
     } else {
-        sizesList[0] = static_cast<int64_t>(static_cast<double>(selfShape.GetDim(DIM_HEIGHT_NHWC)) *
-                                            static_cast<double>((*scales)[DIM_HEIGHT_NHWC]));
-        sizesList[1] = static_cast<int64_t>(static_cast<double>(selfShape.GetDim(DIM_WIDTH_NHWC)) *
-                                            static_cast<double>((*scales)[DIM_WIDTH_NHWC]));
+        sizesList[0] = outShape.GetDim(DIM_HEIGHT_NHWC);
+        sizesList[1] = outShape.GetDim(DIM_WIDTH_NHWC);
     }
     const aclIntArray* arr = executor->AllocIntArray(sizesList.data(), sizesList.size());
     auto sizes = executor->ConvertToTensor(arr, op::ToOpDataType(ACL_INT32));
@@ -277,7 +262,7 @@ aclnnStatus aclnnResizeGetWorkspaceSize(const aclTensor* self, const aclFloatArr
     CHECK_RET(outContiguous != nullptr, ACLNN_ERR_INNER_NULLPTR);
 
     if (extendFlag && IsRegBase()) {
-        auto sizes = CreateSizesRegBase(selfContiguous, scales, uniqueExecutor.get());
+        auto sizes = CreateSizesRegBase(outContiguous, uniqueExecutor.get());
         CHECK_RET(sizes != nullptr, ACLNN_ERR_INNER_NULLPTR);
         // 不必转到5HD，直接执行L0算子 带scales参数
         const aclTensor* resizeRet = nullptr;
