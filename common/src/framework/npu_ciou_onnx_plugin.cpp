@@ -1,41 +1,57 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
-#include "onnx_common.h"
+#include "cv_plugin_util.h"
+#include "graph/operator.h"
+#include "nlohmann/json.hpp"
+#include "register/register.h"
 
 namespace domi {
-using NodeProto = ge::onnx::NodeProto;
+using json = nlohmann::json;
 
-static Status ParseParamsNpuCiou(const Message* op_src, ge::Operator& op_dest)
+static Status ParseParamsNpuCiou(const ge::Operator& op_src, ge::Operator& op_dest)
 {
-    const NodeProto* node = dynamic_cast<const NodeProto*>(op_src);
-    if (node == nullptr) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "Dynamic cast op_src to NodeProto failed.");
-        return FAILED;
-    }
-
     bool trans = false;
     bool is_cross = true;
     std::string mode = "iou";
     bool atan_sub_flag = false;
 
-    for (const auto& attr : node->attribute()) {
-        if (attr.name() == "trans" && attr.type() == ge::onnx::AttributeProto::INT) {
-            trans = (attr.i() == 1);
-        } else if (attr.name() == "is_cross" && attr.type() == ge::onnx::AttributeProto::INT) {
-            is_cross = (attr.i() == 1);
-        } else if (attr.name() == "mode" && attr.type() == ge::onnx::AttributeProto::INT && attr.i() == 1) {
-            mode = "iof";
-        } else if (attr.name() == "atan_sub_flag" && attr.type() == ge::onnx::AttributeProto::INT) {
-            atan_sub_flag = (attr.i() == 1);
+    ge::AscendString attrs_string;
+    try {
+        if (op_src.GetAttr("attribute", attrs_string) == ge::GRAPH_SUCCESS) {
+            json attrs = json::parse(attrs_string.GetString());
+            if (attrs.contains("attribute") && attrs["attribute"].is_array()) {
+                for (json& attr : attrs["attribute"]) {
+                    // GE omits i when the int is zero. is_cross defaults to true, so a missing i must become false.
+                    const std::string name = attr.value("name", "");
+                    const int type = attr.value("type", -1);
+                    if (name == "trans" && type == ATTR_TYPE_INT) {
+                        trans = attr.contains("i") && (attr["i"].get<int64_t>() != 0);
+                    } else if (name == "is_cross" && type == ATTR_TYPE_INT) {
+                        is_cross = attr.contains("i") && (attr["i"].get<int64_t>() != 0);
+                    } else if (name == "mode" && type == ATTR_TYPE_INT) {
+                        mode = (attr.contains("i") && attr["i"].get<int64_t>() == 1) ? "iof" : "iou";
+                    } else if (name == "atan_sub_flag" && type == ATTR_TYPE_INT) {
+                        atan_sub_flag = attr.contains("i") && (attr["i"].get<int64_t>() != 0);
+                    }
+                }
+            }
         }
+    } catch (const nlohmann::json::exception& e) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        return FAILED;
+    } catch (...) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        return FAILED;
     }
 
     op_dest.SetAttr("trans", trans);
@@ -53,6 +69,6 @@ REGISTER_CUSTOM_OP("CIoU")
                    ge::AscendString("ai.onnx::14::NPUCiou"), ge::AscendString("ai.onnx::15::NPUCiou"),
                    ge::AscendString("ai.onnx::16::NPUCiou"), ge::AscendString("ai.onnx::17::NPUCiou"),
                    ge::AscendString("ai.onnx::18::NPUCiou")})
-    .ParseParamsFn(ParseParamsNpuCiou)
+    .ParseParamsByOperatorFn(ParseParamsNpuCiou)
     .ImplyType(ImplyType::TVM);
 } // namespace domi

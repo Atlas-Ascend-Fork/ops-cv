@@ -1,11 +1,13 @@
 /**
  * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under
+ * the terms and conditions of CANN Open Software License Agreement Version 2.0
+ * (the "License"). Please refer to the License for details. You may not use
+ * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
+ * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
+ * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
+ * for the full text of the License.
  */
 
 /*!
@@ -13,15 +15,20 @@
  * \brief
  */
 
-#include "onnx_common.h"
 #include "col2_im_v2_proto.h"
+#include "cv_plugin_util.h"
+#include "graph/graph.h"
+#include "graph/operator.h"
+#include "nlohmann/json.hpp"
+#include "register/register.h"
+#include "stub_ops.h"
 
 using namespace ge;
 namespace {
 const int ATTR_INTS = 2;
 }
 namespace domi {
-using NodeProto = ge::onnx::NodeProto;
+using json = nlohmann::json;
 
 namespace {
 static void SetCol2ImV2ByCondition(ge::Operator& op_dest, bool set_dilations_flag, std::vector<int>& v_dilations,
@@ -40,26 +47,21 @@ static void SetCol2ImV2ByCondition(ge::Operator& op_dest, bool set_dilations_fla
     }
 }
 
-static void SetCol2ImV2ByNode(ge::Operator& op_dest, const ge::onnx::NodeProto* node)
+static void SetCol2ImV2ByOp(ge::Operator& op_dest, const ge::Operator& op_src)
 {
-    op_dest.SetAttr("name", node->name());
+    op_dest.SetAttr("name", GetOpName(op_src));
     op_dest.SetAttr("original_type", "ai.onnx::18::Col2Im");
 
-    int input_size = node->input_size();
-    int output_size = node->output_size();
+    int input_size = static_cast<int>(op_src.GetInputsSize());
+    int output_size = static_cast<int>(op_src.GetOutputsSize());
 
     op_dest.DynamicInputRegister("x", input_size);
     op_dest.DynamicOutputRegister("y", output_size);
 }
 } // namespace
 
-static Status ParseOnnxParamsCol2ImV2(const Message* op_src, ge::Operator& op_dest)
+static Status ParseOnnxParamsCol2ImV2(const ge::Operator& op_src, ge::Operator& op_dest)
 {
-    const ge::onnx::NodeProto* node = dynamic_cast<const ge::onnx::NodeProto*>(op_src);
-    if (node == nullptr) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "Dynamic cast op_src to NodeProto failed.");
-        return FAILED;
-    }
     std::vector<int> v_dilations = {};
     bool set_dilations_flag = false;
     std::vector<int> v_pads = {};
@@ -67,43 +69,58 @@ static Status ParseOnnxParamsCol2ImV2(const Message* op_src, ge::Operator& op_de
     std::vector<int> v_strides = {};
     bool set_strides_flag = false;
 
-    for (const auto& attr : node->attribute()) {
-        if (attr.name() == "dilations" && attr.type() == ge::onnx::AttributeProto::INTS) {
-            if (attr.ints_size() == ATTR_INTS) {
-                for (int i = 0; i < attr.ints_size(); i++) {
-                    v_dilations.push_back(attr.ints(i));
+    ge::AscendString attrs_string;
+    try {
+        if (op_src.GetAttr("attribute", attrs_string) == ge::GRAPH_SUCCESS) {
+            json attrs = json::parse(attrs_string.GetString());
+            if (attrs.contains("attribute") && attrs["attribute"].is_array()) {
+                for (json& attr : attrs["attribute"]) {
+                    const std::string name = attr.value("name", "");
+                    if (name == "dilations" && attr.contains("ints")) {
+                        if (attr["ints"].size() == ATTR_INTS) {
+                            for (auto& v : attr["ints"]) {
+                                v_dilations.push_back(static_cast<int>(v.get<int64_t>()));
+                            }
+                        } else {
+                            OP_LOGE(GetOpName(op_dest).c_str(), "length of dilations must be 2.");
+                            return FAILED;
+                        }
+                        set_dilations_flag = true;
+                    } else if (name == "pads" && attr.contains("ints")) {
+                        if (attr["ints"].size() == ATTR_INTS) {
+                            for (auto& v : attr["ints"]) {
+                                v_pads.push_back(static_cast<int>(v.get<int64_t>()));
+                            }
+                        } else {
+                            OP_LOGE(GetOpName(op_dest).c_str(), "length of pads must be 2.");
+                            return FAILED;
+                        }
+                        set_pads_flag = true;
+                    } else if (name == "strides" && attr.contains("ints")) {
+                        if (attr["ints"].size() == ATTR_INTS) {
+                            for (auto& v : attr["ints"]) {
+                                v_strides.push_back(static_cast<int>(v.get<int64_t>()));
+                            }
+                        } else {
+                            OP_LOGE(GetOpName(op_dest).c_str(), "length of strides must be 2.");
+                            return FAILED;
+                        }
+                        set_strides_flag = true;
+                    }
                 }
-            } else {
-                OP_LOGE(GetOpName(op_dest).c_str(), "length of dilations must be 2.");
-                return FAILED;
             }
-            set_dilations_flag = true;
-        } else if (attr.name() == "pads" && attr.type() == ge::onnx::AttributeProto::INTS) {
-            if (attr.ints_size() == ATTR_INTS) {
-                for (int i = 0; i < attr.ints_size(); i++) {
-                    v_pads.push_back(attr.ints(i));
-                }
-            } else {
-                OP_LOGE(GetOpName(op_dest).c_str(), "length of pads must be 2.");
-                return FAILED;
-            }
-            set_pads_flag = true;
-        } else if (attr.name() == "strides" && attr.type() == ge::onnx::AttributeProto::INTS) {
-            if (attr.ints_size() == ATTR_INTS) {
-                for (int i = 0; i < attr.ints_size(); i++) {
-                    v_strides.push_back(attr.ints(i));
-                }
-            } else {
-                OP_LOGE(GetOpName(op_dest).c_str(), "length of strides must be 2.");
-                return FAILED;
-            }
-            set_strides_flag = true;
         }
+    } catch (const nlohmann::json::exception& e) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        return FAILED;
+    } catch (...) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        return FAILED;
     }
 
     SetCol2ImV2ByCondition(op_dest, set_dilations_flag, v_dilations, set_pads_flag, v_pads, set_strides_flag,
                            v_strides);
-    SetCol2ImV2ByNode(op_dest, node);
+    SetCol2ImV2ByOp(op_dest, op_src);
 
     return SUCCESS;
 }
@@ -156,7 +173,7 @@ static Status ParseOnnxOpToGraphCol2ImV2(const ge::Operator& op, Graph& graph)
 
     std::vector<ge::Operator> inputs = {data0, data1, data2};
     std::vector<std::pair<ge::Operator, std::vector<size_t>>> output_indexs;
-    output_indexs.emplace_back(col2im_v2, vector<std::size_t>{0});
+    output_indexs.emplace_back(col2im_v2, std::vector<std::size_t>{0});
     graph.SetInputs(inputs).SetOutputs(output_indexs);
     return SUCCESS;
 }
@@ -164,7 +181,7 @@ static Status ParseOnnxOpToGraphCol2ImV2(const ge::Operator& op, Graph& graph)
 REGISTER_CUSTOM_OP("PartitionedCall")
     .FrameworkType(ONNX)
     .OriginOpType({ge::AscendString("ai.onnx::18::Col2Im")})
-    .ParseParamsFn(ParseOnnxParamsCol2ImV2)
+    .ParseParamsByOperatorFn(ParseOnnxParamsCol2ImV2)
     .ParseOpToGraphFn(ParseOnnxOpToGraphCol2ImV2)
     .ImplyType(ImplyType::TVM);
 } // namespace domi
