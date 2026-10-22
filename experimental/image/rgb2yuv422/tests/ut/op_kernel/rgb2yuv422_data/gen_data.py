@@ -2,9 +2,8 @@
 # -*- coding: utf-8 -*-
 # ----------------------------------------------------------------------------
 # Copyright (c) 2026 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it.
-# This file is a part of the CANN Open Software.
-# Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
@@ -14,11 +13,10 @@
 import sys
 import os
 import numpy as np
-import re
 
 
 def parse_str_to_shape_list(shape_str):
-    shape_str = shape_str.strip('(').strip(')')
+    shape_str = shape_str.strip("(").strip(")")
     shape_list = [int(x) for x in shape_str.split(",")]
     return np.array(shape_list)
 
@@ -27,13 +25,17 @@ def golden_rgb2yuv422(x, data_format="NHWC"):
     input_dtype = x.dtype
     x_f64 = np.asarray(x, dtype=np.float64)
 
-    channel_axis = -1
+    if data_format not in ("NHWC", "NCHW"):
+        raise ValueError(f"Unsupported data_format: {data_format}")
+    channel_axis = -1 if data_format == "NHWC" else -3
     if x_f64.shape[channel_axis] != 3:
-        raise ValueError(f"Input channel dimension must be 3, got {x_f64.shape[channel_axis]}")
+        raise ValueError(
+            f"Input channel dimension must be 3, got {x_f64.shape[channel_axis]}"
+        )
 
-    x_hwc = x_f64
+    x_hwc = np.moveaxis(x_f64, channel_axis, -1)
     orig_shape = x_hwc.shape
-    h, w = orig_shape[-3], orig_shape[-2]
+    w = orig_shape[-2]
 
     r = x_hwc[..., 0]
     g = x_hwc[..., 1]
@@ -55,8 +57,11 @@ def golden_rgb2yuv422(x, data_format="NHWC"):
         yuv422[..., j, 1] = u_full[..., j]
 
         if j + 1 < w:
-            yuv422[..., j+1, 0] = y_full[..., j+1]
-            yuv422[..., j+1, 1] = v_full[..., j]
+            yuv422[..., j + 1, 0] = y_full[..., j + 1]
+            yuv422[..., j + 1, 1] = v_full[..., j]
+
+    if data_format == "NCHW":
+        yuv422 = np.moveaxis(yuv422, -1, -3)
 
     if input_dtype == np.uint8:
         yuv422 = np.clip(np.round(yuv422), 0, 255).astype(np.uint8)
@@ -69,11 +74,7 @@ def golden_rgb2yuv422(x, data_format="NHWC"):
 
 
 def gen_data_and_golden(shape_str, d_type="float32"):
-    d_type_dict = {
-        "float32": np.float32,
-        "float16": np.float16,
-        "uint8": np.uint8
-    }
+    d_type_dict = {"float32": np.float32, "float16": np.float16, "uint8": np.uint8}
     np_type = d_type_dict[d_type]
     shape = parse_str_to_shape_list(shape_str)
     shape_tuple = tuple(int(s) for s in shape)

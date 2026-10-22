@@ -12,16 +12,13 @@
 
 import numpy as np
 
-__golden__ = {
-    "kernel": {
-        "rgb2yuv422": "rgb2yuv422_golden"
-    }
-}
+__golden__ = {"kernel": {"rgb2yuv422": "rgb2yuv422_golden"}}
 
 
-def rgb2yuv422_golden(x, **kwargs):
+def rgb2yuv422_golden(x, data_format="NHWC", **kwargs):
     input_dtype = x.dtype
-    data_format = kwargs.get("input_formats", ["NHWC"])[0] if "input_formats" in kwargs else "NHWC"
+    if data_format not in ("NHWC", "NCHW"):
+        raise ValueError(f"Unsupported data_format: {data_format}")
 
     x_f64 = np.asarray(x, dtype=np.float64)
 
@@ -31,12 +28,14 @@ def rgb2yuv422_golden(x, **kwargs):
         channel_axis = -3 if x_f64.ndim >= 4 else 0
 
     if x_f64.shape[channel_axis] != 3:
-        raise ValueError(f"Input channel dimension must be 3, got {x_f64.shape[channel_axis]}")
+        raise ValueError(
+            f"Input channel dimension must be 3, got {x_f64.shape[channel_axis]}"
+        )
 
     x_hwc = np.moveaxis(x_f64, channel_axis, -1)
 
     orig_shape = x_hwc.shape
-    h, w = orig_shape[-3], orig_shape[-2]
+    w = orig_shape[-2]
 
     r = x_hwc[..., 0]
     g = x_hwc[..., 1]
@@ -58,8 +57,8 @@ def rgb2yuv422_golden(x, **kwargs):
         yuv422[..., j, 1] = u_full[..., j]
 
         if j + 1 < w:
-            yuv422[..., j+1, 0] = y_full[..., j+1]
-            yuv422[..., j+1, 1] = v_full[..., j]
+            yuv422[..., j + 1, 0] = y_full[..., j + 1]
+            yuv422[..., j + 1, 1] = v_full[..., j]
 
     if data_format == "NCHW":
         result_channel_axis = -3 if x.ndim >= 4 else 0
