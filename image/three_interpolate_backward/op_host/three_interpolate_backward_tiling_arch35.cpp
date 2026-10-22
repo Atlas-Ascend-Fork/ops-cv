@@ -20,7 +20,9 @@
  *     任意核数下结果确定，故删除 GetDeterministic() 强制单核分支）
  *   - DCACHE_SIZE=128KB，STATIC_UB_ESTIMATE=0
  *   - TilingKey 不枚举 dtype，使用 DTYPE_ 宏
- *   - 无 workspace（行私有串行累加，userWorkspaceSize=0）
+ *   - user workspace = b*c*m*sizeof(float)：kernel 的 fp32 行累加器
+ *     （若按输出 dtype 如 fp16 在 GM 逐步累加，小贡献被 ulp/2 吸收，
+ *     N 大时产生无界系统性偏差；fp32 累加 + 末次 cast 与 golden 语义一致）
  *
  * 输入校验清单（tiling 阶段，与 infershape 双重校验）：
  *   1. grad_x dimNum == 3，shape 为 (B, C, N)
@@ -76,7 +78,7 @@ static ge::graphStatus GetWorkspaceSize(gert::TilingContext* context, int64_t us
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
     // SKILL 3.6.1：含 GM_ADDR workspace 必须分配 sysWorkspaceSize（无条件调用）
-    // userWorkspaceSize 为 0（确定性行私有方案，无 workspace）
+    // userWorkspaceSize = b*c*m*sizeof(float)，kernel 的 fp32 行累加器
     currentWorkspace[0] = static_cast<size_t>(userWorkspaceSize + static_cast<int64_t>(sysWorkspaceSize));
     return ge::GRAPH_SUCCESS;
 }
@@ -163,8 +165,9 @@ ge::graphStatus Tiling4ThreeInterpolateBackwardRegbase(gert::TilingContext* cont
         needCoreNum = static_cast<int32_t>(Ops::Base::CeilDiv(totalElements, perCoreElements));
     }
 
-    // 6. 填充 TilingData（确定性行私有方案，无 workspace）
-    int64_t userWorkspaceSize = 0;
+    // 6. 填充 TilingData（确定性行私有方案，user workspace 为 fp32 行累加器）
+    //    userWorkspaceSize = b*c*m*sizeof(float)，按 int64 计算防溢出
+    int64_t userWorkspaceSize = totalElements * static_cast<int64_t>(m) * static_cast<int64_t>(sizeof(float));
 
     ThreeInterpolateBackwardTilingData* tiling = context->GetTilingData<ThreeInterpolateBackwardTilingData>();
     OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
@@ -178,7 +181,7 @@ ge::graphStatus Tiling4ThreeInterpolateBackwardRegbase(gert::TilingContext* cont
     tiling->m = m;
     tiling->totalElements = totalElements;
 
-    // 7. Workspace 分配（始终分配 sysWorkspaceSize，userWorkspaceSize=0）
+    // 7. Workspace 分配（sysWorkspaceSize + userWorkspaceSize=fp32 行累加器）
     uint64_t sysWorkspaceSize = 0;
     OP_CHECK_IF(GetWorkspaceSize(context, userWorkspaceSize, sysWorkspaceSize) != ge::GRAPH_SUCCESS,
                 OP_LOGE(context, "GetWorkspaceSize error"), return ge::GRAPH_FAILED);

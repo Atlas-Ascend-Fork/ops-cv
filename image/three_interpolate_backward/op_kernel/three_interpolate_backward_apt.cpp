@@ -15,7 +15,8 @@
  * \brief Kernel entry for three_interpolate_backward operator
  *
  * 确定性行私有方案：入口签名不变（grad_x, idx, weight, grad_y, workspace, tiling），
- * kernel 内部为统一单一路径（行私有串行累加，无 m==1/m>1 分支、无原子操作、无 workspace）。
+ * kernel 内部为统一单一路径（行私有 fp32 串行累加，user workspace 作 fp32 行累加器，
+ * 无 m==1/m>1 分支、无原子操作）。
  *
  * 模板参数 schMode 对应 TilingKey 中声明的场景模式（仅 MODE_DEFAULT=0）。
  * DTYPE_ 宏自动实例化 4 种 dtype 组合，无需 if-constexpr 分支：

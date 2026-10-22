@@ -14,23 +14,26 @@
  * \file three_interpolate_backward_simt.h
  * \brief SIMT kernel for three_interpolate_backward operator（确定性行私有方案）
  *
- * 设计要点（确定性实现改造，替代原 atomic_add 非确定性方案）：
+ * 设计要点（确定性行私有方案，fp32  workspace 累加）：
  *   - 核心原理：idx/weight 只依赖 (b,n) 不依赖 c。把一整行 (b,c) 划给单个线程私有，
- *     该线程独占 grad_y[b,c,:] 的读写，串行累加、顺序固定 → 无原子操作、无 workspace、
+ *     该线程独占 grad_y[b,c,:] 的读写，串行累加、顺序固定 → 无原子操作、
  *     无跨核同步，任意核数下结果天然确定。
  *   - Grid-Stride 循环：工作项为 (b,c) 行，共 b*c 个；UintDiv 快除解码 bcIdx → (b,c)
- *   - 累加顺序：k 外层（i=0,1,2）、n 内层升序，与 golden 的 np.add.at 三次散射、
+ *   - fp32 累加（user workspace）：每行在 workspace 中占 m 个 float，先清零、再累加、
+ *     行末一次性 cast 回 T 写 grad_y。与 golden 的 fp32 scatter_add_ 累加语义一致；
+ *     若按输出 dtype T（如 fp16）在 GM 上逐步累加，小贡献会被 ulp/2 吸收，
+ *     N 大时产生无界系统性偏差（实测 N=2e7 时相对误差 >50%）
+ *   - 累加顺序：k 外层（i=0,1,2）、n 内层升序，与 golden 的 scatter_add_ 三次散射、
  *     每次 n 升序的顺序完全一致
- *   - 两步舍入：乘法与加法各自先转 float 计算、再 cast 回 T，与 golden 原生 dtype
- *     运算逐位一致（half/fp32 的乘积与和在 float 中精确可表示，float 计算后 cast 回 T
- *     = 正确舍入的原生 T 运算，与 numpy 原生 dtype 逐位相同），禁止合并成一步 float FMA
- *   - 行私有清零：线程先对自己独占的行清零，再串行累加，同行内程序序保证可见性，
+ *   - 乘法保留中间舍入：prod 先以 float 落变量再加进累加器，禁止编译器收缩成
+ *     FMA（FMA 会消除乘积的 fp32 中间舍入，与 golden 的 mul-then-add 产生 ULP 级偏差）
+ *   - 行私有清零：线程先对自己独占的累加行清零，再串行累加，同行内程序序保证可见性，
  *     无需 V_S/DCCI/SyncAll 三件套
  *   - VF 线程数 THREAD_NUM=512（编译期常量，禁止从 tiling 获取）
  *   - UB 分配：LocalMemAllocator 动态分配 magicC/shiftC（32B 对齐）
  *
  * 已知性能取舍：k 外层循环下 grad_x[b,c,ni] 会被读 3 次（每个 k 一次），
- * 依赖 DCache 吸收重复读，换取与 golden 逐位一致的确定性累加顺序。
+ * 依赖 DCache 吸收重复读，换取与 golden 一致的确定性累加顺序。
  */
 
 #ifndef THREE_INTERPOLATE_BACKWARD_SIMT_H_
@@ -60,22 +63,23 @@ constexpr uint32_t UINTDIV_UB_ELEMS = 8;
  * \brief SIMT VF 函数：确定性行私有累加（统一 kernel，覆盖所有 m）
  *
  * 每个线程独占一个或多个 (b,c) 行：
- *   1. 行私有清零：grad_y[bIdx,cIdx,0..m) = T(0)（行私有，无需任何屏障/DCCI/SyncAll）
- *   2. 串行累加：k 外层（0..2）、n 内层升序，顺序与 golden 的 np.add.at 完全一致
+ *   1. 行私有清零：workspace 中该行 fp32 累加器 acc[0..m) = 0.0f（行私有，无需任何屏障/DCCI/SyncAll）
+ *   2. fp32 串行累加：k 外层（0..2）、n 内层升序，顺序与 golden 的 scatter_add_ 完全一致
+ *   3. 末次舍入：acc[j] 一次性 cast 回 T 写入 grad_y
  *
  * 确定性保证：
  *   - 每行只被一个线程读写，无跨线程/跨核竞争，无原子操作
  *   - 累加顺序固定（k 外 n 内），与线程调度无关，任意核数结果一致
  *
- * 两步舍入（与 golden 原生 dtype 运算逐位一致）：
- *   - half/fp32 的乘积与和在 float 中精确可表示，float 计算后 cast 回 T
- *     = 正确舍入的原生 T 运算，与 numpy 原生 dtype 逐位相同
- *   - 禁止合并成一步 float FMA（会改变舍入点，与 golden 产生系统性偏差）
+ * fp32 累加（与 golden 语义一致）：
+ *   - golden 以 fp32 scatter_add_ 累加、末次 cast 回输出 dtype；
+ *     kernel 在 user workspace 中以 fp32 累加、行末 cast 回 T，语义一致
+ *   - 禁止合并成一步 float FMA（会消除乘积的 fp32 中间舍入，与 golden 产生系统性偏差）
  */
 template <typename T, typename IDX_T>
 __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpolateBackwardSimtDet(
     int32_t b, int32_t c, int32_t n, int32_t m, __gm__ T* grad_x_gm, __gm__ IDX_T* idx_gm, __gm__ T* weight_gm,
-    __gm__ T* grad_y_gm, __ubuf__ uint32_t* uintdivUb)
+    __gm__ T* grad_y_gm, __gm__ float* acc_gm, __ubuf__ uint32_t* uintdivUb)
 {
     // 1. 从 UB 读取 UintDiv 参数（仅需 magicC/shiftC，用于 bcIdx → (b,c) 解码）
     const uint32_t magicC = uintdivUb[0];
@@ -96,16 +100,16 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpol
         uint32_t bIdx = Simt::UintDiv<uint32_t>(bcU32, magicC, shiftC);
         uint32_t cIdx = bcU32 - bIdx * cU32;
 
-        // 2.2 行基址：grad_y[bIdx, cIdx, :]（本线程独占该行）
-        uint64_t gradYBase = static_cast<uint64_t>(bIdx) * c * m + static_cast<uint64_t>(cIdx) * m;
+        // 2.2 行基址：acc/grad_y 均为 (bIdx*c + cIdx)*m = bcIdx*m（本线程独占该行）
+        uint64_t rowBase = bcIdx * static_cast<uint64_t>(m);
 
-        // 2.3 行私有清零（同行内程序序保证后续累加可见，无需屏障/刷缓存/跨核同步）
+        // 2.3 行私有清零 fp32 累加器（同行内程序序保证后续累加可见，无需屏障/刷缓存/跨核同步）
         for (int32_t j = 0; j < m; j++) {
-            grad_y_gm[gradYBase + static_cast<uint64_t>(j)] = static_cast<T>(0);
+            acc_gm[rowBase + static_cast<uint64_t>(j)] = 0.0f;
         }
 
-        // 2.4 串行累加：k 外层（i=0,1,2）、n 内层升序
-        //     与 golden 的 np.add.at 按 i=0,1,2 三次散射、每次 n 升序的顺序完全一致
+        // 2.4 fp32 串行累加：k 外层（i=0,1,2）、n 内层升序
+        //     与 golden 的 scatter_add_ 按 i=0,1,2 三次散射、每次 n 升序的顺序完全一致
         //     ⚠️ grad_x[bIdx,cIdx,ni] 在 k 外层循环下会被读 3 次，依赖 DCache 吸收（已知性能取舍）
         for (int32_t k = 0; k < 3; k++) {
             for (int32_t ni = 0; ni < n; ni++) {
@@ -114,24 +118,21 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpol
                 IDX_T jRaw = idx_gm[idxWeightOffset];
                 // int32 索引显式转 int64_t 再转 uint64_t，避免编译器差异
                 uint64_t j = static_cast<uint64_t>(static_cast<int64_t>(jRaw));
-                T w = weight_gm[idxWeightOffset];
+                float w = static_cast<float>(weight_gm[idxWeightOffset]);
 
                 uint64_t gradXOffset = static_cast<uint64_t>(bIdx) * c * n + static_cast<uint64_t>(cIdx) * n + ni;
-                T g = grad_x_gm[gradXOffset];
+                float g = static_cast<float>(grad_x_gm[gradXOffset]);
 
-                // ⚠️ 两步舍入（与 golden 原生 dtype 运算逐位一致，禁止合并成一步 float FMA）：
-                // half/fp32 的乘积与和在 float 中精确可表示，float 计算后 cast 回 T
-                // = 正确舍入的原生 T 运算，与 numpy 原生 dtype 逐位相同
-                // ⚠️ volatile 中间变量（ttk_round=24 根因修复）：ccec 在 T=float 路径会把
-                // "prod=g*w 再 acc+prod" 收缩为 fma(g,w,acc)，消除乘积的中间舍入，
-                // 与 golden 原生 fp32 mul-then-add 产生系统性 ULP 级偏差（确定性复现、
-                // hits>=2 起失配、FMA 链仿真与设备输出全量逐位一致已实证）。
-                // volatile 强制乘积先落内存再读回，编译器无法跨过 volatile 做 FMA 收缩。
-                volatile T prod = static_cast<T>(static_cast<float>(g) * static_cast<float>(w));
-                uint64_t gradYOffset = gradYBase + j;
-                grad_y_gm[gradYOffset] = static_cast<T>(static_cast<float>(grad_y_gm[gradYOffset]) +
-                                                        static_cast<float>(prod));
+                // ⚠️ 乘法保留 fp32 中间舍入（volatile 防 FMA 收缩）：golden 为 fp32 mul-then-add
+                // 两次舍入；若被 ccec 收缩为 fma(g,w,acc)，乘积舍入点消失，与 golden 产生 ULP 级偏差
+                volatile float prod = g * w;
+                acc_gm[rowBase + j] = acc_gm[rowBase + j] + prod;
             }
+        }
+
+        // 2.5 末次舍入：fp32 累加结果一次性 cast 回 T 写 grad_y（与 golden 的唯一舍入点一致）
+        for (int32_t j = 0; j < m; j++) {
+            grad_y_gm[rowBase + static_cast<uint64_t>(j)] = static_cast<T>(acc_gm[rowBase + static_cast<uint64_t>(j)]);
         }
     }
 }
@@ -199,20 +200,20 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpol
  *
  * 原 m==1/m>1 两路分支已被统一 kernel 取代：
  *   - 行私有方案对任意 m 均成立（每行只被一个线程读写）
- *   - 无清零 VF、无 V_S/DCCI/SyncAll 三件套、无 atomic_add、无 workspace
+ *   - 无清零 VF、无 V_S/DCCI/SyncAll 三件套、无 atomic_add
  *
- * workspace 参数保留不用（tiling 仍无条件分配 sysWorkspace）。
+ * workspace：user workspace 作为 fp32 行累加器（b*c*m 个 float，
+ * 由 tiling 按 shape 分配），sysWorkspace 由框架保留。
  */
 template <uint32_t schMode, typename T, typename IDX_T>
 __aicore__ inline void Process(GM_ADDR grad_x, GM_ADDR idx, GM_ADDR weight, GM_ADDR grad_y, GM_ADDR workspace,
                                const ThreeInterpolateBackwardTilingData* tilingData)
 {
-    (void)workspace; // 保留参数，确定性行私有方案不使用 workspace
-
     __gm__ T* grad_x_gm = (__gm__ T*)grad_x;
     __gm__ IDX_T* idx_gm = (__gm__ IDX_T*)idx;
     __gm__ T* weight_gm = (__gm__ T*)weight;
     __gm__ T* grad_y_gm = (__gm__ T*)grad_y;
+    __gm__ float* acc_gm = (__gm__ float*)GetUserWorkspace(workspace);
 
     int32_t b = tilingData->b;
     int32_t c = tilingData->c;
@@ -242,9 +243,9 @@ __aicore__ inline void Process(GM_ADDR grad_x, GM_ADDR idx, GM_ADDR weight, GM_A
 
     __ubuf__ uint32_t* uintdivUb = (__ubuf__ uint32_t*)(uintdivTensor.GetPhyAddr());
 
-    // 2. 统一确定性 kernel：行私有串行累加（单次发射，无清零 VF、无跨核同步）
+    // 2. 统一确定性 kernel：行私有 fp32 串行累加（单次发射，无清零 VF、无跨核同步）
     asc_vf_call<OpThreeInterpolateBackwardSimtDet<T, IDX_T>>(dim3(THREAD_NUM), b, c, n, m, grad_x_gm, idx_gm, weight_gm,
-                                                             grad_y_gm, uintdivUb);
+                                                             grad_y_gm, acc_gm, uintdivUb);
 }
 
 } // namespace NsThreeInterpolateBackward
