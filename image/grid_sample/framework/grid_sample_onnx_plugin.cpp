@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -8,35 +8,51 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "onnx_common.h"
+#include "cv_plugin_util.h"
+#include "graph/operator.h"
+#include "nlohmann/json.hpp"
+#include "register/register.h"
 
 namespace domi {
-using NodeProto = ge::onnx::NodeProto;
+using json = nlohmann::json;
 
-static Status ParseParamsGridSample(const Message* op_src, ge::Operator& op_dest)
+static Status ParseParamsGridSample(const ge::Operator& op_src, ge::Operator& op_dest)
 {
-    const NodeProto* node = dynamic_cast<const NodeProto*>(op_src);
-    if (node == nullptr) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "Dynamic cast op_src to NodeProto failed.");
-        return FAILED;
-    }
     bool align_corners = false;
     std::string mode_value;
     std::string padding_mode_value;
-    for (const auto& attr : node->attribute()) {
-        if (attr.name() == "align_corners" && attr.i() != 0) {
-            if (attr.i() > 1 || attr.i() < -1) {
-                OP_LOGE(GetOpName(op_dest).c_str(), "the value of align_corners [%ld] is out of range [-1, 1]",
-                        attr.i());
+
+    ge::AscendString attrs_string;
+    try {
+        if (op_src.GetAttr("attribute", attrs_string) == ge::GRAPH_SUCCESS) {
+            json attrs = json::parse(attrs_string.GetString());
+            if (attrs.contains("attribute") && attrs["attribute"].is_array()) {
+                for (json& attr : attrs["attribute"]) {
+                    // GE omits i when the int is zero.
+                    const std::string name = attr.value("name", "");
+                    if (name == "align_corners" && attr.value("type", -1) == ATTR_TYPE_INT) {
+                        int64_t align_corners_i = attr.contains("i") ? attr["i"].get<int64_t>() : 0;
+                        if (align_corners_i != 0) {
+                            if (align_corners_i > 1 || align_corners_i < -1) {
+                                OP_LOGE(GetOpName(op_dest).c_str(),
+                                        "the value of align_corners [%ld] is out of range [-1, 1]", align_corners_i);
+                            }
+                            align_corners = true;
+                        }
+                    } else if (name == "mode" && attr.contains("s")) {
+                        mode_value = attr["s"];
+                    } else if (name == "padding_mode" && attr.contains("s")) {
+                        padding_mode_value = attr["s"];
+                    }
+                }
             }
-            align_corners = true;
         }
-        if (attr.name() == "mode" && attr.type() == ge::onnx::AttributeProto::STRING) {
-            mode_value = attr.s();
-        }
-        if (attr.name() == "padding_mode" && attr.type() == ge::onnx::AttributeProto::STRING) {
-            padding_mode_value = attr.s();
-        }
+    } catch (const nlohmann::json::exception& e) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        return FAILED;
+    } catch (...) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        return FAILED;
     }
 
     auto orgTensorX = op_dest.GetInputDescByName("x");
@@ -56,42 +72,57 @@ static Status ParseParamsGridSample(const Message* op_src, ge::Operator& op_dest
     return SUCCESS;
 }
 
-static Status ParseParamsGridSampleV2(const Message* op_src, ge::Operator& op_dest)
+static Status ParseParamsGridSampleV2(const ge::Operator& op_src, ge::Operator& op_dest)
 {
-    const NodeProto* node = dynamic_cast<const NodeProto*>(op_src);
-    if (node == nullptr) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "Dynamic cast op_src to NodeProto failed.");
-        return FAILED;
-    }
     bool align_corners = false;
     std::string mode_value;
     std::string padding_mode_value;
     bool channel_last = false;
     int scheduler_mode = 0;
-    for (const auto& attrv2 : node->attribute()) {
-        if (attrv2.name() == "align_corners" && attrv2.i() != 0) {
-            if (attrv2.i() > 1 || attrv2.i() < -1) {
-                OP_LOGE(GetOpName(op_dest).c_str(), "the value of align_corners [%ld] is out of range [-1, 1]",
-                        attrv2.i());
+
+    ge::AscendString attrs_string;
+    try {
+        if (op_src.GetAttr("attribute", attrs_string) == ge::GRAPH_SUCCESS) {
+            json attrs = json::parse(attrs_string.GetString());
+            if (attrs.contains("attribute") && attrs["attribute"].is_array()) {
+                for (json& attrv2 : attrs["attribute"]) {
+                    // GE omits i when the int is zero.
+                    const std::string name = attrv2.value("name", "");
+                    const int type = attrv2.value("type", -1);
+                    if (name == "align_corners" && type == ATTR_TYPE_INT) {
+                        int64_t align_corners_i = attrv2.contains("i") ? attrv2["i"].get<int64_t>() : 0;
+                        if (align_corners_i != 0) {
+                            if (align_corners_i > 1 || align_corners_i < -1) {
+                                OP_LOGE(GetOpName(op_dest).c_str(),
+                                        "the value of align_corners [%ld] is out of range [-1, 1]", align_corners_i);
+                            }
+                            align_corners = true;
+                        }
+                    } else if (name == "mode" && attrv2.contains("s")) {
+                        mode_value = attrv2["s"];
+                    } else if (name == "padding_mode" && attrv2.contains("s")) {
+                        padding_mode_value = attrv2["s"];
+                    } else if (name == "channel_last" && type == ATTR_TYPE_INT) {
+                        int64_t channel_last_i = attrv2.contains("i") ? attrv2["i"].get<int64_t>() : 0;
+                        if (channel_last_i != 0) {
+                            if (channel_last_i > 1 || channel_last_i < 0) {
+                                OP_LOGE(GetOpName(op_dest).c_str(),
+                                        "the value of channel_last [%ld] is out of range [0, 1]", channel_last_i);
+                            }
+                            channel_last = true;
+                        }
+                    } else if (name == "scheduler_mode" && type == ATTR_TYPE_INT) {
+                        scheduler_mode = attrv2.contains("i") ? static_cast<int>(attrv2["i"].get<int64_t>()) : 0;
+                    }
+                }
             }
-            align_corners = true;
         }
-        if (attrv2.name() == "mode" && attrv2.type() == ge::onnx::AttributeProto::STRING) {
-            mode_value = attrv2.s();
-        }
-        if (attrv2.name() == "padding_mode" && attrv2.type() == ge::onnx::AttributeProto::STRING) {
-            padding_mode_value = attrv2.s();
-        }
-        if (attrv2.name() == "channel_last" && attrv2.i() != 0) {
-            if (attrv2.i() > 1 || attrv2.i() < 0) {
-                OP_LOGE(GetOpName(op_dest).c_str(), "the value of channel_last [%ld] is out of range [0, 1]",
-                        attrv2.i());
-            }
-            channel_last = true;
-        }
-        if (attrv2.name() == "scheduler_mode" && attrv2.type() == ge::onnx::AttributeProto::INT) {
-            scheduler_mode = attrv2.i();
-        }
+    } catch (const nlohmann::json::exception& e) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        return FAILED;
+    } catch (...) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        return FAILED;
     }
 
     op_dest.SetAttr("interpolation_mode", mode_value);
@@ -107,20 +138,20 @@ REGISTER_CUSTOM_OP("GridSample")
     .FrameworkType(ONNX)
     .OriginOpType({ge::AscendString("ai.onnx::11::GridSampleV2"), ge::AscendString("ai.onnx::16::GridSampleV2"),
                    ge::AscendString("ai.onnx::17::GridSampleV2"), ge::AscendString("ai.onnx::18::GridSampleV2")})
-    .ParseParamsFn(ParseParamsGridSampleV2)
+    .ParseParamsByOperatorFn(ParseParamsGridSampleV2)
     .ImplyType(ImplyType::TVM);
 
 REGISTER_CUSTOM_OP("GridSampler2D")
     .FrameworkType(ONNX)
     .OriginOpType({ge::AscendString("ai.onnx::11::GridSample"), ge::AscendString("ai.onnx::16::GridSample"),
                    ge::AscendString("ai.onnx::17::GridSample"), ge::AscendString("ai.onnx::18::GridSample")})
-    .ParseParamsFn(ParseParamsGridSample)
+    .ParseParamsByOperatorFn(ParseParamsGridSample)
     .ImplyType(ImplyType::TVM);
 
 REGISTER_CUSTOM_OP("GridSampler3D")
     .FrameworkType(ONNX)
     .OriginOpType({ge::AscendString("ai.onnx::11::GridSample3D"), ge::AscendString("ai.onnx::16::GridSample3D"),
                    ge::AscendString("ai.onnx::17::GridSample3D"), ge::AscendString("ai.onnx::18::GridSample3D")})
-    .ParseParamsFn(ParseParamsGridSample)
+    .ParseParamsByOperatorFn(ParseParamsGridSample)
     .ImplyType(ImplyType::TVM);
 } // namespace domi

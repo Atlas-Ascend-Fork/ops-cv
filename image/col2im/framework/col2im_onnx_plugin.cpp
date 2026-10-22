@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -13,14 +13,19 @@
  * \brief
  */
 
-#include "onnx_common.h"
+#include "cv_plugin_util.h"
+#include "graph/operator.h"
 #include "nlohmann/json.hpp"
+#include "register/register.h"
 
 using namespace ge;
 using json = nlohmann::json;
 namespace domi {
 static void GetAttrListFromJson(json& attr, std::vector<int32_t>& val)
 {
+    if (!attr.contains("ints") || !attr["ints"].is_array()) {
+        return;
+    }
     for (size_t i = 0; i < attr["ints"].size(); ++i) {
         val.push_back(attr["ints"][i].get<int32_t>());
     }
@@ -33,19 +38,30 @@ static Status ParseOnnxParamsCol2im(const ge::Operator& op_src, ge::Operator& op
     std::vector<int32_t> dilation;
     std::vector<int32_t> padding;
     std::vector<int32_t> stride;
-    if (op_src.GetAttr("attribute", attrs_string) == ge::GRAPH_SUCCESS) {
-        json attrs = json::parse(attrs_string.GetString());
-        for (json& attr : attrs["attribute"]) {
-            if (attr["name"] == "kernel_size") {
-                GetAttrListFromJson(attr, kernel_size);
-            } else if (attr["name"] == "dilation") {
-                GetAttrListFromJson(attr, dilation);
-            } else if (attr["name"] == "padding") {
-                GetAttrListFromJson(attr, padding);
-            } else if (attr["name"] == "stride") {
-                GetAttrListFromJson(attr, stride);
+    try {
+        if (op_src.GetAttr("attribute", attrs_string) == ge::GRAPH_SUCCESS) {
+            json attrs = json::parse(attrs_string.GetString());
+            if (attrs.contains("attribute") && attrs["attribute"].is_array()) {
+                for (json& attr : attrs["attribute"]) {
+                    const std::string name = attr.value("name", "");
+                    if (name == "kernel_size") {
+                        GetAttrListFromJson(attr, kernel_size);
+                    } else if (name == "dilation") {
+                        GetAttrListFromJson(attr, dilation);
+                    } else if (name == "padding") {
+                        GetAttrListFromJson(attr, padding);
+                    } else if (name == "stride") {
+                        GetAttrListFromJson(attr, stride);
+                    }
+                }
             }
         }
+    } catch (const nlohmann::json::exception& e) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        return FAILED;
+    } catch (...) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        return FAILED;
     }
 
     if (kernel_size.empty() || dilation.empty() || padding.empty() || stride.empty()) {
