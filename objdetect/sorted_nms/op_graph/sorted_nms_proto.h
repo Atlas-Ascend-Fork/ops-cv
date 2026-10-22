@@ -21,9 +21,9 @@ namespace ge {
  * @li boxes: A 2-D tensor of shape [num_boxes, 4].
  * @li sorted_scores: A 1-D tensor of shape [num_boxes], sorted in descending order.
  * @li input_indices: A 1-D int32 tensor of shape [num_boxes], with values in [0, num_boxes).
- * @li max_output_size: A scalar int32 tensor giving the maximum number of selected boxes.
- * @li iou_threshold: A scalar float tensor in [0, 1].
- * @li score_threshold: A scalar float tensor.
+ * @li max_output_size: A scalar (rank-0) or 1-D [1] int32 tensor giving the maximum number of selected boxes.
+ * @li iou_threshold: A scalar (rank-0) or 1-D [1] float tensor in [0, 1].
+ * @li score_threshold: A scalar (rank-0) or 1-D [1] float tensor.
  *
  * boxes and iou_threshold must have the same type (float16 or float32). sorted_scores and
  * score_threshold must have the same type (float16 or float32), independently of boxes.
