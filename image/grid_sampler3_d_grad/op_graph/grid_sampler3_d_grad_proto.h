@@ -35,7 +35,9 @@ namespace ge {
 
 * @par Attributes:
 * @li interpolation_mode: An optional string specifying the interpolation method.
+* "bilinear" and "nearest" are supported. Defaults to "bilinear".
 * @li padding_mode: An optional string specifying the pad method.
+* One of "zeros", "border", or "reflection". Defaults to "zeros".
 * @li align_corners: An optional bool. If "true", the centers of the corner
 * pixels of the input and output tensors are aligned. Defaults to "false" .
 
