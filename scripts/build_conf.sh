@@ -13,8 +13,8 @@
 
 RELEASE_TARGETS=("ophost" "opapi" "opgraph" "opkernel" "opkernel_aicpu" "onnxplugin" "tfplugin")
 SUPPORTED_UT_TARGETS=("ophost_test" "opapi_test" "opgraph_test" "opkernel_test" "opkernel_aicpu_test")
-SUPPORT_COMPUTE_UNIT_SHORT=("ascend031" "ascend035" "ascend310b" "ascend310p" "ascend610lite" "ascend630"
-                            "ascend910_93" "ascend350" "ascend950" "ascend960dt" "ascend960pr" "ascend910b" "ascend910" "mc62" "kirinx90" "kirin9030" "ascend5162a")
+# 支持的芯片列表从 cmake/soc_arch_variables.cmake 统一获取（经 query.cmake 按行输出，bash 直接分词）
+SUPPORT_COMPUTE_UNIT_SHORT=($(cmake -P ${BASE_PATH}/cmake/query.cmake Value ASCEND_ALL_COMPUTE_UNIT 2>&1))
 
 # 所有支持的短选项
 SUPPORTED_SHORT_OPTS="hj:vO:uf:-:"

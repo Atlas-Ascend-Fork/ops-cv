@@ -11,6 +11,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 include(cmake/fetch_cann_cmake.cmake)
+include(cmake/soc_arch_variables.cmake)
 
 set(PKG_NAME cv)
 project(${PKG_NAME} VERSION 1.0.0)
@@ -68,7 +69,6 @@ if(NOT PACKAGE_TYPE IN_LIST SUPPORTED_PACKAGE_TYPES)
   message(FATAL_ERROR "PACKAGE_TYPE only supports run/rpm/deb/all, got: ${PACKAGE_TYPE}")
 endif()
 set(ASCEND_COMPUTE_UNIT "ascend910b" CACHE STRING "soc that need to be compiled")
-set(ASCEND_ALL_COMPUTE_UNIT "ascend031;ascend035;ascend310b;ascend310p;ascend610lite;ascend630;ascend910;ascend350;ascend910b;ascend910_93;ascend950;ascend960dt;ascend960pr;mc62;kirinx90;kirin9030;ascend5162a" CACHE STRING "all soc list")
 if(NOT CANN_3RD_LIB_PATH)
   set(CANN_3RD_LIB_PATH ${PROJECT_SOURCE_DIR}/third_party CACHE STRING "cann third party lib path")
 endif()

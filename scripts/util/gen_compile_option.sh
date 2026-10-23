@@ -111,16 +111,25 @@ main() {
   local binary_param_dir=${topdir}/build/tbe
   for pair in "${all_pairs[@]}"; do
     if [[ "$pair" != *:* ]]; then
-      echo "[ERROR] Invaild format: '$pair'. Expected: op_type:compute_unit"
+      echo "[ERROR] Invalid format: '$pair'. Expected: op_type:compute_unit"
       continue
     fi
     local op_type="${pair%%:*}"
     local soc_version="${pair#*:}"
+    # soc->npuArch 查询：兼容 ascendc_config.json 中按 arch（dav_XXX）或 soc 登记的配置，
+    # 命中 arch 键时回替为 soc 名，供后续按 soc 名解析；arch 为空（如 ascend610lite/ascend630）时保持原按 soc 匹配
+    local arch=$(cmake -P ${topdir}/cmake/query.cmake Func get_npu_arch_by_soc_version ${soc_version} 2>&1)
     local soc_version_lower=${soc_version,,}
 
     local ascendc_config_file="${topdir}/scripts/kernel/binary_config/ascendc_config.json"
     local key_word_in_list="\"name\":\s*\"${op_type}\""
-    local ascendc_op_conf=$(grep ${key_word_in_list} ${ascendc_config_file} | grep -w $soc_version_lower)
+    local ascendc_op_conf
+    if [ -n "$arch" ]; then
+      ascendc_op_conf=$(grep ${key_word_in_list} ${ascendc_config_file} | grep -wE "$arch|$soc_version_lower")
+      ascendc_op_conf=${ascendc_op_conf//$arch/$soc_version_lower}
+    else
+      ascendc_op_conf=$(grep ${key_word_in_list} ${ascendc_config_file} | grep -w $soc_version_lower)
+    fi
 
     json_line=$(echo "$ascendc_op_conf" | tr -d '\n\r')
 
@@ -153,6 +162,7 @@ main() {
     match($0, /"compile_options"[[:space:]]*:[[:space:]]*(\{[^}]*\})/, arr) {
       print arr[1]
     }')
+    echo $compile_options
 
     call_write_scripts "$op_type" "$soc_version_lower" "$auto_sync" "$compute_units" "$compile_options"
   done

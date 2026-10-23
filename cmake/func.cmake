@@ -537,6 +537,44 @@ function(find_value_by_key key_list value_list search_key result)
   set(${result} ${found_value} PARENT_SCOPE)
 endfunction()
 
+###################################################################################################
+# get npuArch by socVersion, mapping is consistent with get_simulator_chip_version in scripts/build_example.sh
+# 映射列表 ASCEND_ALL_COMPUTE_UNIT/SOC_TO_ARCH_VALUES 定义在 soc_arch_variables.cmake，两者按位置一一对应
+# usage: get_npu_arch_by_soc_version(<soc_version> <out_var>)
+# e.g.: get_npu_arch_by_soc_version("ascend910b" npu_arch) -> npu_arch is dav_2201
+# 未匹配的 socVersion（如 ascend610lite/ascend630 等暂无 npuArch 的 soc）返回空串
+###################################################################################################
+function(get_npu_arch_by_soc_version soc_version npu_arch)
+    string(TOLOWER "${soc_version}" soc_version_lower)
+    list(FIND ASCEND_ALL_COMPUTE_UNIT ${soc_version_lower} index)
+    if(NOT index EQUAL -1)
+        list(GET SOC_TO_ARCH_VALUES ${index} mapped_value)
+        set(${npu_arch} ${mapped_value} PARENT_SCOPE)
+    else()
+        set(${npu_arch} "" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(get_soc_version_by_npu_arch npu_arch soc_version)
+    list(LENGTH SOC_TO_ARCH_VALUES arch_list_length)
+    set(mapped_list)
+    set(index 0)
+    # SOC_TO_ARCH_VALUES 含空占位元素（foreach 展开会丢弃空元素），须用 list(GET) 按位遍历
+    while(index LESS arch_list_length)
+        list(GET SOC_TO_ARCH_VALUES ${index} arch)
+        if("${npu_arch}" STREQUAL "${arch}")
+            list(GET ASCEND_ALL_COMPUTE_UNIT ${index} mapped_value)
+            list(APPEND mapped_list ${mapped_value})
+        endif()
+        math(EXPR index "${index} + 1")
+    endwhile()
+    if(mapped_list)
+        set(${soc_version} ${mapped_list} PARENT_SCOPE)
+    else()
+        set(${soc_version} "" PARENT_SCOPE)
+    endif()
+endfunction()
+
 # ------------------------------------------------------------------------------------------------------------
 # require_pypto_pro(<op_name>)
 #   Require pypto_pro for the current operator. Call at the beginning of an operator's CMakeLists.txt, before
@@ -733,17 +771,19 @@ function(add_tiling_sources tiling_dir disable_in_opp)
   endif()
 endfunction()
 
-# usage: add_all_modules_sources(OPTYPE ACLNNTYPE DEPENDENCIES COMPUTE_UNIT TILING_DIR DISABLE_IN_OPP HOSTCPU)
+# usage: add_all_modules_sources(OPTYPE ACLNNTYPE DEPENDENCIES COMPUTE_UNIT NPU_ARCH TILING_DIR DISABLE_IN_OPP HOSTCPU)
 # ACLNNTYPE 支持类型aclnn/aclnn_inner/aclnn_exclude
 # OPTYPE 和 ACLNNTYPE 需一一对应
 # DEPENDENCIES 指定依赖的算子名称列表
-# COMPUTE_UNIT 设置支持芯片版本号，必须与TILING_DIR一一对应，示例：ascend910b ascend950
-# TILING_DIR 设置所支持芯片类型对应的tiling文件目录，必须与COMPUTE_UNIT一一对应，示例：arch22 arch35
+# COMPUTE_UNIT 兼容参数：设置支持芯片版本号（soc列表），必须与TILING_DIR一一对应，缺省为配置所有的soc
+# NPU_ARCH 设置支持的npuArch列表，必须与TILING_DIR一一对应，示例：dav_2201 dav_3510；与COMPUTE_UNIT互斥，
+#          配置后当前构建芯片转换为npuArch统一按arch匹配
+# TILING_DIR 设置所支持芯片类型对应的tiling文件目录，必须与COMPUTE_UNIT（或NPU_ARCH）一一对应，示例：arch22 arch35
 # DISABLE_IN_OPP 设置是否在opp包中编译tiling文件，布尔类型：TRUE，FALSE
 # HOSTCPU 设置是否编译host侧常量折叠OBJECT，布尔类型：TRUE，FALSE，仅在built-in包生效
 macro(add_all_modules_sources)
   set(oneValueArgs DISABLE_IN_OPP HOSTCPU)
-  set(multiValueArgs OPTYPE ACLNNTYPE DEPENDENCIES COMPUTE_UNIT TILING_DIR)
+  set(multiValueArgs OPTYPE ACLNNTYPE DEPENDENCIES COMPUTE_UNIT NPU_ARCH TILING_DIR)
 
   cmake_parse_arguments(MODULE "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -799,8 +839,20 @@ macro(add_all_modules_sources)
     target_sources(${OPHOST_NAME}_infer_obj PRIVATE ${OPINFER_SRCS})
   endif()
 
-  # 添加tiling文件
-  find_value_by_key("${MODULE_COMPUTE_UNIT}" "${MODULE_TILING_DIR}" "${ASCEND_COMPUTE_UNIT}" tiling_dir)
+  # 添加tiling文件：NPU_ARCH 与 TILING_DIR 按位置一一配对，当前构建芯片转换为 npuArch 后统一按 arch 匹配；
+  # 未配置 NPU_ARCH 时走原 COMPUTE_UNIT 路径，按 soc 名匹配（保持既有行为不变）；
+  # 构建芯片无 npuArch 映射（如 ascend610lite/ascend630）时与旧路径对不支持 soc 的行为一致，回退默认 tiling 目录
+  set(tiling_dir "")
+  if(MODULE_NPU_ARCH)
+    get_npu_arch_by_soc_version("${ASCEND_COMPUTE_UNIT}" _cur_key)
+    set(_cur_keys "${MODULE_NPU_ARCH}")
+  else()
+    set(_cur_key "${ASCEND_COMPUTE_UNIT}")
+    set(_cur_keys "${MODULE_COMPUTE_UNIT}")
+  endif()
+  if(_cur_key)
+    find_value_by_key("${_cur_keys}" "${MODULE_TILING_DIR}" "${_cur_key}" tiling_dir)
+  endif()
   add_tiling_sources("${tiling_dir}" "${MODULE_DISABLE_IN_OPP}")
 
   # Some existing TF plugin sources in ops-cv still depend on non-public GE headers
