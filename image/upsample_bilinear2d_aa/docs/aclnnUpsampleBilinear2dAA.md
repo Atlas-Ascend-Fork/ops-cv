@@ -174,7 +174,7 @@ aclnnStatus aclnnUpsampleBilinear2dAA(
       <td>out（aclTensor*）</td>
       <td>输出</td>
       <td>表示采样后的输出张量，对应公式中的`I`。</td>
-      <td><ul><li>不支持空Tensor。</li><li>数据类型、数据格式和shape与入参`input`保持一致。</li></ul></td>
+      <td><ul><li>不支持空Tensor。</li><li>数据类型、数据格式与入参`input`保持一致；N、C维与`input`一致，H、W维分别与`outputSize`中的值一致。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16</td>
       <td>NCHW、ND</td>
       <td>4</td>
