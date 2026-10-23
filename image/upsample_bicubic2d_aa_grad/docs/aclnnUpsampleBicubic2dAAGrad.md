@@ -27,7 +27,8 @@
 - 计算公式：对于一个二维插值点$(N, C, h, w)$，插值$gradInput(N, C, h, w)$可以表示为：
 
   $$
-  {gradInput(N, C, h, w)}=\sum_{i=0}^{3}\sum_{j=0}^{3}{W(i, j)}*{f(h_i, w_j)}
+  {gradInput(N, C, h, w)}=\sum_{r: h\in R_H(r)}\sum_{s: w\in R_W(s)}
+  {gradOutput(N, C, r, s)} W_H(h|r) W_W(w|s)
   $$
 
   $$
@@ -48,21 +49,43 @@
 
   其中：
   - alignCorners为true，表示输入和输出张量的角像素点对齐；alignCorners为false，表示输入和输出张量的边像素点对齐。
-  - i和j是$W(i, j)$的索引变量。
-  - $f(h_i, w_j)$是gradOutput在$(h_i, w_j)$的像素值。
-  - $W(i, j)$是双三次抗锯齿插值的权重，定义为：
+  - $r$和$s$是gradOutput的H、W坐标；$h$和$w$是gradInput的H、W坐标。$gradInput_H$和$gradInput_W$分别表示gradInput的H、W长度。
+  - 对方向$D\in\{H,W\}$、gradOutput坐标$q$，中心坐标为：
 
     $$
-    W(d) =\begin{cases}
-    (a+2)|d|^3-(a+3)|d|^2+1 & |d|\leq1 \\
-    a|d|^3-5a|d|^2+8a|d|-4a & 1<|d|<2 \\
+    c_D(q)=\begin{cases}
+    (q+0.5)scale_D & scale_D>0 \\
+    0.5 & otherwise
+    \end{cases}
+    $$
+
+  - 有效gradInput坐标范围按support计算并裁剪到gradInput边界：
+
+    $$
+    R_D(q)=\left[\max(0,\lfloor c_D(q)-support_D+0.5\rfloor),\,
+    \min(gradInput_D,\lfloor c_D(q)+support_D+0.5\rfloor)\right)
+    $$
+
+    其中$support_D=2scale_D$（$scale_D\geq1$），否则$support_D=2$。因此scale不小于1时，参与计算的窗口会随scale扩大。
+
+  - 权重距离缩放系数为$invScale_D=1/scale_D$（$scale_D\geq1$），否则$invScale_D=1$。方向$D$上位置$x\in R_D(q)$的归一化权重为：
+
+    $$
+    \widetilde W_D(x|q)=CubicFilterAA((x-c_D(q)+0.5)invScale_D),\qquad
+    W_D(x|q)=\frac{\widetilde W_D(x|q)}{\sum_{t\in R_D(q)}\widetilde W_D(t|q)}
+    $$
+
+  - $CubicFilterAA(x)$是双三次核，定义为：
+
+    $$
+    CubicFilterAA(x)=\begin{cases}
+    (a+2)|x|^3-(a+3)|x|^2+1 & |x|\leq1 \\
+    a|x|^3-5a|x|^2+8a|x|-4a & 1<|x|<2 \\
     0 & otherwise
     \end{cases}
     $$
 
-    其中：
-    - $a=-0.5$
-    - $d = |(h, w) - (h_i, w_j)|$
+    其中抗锯齿场景$a=-0.5$。
 
 ## 函数原型
 
