@@ -56,6 +56,8 @@ static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST_DATA = {op::
 static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST_DATA_REGBASE = {
     op::DataType::DT_FLOAT16, op::DataType::DT_FLOAT, op::DataType::DT_BF16};
 
+static inline bool Is960SocVersion(const NpuArch curArch) { return curArch == NpuArch::DAV_9201; }
+
 static bool CheckScalesSize(const aclFloatArray* scales)
 {
     uint64_t size = 0;
@@ -238,8 +240,8 @@ static const aclTensor* CreateSizesRegBase(const aclTensor* out, aclOpExecutor* 
 static bool GetExtendPathFlag()
 {
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
-    if (IsRegBase(curArch) || curArch == NpuArch::DAV_2201 || curArch == NpuArch::DAV_1001 ||
-        curArch == NpuArch::DAV_2002) {
+    if (IsRegBase(curArch) || Is960SocVersion(curArch) || curArch == NpuArch::DAV_2201 ||
+        curArch == NpuArch::DAV_1001 || curArch == NpuArch::DAV_2002) {
         return true;
     }
     return false;
@@ -266,7 +268,7 @@ aclnnStatus aclnnResizeGetWorkspaceSize(const aclTensor* self, const aclFloatArr
     auto outContiguous = l0op::Contiguous(out, uniqueExecutor.get());
     CHECK_RET(outContiguous != nullptr, ACLNN_ERR_INNER_NULLPTR);
 
-    if (extendFlag && IsRegBase()) {
+    if (extendFlag && (IsRegBase() || Is960SocVersion(GetCurrentPlatformInfo().GetCurNpuArch()))) {
         auto sizes = CreateSizesRegBase(outContiguous, uniqueExecutor.get());
         CHECK_RET(sizes != nullptr, ACLNN_ERR_INNER_NULLPTR);
         // 不必转到5HD，直接执行L0算子 带scales参数

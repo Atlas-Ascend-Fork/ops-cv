@@ -59,6 +59,8 @@ static const float MAX_W = 130000;
 
 static const std::string CUBIC_MODE = "cubic";
 
+static inline bool Is960SocVersion(const NpuArch curArch) { return curArch == NpuArch::DAV_9201; }
+
 static bool CheckNotNull(const aclTensor* gradOut, const aclIntArray* outputSize, const aclIntArray* inputSize,
                          const aclTensor* gradInput)
 {
@@ -74,7 +76,7 @@ static bool CheckDtypeValid(const aclTensor* gradOut, const aclTensor* gradInput
     // Check if the data type of gradOut is in the supported list of
     // the ResizeBicubicV2Grad operator
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
-    if (IsRegBase(curArch)) {
+    if (IsRegBase(curArch) || Is960SocVersion(curArch)) {
         OP_CHECK_DTYPE_NOT_SUPPORT(gradOut, DTYPE_SUPPORT_LIST_REGBASE, return false);
     } else {
         bool is910BSocVersion = (curArch == NpuArch::DAV_2201 || IsRegBase(curArch));
@@ -95,7 +97,8 @@ static bool CheckShape(const aclTensor* gradOut, const aclTensor* gradIn, const 
     // NCHW NHWC和ND格式判断
     auto srcOriginFormat = gradOut->GetOriginalFormat();
     bool supportFormat = false;
-    if (IsRegBase()) {
+    auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
+    if (IsRegBase() || Is960SocVersion(curArch)) {
         supportFormat = srcOriginFormat == op::Format::FORMAT_ND || srcOriginFormat == op::Format::FORMAT_NCHW ||
                         srcOriginFormat == op::Format::FORMAT_NHWC;
         OP_CHECK(supportFormat, OP_LOGE(ACLNN_ERR_PARAM_INVALID, "input format only supports NCHW, NHWC or ND"),
@@ -344,7 +347,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackwardGetWorkspaceSize(const aclTensor* grad
     const aclTensor* gradOutContiguous = nullptr;
     const aclTensor* gradInputContiguous = nullptr;
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
-    if (IsRegBase(curArch)) {
+    if (IsRegBase(curArch) || Is960SocVersion(curArch)) {
         // constuct aclFloatArray
         const float scalesList[] = {static_cast<float>(scalesH), static_cast<float>(scalesW)};
         const aclFloatArray* scales = uniqueExecutor->AllocFloatArray(scalesList, EXPECT_SIZE);

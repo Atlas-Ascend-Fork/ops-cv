@@ -49,6 +49,8 @@ static const std::initializer_list<op::DataType> ASCEND910B_DTYPE_DTYPE_SUPPORT_
 static const std::initializer_list<op::DataType> AICORE_DTYPE_SUPPORT_LIST = {
     op::DataType::DT_FLOAT16, op::DataType::DT_FLOAT, op::DataType::DT_BF16};
 
+static inline bool Is960SocVersion(const NpuArch curArch) { return curArch == NpuArch::DAV_9201; }
+
 static bool CheckNotNull(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out)
 {
     OP_CHECK_NULL(self, return false);
@@ -60,7 +62,7 @@ static bool CheckNotNull(const aclTensor* self, const aclIntArray* outputSize, c
 static const std::initializer_list<DataType>& GetDtypeSupportList()
 {
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
-    if (curArch == NpuArch::DAV_2201 || IsRegBase(curArch)) {
+    if (curArch == NpuArch::DAV_2201 || IsRegBase(curArch) || Is960SocVersion(curArch)) {
         return ASCEND910B_DTYPE_DTYPE_SUPPORT_LIST;
     } else {
         return ASCEND910_DTYPE_DTYPE_SUPPORT_LIST;
@@ -319,7 +321,7 @@ aclnnStatus aclnnUpsampleNearest1dGetWorkspaceSize(const aclTensor* self, const 
 
     const aclTensor* resizeNearestOut = nullptr;
     if (CheckType(self->GetDataType(), AICORE_DTYPE_SUPPORT_LIST)) {
-        if (IsRegBase()) {
+        if (IsRegBase() || Is960SocVersion(GetCurrentPlatformInfo().GetCurNpuArch())) {
             resizeNearestOut = l0op::ResizeNearestNeighborV2(selfContiguous, size, nullptr, false, false, outContiguous,
                                                              uniqueExecutor.get());
         } else if (GetCurrentPlatformInfo().GetCurNpuArch() == NpuArch::DAV_2201) {
