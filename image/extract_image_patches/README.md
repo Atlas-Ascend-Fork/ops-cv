@@ -55,14 +55,14 @@ $$
       <td>输入</td>
       <td>4D 图像输入，支持NHWC与NCHW两种origin format。公式中的x。</td>
       <td>FLOAT16、FLOAT、BF16、INT8、UINT8</td>
-      <td>ND</td>
+      <td>NHWC/NCHW</td>
     </tr>
     <tr>
       <td>y</td>
       <td>输出</td>
       <td>patch展平到通道维的输出，format与输入origin format一致。公式中的y。</td>
       <td>FLOAT16、FLOAT、BF16、INT8、UINT8</td>
-      <td>ND</td>
+      <td>NHWC/NCHW</td>
     </tr>
     <tr>
       <td>ksizes</td>
