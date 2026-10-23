@@ -43,7 +43,8 @@ namespace ge {
 * shape.
 
 * @attention Constraints:
-* In each batch, invalid boxes cannot appear before valid boxes.
+* Invalid boxes (non-finite coordinates or non-positive width/height) may appear
+* at any position; each pair containing one produces zero overlap.
 */
 #ifndef OPS_PROTO_DEF_ROTATEDOVERLAPS
 #define OPS_PROTO_DEF_ROTATEDOVERLAPS
