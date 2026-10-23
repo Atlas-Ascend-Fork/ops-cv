@@ -271,6 +271,23 @@ ge::graphStatus UpsampleBilinear2dGradTiling::RunBigKernelTiling()
 
     setSingleCoreK();
 
+    // 输出tensor的实际shape必须与inputSize推导出的shape一致，不一致时下发kernel会越界写导致设备侧挂死
+    auto outShape = tilingContext->GetOutputShape(0);
+    OP_CHECK_IF(outShape == nullptr, OP_LOGE(tilingContext->GetNodeName(), "output shape is nullptr"),
+                return ge::GRAPH_FAILED);
+    auto outStorageShape = outShape->GetStorageShape();
+    OP_CHECK_IF(outStorageShape.GetDimNum() != SHAPE_SIZE,
+                OP_LOGE(tilingContext->GetNodeName(), "the num of output shape is %lu, must be %d",
+                        outStorageShape.GetDimNum(), SHAPE_SIZE),
+                return ge::GRAPH_FAILED);
+    for (int8_t i = 0; i < SHAPE_SIZE; i++) {
+        OP_CHECK_IF(outStorageShape.GetDim(i) != output_shapes[i],
+                    OP_LOGE(tilingContext->GetNodeName(),
+                            "the dim %d of output shape is %ld, not match inputSize dim %ld, please check", i,
+                            outStorageShape.GetDim(i), output_shapes[i]),
+                    return ge::GRAPH_FAILED);
+    }
+
     uint32_t needCoreNum = GetNeedCoreNum(coreNumPlatForm);
 
     // 计算workspace，每个核的系数矩阵（是否要乘2，避免doubelBuffer矩阵相互影响？），中间矩阵大小

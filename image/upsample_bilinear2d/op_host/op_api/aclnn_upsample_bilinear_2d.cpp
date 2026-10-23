@@ -17,6 +17,7 @@
 #include "aclnn_kernels/transdata.h"
 #include "aclnn_kernels/transpose.h"
 #include "aclnn_kernels/reshape.h"
+#include "level0/fill.h"
 #include "aclnn/aclnn_base.h"
 #include "aclnn_kernels/common/op_error_check.h"
 #include "opdev/common_types.h"
@@ -381,6 +382,17 @@ static const aclTensor* GoUpsampleBilinear2DAICORE(const aclTensor* selfRefConti
     return castOut;
 }
 
+// self 为空（H==0 或 W==0）时没有有效输入可插值。aclnn 早退不写输出会把未初始化内存返回给用户。
+static const aclTensor* GetOutTensorWithValueZero(aclTensor* out, aclOpExecutor* executor)
+{
+    aclScalar* scalar = executor->AllocScalar(0);
+    auto valueTensor = executor->ConvertToTensor(scalar, out->GetDataType());
+    auto outDims = op::ToShapeVector(out->GetViewShape());
+    aclIntArray* dimArray = executor->AllocIntArray(outDims.data(), outDims.size());
+    auto dimTensor = executor->ConvertToTensor(dimArray, op::DataType::DT_INT64);
+    return l0op::Fill(dimTensor, valueTensor, dimArray, executor);
+}
+
 aclnnStatus aclnnUpsampleBilinear2dGetWorkspaceSize(const aclTensor* self, const aclIntArray* outputSize,
                                                     const bool alignCorners, const double scalesH, const double scalesW,
                                                     aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
@@ -396,8 +408,18 @@ aclnnStatus aclnnUpsampleBilinear2dGetWorkspaceSize(const aclTensor* self, const
 
     // IndexPut算子的空tensor在kernel中支持，对标竞品根据算子实际情况补充
     if (self->IsEmpty() || out->IsEmpty()) {
-        // 根据实际支持情况补充
-        *workspaceSize = 0;
+        // 输出为空（如 N==0 或 C==0）时没有元素可写，直接成功。
+        // 输出非空（self 的 H==0 或 W==0，但 out 各维均大于 0）时必须写成全 0，避免把未初始化内存返回给用户。
+        if (out->IsEmpty()) {
+            *workspaceSize = 0;
+            uniqueExecutor.ReleaseTo(executor);
+            return ACLNN_SUCCESS;
+        }
+        auto fillOut = GetOutTensorWithValueZero(out, uniqueExecutor.get());
+        CHECK_RET(fillOut != nullptr, ACLNN_ERR_INNER_NULLPTR);
+        auto viewCopyResult = l0op::ViewCopy(fillOut, out, uniqueExecutor.get());
+        CHECK_RET(viewCopyResult != nullptr, ACLNN_ERR_INNER_NULLPTR);
+        *workspaceSize = uniqueExecutor->GetWorkspaceSize();
         uniqueExecutor.ReleaseTo(executor);
         return ACLNN_SUCCESS;
     }

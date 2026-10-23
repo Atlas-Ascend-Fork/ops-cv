@@ -699,3 +699,74 @@ TEST_F(l2_upsamplebilinear2d_test, Ascend950PR_9599_l2_upsamplebilinear2d_test_0
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
     EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
 }
+
+// self 为空（H==0 且 W==0）且 out 非空（64 个元素）：第一段应成功，
+// Fill+ViewCopy 会把 out 清零，不能把未初始化内存返回给用户
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_self_nonempty_out)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {2, 2, 0, 0};
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> out = {2, 2, 4, 4};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
+}
+
+// self 仅 W==0、out 非空：第一段应成功，out 清零
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_self_w_zero_nonempty_out)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {1, 1, 4, 0};
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> out = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
+}
+
+// N==0 时 out 也为空：没有元素可写，早退成功且不需要 workspace
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_out)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {0, 1, 3, 3};
+    vector<int64_t> output_size = {2, 2};
+    vector<int64_t> out = {0, 1, 2, 2};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
+    EXPECT_EQ(workspaceSize, 0);
+}

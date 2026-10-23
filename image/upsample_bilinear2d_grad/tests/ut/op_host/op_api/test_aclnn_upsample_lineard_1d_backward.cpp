@@ -466,6 +466,69 @@ TEST_F(l2_upsamplelinear1d_backward_test, l2_upsamplelinear1d_backward_test_021)
     EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }
 
+// out的L维度与inputSize[2]不一致时返回161002，禁止下发kernel后设备侧挂死
+TEST_F(l2_upsamplelinear1d_backward_test, l2_upsamplelinear1d_backward_test_out_L_not_match_inputSize)
+{
+    const double_t scales_l = 0.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {13};
+    vector<int64_t> input_size = {161, 161, 161};
+
+    auto self_desc = TensorDesc({161, 161, 13}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({161, 161, 13}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleLinear1dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_l),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// out的L维度大于inputSize[2]时返回161002
+TEST_F(l2_upsamplelinear1d_backward_test, l2_upsamplelinear1d_backward_test_out_L_greater_than_inputSize)
+{
+    const double_t scales_l = 2.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {3};
+    vector<int64_t> input_size = {1, 1, 6};
+
+    auto self_desc = TensorDesc({1, 1, 3}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 8}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleLinear1dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_l),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// out的N维度与inputSize[0]不一致时返回161002
+TEST_F(l2_upsamplelinear1d_backward_test, l2_upsamplelinear1d_backward_test_out_N_not_match_inputSize)
+{
+    const double_t scales_l = 2.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {3};
+    vector<int64_t> input_size = {2, 1, 6};
+
+    auto self_desc = TensorDesc({2, 1, 3}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 6}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleLinear1dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_l),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
 // align_corners为True
 TEST_F(l2_upsamplelinear1d_backward_test, l2_upsamplelinear1d_backward_test_022)
 {

@@ -152,6 +152,16 @@ static bool CheckShape(const aclTensor* gradOut, const aclIntArray* outputSize, 
 
     OP_CHECK(inputSizeNum == DIM_LIMIT,
              OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected input_size to be 3, but got %zu", inputSizeNum), return false);
+
+    // out的shape必须与inputSize(N/C/L)一致，否则下发kernel后会因out与inputSize不匹配导致设备侧异常
+    auto outShape = out->GetViewShape();
+    for (size_t i = 0; i < DIM_LIMIT; ++i) {
+        OP_CHECK(
+            outShape.GetDim(i) == (*inputSize)[i],
+            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "The dim %zu of out should be %ld according to inputSize, but got %ld", i,
+                    (*inputSize)[i], outShape.GetDim(i)),
+            return false);
+    }
     return true;
 }
 
