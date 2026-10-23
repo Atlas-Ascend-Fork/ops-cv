@@ -27,19 +27,20 @@ namespace ge {
 *@li anchor_box: A 3D Tensor of float32 (float16) with shape (B, 5, N).
 * "B" indicates the number of batch size
 * "N" indicates the number of bounding boxes, and the value "5" refers to
-* "x0", "x1", "y0", "y1" and "angle".
+* "lx", "ly", "rx", "ry" and "angle" (in degrees).
 *@li deltas: A 3D Tensor of float32 (float16) with shape (B, 5, N).
 * "B" indicates the number of batch size
 * "N" indicates the number of bounding boxes, and the value "5" refers to
-* "x0", "x1", "y0", "y1" and "angle". \n
+* "dx", "dy", "dw", "dh" and "dt". \n
 
 *@par Attributes:
-*@li weight: A float list for "x0", "x1", "y0", "y1" and "angle",
+*@li weight: A float list corresponding to "dx", "dy", "dw", "dh" and "dt",
 * defaults to [1.0, 1.0, 1.0, 1.0, 1.0].
 
 *@par Outputs:
 *@li y: A 3D Tensor of type float32 (float16) with shape (B, 5, N),
-* specifying the variations between all anchor boxes and ground truth boxes.
+* containing the decoded rotated boxes: "lx'", "ly'", "rx'", "ry'" and
+* "theta_t" (in degrees).
 */
 REG_OP(RotatedBoxDecode)
     .INPUT(anchor_box, TensorType({DT_FLOAT16, DT_FLOAT}))
