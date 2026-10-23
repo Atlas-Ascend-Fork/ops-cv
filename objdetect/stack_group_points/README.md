@@ -78,7 +78,10 @@
 
 ## 约束说明
 
-无
+- `features` 和 `indices` 必须为二维 Tensor；`features_batch_cnt` 和 `indices_batch_cnt` 必须为一维 Tensor。
+- `features` 的通道维 C、`indices` 的 nsample 维以及 batch 计数长度 B 必须为正数。
+- `features_batch_cnt` 与 `indices_batch_cnt` 的长度必须相等，且分别描述同一批次的特征数量和索引数量。
+- 每个批次的 `indices` 值必须位于对应批次 `features` 数量范围内；越界索引的输出为零。
 
 ## 调用说明
 
