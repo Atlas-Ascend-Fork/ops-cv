@@ -169,10 +169,11 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclIntArray* outpu
         fullInputSize = {N, inputH, inputW, C};
     }
 
-    OP_CHECK(inputH > 0 && inputW > 0 && outputH > 0 && outputW > 0,
+    OP_CHECK(N > 0 && C > 0 && inputH > 0 && inputW > 0 && outputH > 0 && outputW > 0,
              OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Size of H and W must be greater than 0, but got input (H: %ld, W: %ld), output (H: %ld, W: %ld)",
-                     inputH, inputW, outputH, outputW),
+                     "Size of N, C, H and W must be greater than 0, but got input (N: %ld, C: %ld, H: %ld, W: %ld), "
+                     "output (H: %ld, W: %ld)",
+                     N, C, inputH, inputW, outputH, outputW),
              return false);
 
     auto gradOutShape = gradOut->GetViewShape();

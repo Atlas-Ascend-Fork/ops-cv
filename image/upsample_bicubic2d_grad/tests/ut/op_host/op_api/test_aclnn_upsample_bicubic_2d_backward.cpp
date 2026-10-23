@@ -287,7 +287,7 @@ TEST_F(l2_upsamplebicubic2d_backward_test, l2_upsamplebicubic2d_backward_test_01
     EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }
 
-// 支持空tensor
+// 不支持inputSize的N为0
 TEST_F(l2_upsamplebicubic2d_backward_test, l2_upsamplebicubic2d_backward_test_013)
 {
     const double_t scales_h = 2.0;
@@ -306,8 +306,7 @@ TEST_F(l2_upsamplebicubic2d_backward_test, l2_upsamplebicubic2d_backward_test_01
                         OUTPUT(output_desc));
     uint64_t workspaceSize = 0;
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
-    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
-    // ut.TestPrecision();
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }
 
 // 不支持shape为2的输入
@@ -661,4 +660,26 @@ TEST_F(l2_upsamplebicubic2d_backward_test, l2_upsamplebicubic2d_backward_test_02
     uint64_t workspaceSize = 0;
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
     EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+}
+
+// 不支持inputSize的C为0
+TEST_F(l2_upsamplebicubic2d_backward_test, l2_upsamplebicubic2d_backward_test_030)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {2, 2};
+    vector<int64_t> input_size = {1, 0, 3, 3};
+
+    auto self_desc = TensorDesc({1, 0, 2, 2}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 0, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBicubic2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }
