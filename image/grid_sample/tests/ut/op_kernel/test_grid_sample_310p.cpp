@@ -44,9 +44,7 @@ TEST_F(grid_sample_310p_test, test_case_fp32_test08)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     string socVersion = "Ascend310p";
     gert::TilingContextPara tilingContextPara(
         "GridSample",
@@ -99,9 +97,7 @@ TEST_F(grid_sample_310p_test, test_case_fp32_test11)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     string socVersion = "Ascend310p";
     gert::TilingContextPara tilingContextPara(
         "GridSample",

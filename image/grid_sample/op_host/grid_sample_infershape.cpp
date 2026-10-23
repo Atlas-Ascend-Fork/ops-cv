@@ -144,8 +144,12 @@ static ge::graphStatus InferShape4GridSample(gert::InferShapeContext* context)
     OP_CHECK_NULL_WITH_CONTEXT(context, yShape);
     OP_LOGD(context->GetNodeName(), "x dim num:%ld, x shape:%s, grid dim num:%ld, grid shape:%s", xShape->GetDimNum(),
             Ops::Base::ToString(*xShape).c_str(), gridShape->GetDimNum(), Ops::Base::ToString(*gridShape).c_str());
-    const gert::Tensor* shape_tensor = context->GetInputTensor(0);
-    auto format = shape_tensor->GetOriginFormat();
+    // Shape inference may run before a concrete input tensor is available (for
+    // example for a dynamic graph).  The input descriptor already carries the
+    // origin format, so do not dereference the optional tensor here.
+    const auto* input_desc = context->GetInputDesc(0);
+    OP_CHECK_NULL_WITH_CONTEXT(context, input_desc);
+    auto format = input_desc->GetOriginFormat();
     OP_LOGD(context->GetNodeName(), "format = %d", format);
 
     if (IsUnknownRank(*xShape) || IsUnknownRank(*gridShape)) {

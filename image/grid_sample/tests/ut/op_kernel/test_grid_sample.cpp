@@ -44,9 +44,7 @@ TEST_F(grid_sample_test, test_case_fp32_test01)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 2, 2, 1}, {2, 2, 2, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -100,9 +98,7 @@ TEST_F(grid_sample_test, test_case_fp32_test02)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 64, 16, 16}, {2, 64, 16, 16}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -154,9 +150,7 @@ TEST_F(grid_sample_test, test_case_fp32_test04)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 64, 16, 1}, {2, 64, 16, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -209,9 +203,7 @@ TEST_F(grid_sample_test, test_case_fp32_test05)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 64, 16, 16}, {2, 64, 16, 16}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -264,9 +256,7 @@ TEST_F(grid_sample_test, test_case_fp32_test06)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 64, 16, 16}, {2, 64, 16, 16}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -319,9 +309,7 @@ TEST_F(grid_sample_test, test_case_fp16_test08)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 64, 16, 16}, {2, 64, 16, 16}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -374,9 +362,7 @@ TEST_F(grid_sample_test, test_case_fp16_test09)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 16, 16, 64}, {2, 16, 16, 64}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -428,9 +414,7 @@ TEST_F(grid_sample_test, test_case_fp16_test10)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 1, 2, 2}, {2, 1, 2, 2}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -482,9 +466,7 @@ TEST_F(grid_sample_test, test_case_fp32_test11)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 64, 16, 16}, {2, 64, 16, 16}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -536,9 +518,7 @@ TEST_F(grid_sample_test, test_case_fp16_test12)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(half);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(half);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(half);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 16, 16, 64}, {2, 16, 16, 64}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -591,9 +571,7 @@ TEST_F(grid_sample_test, test_case_fp32_test13)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(float);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(float);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(float);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 16, 16, 64}, {2, 16, 16, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -646,9 +624,7 @@ TEST_F(grid_sample_test, test_case_fp32_test14)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 200, 200, 1}, {2, 200, 200, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -703,9 +679,7 @@ TEST_F(grid_sample_test, test_case_fp32_test15)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 200, 200, 1}, {2, 200, 200, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -760,9 +734,7 @@ TEST_F(grid_sample_test, test_case_fp32_test16)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 200, 200, 16}, {2, 200, 200, 16}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -817,9 +789,7 @@ TEST_F(grid_sample_test, test_case_fp32_test17)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 200, 200, 16}, {2, 200, 200, 16}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -874,9 +844,7 @@ TEST_F(grid_sample_test, test_case_fp16_test18)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 200, 200, 16}, {2, 200, 200, 16}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -931,9 +899,7 @@ TEST_F(grid_sample_test, test_case_bicubic_fp16_fullLoad)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(half);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(half);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(half);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{1, 24, 24, 32}, {1, 24, 24, 32}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -986,9 +952,7 @@ TEST_F(grid_sample_test, test_case_bicubic_fp32_fullLoad)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{1, 60, 60, 1}, {1, 60, 60, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -1041,9 +1005,7 @@ TEST_F(grid_sample_test, test_case_bilinear_fp16_fullLoad_c1)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(half);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(half);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(half);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{8, 24, 24, 1}, {8, 24, 24, 1}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -1096,9 +1058,7 @@ TEST_F(grid_sample_test, test_case_bilinear_fp32_fullLoad_c1)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{1, 608, 608, 1}, {1, 608, 608, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -1151,9 +1111,7 @@ TEST_F(grid_sample_test, test_case_bilinear_fp16_fullLoad_c32)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(half);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(half);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(half);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{8, 32, 24, 24}, {8, 32, 24, 24}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -1208,9 +1166,7 @@ TEST_F(grid_sample_test, test_case_bilinear_fp32_fullLoad_c32)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{1, 16, 16, 32}, {1, 16, 16, 32}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -1264,9 +1220,7 @@ TEST_F(grid_sample_test, test_case_bilinear_fp32_fullLoad)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{1, 6, 6, 2}, {1, 6, 6, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -1319,9 +1273,7 @@ TEST_F(grid_sample_test, test_case_bilinear_fp16_slice_window)
     size_t inputByteSize = N * x_h * x_w * C * sizeof(half);
     size_t gridByteSize = N * grid_h * grid_w * dim * sizeof(half);
     size_t outputByteSize = N * grid_h * grid_w * C * sizeof(half);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{1, 608, 608, 1}, {1, 608, 608, 1}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -1376,9 +1328,7 @@ TEST_F(grid_sample_test, test_case_bilinear_fp32_test01)
     size_t inputByteSize = N * x_d * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_d * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_d * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 2, 2, 2, 1}, {2, 2, 2, 2, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -1433,9 +1383,7 @@ TEST_F(grid_sample_test, test_case_bilinear_fp16_test02)
     size_t inputByteSize = N * x_d * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_d * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_d * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 1, 2, 2, 2}, {2, 1, 2, 2, 2}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -1491,9 +1439,7 @@ TEST_F(grid_sample_test, test_case_nearest_fp32_test03)
     size_t inputByteSize = N * x_d * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_d * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_d * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 2, 2, 2, 1}, {2, 2, 2, 2, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -1549,9 +1495,7 @@ TEST_F(grid_sample_test, test_case_nearest_fp16_test04)
     size_t inputByteSize = N * x_d * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_d * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_d * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 2, 2, 2, 1}, {2, 1, 2, 2, 1}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -1606,9 +1550,7 @@ TEST_F(grid_sample_test, test_case_nearest_bf16_test05)
     size_t inputByteSize = N * x_d * x_h * x_w * C * sizeof(half);
     size_t gridByteSize = N * grid_d * grid_h * grid_w * dim * sizeof(half);
     size_t outputByteSize = N * grid_d * grid_h * grid_w * C * sizeof(half);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 2, 2, 2, 1}, {2, 2, 2, 2, 1}}, ge::DT_BF16, ge::FORMAT_ND},
@@ -1663,9 +1605,7 @@ TEST_F(grid_sample_test, test_case_bilinear_fp16_protrait_test08)
     size_t inputByteSize = N * x_d * x_h * x_w * C * sizeof(half);
     size_t gridByteSize = N * grid_d * grid_h * grid_w * dim * sizeof(half);
     size_t outputByteSize = N * grid_d * grid_h * grid_w * C * sizeof(half);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{22, 16, 64, 64, 4}, {22, 16, 64, 64, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
@@ -1722,9 +1662,7 @@ TEST_F(grid_sample_test, test_case_nearest_fp32_test09)
     size_t inputByteSize = N * x_d * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_d * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_d * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 2, 2, 2, 22}, {2, 2, 2, 2, 22}}, ge::DT_FLOAT, ge::FORMAT_ND},
@@ -1780,9 +1718,7 @@ TEST_F(grid_sample_test, test_case_nearest_fp16_test10)
     size_t inputByteSize = N * x_d * x_h * x_w * C * sizeof(int32_t);
     size_t gridByteSize = N * grid_d * grid_h * grid_w * dim * sizeof(int32_t);
     size_t outputByteSize = N * grid_d * grid_h * grid_w * C * sizeof(int32_t);
-    struct GridSampleCompileInfo {
-        int64_t coreNum = 48;
-    } compileInfo;
+    GridSampleCompileInfo compileInfo = {48, 0, false};
     gert::TilingContextPara tilingContextPara(
         "GridSample",
         {{{{2, 22, 2, 2, 2}, {2, 2, 2, 2, 22}}, ge::DT_FLOAT16, ge::FORMAT_ND},
