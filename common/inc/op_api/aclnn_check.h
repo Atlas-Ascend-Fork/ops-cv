@@ -22,14 +22,14 @@
 namespace op {
 static inline bool IsRegBase()
 {
-    const static std::set<NpuArch> regbaseArch = {NpuArch::DAV_3510};
+    const static std::set<NpuArch> regbaseArch = {NpuArch::DAV_3510, NpuArch::DAV_9201};
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
     return regbaseArch.find(curArch) != regbaseArch.end();
 }
 
 static inline bool IsRegBase(NpuArch arch)
 {
-    const static std::set<NpuArch> regbaseArch = {NpuArch::DAV_3510};
+    const static std::set<NpuArch> regbaseArch = {NpuArch::DAV_3510, NpuArch::DAV_9201};
     return regbaseArch.find(arch) != regbaseArch.end();
 }
 } // namespace op
