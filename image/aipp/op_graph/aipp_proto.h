@@ -34,7 +34,7 @@ image normalization (by subtracting the mean value or multiplying a factor), ima
 *and availability still comply with the existing AIPP constraints. \n
 
 *@par Outputs:
-*features: The AIPP-processed output tensor of type float16.
+*features: The AIPP-processed output tensor of type float16 or uint8.
 *@par Third-party framework compatibility
 * It is a custom operator. It has no corresponding operator in Caffe.
 *@par Restrictions:
@@ -44,7 +44,7 @@ directly.
 REG_OP(Aipp)
     .INPUT(images, TensorType{DT_UINT8})
     .OPTIONAL_INPUT(params, TensorType{DT_UINT8})
-    .OUTPUT(features, TensorType({DT_FLOAT16}))
+    .OUTPUT(features, TensorType({DT_FLOAT16, DT_UINT8}))
     .ATTR(aipp_config_path, String, "./aipp.cfg")
     .OP_END_FACTORY_REG(Aipp)
 } // namespace ge
