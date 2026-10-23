@@ -67,7 +67,7 @@ $$
     <tr>
       <td>num_valid_boxes</td>
       <td>可选输入</td>
-      <td>每个batch的有效候选框数，shape为[B]。可传空指针。</td>
+      <td>每个batch的有效候选框数，shape为[B]。运行时会将每个值限制在[0,N]：小于0按0处理，大于候选框数N按N处理。可传空指针。</td>
       <td>INT32</td>
       <td>ND</td>
     </tr>
