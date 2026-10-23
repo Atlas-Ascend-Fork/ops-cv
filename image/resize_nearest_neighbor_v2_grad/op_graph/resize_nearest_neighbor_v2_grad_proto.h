@@ -20,15 +20,16 @@
 namespace ge {
 
 /**
-* @brief Resize images to size using nearest neighbor interpolation. \n
+* @brief Computes the gradient of ResizeNearestNeighborV2 by accumulating output gradients at their source pixels. \n
 
 * @par Inputs:
 * Inputs include:
-* @li x: A 4-D tensor. Represents the original image. Must set the format, supported format list ["NCHW, NHWC"].
+* @li grads: A 4-D tensor. Represents gradients of the resized image.
+* Must set the format, supported format list ["NCHW", "NHWC"].
 * Must be one of the following types: int8, uint8, int16, uint16, int32, int64, float16, float32,
 * double, bfloat16.
-* @li size: A 1-D int32 tensor of 2 elements: new_height, new_width.
-* Indicates the size of the target image, which is used to determine the height and width of the output image.
+* @li size: A 1-D int32 tensor of 2 elements: orig_height, orig_width.
+* Specifies the original image height and width, which determine the spatial dimensions of the output gradient.
 * Must be the type int32. \n
 
 * @par Attributes:
@@ -44,11 +45,11 @@ namespace ge {
 
 * @li scales: An optional listfloat. Multiplier for spatial size. Defaults to {0.0f, 0.0f} .
 * @par Outputs:
-* y: A 4-D tensor. Indicates the target image. Has the same type and format as input "x".
-     The N, C dimension must be the same as x. \n
+* y: A 4-D tensor. Contains accumulated gradients of the original image. Has the same type and format as "grads".
+     The N and C dimensions match grads; spatial dimensions are specified by size. \n
 
 * @par Third-party framework compatibility
-* Compatible with tensorflow ResizeNearestNeighbor operator.
+* Compatible with the TensorFlow ResizeNearestNeighborGrad operator.
 */
 
 REG_OP(ResizeNearestNeighborV2Grad)
