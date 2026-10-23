@@ -18,11 +18,64 @@
 #include "points_in_polygons_tiling_data.h"
 #include "points_in_polygons_tiling_key.h"
 
+constexpr AscendC::Reg::DivSpecificMode kRayCastDivMode = {AscendC::Reg::MaskMergeMode::ZEROING, false,
+                                                           AscendC::DivAlgo::PRECISION_1ULP_FTZ_FALSE};
+
 constexpr uint32_t VL_F32 = 64; // 256B / 4B = 64 elements per vector register
+
+// Nonzero coordinates in [2^-40, 2^40] have differences in [2^-64, 2^41].
+// Their quotient stays normal, so the original division is safe. Inspect bits
+// rather than float comparisons so subnormal inputs and signed zero are handled.
+template <typename T>
+__simd_vf__ inline void CheckCoordinateRangeVF(__ubuf__ T* points, __ubuf__ T* polygons, __ubuf__ uint32_t* flag,
+                                               uint32_t pointStride, uint32_t curN, uint32_t polygonStride,
+                                               uint32_t curM)
+{
+    using namespace AscendC;
+    using namespace AscendC::Reg;
+    constexpr uint32_t kFloatAbsMask = 0x7fffffffU;
+    constexpr uint32_t kFastDivMinAbsCoordinateBits = 0x2b800000U; // 2^-40
+    constexpr uint32_t kFastDivMaxAbsCoordinateBits = 0x53800000U; // 2^40
+    constexpr uint16_t kPointCoordinateRows = 2;
+    constexpr uint16_t kPolygonCoordinateRows = 8;
+    RegTensor<uint32_t> bits, absBits, signMask, zero, one, dirty, laneDirty;
+    MaskReg mask, small, nonzero, large;
+    MaskReg full = CreateMask<uint32_t, MaskPattern::ALL>();
+    Duplicate(signMask, kFloatAbsMask);
+    Duplicate(zero, 0U);
+    Duplicate(one, 1U);
+    Duplicate(dirty, 0U);
+    // N-vec polygon rows can have an unaligned stride (for example M=9).
+    // Scan the contiguous 8*M values from the aligned allocation in that case.
+    bool contiguousPolygons = polygonStride == curM;
+    uint16_t rows = contiguousPolygons ? kPointCoordinateRows + 1 : kPointCoordinateRows + kPolygonCoordinateRows;
+    for (uint16_t row = 0; row < rows; ++row) {
+        __ubuf__ T* addr = row < kPointCoordinateRows ? points + row * pointStride :
+                                                        polygons + (row - kPointCoordinateRows) * polygonStride;
+        uint32_t count = row < kPointCoordinateRows ? curN :
+                                                      (contiguousPolygons ? kPolygonCoordinateRows * curM : curM);
+        uint32_t remain = count;
+        uint16_t loops = static_cast<uint16_t>((count + VL_F32 - 1U) / VL_F32);
+        for (uint16_t j = 0; j < loops; ++j) {
+            mask = UpdateMask<uint32_t>(remain);
+            LoadAlign(bits, reinterpret_cast<__ubuf__ uint32_t*>(addr) + j * VL_F32);
+            And(absBits, bits, signMask, mask);
+            Compares<uint32_t, CMPMODE::LT>(small, absBits, kFastDivMinAbsCoordinateBits, mask);
+            Compares<uint32_t, CMPMODE::NE>(nonzero, absBits, 0U, mask);
+            MaskAnd(small, small, nonzero, mask);
+            Compares<uint32_t, CMPMODE::GT>(large, absBits, kFastDivMaxAbsCoordinateBits, mask);
+            MaskOr(large, large, small, mask);
+            Select(laneDirty, one, zero, large);
+            Or(dirty, dirty, laneDirty, full);
+        }
+    }
+    Reduce<ReduceType::MAX>(dirty, dirty, full);
+    StoreAlign<uint32_t, StoreDist::DIST_FIRST_ELEMENT_B32>(flag, dirty, full);
+}
 
 // NORMAL 分支 VF 计算：对每个点用 Regbase 寄存器级 API（VL=64 分块）执行 4 边射线法，
 // 中间量全程在 RegTensor<float> 内融合不落 UB，仅最终 output 经 StoreAlign 写回 B2。
-template <typename T>
+template <typename T, bool preserveSubnormals>
 __simd_vf__ inline void RayCastComputeVF(__ubuf__ T* pxAddr, __ubuf__ T* pyAddr, __ubuf__ T* polyBase,
                                          __ubuf__ T* outBase, uint32_t tileM, uint32_t curN, uint32_t curM,
                                          uint16_t vfLoopPerRow)
@@ -72,7 +125,11 @@ __simd_vf__ inline void RayCastComputeVF(__ubuf__ T* pxAddr, __ubuf__ T* pyAddr,
                 AscendC::Reg::Sub<float>(vDy, vYsNext, vYsK, mask);
                 AscendC::Reg::Compares<float, AscendC::CMPMODE::EQ>(cmpEq, vDy, 0.0f, mask);
                 AscendC::Reg::Select<float>(vSafeDy, vOne, vDy, cmpEq); // (dy==0)?1.0:dy
-                AscendC::Reg::Div<float>(vT, vPyMinusYsK, vSafeDy, mask);
+                if constexpr (preserveSubnormals) {
+                    AscendC::Reg::Div<float, &kRayCastDivMode>(vT, vPyMinusYsK, vSafeDy, mask);
+                } else {
+                    AscendC::Reg::Div<float>(vT, vPyMinusYsK, vSafeDy, mask);
+                }
                 AscendC::Reg::Sub<float>(vDx, vXsNext, vXsK, mask);
                 AscendC::Reg::Mul<float>(vT, vT, vDx, mask);
                 AscendC::Reg::Add<float>(vXint, vT, vXsK, mask);
@@ -123,7 +180,7 @@ __simd_vf__ inline void RayCastComputeVF(__ubuf__ T* pxAddr, __ubuf__ T* pyAddr,
 }
 
 // N-vec 分支 VF 计算：广播单个多边形边坐标为标量，VF 沿 N 轴处理 64 个点
-template <typename T>
+template <typename T, bool preserveSubnormals>
 __simd_vf__ inline void RayCastComputeVF_N(__ubuf__ T* pxAddr, __ubuf__ T* pyAddr, __ubuf__ T* polyBase,
                                            __ubuf__ T* outBase, uint32_t curNVec, uint32_t M, uint32_t mIdx)
 {
@@ -171,7 +228,11 @@ __simd_vf__ inline void RayCastComputeVF_N(__ubuf__ T* pxAddr, __ubuf__ T* pyAdd
             AscendC::Reg::Sub<float>(vDy, vTyNext, vSyK, mask);
             AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vDy, vZero, mask);
             AscendC::Reg::Select<float>(vSafeDy, vOne, vDy, cmpEq);
-            AscendC::Reg::Div<float>(vT, vPyMinusSyK, vSafeDy, mask);
+            if constexpr (preserveSubnormals) {
+                AscendC::Reg::Div<float, &kRayCastDivMode>(vT, vPyMinusSyK, vSafeDy, mask);
+            } else {
+                AscendC::Reg::Div<float>(vT, vPyMinusSyK, vSafeDy, mask);
+            }
             AscendC::Reg::Sub<float>(vDx, vTxNext, vSxK, mask);
             AscendC::Reg::Mul<float>(vT, vT, vDx, mask);
             AscendC::Reg::Add<float>(vXint, vT, vSxK, mask);
@@ -419,8 +480,24 @@ private:
 
         uint16_t vfLoopPerRow = (uint16_t)(((uint32_t)curM + VL_F32 - 1U) / VL_F32);
 
-        asc_vf_call<RayCastComputeVF<T>>(pxAddr, pyAddr, polyBase, outBase, (uint32_t)tileM_, (uint32_t)curN,
-                                         (uint32_t)curM, vfLoopPerRow);
+        if (NeedsSubnormalDivision(pxAddr, polyBase, tileN_, curN, tileM_, curM)) {
+            asc_vf_call<RayCastComputeVF<T, true>>(pxAddr, pyAddr, polyBase, outBase, (uint32_t)tileM_, (uint32_t)curN,
+                                                   (uint32_t)curM, vfLoopPerRow);
+        } else {
+            asc_vf_call<RayCastComputeVF<T, false>>(pxAddr, pyAddr, polyBase, outBase, (uint32_t)tileM_, (uint32_t)curN,
+                                                    (uint32_t)curM, vfLoopPerRow);
+        }
+    }
+
+    __aicore__ inline bool NeedsSubnormalDivision(__ubuf__ T* points, __ubuf__ T* polygons, uint32_t pointStride,
+                                                  uint32_t curN, uint32_t polygonStride, uint32_t curM)
+    {
+        auto flag = maskBuf_.Get<uint32_t>();
+        asc_vf_call<CheckCoordinateRangeVF<T>>(points, polygons, (__ubuf__ uint32_t*)flag.GetPhyAddr(), pointStride,
+                                               curN, polygonStride, curM);
+        AscendC::SetFlag<AscendC::HardEvent::V_S>(0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_S>(0);
+        return flag.GetValue(0) != 0;
     }
 
     __aicore__ inline void DoCopyOut(int64_t nIdx, int64_t mIdx, int64_t curN, int64_t curM, int64_t round)
@@ -509,10 +586,16 @@ private:
         __ubuf__ T* polyBase = (__ubuf__ T*)B1.GetPhyAddr();
         __ubuf__ T* outBase = (__ubuf__ T*)B2.GetPhyAddr();
 
+        bool preserveSubnormals = NeedsSubnormalDivision(pxAddr, polyBase, tileNVec_, curNVec, M_, M_);
         for (int64_t polyIdx = 0; polyIdx < M_; polyIdx++) {
             __ubuf__ T* outPtr = outBase + polyIdx * tileNVec_;
-            asc_vf_call<RayCastComputeVF_N<T>>(pxAddr, pyAddr, polyBase, outPtr, (uint32_t)curNVec, (uint32_t)M_,
-                                               (uint32_t)polyIdx);
+            if (preserveSubnormals) {
+                asc_vf_call<RayCastComputeVF_N<T, true>>(pxAddr, pyAddr, polyBase, outPtr, (uint32_t)curNVec,
+                                                         (uint32_t)M_, (uint32_t)polyIdx);
+            } else {
+                asc_vf_call<RayCastComputeVF_N<T, false>>(pxAddr, pyAddr, polyBase, outPtr, (uint32_t)curNVec,
+                                                          (uint32_t)M_, (uint32_t)polyIdx);
+            }
         }
     }
 
