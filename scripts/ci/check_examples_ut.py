@@ -14,7 +14,8 @@
 
 算子判定：目录下存在 op_host 或 op_kernel 子目录，op_host 下存在def文件，
 且目录名不属于公共库（common、*_common 等）；无def文件为接口类算子，不参与统计。
-example 判定：examples 目录不存在，目录内（含子目录）无任何源码文件，
+example 判定：仅扫描暴露aclnn接口的算子（op_api或op_host/op_api目录存在aclnn_*文件，
+或CMakeLists声明ACLNNTYPE aclnn/aclnn_inner）；examples 目录不存在，目录内（含子目录）无任何源码文件，
 或仅有 arch35 一个子目录且def文件声明支持ascend910b/ascend910_93（纯950等非910芯片算子不统计）。
 ut 判定：tests/ut 目录不存在，或目录内除 CMakeLists.txt 外无任何文件。
 检测结果按类别汇总写入 build/check_examples_ut.csv，
@@ -109,19 +110,55 @@ def is_arch35_only_examples(examples_dir: str) -> bool:
     )
 
 
+# aclnn接口声明：CMakeLists中ACLNNTYPE取aclnn/aclnn_inner视为暴露aclnn接口
+# （aclnn_exclude/no_need_aclnn等取值表示未暴露aclnn接口，不参与匹配）
+ACLNN_TYPE_RE = re.compile(r"ACLNNTYPE\s+aclnn(_inner)?\b")
+
+# ops-cv的aclnn接口文件存在op_api与op_host/op_api两种布局（如upsample系算子）；
+# ACLNNTYPE声明实际只出现在算子根与op_host层级的CMakeLists，故仅扫描这些位置
+ACLNN_API_DIRS = ("op_api", os.path.join("op_host", "op_api"))
+ACLNN_CMAKE_DIRS = ("", "op_host")
+
+
+def has_aclnn_entry(op_path: str) -> bool:
+    """判断算子是否暴露aclnn接口（examples检测前置条件）。
+
+    op_api或op_host/op_api目录存在aclnn_*文件，或CMakeLists（算子根/op_host层级）
+    声明ACLNNTYPE aclnn/aclnn_inner视为有aclnn入口；两者皆无的算子不扫描examples。
+    """
+    for sub_dir in ACLNN_API_DIRS:
+        api_dir = os.path.join(op_path, sub_dir)
+        if os.path.isdir(api_dir):
+            for entry in os.listdir(api_dir):
+                if entry.startswith("aclnn_"):
+                    return True
+    for sub_dir in ACLNN_CMAKE_DIRS:
+        cmake = os.path.join(op_path, sub_dir, "CMakeLists.txt")
+        try:
+            with open(cmake, encoding="utf-8", errors="ignore") as file:
+                if ACLNN_TYPE_RE.search(file.read()):
+                    return True
+        except OSError:
+            continue
+    return False
+
+
 def check_op(op_path: str) -> Optional[OpIssue]:
     """检查单个算子，无问题返回 None。"""
-    missing_examples = True
+    missing_examples = False
     arch35_only_examples = False
-    examples_dir = os.path.join(op_path, "examples")
-    if os.path.isdir(examples_dir):
-        missing_examples = not has_file_with_ext(examples_dir, EXAMPLE_EXTS)
-        # def文件仅声明950等非910芯片的算子，仅有arch35 examples属正常，不视为缺失
-        arch35_only_examples = (
-            not missing_examples
-            and is_arch35_only_examples(examples_dir)
-            and def_supports_910(op_path)
-        )
+    # 未暴露aclnn接口的算子不需要examples，不扫描（不报缺失、不计arch35-only）
+    if has_aclnn_entry(op_path):
+        missing_examples = True
+        examples_dir = os.path.join(op_path, "examples")
+        if os.path.isdir(examples_dir):
+            missing_examples = not has_file_with_ext(examples_dir, EXAMPLE_EXTS)
+            # def文件仅声明950等非910芯片的算子，仅有arch35 examples属正常，不视为缺失
+            arch35_only_examples = (
+                not missing_examples
+                and is_arch35_only_examples(examples_dir)
+                and def_supports_910(op_path)
+            )
 
     missing_ut = True
     ut_dir = os.path.join(op_path, "tests", "ut")
