@@ -60,14 +60,10 @@ inline void CalcCropWindow(float y1, float x1, float y2, float x2, int64_t imgH,
     x1o = MapV2Coordinate(x1, imgW);
     y2o = MapV2Coordinate(y2, imgH);
     x2o = MapV2Coordinate(x2, imgW);
-    wo = 1;
-    ho = 1;
-    if ((x2o - x1o + 1) > 1) {
-        wo = x2o - x1o + 1;
-    }
-    if ((y2o - y1o + 1) > 1) {
-        ho = y2o - y1o + 1;
-    }
+    const int64_t xDistance = (x2o >= x1o) ? (x2o - x1o) : (x1o - x2o);
+    const int64_t yDistance = (y2o >= y1o) ? (y2o - y1o) : (y1o - y2o);
+    wo = xDistance + 1;
+    ho = yDistance + 1;
 }
 
 inline void GetV2Indices(int64_t pos, int64_t cropSz, int64_t winSz, int64_t& lower, int64_t& upper, float& ratio,
@@ -120,15 +116,16 @@ inline void ComputeBilinearV2(typename TTypes<T, kDimNumFour>::Tensor image,
                               typename TTypes<float, kDimNumFour>::Tensor crops, int64_t b, int32_t b_in, int64_t y1,
                               int64_t x1, int64_t cropHeight, int64_t cropWidth, int64_t depth, int64_t w, int64_t h,
                               int64_t imageHeight, int64_t imageWidth, bool extrapolateTop, bool extrapolateLeft,
-                              bool extrapolateBottom, bool extrapolateRight, float extrapolation_value)
+                              bool extrapolateBottom, bool extrapolateRight, float extrapolation_value, int64_t xStep,
+                              int64_t yStep)
 {
     for (int64_t y = 0; y < cropHeight; ++y) {
         int64_t y_base, y_top;
         float y_ratio, y_window_pos;
         GetV2Indices(y, cropHeight, h, y_base, y_top, y_ratio, y_window_pos);
-        int64_t y_base_index = y1 + y_base;
-        int64_t y_top_index = y1 + y_top;
-        float y_image_pos = static_cast<float>(y1) + y_window_pos;
+        int64_t y_base_index = y1 + yStep * y_base;
+        int64_t y_top_index = y1 + yStep * y_top;
+        float y_image_pos = static_cast<float>(y1) + yStep * y_window_pos;
         bool y_index_out_of_bounds = y_base_index < 0 || y_top_index < 0 || y_base_index >= imageHeight ||
                                      y_top_index >= imageHeight;
         if (y_index_out_of_bounds ||
@@ -140,9 +137,9 @@ inline void ComputeBilinearV2(typename TTypes<T, kDimNumFour>::Tensor image,
             int64_t x_base, x_top;
             float x_ratio, x_window_pos;
             GetV2Indices(x, cropWidth, w, x_base, x_top, x_ratio, x_window_pos);
-            int64_t x_base_index = x1 + x_base;
-            int64_t x_top_index = x1 + x_top;
-            float x_image_pos = static_cast<float>(x1) + x_window_pos;
+            int64_t x_base_index = x1 + xStep * x_base;
+            int64_t x_top_index = x1 + xStep * x_top;
+            float x_image_pos = static_cast<float>(x1) + xStep * x_window_pos;
             bool x_index_out_of_bounds = x_base_index < 0 || x_top_index < 0 || x_base_index >= imageWidth ||
                                          x_top_index >= imageWidth;
             if (x_index_out_of_bounds ||
@@ -309,13 +306,15 @@ private:
                         int64_t y1, x1, y2, x2, w, h;
                         CalcCropWindow(boxes(b, 0), boxes(b, 1), boxes(b, 2), boxes(b, 3), imageHeight, imageWidth, y1,
                                        x1, y2, x2, w, h);
+                        const int64_t xStep = (x2 >= x1) ? 1 : -1;
+                        const int64_t yStep = (y2 >= y1) ? 1 : -1;
                         bool extrapolateTop = std::min(boxes(b, 0), boxes(b, 2)) < 0;
                         bool extrapolateBottom = std::max(boxes(b, 0), boxes(b, 2)) > 1;
                         bool extrapolateLeft = std::min(boxes(b, 1), boxes(b, 3)) < 0;
                         bool extrapolateRight = std::max(boxes(b, 1), boxes(b, 3)) > 1;
                         ComputeBilinearV2<T>(image, crops, b, box_index(b), y1, x1, cropHeight, cropWidth, depth, w, h,
                                              imageHeight, imageWidth, extrapolateTop, extrapolateLeft,
-                                             extrapolateBottom, extrapolateRight, extrapolation_value);
+                                             extrapolateBottom, extrapolateRight, extrapolation_value, xStep, yStep);
                     } else {
                         const float y1 = boxes(b, 0);
                         const float x1 = boxes(b, 1);

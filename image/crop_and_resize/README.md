@@ -80,8 +80,10 @@
     1. 首先将归一化框坐标映射为输入图像上的像素坐标，计算裁剪窗口。令$map(c, n) = \lfloor c \times n \rfloor$（当$c = 1$时取$n - 1$），$y_{1o} = map(y_1, image\_height)$，$x_{1o} = map(x_1, image\_width)$，$y_{2o} = map(y_2, image\_height)$，$x_{2o} = map(x_2, image\_width)$，则裁剪窗口的高$h$和宽$w$为：
 
        $$
-       h = \max(y_{2o} - y_{1o} + 1,\; 1), \quad w = \max(x_{2o} - x_{1o} + 1,\; 1)
+       h = |y_{2o} - y_{1o}| + 1, \quad w = |x_{2o} - x_{1o}| + 1
        $$
+
+    令 $s_y=1$（$y_{2o} \ge y_{1o}$ 时），否则 $s_y=-1$；宽度方向同理定义 $s_x$。采样沿端点顺序进行，反向框在对应轴上翻转。
 
     2. 对于输出位置$(p_y, p_x)$，计算其在裁剪窗口中的浮点索引$r_y$和$r_x$：
 
@@ -107,16 +109,14 @@
        y\_ratio = r_y - lower\_y, \quad x\_ratio = r_x - lower\_x
        $$
 
-       当归一化框坐标超出`[0, 1]`且对应采样位置超出输入图像边界时，输出使用`extrapolation_value`；框坐标在`[0, 1]`内时，窗口边缘的采样下标按上述公式钳制。
-
-    4. 双线性插值：
+    4. 检查全局图像坐标：将窗口内的相对下标乘以对应方向 $s_y$、$s_x$ 并加到窗口起点后，若任一采样下标超出图像范围，则当前输出的所有通道均使用 `extrapolation_value`，不读取越界像素。当框坐标超出 `[0, 1]` 时，还需检查沿采样方向计算的浮点图像坐标，超出图像边界同样外插；框坐标在 `[0, 1]` 内时，窗口边缘按上述公式钳制。否则进行双线性插值：
 
        $$
        \begin{aligned}
-       y(i, p_y, p_x, d) =\; & (1 - y\_ratio)(1 - x\_ratio) \cdot x(b, y_{1o} + lower\_y, x_{1o} + lower\_x, d) \\
-       +\; & (1 - y\_ratio) \cdot x\_ratio \cdot x(b, y_{1o} + lower\_y, x_{1o} + upper\_x, d) \\
-       +\; & y\_ratio \cdot (1 - x\_ratio) \cdot x(b, y_{1o} + upper\_y, x_{1o} + lower\_x, d) \\
-       +\; & y\_ratio \cdot x\_ratio \cdot x(b, y_{1o} + upper\_y, x_{1o} + upper\_x, d)
+       y(i, p_y, p_x, d) =\; & (1 - y\_ratio)(1 - x\_ratio) \cdot x(b, y_{1o} + s_y \cdot lower\_y, x_{1o} + s_x \cdot lower\_x, d) \\
+       +\; & (1 - y\_ratio) \cdot x\_ratio \cdot x(b, y_{1o} + s_y \cdot lower\_y, x_{1o} + s_x \cdot upper\_x, d) \\
+       +\; & y\_ratio \cdot (1 - x\_ratio) \cdot x(b, y_{1o} + s_y \cdot upper\_y, x_{1o} + s_x \cdot lower\_x, d) \\
+       +\; & y\_ratio \cdot x\_ratio \cdot x(b, y_{1o} + s_y \cdot upper\_y, x_{1o} + s_x \cdot upper\_x, d)
        \end{aligned}
        $$
 
@@ -148,7 +148,7 @@
     <tr>
       <td>boxes</td>
       <td>输入</td>
-      <td>二维Tensor，其shape为(num_boxes, 4)。第i行指定了box_index[i]在图像中一个框的位置，并且使用归一化坐标[y1, x1, y2, x2]进行表示。对于bilinear和nearest方法，归一化y坐标通过y*(image_height - 1)映射到图像坐标系；bilinear_v2按其专属公式映射。宽度维度的处理方式相似，坐标超出[0, 1]范围的对应输出使用extrapolation_value。</td>
+      <td>二维Tensor，其shape为(num_boxes, 4)。第i行指定了box_index[i]在图像中一个框的位置，并且使用归一化坐标[y1, x1, y2, x2]进行表示。bilinear/nearest 将归一化 y 坐标通过 y*(image_height - 1) 映射到图像坐标；bilinear_v2 按上述 map 公式计算窗口端点（精确坐标 1 映射到最后一个有效像素）。我们允许y1 > y2, 在这种情况下，采样的裁剪区域会是原始图像的上下翻转版。宽度维度的处理方式相似，归一化坐标值超出[0, 1]范围时，使用extrapolation_value外插值进行补齐。</td>
       <td>FLOAT、FLOAT16</td>
       <td>ND</td>
     </tr>

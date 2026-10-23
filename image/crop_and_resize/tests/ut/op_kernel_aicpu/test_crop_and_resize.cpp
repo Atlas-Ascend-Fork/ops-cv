@@ -18,6 +18,7 @@
 #include "utils/aicpu_read_file.h"
 #undef private
 #undef protected
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <limits>
@@ -40,6 +41,46 @@ float inputs[BATCH_SIZE][IMAGE_HEIGHT][IMAGE_WIDTH][CHANNELS] = {0};
 float boxes[NUM_BOXES][4] = {0};
 float y[5][24][24][3] = {0};
 float expected_y[5][24][24][3] = {0};
+
+// Reference for this fixture's in-bounds boxes, independent of the kernel's index helpers.
+static double ReferenceV2Position(float start, float end, int imageSize, int outputIndex, int cropSize)
+{
+    const int first = start == 1.0f ? imageSize - 1 : static_cast<int>(std::floor(start * imageSize));
+    const int last = end == 1.0f ? imageSize - 1 : static_cast<int>(std::floor(end * imageSize));
+    const int distance = std::abs(last - first);
+    if (distance == 0) {
+        return first;
+    }
+    const double position = (outputIndex + 0.5) * (distance + 1) / cropSize - 0.5;
+    const double weight = std::min(1.0, std::max(0.0, position / distance));
+    return (1.0 - weight) * first + weight * last;
+}
+
+static void SetReversedV2Expected(int boxIndex)
+{
+    for (float coordinate : boxes[boxIndex]) {
+        ASSERT_GE(coordinate, 0.0f);
+        ASSERT_LE(coordinate, 1.0f);
+    }
+    for (int row = 0; row < 24; ++row) {
+        const double py = ReferenceV2Position(boxes[boxIndex][0], boxes[boxIndex][2], IMAGE_HEIGHT, row, 24);
+        const int top = static_cast<int>(std::floor(py));
+        const int bottom = static_cast<int>(std::ceil(py));
+        const double wy = py - top;
+        for (int col = 0; col < 24; ++col) {
+            const double px = ReferenceV2Position(boxes[boxIndex][1], boxes[boxIndex][3], IMAGE_WIDTH, col, 24);
+            const int left = static_cast<int>(std::floor(px));
+            const int right = static_cast<int>(std::ceil(px));
+            const double wx = px - left;
+            for (int channel = 0; channel < CHANNELS; ++channel) {
+                const double upper = (1.0 - wx) * inputs[0][top][left][channel] + wx * inputs[0][top][right][channel];
+                const double lower = (1.0 - wx) * inputs[0][bottom][left][channel] +
+                                     wx * inputs[0][bottom][right][channel];
+                expected_y[boxIndex][row][col][channel] = static_cast<float>((1.0 - wy) * upper + wy * lower);
+            }
+        }
+    }
+}
 
 TEST_F(TEST_CropAndResize_UTest, CropAndResizeKernel_Success)
 {
@@ -244,6 +285,13 @@ TEST_F(TEST_CropAndResize_UTest, CropAndResizeKernel_V2_Success)
 
     auto nodeDef = CpuKernelUtils::CreateNodeDef();
     nodeDef->SetOpType("CropAndResize");
+
+    // Retain the forward golden and calculate reversed boxes without changing the static fixture.
+    for (int i = 0; i < NUM_BOXES; ++i) {
+        if (boxes[i][2] < boxes[i][0] || boxes[i][3] < boxes[i][1]) {
+            SetReversedV2Expected(i);
+        }
+    }
 
     // set attr
     auto method = CpuKernelUtils::CreateAttrValue();
