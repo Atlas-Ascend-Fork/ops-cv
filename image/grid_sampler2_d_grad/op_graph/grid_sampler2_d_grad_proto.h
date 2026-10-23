@@ -38,7 +38,7 @@ namespace ge {
 * @par Attributes:
 * @li interpolation_mode: An optional string specifying the interpolation method.
 * 'bilinear' and 'nearest' are supported now. Defaults to "bilinear".
-* @li padding_mode: An optional string specifying the pad method, either "zeros" or "border".
+* @li padding_mode: An optional string specifying the pad method: "zeros", "border", or "reflection".
 * Defaults to "zeros".
 * @li align_corners: An optional bool. Indicates the mapping mode between the coordinates of the feature map and the
 feature value.
