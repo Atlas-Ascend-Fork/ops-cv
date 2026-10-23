@@ -38,10 +38,10 @@ extern "C" {
  * ```
  *
  * @param [in] self: npu
- * device侧的aclTensor，数据类型支持FLOAT、BFLOAT16、FLOAT16、DOUBLE、UIN8。数据格式支持NCHW、NHWC。支持非连续的Tensor。
+ * device侧的aclTensor，数据类型支持FLOAT、BFLOAT16、FLOAT16、DOUBLE、UINT8。数据格式支持NCHW、NHWC。支持非连续的Tensor。
  * @param [in] outputSize: npu device侧的aclIntArray，指定输出空间大小。
  * @param [in] out: npu
- * device侧的aclTensor，数据类型支持FLOAT、BFLOAT16、FLOAT16、DOUBLE、UIN8。数据格式支持NCHW、NHWC。支持非连续的Tensor。
+ * device侧的aclTensor，数据类型支持FLOAT、BFLOAT16、FLOAT16、DOUBLE、UINT8。数据格式支持NCHW、NHWC。支持非连续的Tensor。
  * @param [out] workspaceSize: 返回用户需要在npu device侧申请的workspace大小。
  * @param [out] executor: 返回op执行器，包含算子计算流程。
  * @return aclnnStatus: 返回状态码。
