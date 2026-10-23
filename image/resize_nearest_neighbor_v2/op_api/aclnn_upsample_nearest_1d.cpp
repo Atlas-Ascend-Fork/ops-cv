@@ -37,7 +37,8 @@ extern "C" {
 namespace {
 static const size_t THREEDIMS = 3;
 static const size_t DIM_IDX_2 = 2;
-static const int64_t ZERO = 0;
+static const uint64_t ZERO = 0;
+static const uint64_t ONE = 1;
 static const std::initializer_list<op::DataType> ASCEND910_DTYPE_DTYPE_SUPPORT_LIST = {
     op::DataType::DT_FLOAT16, op::DataType::DT_FLOAT, op::DataType::DT_DOUBLE, op::DataType::DT_UINT8};
 
@@ -79,27 +80,41 @@ static bool CheckDtypeEqual(const aclTensor* self, const aclTensor* out)
     return true;
 }
 
-static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize)
+static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out)
 {
     uint64_t size = outputSize->Size();
-    OP_CHECK(size > ZERO,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "The size of outputSize should be greater than 0, but got %zu", size),
+    OP_CHECK(size == ONE,
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "It is expected output size equals to %lu, but got size %zu.", ONE, size),
              return false);
     if (self->GetViewShape().GetDimNum() != THREEDIMS) {
         OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected input size to be %zu, but got %zu.", THREEDIMS,
                 self->GetViewShape().GetDimNum());
         return false;
     }
-    if (self->GetViewShape().GetDim(1) == 0 || self->GetViewShape().GetDim(DIM_IDX_2) == 0) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 3D data tensor expected but got a tensor with sizes %s.",
-                op::ToString(self->GetViewShape()).GetString());
+    if (out->GetViewShape().GetDimNum() != THREEDIMS) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output size to be %zu, but got %zu.", THREEDIMS,
+                out->GetViewShape().GetDimNum());
         return false;
     }
-    if (outputSize->GetData()[ZERO] == ZERO) {
+    if (self->GetViewShape().GetDim(ZERO) == ZERO || self->GetViewShape().GetDim(1) == ZERO ||
+        self->GetViewShape().GetDim(DIM_IDX_2) == ZERO || outputSize->GetData()[ZERO] == ZERO) {
         OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "Input and output sizes should be greater than %ld, "
-                "but got output (W: %ld).",
-                ZERO, outputSize->GetData()[ZERO]);
+                "Non-empty 3D data tensor expected but got a tensor with sizes %s and output size (%ld).",
+                op::ToString(self->GetViewShape()).GetString(), outputSize->GetData()[ZERO]);
+        return false;
+    }
+    if (outputSize->GetData()[ZERO] != out->GetViewShape().GetDim(DIM_IDX_2)) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output size (L: %ld), but got output tensor size (L: %ld).",
+                outputSize->GetData()[ZERO], out->GetViewShape().GetDim(DIM_IDX_2));
+        return false;
+    }
+    // 与 2D 接口 CheckNCDimValid 口径对齐：out 的 N/C 两维需与 self 一致，
+    // 否则形状不匹配会延迟到 ViewCopy 落到内部错误而非 161002
+    if (self->GetViewShape().GetDim(ZERO) != out->GetViewShape().GetDim(ZERO) ||
+        self->GetViewShape().GetDim(1) != out->GetViewShape().GetDim(1)) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected out N/C dims to be (%ld, %ld), but got (%ld, %ld).",
+                self->GetViewShape().GetDim(ZERO), self->GetViewShape().GetDim(1), out->GetViewShape().GetDim(ZERO),
+                out->GetViewShape().GetDim(1));
         return false;
     }
     return true;
@@ -132,7 +147,7 @@ static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputS
     CHECK_RET(CheckDtypeEqual(self, out), ACLNN_ERR_PARAM_INVALID);
 
     // 4. 检查shape是否支持
-    CHECK_RET(CheckShape(self, outputSize), ACLNN_ERR_PARAM_INVALID);
+    CHECK_RET(CheckShape(self, outputSize, out), ACLNN_ERR_PARAM_INVALID);
 
     // 5. 检查format是否支持
     CHECK_RET(CheckFormat(self, out), ACLNN_ERR_PARAM_INVALID);
