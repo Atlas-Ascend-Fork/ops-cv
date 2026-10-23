@@ -13,9 +13,9 @@
 
 ## 功能说明
 
-将目标检测回归分支预测的偏移量`deltas`结合锚框`anchor_box`解码为图像坐标空间的绝对框`boxes`，用于后续NMS、画框或COCO mAP评估。该算子是`bounding_box_encode`的逆运算，两者共享同一套`(means, stds)`标准化参数与`(x1, y1, x2, y2)`锚框坐标约定，配套使用才能保证训练与推理编码一致。
+将目标检测回归分支预测的偏移量`deltas`结合感兴趣区域`rois`解码为图像坐标空间的绝对框`bboxes`，用于后续NMS、画框或COCO mAP评估。该算子是`bounding_box_encode`的逆运算，两者共享同一套`(means, stds)`标准化参数与`(x1, y1, x2, y2)`锚框坐标约定，配套使用才能保证训练与推理编码一致。
 
-设锚框`anchor_box=(x1, y1, x2, y2)`、偏移量`deltas=(dx', dy', dw', dh')`、`means=(m0,m1,m2,m3)`、`stds=(s0,s1,s2,s3)`、`max_shape=(H, W)`，解码步骤为：
+设输入`rois=(x1, y1, x2, y2)`、偏移量`deltas=(dx', dy', dw', dh')`、`means=(m0,m1,m2,m3)`、`stds=(s0,s1,s2,s3)`、`max_shape=(H, W)`，解码步骤为：
 
 $$
 pw = x2 - x1 + 1,\quad pcx = (x1 + x2) \times 0.5
@@ -58,7 +58,7 @@ y维度（y1、y2）同理，裁剪上界为H-1。裁剪上界取最后有效像
 <tr>
 <td>rois</td>
 <td>输入</td>
-<td>锚框坐标(x1,y1,x2,y2)，对应公式中的anchor_box。</td>
+<td>感兴趣区域坐标(x1,y1,x2,y2)，对应公式中的rois。</td>
 <td>FLOAT16、FLOAT</td>
 <td>ND</td>
 </tr>
@@ -72,7 +72,7 @@ y维度（y1、y2）同理，裁剪上界为H-1。裁剪上界取最后有效像
 <tr>
 <td>bboxes</td>
 <td>输出</td>
-<td>解码后的绝对框(x1,y1,x2,y2)，对应公式中的boxes。</td>
+<td>解码后的绝对框(x1,y1,x2,y2)，对应公式中的bboxes。</td>
 <td>FLOAT16、FLOAT</td>
 <td>ND</td>
 </tr>
@@ -109,8 +109,8 @@ y维度（y1、y2）同理，裁剪上界为H-1。裁剪上界取最后有效像
 
 ## 约束说明
 
-- anchor_box与deltas的shape必须完全一致(N, 4)，无广播。
-- anchor_box与deltas的dtype必须一致。
+- rois与deltas的shape必须完全一致(N, 4)，无广播。
+- rois与deltas的dtype必须一致。
 - means与stds长度必须为4，stds各元素不能为0。
 - max_shape长度必须为2。
 - wh_ratio_clip必须大于0，当前不参与核心解码公式，仅做入参校验。
