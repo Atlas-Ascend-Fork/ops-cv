@@ -18,6 +18,8 @@
 #undef private
 #undef protected
 #include "Eigen/Core"
+#include <algorithm>
+#include <cmath>
 #include <limits>
 #include <random>
 
@@ -82,6 +84,236 @@ void RunParameterShapeValidationCase(const vector<int64_t>& scale_shape, const v
                            (void*)output};
     CREATE_NODEDEF(shapes, data_types, datas, "box", true);
     RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
+}
+} // namespace
+
+namespace {
+// ComputeSpansCore switches from a serial loop to CpuKernelUtils::ParallelFor
+// once the number of output samples exceeds kParallelDataNums (1024).  The
+// cases below deliberately cross that boundary on the resized axis so the
+// parallel span path is exercised.  The launcher used to keep one scratch
+// weight vector outside the shard lambda, which let several worker threads
+// clear and append to the same vector at once.
+constexpr int64_t kLargeSpanOutputSize = 1025;
+constexpr int64_t kDownscaleFactor = 2;
+constexpr int64_t kLargeSpanInputSize = kLargeSpanOutputSize * kDownscaleFactor;
+constexpr int kLargeSpanRepeat = 10;
+constexpr int kLargeSpanBothDimsRepeat = 3;
+
+template <typename T>
+void FillLargeSpanImage(int64_t height, int64_t width, std::vector<T>& data)
+{
+    data.resize(static_cast<size_t>(height * width));
+    for (size_t i = 0; i < data.size(); ++i) {
+        // Deterministic but non-uniform: neighbouring pixels differ, so a shard
+        // that consumes another shard's temporary weights cannot accidentally
+        // produce the expected value.
+        data[i] = static_cast<T>(static_cast<float>((i * 37U) % 251U));
+    }
+}
+
+// Serial reference for the box kernel with translation 0.  Downscaling by two
+// maps output index i to source indices 2*i and 2*i+1, and the box kernel gives
+// both a normalized weight of 0.5.  Honor the same two-pass order as
+// GatherRows followed by GatherColumns so the comparison is deterministic.
+template <typename T>
+std::vector<float> ComputeLargeSpanReference(const std::vector<T>& input, int64_t in_width, int64_t out_height,
+                                             int64_t out_width, bool downscale_height, bool downscale_width)
+{
+    auto source_value = [&](int64_t y, int64_t x) -> float {
+        return static_cast<float>(input[static_cast<size_t>(y * in_width + x)]);
+    };
+    auto interpolated_row = [&](int64_t y, int64_t x) -> float {
+        if (!downscale_height) {
+            return source_value(y, x);
+        }
+        return 0.5f * source_value(2 * y, x) + 0.5f * source_value(2 * y + 1, x);
+    };
+
+    std::vector<float> reference(static_cast<size_t>(out_height * out_width));
+    for (int64_t y = 0; y < out_height; ++y) {
+        for (int64_t x = 0; x < out_width; ++x) {
+            if (!downscale_width) {
+                reference[static_cast<size_t>(y * out_width + x)] = interpolated_row(y, x);
+            } else {
+                reference[static_cast<size_t>(y * out_width + x)] = 0.5f * interpolated_row(y, 2 * x) +
+                                                                    0.5f * interpolated_row(y, 2 * x + 1);
+            }
+        }
+    }
+    return reference;
+}
+
+// Local copy of the lanczos5 kernel used by the operator.  The reference path
+// needs the same weights but must compute them serially.
+inline float Lanczos5ReferenceWeight(float x)
+{
+    constexpr float kPi = 3.14159265359f;
+    constexpr float kRadius = 5.0f;
+    x = std::abs(x);
+    if (x > kRadius) {
+        return 0.0f;
+    }
+    if (x <= 1e-3f) {
+        return 1.0f;
+    }
+    return kRadius * std::sin(kPi * x) * std::sin(kPi * x / kRadius) / (kPi * kPi * x * x);
+}
+
+// Serial version of ComputeSpansCore.  It mirrors the span selection,
+// normalization and zero-weight handling but never spawns a worker thread, so
+// it is a scheduling-independent oracle for the parallel path.
+inline void ComputeSpansSerialReference(int64_t output_size, int64_t input_size, float scale, float translate,
+                                        bool antialias, int& span_size, std::vector<int32_t>& starts,
+                                        std::vector<float>& weights)
+{
+    constexpr float kRadius = 5.0f;
+    const float inv_scale = 1.0 / scale;
+    const float inv_translate = -inv_scale * translate;
+    const float kernel_scale = antialias ? std::max(inv_scale, 1.0f) : 1.0f;
+    const float one_over_kernel_scale = 1.0f / kernel_scale;
+    span_size = std::min(2 * static_cast<int>(std::ceil(kRadius * kernel_scale)) + 1, static_cast<int>(input_size));
+    starts.assign(static_cast<size_t>(output_size), 0);
+    weights.assign(static_cast<size_t>(span_size * output_size), 0.0f);
+
+    for (int64_t x = 0; x < output_size; ++x) {
+        const float sample_f = (static_cast<float>(x) + 0.5f) * inv_scale + inv_translate;
+        if (sample_f < 0 || sample_f > input_size) {
+            continue;
+        }
+        int64_t span_start = static_cast<int64_t>(std::ceil(sample_f - kRadius * kernel_scale - 0.5f));
+        int64_t span_end = static_cast<int64_t>(std::floor(sample_f + kRadius * kernel_scale - 0.5f));
+        span_start = std::max<int64_t>(0, std::min<int64_t>(input_size - 1, span_start));
+        span_end = std::max<int64_t>(0, std::min<int64_t>(input_size - 1, span_end)) + 1;
+
+        std::vector<float> temp_weights;
+        float total_weight = 0.0f;
+        for (int64_t source = span_start; source < span_end; ++source) {
+            const float kernel_pos = static_cast<float>(source) + 0.5f - sample_f;
+            const float weight = Lanczos5ReferenceWeight(std::abs(kernel_pos * one_over_kernel_scale));
+            total_weight += weight;
+            temp_weights.push_back(weight);
+        }
+        if (std::abs(total_weight) >= 1000.0f * std::numeric_limits<float>::min()) {
+            const float one_over_total_weight = 1.0f / total_weight;
+            for (size_t i = 0; i < temp_weights.size(); ++i) {
+                weights[static_cast<size_t>(x * span_size) + i] = temp_weights[i] * one_over_total_weight;
+            }
+        }
+        starts[static_cast<size_t>(x)] = static_cast<int32_t>(span_start);
+    }
+}
+
+// Serial version of the two-pass gather.  Batch and channel are fixed at one
+// because the regression shapes use a single image with a single channel.
+inline std::vector<float> ComputeLanczos5Reference(const std::vector<float>& input, int64_t in_height, int64_t in_width,
+                                                   int64_t out_height, int64_t out_width, float row_scale,
+                                                   float col_scale, bool antialias)
+{
+    int row_span_size = 0;
+    int col_span_size = 0;
+    std::vector<int32_t> row_starts;
+    std::vector<int32_t> col_starts;
+    std::vector<float> row_weights;
+    std::vector<float> col_weights;
+    ComputeSpansSerialReference(out_height, in_height, row_scale, 0.0f, antialias, row_span_size, row_starts,
+                                row_weights);
+    ComputeSpansSerialReference(out_width, in_width, col_scale, 0.0f, antialias, col_span_size, col_starts,
+                                col_weights);
+
+    std::vector<float> intermediate(static_cast<size_t>(out_height * in_width), 0.0f);
+    for (int64_t y = 0; y < out_height; ++y) {
+        for (int64_t x = 0; x < in_width; ++x) {
+            float value = 0.0f;
+            for (int k = 0; k < row_span_size; ++k) {
+                const int64_t source_y = row_starts[static_cast<size_t>(y)] + k;
+                if (source_y >= in_height) {
+                    break;
+                }
+                value += row_weights[static_cast<size_t>(y * row_span_size + k)] *
+                         input[static_cast<size_t>(source_y * in_width + x)];
+            }
+            intermediate[static_cast<size_t>(y * in_width + x)] = value;
+        }
+    }
+
+    std::vector<float> output(static_cast<size_t>(out_height * out_width), 0.0f);
+    for (int64_t y = 0; y < out_height; ++y) {
+        for (int64_t x = 0; x < out_width; ++x) {
+            float value = 0.0f;
+            for (int k = 0; k < col_span_size; ++k) {
+                const int64_t source_x = col_starts[static_cast<size_t>(x)] + k;
+                if (source_x >= in_width) {
+                    break;
+                }
+                value += col_weights[static_cast<size_t>(x * col_span_size + k)] *
+                         intermediate[static_cast<size_t>(y * in_width + source_x)];
+            }
+            output[static_cast<size_t>(y * out_width + x)] = value;
+        }
+    }
+    return output;
+}
+
+template <typename T>
+void RunLanczos5LargeSpanCase(DataType data_type, int64_t in_height, int64_t in_width, int64_t out_height,
+                              int64_t out_width, float row_scale, float col_scale, bool antialias, int repeat)
+{
+    std::vector<T> input;
+    FillLargeSpanImage(in_height, in_width, input);
+    std::vector<float> float_input(input.size());
+    for (size_t i = 0; i < input.size(); ++i) {
+        float_input[i] = static_cast<float>(input[i]);
+    }
+    std::vector<float> reference = ComputeLanczos5Reference(float_input, in_height, in_width, out_height, out_width,
+                                                            row_scale, col_scale, antialias);
+
+    vector<DataType> data_types = {data_type, DT_INT32, DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{1, in_height, in_width, 1}, {2}, {2}, {2}, {1, out_height, out_width, 1}};
+    int32_t size_data[2] = {static_cast<int32_t>(out_height), static_cast<int32_t>(out_width)};
+    float scale_data[2] = {row_scale, col_scale};
+    float translate_data[2] = {0.0f, 0.0f};
+    std::vector<float> output(static_cast<size_t>(out_height * out_width));
+
+    for (int iteration = 0; iteration < repeat; ++iteration) {
+        std::fill(output.begin(), output.end(), 0.0f);
+        vector<void*> datas = {(void*)input.data(), (void*)size_data, (void*)scale_data, (void*)translate_data,
+                               (void*)output.data()};
+        CREATE_NODEDEF(shapes, data_types, datas, "lanczos5", antialias);
+        RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+        EXPECT_TRUE(CompareResult(output.data(), reference.data(), static_cast<uint64_t>(reference.size())))
+            << "lanczos5 large span output diverged on iteration " << iteration;
+    }
+}
+
+template <typename T>
+void RunLargeSpanCase(DataType data_type, int64_t in_height, int64_t in_width, int64_t out_height, int64_t out_width,
+                      float row_scale, float col_scale, bool downscale_height, bool downscale_width, int repeat)
+{
+    std::vector<T> input;
+    FillLargeSpanImage(in_height, in_width, input);
+    std::vector<float> reference = ComputeLargeSpanReference(input, in_width, out_height, out_width, downscale_height,
+                                                             downscale_width);
+
+    vector<DataType> data_types = {data_type, DT_INT32, DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{1, in_height, in_width, 1}, {2}, {2}, {2}, {1, out_height, out_width, 1}};
+    int32_t size_data[2] = {static_cast<int32_t>(out_height), static_cast<int32_t>(out_width)};
+    float scale_data[2] = {row_scale, col_scale};
+    float translate_data[2] = {0.0f, 0.0f};
+    std::vector<float> output(static_cast<size_t>(out_height * out_width));
+
+    // Repeating the same call gives the worker threads more opportunities to
+    // interleave inside the span functor; with the old shared scratch vector
+    // this usually shows up as a wrong value within a few iterations.
+    for (int iteration = 0; iteration < repeat; ++iteration) {
+        std::fill(output.begin(), output.end(), 0.0f);
+        vector<void*> datas = {(void*)input.data(), (void*)size_data, (void*)scale_data, (void*)translate_data,
+                               (void*)output.data()};
+        CREATE_NODEDEF(shapes, data_types, datas, "box", false);
+        RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+        EXPECT_TRUE(CompareResult(output.data(), reference.data(), static_cast<uint64_t>(reference.size())))
+            << "large span output diverged on iteration " << iteration;
+    }
 }
 } // namespace
 
@@ -1348,4 +1580,125 @@ TEST_F(TEST_SCALEANDTRANSLATE_UT, INPUT_DATA_TYPE_EXCEPTION)
     CREATE_NODEDEF(shapes, data_types, datas, kernel_type_str, antialias);
     RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
     delete[] output;
+}
+
+// Small serial ranges must clear and reuse the scratch weights for each output pixel.
+TEST_F(TEST_SCALEANDTRANSLATE_UT, SMALL_WIDTH_FLOAT32_SERIAL_SPANS_SUCC)
+{
+    RunLargeSpanCase<float>(DT_FLOAT, 2, 32, 2, 16, 1.0f, 0.5f, false, true, 1);
+}
+
+// Together with the 1025 cases below, cover both sides of the dispatch threshold.
+// Varying weights detect a missing per-pixel clear when the serial buffer is reused.
+TEST_F(TEST_SCALEANDTRANSLATE_UT, WIDTH_1024_VARYING_WEIGHTS_FLOAT32_SERIAL_SUCC)
+{
+    RunLanczos5LargeSpanCase<float>(DT_FLOAT, 2, 4096, 2, 1024, 1.0f, 0.3f, false, 1);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, HEIGHT_1024_VARYING_WEIGHTS_FLOAT32_SERIAL_SUCC)
+{
+    RunLanczos5LargeSpanCase<float>(DT_FLOAT, 4096, 2, 1024, 2, 0.3f, 1.0f, false, 1);
+}
+
+// Output width 1025 crosses kParallelDataNums, so ComputeSpans runs the column
+// shards concurrently while the row spans stay serial.  The 2050 source pixels
+// map to 1025 outputs, which makes every span use two non-zero weights instead
+// of the single-weight identity case.
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_WIDTH_FLOAT32_PARALLEL_SPANS_SUCC)
+{
+    RunLargeSpanCase<float>(DT_FLOAT, 2, kLargeSpanInputSize, 2, kLargeSpanOutputSize, 1.0f, 0.5f, false, true,
+                            kLargeSpanRepeat);
+}
+
+// Mirror of the width case for the row spans: output height 1025 makes the row
+// shard lambda run in parallel while the column spans stay serial.
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_HEIGHT_FLOAT32_PARALLEL_SPANS_SUCC)
+{
+    RunLargeSpanCase<float>(DT_FLOAT, kLargeSpanInputSize, 2, kLargeSpanOutputSize, 2, 0.5f, 1.0f, true, false,
+                            kLargeSpanRepeat);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_WIDTH_FLOAT16_PARALLEL_SPANS_SUCC)
+{
+    RunLargeSpanCase<Eigen::half>(DT_FLOAT16, 2, kLargeSpanInputSize, 2, kLargeSpanOutputSize, 1.0f, 0.5f, false, true,
+                                  kLargeSpanRepeat);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_HEIGHT_FLOAT16_PARALLEL_SPANS_SUCC)
+{
+    RunLargeSpanCase<Eigen::half>(DT_FLOAT16, kLargeSpanInputSize, 2, kLargeSpanOutputSize, 2, 0.5f, 1.0f, true, false,
+                                  kLargeSpanRepeat);
+}
+
+// Both output dimensions exceed the threshold in one call, so the concurrent
+// column spans and the concurrent row spans are exercised together.  Scale 1
+// makes the expected result an exact copy of the input.
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_BOTH_DIMS_FLOAT32_PARALLEL_SPANS_SUCC)
+{
+    RunLargeSpanCase<float>(DT_FLOAT, kLargeSpanOutputSize, kLargeSpanOutputSize, kLargeSpanOutputSize,
+                            kLargeSpanOutputSize, 1.0f, 1.0f, false, false, kLargeSpanBothDimsRepeat);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_BOTH_DIMS_FLOAT16_PARALLEL_SPANS_SUCC)
+{
+    RunLargeSpanCase<Eigen::half>(DT_FLOAT16, kLargeSpanOutputSize, kLargeSpanOutputSize, kLargeSpanOutputSize,
+                                  kLargeSpanOutputSize, 1.0f, 1.0f, false, false, kLargeSpanBothDimsRepeat);
+}
+
+// Exact shape from the reported failure: a tiny image expanded to width 2048
+// with lanczos5.  Output width 2048 forces the column span launcher through
+// ParallelFor while the serial reference above stays single-threaded.
+TEST_F(TEST_SCALEANDTRANSLATE_UT, REPRO_LANCZOS5_WIDTH_2048_FLOAT32_SUCC)
+{
+    RunLanczos5LargeSpanCase<float>(DT_FLOAT, 2, 2, 1, 2048, 1.0f, 1.0f, false, kLargeSpanRepeat);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, REPRO_LANCZOS5_WIDTH_2048_FLOAT16_SUCC)
+{
+    RunLanczos5LargeSpanCase<Eigen::half>(DT_FLOAT16, 2, 2, 1, 2048, 1.0f, 1.0f, false, kLargeSpanRepeat);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, REPRO_LANCZOS5_WIDTH_2048_ANTIALIAS_FLOAT32_SUCC)
+{
+    RunLanczos5LargeSpanCase<float>(DT_FLOAT, 2, 2, 1, 2048, 1.0f, 1.0f, true, kLargeSpanRepeat);
+}
+
+// The transposed variant, output height 2049, drives the row span launcher
+// through ParallelFor instead of the column one.
+TEST_F(TEST_SCALEANDTRANSLATE_UT, REPRO_LANCZOS5_HEIGHT_2049_FLOAT32_SUCC)
+{
+    RunLanczos5LargeSpanCase<float>(DT_FLOAT, 2, 2, 2049, 1, 1.0f, 1.0f, false, kLargeSpanRepeat);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, REPRO_LANCZOS5_HEIGHT_2049_FLOAT16_SUCC)
+{
+    RunLanczos5LargeSpanCase<Eigen::half>(DT_FLOAT16, 2, 2, 2049, 1, 1.0f, 1.0f, false, kLargeSpanRepeat);
+}
+
+// With scale 0.3 the sample positions land on different fractional offsets for
+// every output pixel, so each pixel gets a genuinely different set of lanczos5
+// weights.  A shard that reads another shard's scratch buffer therefore writes
+// visible garbage instead of an interchangeable zero/one pattern, which makes
+// this case far more sensitive to the shared-buffer race than the identity
+// shapes above.
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_WIDTH_VARYING_WEIGHTS_FLOAT32_SUCC)
+{
+    RunLanczos5LargeSpanCase<float>(DT_FLOAT, 2, 4096, 2, kLargeSpanOutputSize, 1.0f, 0.3f, false, kLargeSpanRepeat);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_HEIGHT_VARYING_WEIGHTS_FLOAT32_SUCC)
+{
+    RunLanczos5LargeSpanCase<float>(DT_FLOAT, 4096, 2, kLargeSpanOutputSize, 2, 0.3f, 1.0f, false, kLargeSpanRepeat);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_WIDTH_VARYING_WEIGHTS_FLOAT16_SUCC)
+{
+    RunLanczos5LargeSpanCase<Eigen::half>(DT_FLOAT16, 2, 4096, 2, kLargeSpanOutputSize, 1.0f, 0.3f, false,
+                                          kLargeSpanRepeat);
+}
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_HEIGHT_VARYING_WEIGHTS_FLOAT16_SUCC)
+{
+    RunLanczos5LargeSpanCase<Eigen::half>(DT_FLOAT16, 4096, 2, kLargeSpanOutputSize, 2, 0.3f, 1.0f, false,
+                                          kLargeSpanRepeat);
 }

@@ -11,6 +11,7 @@
 #include "scale_and_translate_aicpu.h"
 
 #include <cmath>
+#include <atomic>
 #include <iostream>
 #include <limits>
 #include <type_traits>
@@ -176,10 +177,11 @@ uint32_t ComputeSpansCore(CpuKernelContext& context, const Kernel& kernel, const
     Eigen::TensorMap<Eigen::Tensor<float, 1>> weights_vec(spans->weights->data(), spans->weights->dimensions());
     weights_vec.setZero();
     const float one_over_kernel_scale = 1.0f / kernel_scale;
-    int max_span_size = 0;
-    std::vector<float> temp_weights;
-    uint32_t shard_ret = KERNEL_STATUS_OK;
+    // Each shard owns its scratch weights; only the atomic error status is shared.
+    std::atomic<uint32_t> shard_ret(KERNEL_STATUS_OK);
     auto shard_x = [&](int start, int end) {
+        std::vector<float> temp_weights;
+        temp_weights.reserve(static_cast<size_t>(spans->span_size));
         for (auto x = start; x < end; ++x) {
             const float col_f = x + 0.5f;
             const float sample_f = col_f * inv_scale + inv_translate;
@@ -199,7 +201,7 @@ uint32_t ComputeSpansCore(CpuKernelContext& context, const Kernel& kernel, const
             const int this_span_size = span_end - span_start;
             if (this_span_size > spans->span_size) {
                 KERNEL_LOG_ERROR("Span is too large: [%d] vs [%d].", this_span_size, spans->span_size);
-                shard_ret = KERNEL_STATUS_PARAM_INVALID;
+                shard_ret.store(KERNEL_STATUS_PARAM_INVALID, std::memory_order_relaxed);
                 return;
             }
             float total_weight = 0.0f;
@@ -210,15 +212,13 @@ uint32_t ComputeSpansCore(CpuKernelContext& context, const Kernel& kernel, const
                 total_weight += weight;
                 temp_weights.push_back(weight);
             }
-            max_span_size = std::max(max_span_size, this_span_size);
             NormalizeSpanWeights(temp_weights, total_weight, spans->span_size, x, weights_vec);
             starts_vec(x) = span_start;
         }
     };
     if (output_size <= kParallelDataNums) {
-        for (size_t i = 0; i < size_t(output_size); i++) {
-            shard_x(i, i + 1);
-        }
+        // Reuse one scratch buffer for the entire serial range, as in a parallel shard.
+        shard_x(0, static_cast<int>(output_size));
     } else {
         uint32_t parallelRet = CpuKernelUtils::ParallelFor(context, output_size, 1, shard_x);
         if (parallelRet != KERNEL_STATUS_OK) {
@@ -230,12 +230,13 @@ uint32_t ComputeSpansCore(CpuKernelContext& context, const Kernel& kernel, const
             return parallelRet;
         }
     }
-    if (shard_ret != KERNEL_STATUS_OK) {
+    const uint32_t shard_status = shard_ret.load(std::memory_order_relaxed);
+    if (shard_status != KERNEL_STATUS_OK) {
         delete spans->starts;
         delete spans->weights;
         spans->starts = nullptr;
         spans->weights = nullptr;
-        return shard_ret;
+        return shard_status;
     }
     return KERNEL_STATUS_OK;
 }
