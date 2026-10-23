@@ -11,6 +11,7 @@
 #include "roi_pooling_with_arg_max.h"
 #include "aclnn_kernels/contiguous.h"
 #include "aclnn_kernels/common/op_error_check.h"
+#include "level0/fill.h"
 #include "opdev/common_types.h"
 #include "opdev/data_type_utils.h"
 #include "opdev/op_dfx.h"
@@ -130,6 +131,16 @@ static aclnnStatus CheckParams(const aclTensor* x, const aclTensor* rois, int64_
     return ACLNN_SUCCESS;
 }
 
+static const aclTensor* GetOutTensorWithValueZero(aclTensor* out, aclOpExecutor* executor)
+{
+    aclScalar* scalar = executor->AllocScalar(0);
+    auto valueTensor = executor->ConvertToTensor(scalar, out->GetDataType());
+    auto outputDims = op::ToShapeVector(out->GetViewShape());
+    aclIntArray* dimArray = executor->AllocIntArray(outputDims.data(), outputDims.size());
+    auto dimTensor = executor->ConvertToTensor(dimArray, op::DataType::DT_INT64);
+    return l0op::Fill(dimTensor, valueTensor, dimArray, executor);
+}
+
 aclnnStatus aclnnRoiPoolingWithArgMaxGetWorkspaceSize(const aclTensor* x, const aclTensor* rois, int64_t pooled_h,
                                                       int64_t pooled_w, float spatial_scale_h, float spatial_scale_w,
                                                       aclTensor* y, aclTensor* argmax, uint64_t* workspaceSize,
@@ -149,8 +160,19 @@ aclnnStatus aclnnRoiPoolingWithArgMaxGetWorkspaceSize(const aclTensor* x, const 
     ret = CheckParams(x, rois, pooled_h, pooled_w, spatial_scale_h, spatial_scale_w, y, argmax);
     CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
-    if (x->IsEmpty()) {
-        *workspaceSize = 0;
+    // Empty x or empty rois: zero-fill outputs and return success.
+    if (x->IsEmpty() || rois->IsEmpty()) {
+        auto fillY = GetOutTensorWithValueZero(y, uniqueExecutor.get());
+        CHECK_RET(fillY != nullptr, ACLNN_ERR_INNER_NULLPTR);
+        auto viewCopyY = l0op::ViewCopy(fillY, y, uniqueExecutor.get());
+        CHECK_RET(viewCopyY != nullptr, ACLNN_ERR_INNER_NULLPTR);
+
+        auto fillArgmax = GetOutTensorWithValueZero(argmax, uniqueExecutor.get());
+        CHECK_RET(fillArgmax != nullptr, ACLNN_ERR_INNER_NULLPTR);
+        auto viewCopyArgmax = l0op::ViewCopy(fillArgmax, argmax, uniqueExecutor.get());
+        CHECK_RET(viewCopyArgmax != nullptr, ACLNN_ERR_INNER_NULLPTR);
+
+        *workspaceSize = uniqueExecutor->GetWorkspaceSize();
         uniqueExecutor.ReleaseTo(executor);
         return ACLNN_SUCCESS;
     }

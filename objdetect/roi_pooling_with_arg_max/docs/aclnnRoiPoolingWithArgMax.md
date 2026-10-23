@@ -144,7 +144,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>x（aclTensor*）</td>
       <td>输入</td>
       <td>输入特征图，格式为NCHW，(N, C, H, W)。</td>
-      <td><ul><li>不支持空Tensor。</li><li>输入维度必须为4维。</li><li>N小于等于1024。</li></ul></td>
+      <td><ul><li>输入维度必须为4维。</li><li>N小于等于1024。</li></ul></td>
       <td>FLOAT32、FLOAT16</td>
       <td>ND</td>
       <td>4</td>
@@ -154,7 +154,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>rois（aclTensor*）</td>
       <td>输入</td>
       <td>ROI框，每行5个元素：batch_idx, x1, y1, x2, y2。</td>
-      <td><ul><li>shape为（num_rois，5），不支持空Tensor。</li><li>第0维小于等于1024。</li><li>x1, y1, x2, y2大于等于0.0。</li></ul></td>
+      <td><ul><li>shape为（num_rois，5）。</li><li>第0维小于等于1024。</li><li>x1, y1, x2, y2大于等于0.0。</li></ul></td>
       <td>FLOAT32、FLOAT16</td>
       <td>ND</td>
       <td>2</td>
@@ -204,7 +204,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>y（aclTensor*）</td>
       <td>输出</td>
       <td>池化结果，shape为（num_rois，C，pooled_h，pooled_w）。</td>
-      <td><ul><li>不支持空Tensor。</li><li>数据类型与x一致。</li></ul></td>
+      <td><ul><li>数据类型与x一致。</li></ul></td>
       <td>FLOAT32、FLOAT16</td>
       <td>ND</td>
       <td>4</td>
@@ -214,7 +214,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>argmax（aclTensor*）</td>
       <td>输出</td>
       <td>每个池化格点最大值在通道内的线性偏移索引。</td>
-      <td><ul><li>不支持空Tensor。</li><li>shape与y一致。</li></ul></td>
+      <td><ul><li>shape与y一致。</li></ul></td>
       <td>INT32</td>
       <td>ND</td>
       <td>4</td>
