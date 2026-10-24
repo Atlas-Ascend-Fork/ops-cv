@@ -178,7 +178,8 @@ static bool CheckShape(const aclTensor* input, const aclTensor* grid, const aclT
         return false;
     }
 
-    if (inputShape.GetDim(FOURTH_DIM) == 0 || inputShape.GetDim(FIFTH_DIM) == 0) {
+    if (inputShape.GetDim(deepIndex) == 0 || inputShape.GetDim(heightIndex) == 0 ||
+        inputShape.GetDim(widthIndex) == 0) {
         OP_LOGE(ACLNN_ERR_PARAM_INVALID,
                 "expect input to have non-empty spatial dimensions, but got input with shape [%s]",
                 op::ToString(inputShape).GetString());
