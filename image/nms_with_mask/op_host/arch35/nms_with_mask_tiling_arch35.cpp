@@ -16,6 +16,7 @@
 #include "nms_with_mask_tiling_arch35.h"
 #include "op_host/tiling_templates_registry.h"
 #include "op_host/tiling_util.h"
+#include <cmath>
 #include <cstdint>
 #include <graph/utils/type_utils.h>
 #include "register/op_impl_registry.h"
@@ -50,8 +51,9 @@ ge::graphStatus NMSWithMaskRegbaseTiling::CheckInputShape()
                 return ge::GRAPH_FAILED);
     boxesNum_ = shapeStorageScores.GetDim(INDEX_ZERO);
     OP_CHECK_IF(
-        boxesNum_ <= 0 || boxesNum_ >= MAX_BLOCK_NUM,
-        OP_LOGE(tilingContext_, "Input boxes num must be greater than 0 and less than 39936, got :%lld.", boxesNum_),
+        boxesNum_ <= 0 || boxesNum_ > MAX_BLOCK_NUM,
+        OP_LOGE(tilingContext_, "Input boxes num must be greater than 0 and less than or equal to 39936, got :%lld.",
+                boxesNum_),
         return ge::GRAPH_FAILED);
     OP_CHECK_IF(shapeStorageScores.GetDim(INDEX_ONE) != ELEMENT_NUM,
                 OP_LOGE(tilingContext_, "Input box_scores' second dim must be 5, got :%lu.",
@@ -181,7 +183,7 @@ ge::graphStatus NMSWithMaskRegbaseTiling::SetTilingData()
     auto iouThrPtr = attrs->GetAttrPointer<float>(ATTR_IOU_THR_INDEX);
     OP_CHECK_NULL_WITH_CONTEXT(tilingContext_, iouThrPtr);
     iouThreshold_ = *iouThrPtr;
-    if (iouThreshold_ < 0.0f || iouThreshold_ > 1.0f) {
+    if (!std::isfinite(iouThreshold_) || iouThreshold_ < 0.0f || iouThreshold_ > 1.0f) {
         OP_LOGE(tilingContext_, "iou_threshold_ must be in [0, 1], got %f", iouThreshold_);
         return ge::GRAPH_FAILED;
     }
