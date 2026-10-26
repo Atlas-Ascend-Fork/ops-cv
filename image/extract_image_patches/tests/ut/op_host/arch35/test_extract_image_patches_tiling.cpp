@@ -88,3 +88,33 @@ TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_dilation_fp32)
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, 4,
                     "1 36 36 12 36 9 4 3 4 2 5 5 1 1 2 2 0 0 25 5 1 1 1024 36 ", {0});
 }
+
+TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_zero_spatial_ksize)
+{
+    gert::StorageShape xShape = {{1, 3, 3, 1}, {1, 3, 3, 1}};
+    gert::StorageShape yShape = {{}, {}};
+    ExtractImagePatchesCompileInfo compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractImagePatches", {{xShape, ge::DT_FLOAT, ge::FORMAT_NHWC}}, {{yShape, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {gert::TilingContextPara::OpAttr("ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 2, 0, 1})),
+         gert::TilingContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("rates", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ExtractImagePatchesTiling, extract_image_patches_nchw_zero_spatial_ksize)
+{
+    gert::StorageShape xShape = {{1, 1, 3, 3}, {1, 1, 3, 3}};
+    gert::StorageShape yShape = {{}, {}};
+    ExtractImagePatchesCompileInfo compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractImagePatches", {{xShape, ge::DT_FLOAT, ge::FORMAT_NCHW}}, {{yShape, ge::DT_FLOAT, ge::FORMAT_NCHW}},
+        {gert::TilingContextPara::OpAttr("ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 0, 2})),
+         gert::TilingContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("rates", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}

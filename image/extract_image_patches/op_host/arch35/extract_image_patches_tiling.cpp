@@ -213,6 +213,13 @@ static ge::graphStatus ParseAttrs(gert::TilingContext* context, const ParsedInpu
                                                " must both be 1 for " + attrFormatName)
                                                   .c_str()),
         return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ksizes[idxH] <= 0 || ksizes[idxW] <= 0,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                    context->GetNodeName(), "ksizes", FormatAttrList(ksizesData).c_str(),
+                    ("spatial elements at indices " + std::to_string(attrIdxH) + " and " + std::to_string(attrIdxW) +
+                     " must both be greater than 0 for " + attrFormatName)
+                        .c_str()),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(strides[idxH] <= 0 || strides[idxW] <= 0,
                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                     context->GetNodeName(), "strides", FormatAttrList(stridesData).c_str(),

@@ -67,7 +67,7 @@ $$
     <tr>
       <td>ksizes</td>
       <td>属性</td>
-      <td>patch大小，长度 4 的ListInt，N/C维必须为 1。</td>
+      <td>patch大小，长度 4 的ListInt，空间 H/W 维必须大于 0，N/C 维必须为 1。</td>
       <td>ListInt</td>
       <td>-</td>
     </tr>
@@ -98,7 +98,7 @@ $$
 
 - 输入必须为4D张量（NHWC或NCHW格式）。
 - ksizes/strides/rates长度必须为4，且N/C维必须为 1。
-- strides的H/W维必须大于 0，rates的H/W维必须大于等于 1。
+- ksizes和strides的H/W维必须大于 0，rates的H/W维必须大于等于 1。
 - padding取值仅支持 "SAME" 或 "VALID"。
 - 输入输出dtype相同，无类型提升。
 - 纯数据搬运算子，所有特殊值（NaN/Inf/+0/-0）原样透传，SAME padding越界补零值为+0.0。

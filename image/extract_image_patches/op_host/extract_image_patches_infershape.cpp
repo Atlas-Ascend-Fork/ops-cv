@@ -104,6 +104,13 @@ static ge::graphStatus ParseEipAttrs(gert::InferShapeContext* context, bool isNh
                                                           .c_str()),
                 return GRAPH_FAILED);
     OP_CHECK_IF(
+        ksizes[idxH] <= 0 || ksizes[idxW] <= 0,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "ksizes", FormatAttrList(ksizes).c_str(),
+                                              ("spatial elements at indices " + std::to_string(idxH) + " and " +
+                                               std::to_string(idxW) + " must both be greater than 0 for " + formatName)
+                                                  .c_str()),
+        return GRAPH_FAILED);
+    OP_CHECK_IF(
         strides[idxH] <= 0 || strides[idxW] <= 0,
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "strides", FormatAttrList(strides).c_str(),
                                               ("spatial elements at indices " + std::to_string(idxH) + " and " +

@@ -32,7 +32,8 @@ namespace ge {
 * When x dtype is in [int8, uint8], format support: [NC1HWC0].
 * @par Attributes:
 * @li ksizes: A required list or tuple. The size of the sliding window for each
-* dimension of images.
+* dimension of images. Spatial values must be at least 1, and batch/channel
+* values must be 1.
 * @li strides: A required list or tuple. How far the centers of two consecutive
 * patches are in the images. Must be: [1, stride_rows, stride_cols, 1].
 * @li rates: A required list or tuple. Must be: [1, rate_rows, rate_cols, 1].

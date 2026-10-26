@@ -206,3 +206,37 @@ TEST_F(ExtractImagePatchesInfershape, extract_image_patches_unknownrank_nchw)
     };
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
+
+TEST_F(ExtractImagePatchesInfershape, extract_image_patches_nhwc_zero_spatial_ksize)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ExtractImagePatches", {{{{1, 3, 3, 1}, {1, 3, 3, 1}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {
+            gert::InfershapeContextPara::OpAttr("ksizes",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 2, 0, 1})),
+            gert::InfershapeContextPara::OpAttr("strides",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("rates",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID")),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ExtractImagePatchesInfershape, extract_image_patches_nchw_zero_spatial_ksize)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ExtractImagePatches", {{{{1, 1, 3, 3}, {1, 1, 3, 3}}, ge::DT_FLOAT, ge::FORMAT_NCHW}},
+        {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NCHW}},
+        {
+            gert::InfershapeContextPara::OpAttr("ksizes",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 0, 2})),
+            gert::InfershapeContextPara::OpAttr("strides",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("rates",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID")),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
