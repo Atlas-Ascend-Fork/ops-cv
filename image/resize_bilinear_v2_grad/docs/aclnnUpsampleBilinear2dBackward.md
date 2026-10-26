@@ -34,7 +34,8 @@
 
     $$
     scaleH =\begin{cases}
-    (inputSize[2]-1) / (outputSize[0]-1) & alignCorners=true \\
+    (inputSize[2]-1) / (outputSize[0]-1) & alignCorners=true\&outputSize[0]>1 \\
+    0 & alignCorners=true\&outputSize[0]=1 \\
     1 / scalesH & alignCorners=false\&scalesH>0\\
     inputSize[2] / outputSize[0] & alignCorners=false
     \end{cases}
@@ -42,7 +43,8 @@
 
     $$
     scaleW =\begin{cases}
-    (inputSize[3]-1) / (outputSize[1]-1) & alignCorners=true \\
+    (inputSize[3]-1) / (outputSize[1]-1) & alignCorners=true\&outputSize[1]>1 \\
+    0 & alignCorners=true\&outputSize[1]=1 \\
     1 / scalesW & alignCorners=false\&scalesW>0\\
     inputSize[3] / outputSize[1] & alignCorners=false
     \end{cases}
@@ -357,14 +359,39 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
   outputSize\_W = floor(inputSize\_W * scalesW)
   $$
 
-- 确定性计算：
+- 参数scalesH、scalesW的生效情况：
 
   <!-- npu="A3,910b,910,310p" id9 -->
-  - <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>、<term>Atlas推理系列产品</term>、<term>Atlas训练系列产品</term>：aclnnUpsampleBilinear2dBackward默认确定性实现。
+  - <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>、<term>Atlas推理系列产品</term>、<term>Atlas训练系列产品</term>：scalesH和scalesW不生效，scaleH和scaleW通过inputSize和outputSize计算得到，计算公式如下：
+
+    $$
+    scaleH =\begin{cases}
+    (inputSize[2]-1) / (outputSize[0]-1) & alignCorners=true\&outputSize[0]>1 \\
+    0 & alignCorners=true\&outputSize[0]=1 \\
+    inputSize[2] / outputSize[0] & alignCorners=false
+    \end{cases}
+    $$
+
+    $$
+    scaleW =\begin{cases}
+    (inputSize[3]-1) / (outputSize[1]-1) & alignCorners=true\&outputSize[1]>1 \\
+    0 & alignCorners=true\&outputSize[1]=1 \\
+    inputSize[3] / outputSize[1] & alignCorners=false
+    \end{cases}
+    $$
   <!-- end id9 -->
   <!-- npu="950" id10 -->
-  - <term>Ascend 950PR&950DT系列产品</term>：aclnnUpsampleBilinear2dBackward默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。
+  - <term>Ascend 950PR&950DT系列产品</term>：scalesH和scalesW生效，scaleH和scaleW的计算公式参见[功能说明](#功能说明)中的计算公式。
   <!-- end id10 -->
+
+- 确定性计算：
+
+  <!-- npu="A3,910b,910,310p" id11 -->
+  - <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>、<term>Atlas推理系列产品</term>、<term>Atlas训练系列产品</term>：aclnnUpsampleBilinear2dBackward默认确定性实现。
+  <!-- end id11 -->
+  <!-- npu="950" id12 -->
+  - <term>Ascend 950PR&950DT系列产品</term>：aclnnUpsampleBilinear2dBackward默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。
+  <!-- end id12 -->
 
 ## 调用示例
 
