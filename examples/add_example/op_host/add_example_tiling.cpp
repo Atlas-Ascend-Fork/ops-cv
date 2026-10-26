@@ -135,14 +135,28 @@ static ge::graphStatus GetShapeAttrsInfo(gert::TilingContext* context, int64_t& 
                         inputShapeX.GetDimNum(), inputShapeY.GetDimNum(), outShapeZ.GetDimNum()),
                 return ge::GRAPH_FAILED);
 
+    // x2 is read for the same element count as x1 by the kernel, so reject known shape mismatches.
+    for (size_t i = 0; i < static_cast<size_t>(DIMS_LIMIT); ++i) {
+        int64_t x1Dim = inputShapeX.GetDim(i);
+        int64_t x2Dim = inputShapeY.GetDim(i);
+        if (x1Dim >= 0 && x2Dim >= 0 && x1Dim != x2Dim) {
+            OP_LOGE(context, "AddExample: x1 and x2 shapes must match");
+            return ge::GRAPH_FAILED;
+        }
+    }
+
     // 获取shape的维度值
     totalIdx = inputShapeX.GetShapeSize();
 
     // 数据类型校验
     const std::set<ge::DataType> supportedDtype = {ge::DT_FLOAT, ge::DT_INT32};
     auto inputDesc = context->GetInputDesc(0);
+    auto inputDescY = context->GetInputDesc(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, inputDesc);
+    OP_CHECK_NULL_WITH_CONTEXT(context, inputDescY);
     dataType = inputDesc->GetDataType();
+    OP_CHECK_IF(dataType != inputDescY->GetDataType(),
+                OP_LOGE(context, "AddExample: x1 and x2 must have the same data type"), return ge::GRAPH_FAILED);
 
     if (supportedDtype.count(dataType) == 0) {
         OP_LOGE(context, "invalid dtype");

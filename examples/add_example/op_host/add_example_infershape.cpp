@@ -40,6 +40,20 @@ static ge::graphStatus InferShapeAddExample(gert::InferShapeContext* context)
     // 获取输入x的shape信息
     const gert::Shape* xShape = context->GetInputShape(IDX_0);
     OP_CHECK_NULL_WITH_CONTEXT(context, xShape);
+    const gert::Shape* x2Shape = context->GetInputShape(1);
+    OP_CHECK_NULL_WITH_CONTEXT(context, x2Shape);
+    if (xShape->GetDimNum() != x2Shape->GetDimNum()) {
+        OP_LOGE(context->GetNodeName(), "AddExample: x1 and x2 must have the same rank");
+        return GRAPH_FAILED;
+    }
+    for (size_t i = 0; i < xShape->GetDimNum(); ++i) {
+        int64_t x1Dim = xShape->GetDim(i);
+        int64_t x2Dim = x2Shape->GetDim(i);
+        if (x1Dim >= 0 && x2Dim >= 0 && x1Dim != x2Dim) {
+            OP_LOGE(context->GetNodeName(), "AddExample: x1 and x2 shapes must match");
+            return GRAPH_FAILED;
+        }
+    }
 
     // 获取输出y的shape信息
     gert::Shape* yShape = context->GetOutputShape(IDX_0);
@@ -75,6 +89,11 @@ static ge::graphStatus InferDataTypeAddExample(gert::InferDataTypeContext* conte
     // 设置输出的数据类型
     // Add算子的输出数据类型与输入数据类型相同
     ge::DataType sizeDtype = context->GetInputDataType(IDX_0);
+    ge::DataType x2Dtype = context->GetInputDataType(1);
+    if (sizeDtype != x2Dtype) {
+        OP_LOGE(context->GetNodeName(), "AddExample: x1 and x2 must have the same data type");
+        return GRAPH_FAILED;
+    }
     context->SetOutputDataType(IDX_0, sizeDtype);
 
     OP_LOGD(context->GetNodeName(), "End to do InferDataTypeAddExample");

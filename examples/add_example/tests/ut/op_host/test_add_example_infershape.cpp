@@ -10,8 +10,10 @@
 
 #include <gtest/gtest.h>
 #include <iostream>
+#include "base/registry/op_impl_space_registry_v2.h"
 #include "infershape_context_faker.h"
 #include "infershape_case_executor.h"
+#include "op_infer_datatype_context_builder.h"
 
 class AddExampleInfershape : public testing::Test {
 protected:
@@ -35,4 +37,36 @@ TEST_F(AddExampleInfershape, add_example_infershape_test1)
         {1, -1, -1, 64},
     };
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+TEST_F(AddExampleInfershape, reject_mismatched_input_shape)
+{
+    gert::InfershapeContextPara infershapeContextPara("AddExample",
+                                                      {
+                                                          {{{2, 3, 4, 4}, {2, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{2, 3, 4, 3}, {2, 3, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(AddExampleInfershape, reject_mismatched_input_dtype)
+{
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    const auto* opImpl = registry->GetOpImpl("AddExample");
+    ASSERT_NE(opImpl, nullptr);
+    ASSERT_NE(opImpl->infer_datatype, nullptr);
+
+    gert::OpInferDataTypeContextBuilder builder;
+    builder.OpType("AddExample").OpName("AddExample").IONum(2, 1);
+    builder.InputTensorDesc(0, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.InputTensorDesc(1, ge::DT_INT32, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.OutputTensorDesc(0, ge::FORMAT_ND, ge::FORMAT_ND);
+    auto holder = builder.Build();
+    auto* context = holder.GetContext();
+    ASSERT_NE(context, nullptr);
+    EXPECT_EQ(opImpl->infer_datatype(context), ge::GRAPH_FAILED);
 }

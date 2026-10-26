@@ -75,3 +75,35 @@ TEST_F(AddExampleTiling, add_example_1)
     std::vector<size_t> expectWorkspaces = {0};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
+
+TEST_F(AddExampleTiling, reject_mismatched_input_shape)
+{
+    struct AddExampleCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("AddExample",
+                                              {
+                                                  {{{32, 4, 4, 4}, {32, 4, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{32, 4, 4, 3}, {32, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{32, 4, 4, 4}, {32, 4, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {}, &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(AddExampleTiling, reject_mismatched_input_dtype)
+{
+    struct AddExampleCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("AddExample",
+                                              {
+                                                  {{{32, 4, 4, 4}, {32, 4, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{32, 4, 4, 4}, {32, 4, 4, 4}}, ge::DT_INT32, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{32, 4, 4, 4}, {32, 4, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {}, &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
