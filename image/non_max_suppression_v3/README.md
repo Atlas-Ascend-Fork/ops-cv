@@ -29,7 +29,7 @@
 
 ## 约束说明
 
-- 输入的boxes和scores必须是float类型。
+- boxes和scores必须使用相同的数据类型，均为FLOAT16或FLOAT。
 
 ## 调用说明
 

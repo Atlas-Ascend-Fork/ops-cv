@@ -48,7 +48,7 @@ namespace ge {
 * indices from the boxes tensor, where M <= max_output_size . \n
 
 * @attention Constraints:
-* Input boxes and  scores must be float type . \n
+* Input boxes and scores must have the same data type, either float16 or float . \n
 
 * @par Third-party framework compatibility
 * Compatible with tensorflow NonMaxSuppressionV3 operator.

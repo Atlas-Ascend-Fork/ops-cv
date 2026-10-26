@@ -44,11 +44,12 @@ gert::StorageShape MakeStorageShape(const std::vector<int64_t>& dims)
 }
 
 void ExpectShape(const gert::StorageShape& boxesShape, const gert::StorageShape& scoresShape,
-                 ge::graphStatus expectedStatus, const std::vector<std::vector<int64_t>>& expectedShapes = {})
+                 ge::graphStatus expectedStatus, const std::vector<std::vector<int64_t>>& expectedShapes = {},
+                 ge::DataType boxesDtype = ge::DT_FLOAT, ge::DataType scoresDtype = ge::DT_FLOAT)
 {
     gert::InfershapeContextPara context("NonMaxSuppressionV3",
-                                        {{boxesShape, ge::DT_FLOAT, ge::FORMAT_ND},
-                                         {scoresShape, ge::DT_FLOAT, ge::FORMAT_ND},
+                                        {{boxesShape, boxesDtype, ge::FORMAT_ND},
+                                         {scoresShape, scoresDtype, ge::FORMAT_ND},
                                          {{{}, {}}, ge::DT_INT32, ge::FORMAT_ND},
                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND}},
@@ -90,6 +91,12 @@ void ExpectControlShapes(const std::vector<int64_t>& maxOutputSizeShape, const s
 TEST(NonMaxSuppressionV3Infershape, infers_static_shape)
 {
     ExpectShape({{8, 4}, {8, 4}}, {{8}, {8}}, ge::GRAPH_SUCCESS, {{-1}});
+}
+
+TEST(NonMaxSuppressionV3Infershape, rejects_mixed_boxes_scores_dtypes)
+{
+    ExpectShape({{8, 4}, {8, 4}}, {{8}, {8}}, ge::GRAPH_FAILED, {}, ge::DT_FLOAT, ge::DT_FLOAT16);
+    ExpectShape({{8, 4}, {8, 4}}, {{8}, {8}}, ge::GRAPH_FAILED, {}, ge::DT_FLOAT16, ge::DT_FLOAT);
 }
 
 TEST(NonMaxSuppressionV3Infershape, accepts_compatible_dynamic_dimensions)

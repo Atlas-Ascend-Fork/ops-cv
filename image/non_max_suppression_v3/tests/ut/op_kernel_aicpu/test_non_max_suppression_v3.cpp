@@ -64,6 +64,39 @@ uint32_t RunControlShapeCase(const vector<int64_t>& max_shape, const vector<int6
     }
     return CpuKernelRegister::Instance().RunCpuKernel(context);
 }
+
+uint32_t RunBoxScoreDtypeCase(DataType boxes_dtype, DataType scores_dtype)
+{
+    std::vector<float> boxes_float = {0.0F, 0.0F, 1.0F, 1.0F, 10.0F, 10.0F, 11.0F, 11.0F};
+    std::vector<Eigen::half> boxes_half = {(Eigen::half)0.0F,  (Eigen::half)0.0F,  (Eigen::half)1.0F,
+                                           (Eigen::half)1.0F,  (Eigen::half)10.0F, (Eigen::half)10.0F,
+                                           (Eigen::half)11.0F, (Eigen::half)11.0F};
+    std::vector<float> scores_float = {0.8F, 0.6F};
+    std::vector<Eigen::half> scores_half = {(Eigen::half)0.8F, (Eigen::half)0.6F};
+    void* boxes_data = boxes_dtype == DT_FLOAT ? static_cast<void*>(boxes_float.data()) :
+                                                 static_cast<void*>(boxes_half.data());
+    void* scores_data = scores_dtype == DT_FLOAT ? static_cast<void*>(scores_float.data()) :
+                                                   static_cast<void*>(scores_half.data());
+    int32_t max_output_size = 2;
+    float iou_threshold = 0.5F;
+    float score_threshold = 0.5F;
+    uint64_t local_result_summary[4] = {0, 0, 0, 0};
+
+    auto node_def = CpuKernelUtils::CpuKernelUtils::CreateNodeDef();
+    NodeDefBuilder(node_def.get(), "NonMaxSuppressionV3", "NonMaxSuppressionV3")
+        .Input({"boxes", boxes_dtype, {2, 4}, boxes_data})
+        .Input({"scores", scores_dtype, {2}, scores_data})
+        .Input({"max_output_size", DT_INT32, {}, &max_output_size})
+        .Input({"iou_threshold", DT_FLOAT, {}, &iou_threshold})
+        .Input({"score_threshold", DT_FLOAT, {}, &score_threshold})
+        .Output({"selected_indices", DT_UINT64, {-1}, local_result_summary});
+    CpuKernelContext context(HOST);
+    const uint32_t init_ret = context.Init(node_def.get());
+    if (init_ret != KERNEL_STATUS_OK) {
+        return init_ret;
+    }
+    return CpuKernelRegister::Instance().RunCpuKernel(context);
+}
 } // namespace
 
 class TEST_NON_MAX_SUPPRESSION_V3_UT : public testing::Test {};
@@ -190,6 +223,12 @@ ADD_CASE(Eigen::half, DT_FLOAT16)
 ADD_CASE(float, DT_FLOAT)
 ADD_NULL_CASE(float, DT_FLOAT)
 ADD_MEMCOPY_CASE_INVALID_PTR(float, DT_FLOAT)
+
+TEST_F(TEST_NON_MAX_SUPPRESSION_V3_UT, TestNonMaxSuppressionV3_RejectsMixedBoxesScoresDtype)
+{
+    EXPECT_EQ(RunBoxScoreDtypeCase(DT_FLOAT, DT_FLOAT16), KERNEL_STATUS_PARAM_INVALID);
+    EXPECT_EQ(RunBoxScoreDtypeCase(DT_FLOAT16, DT_FLOAT), KERNEL_STATUS_PARAM_INVALID);
+}
 
 TEST_F(TEST_NON_MAX_SUPPRESSION_V3_UT, TestNonMaxSuppressionV3_RejectsNonScalarControlInputs)
 {

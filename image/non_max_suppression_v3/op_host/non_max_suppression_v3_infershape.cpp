@@ -61,6 +61,12 @@ static ge::graphStatus InferShapeForNonMaxSuppressionV3(gert::InferShapeContext*
     OP_CHECK_NULL_WITH_CONTEXT(context, boxesShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, scoresShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, maxOutputSizeShape);
+    const auto* boxesDesc = context->GetInputDesc(kBoxesIndex);
+    const auto* scoresDesc = context->GetInputDesc(kScoresIndex);
+    OP_CHECK_NULL_WITH_CONTEXT(context, boxesDesc);
+    OP_CHECK_NULL_WITH_CONTEXT(context, scoresDesc);
+    OP_CHECK_IF(boxesDesc->GetDataType() != scoresDesc->GetDataType(),
+                OP_LOGE(context, "boxes and scores must have the same data type"), return ge::GRAPH_FAILED);
     OP_CHECK_NULL_WITH_CONTEXT(context, iouThresholdShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, scoreThresholdShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, selectedIndicesShape);

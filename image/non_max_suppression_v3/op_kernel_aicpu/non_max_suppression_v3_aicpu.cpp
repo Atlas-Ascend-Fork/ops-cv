@@ -114,6 +114,10 @@ uint32_t NonMaxSuppressionV3CpuKernel::GetInputAndCheck(const CpuKernelContext& 
                        "output:0 output_indices failed.");
 
     boxes_scores_dtype_ = static_cast<DataType>(boxes_->GetDataType());
+    if (static_cast<DataType>(scores_->GetDataType()) != boxes_scores_dtype_) {
+        KERNEL_LOG_ERROR("The dtype of input[0]boxes and input[1]scores must be the same.");
+        return KERNEL_STATUS_PARAM_INVALID;
+    }
     if (boxes_scores_dtype_ != DT_FLOAT16 && boxes_scores_dtype_ != DT_FLOAT) {
         KERNEL_LOG_ERROR("The dtype of input[0]boxes and scores must be float16 or float32.");
         return KERNEL_STATUS_PARAM_INVALID;
