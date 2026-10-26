@@ -27,15 +27,12 @@ namespace ge {
  *@brief Converts RGB images to YUV422 (YUYV packed format) color space.
  *@par Inputs:
  *One input, including:
- * @li x: An ND Tensor of type uint8. Shape [..., H, W, 3]. \n
+ * @li rgb: An ND Tensor of type uint8. Shape [..., H, W, 3]. \n
  *
  *@par Outputs:
- *y: An ND Tensor of type uint8. Shape [..., H, W, 2] (YUYV packed).
+ *yuv: An ND Tensor of type uint8. Shape [..., H, W, 2] (YUYV packed).
  */
-REG_OP(RGB2YUV422)
-    .INPUT(rgb, TensorType({DT_UINT8}))
-    .OUTPUT(yuv, TensorType({DT_UINT8}))
-    .OP_END_FACTORY_REG(RGB2YUV422)
+REG_OP(RGB2YUV422).INPUT(rgb, TensorType({DT_UINT8})).OUTPUT(yuv, TensorType({DT_UINT8})).OP_END_FACTORY_REG(RGB2YUV422)
 
 } // namespace ge
 
