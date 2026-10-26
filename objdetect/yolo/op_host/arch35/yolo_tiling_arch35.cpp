@@ -102,7 +102,7 @@ static ge::graphStatus ExtractAndValidate(gert::TilingContext* context, int64_t&
     return ge::GRAPH_SUCCESS;
 }
 
-// Validate input and output dtypes: must be float16 or float32
+// Validate input and output dtypes: all tensors must use the same float16 or float32 dtype.
 static ge::graphStatus ValidateDtype(gert::TilingContext* context)
 {
     const char* opName = context->GetNodeName();
@@ -141,6 +141,16 @@ static ge::graphStatus ValidateDtype(gert::TilingContext* context)
                     opName, "classes_prob", std::to_string(static_cast<int32_t>(classesProbDataType)).c_str(),
                     "classes_prob dtype must be float16/float32"),
                 return ge::GRAPH_FAILED);
+
+    const std::string actualDtypes = std::to_string(static_cast<int32_t>(xDataType)) + ", " +
+                                     std::to_string(static_cast<int32_t>(coordDataType)) + ", " +
+                                     std::to_string(static_cast<int32_t>(objProbDataType)) + ", " +
+                                     std::to_string(static_cast<int32_t>(classesProbDataType));
+    OP_CHECK_IF(
+        coordDataType != xDataType || objProbDataType != xDataType || classesProbDataType != xDataType,
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(opName, "x, coord_data, obj_prob, classes_prob", actualDtypes.c_str(),
+                                               "x and all outputs must have the same dtype"),
+        return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
