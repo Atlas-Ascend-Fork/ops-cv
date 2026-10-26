@@ -74,7 +74,11 @@ static ge::graphStatus InferShapeAnchorResponseFlags(gert::InferShapeContext* co
     // Compute output shape: [featH * featW * numBaseAnchors]
     int64_t featH = featmapSizeData[0];
     int64_t featW = featmapSizeData[1];
-    int64_t totalAnchors = featH * featW * numBaseAnchors;
+    // Each dimension is bounded by INT32_MAX, so featHW itself fits in int64_t.
+    int64_t featHW = featH * featW;
+    OP_CHECK_IF(numBaseAnchors > 0 && featHW > std::numeric_limits<int64_t>::max() / numBaseAnchors,
+                OP_LOGE(context, "output anchor count overflows int64"), return GRAPH_FAILED);
+    int64_t totalAnchors = featHW * numBaseAnchors;
 
     // Set output shape
     gert::Shape* outShape = context->GetOutputShape(IDX_0);

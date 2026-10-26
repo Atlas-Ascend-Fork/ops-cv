@@ -372,3 +372,41 @@ TEST_F(AnchorResponseFlagsInfershape, anchor_response_flags_infershape_strides_i
     };
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
+
+TEST_F(AnchorResponseFlagsInfershape, anchor_response_flags_infershape_output_anchor_count_overflow)
+{
+    std::vector<gert::InfershapeContextPara::OpAttr> attrs = {
+        gert::InfershapeContextPara::OpAttr(
+            "featmap_size", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2147483647, 2147483647})),
+        gert::InfershapeContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2, 2})),
+        gert::InfershapeContextPara::OpAttr("num_base_anchors", Ops::Cv::AnyValue::CreateFrom(int64_t(4))),
+    };
+    gert::InfershapeContextPara infershapeContextPara("AnchorResponseFlags",
+                                                      {
+                                                          {{{1, 4}, {1, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                                      },
+                                                      attrs);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(AnchorResponseFlagsInfershape, anchor_response_flags_infershape_large_representable_anchor_count)
+{
+    std::vector<gert::InfershapeContextPara::OpAttr> attrs = {
+        gert::InfershapeContextPara::OpAttr(
+            "featmap_size", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2147483647, 2147483647})),
+        gert::InfershapeContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2, 2})),
+        gert::InfershapeContextPara::OpAttr("num_base_anchors", Ops::Cv::AnyValue::CreateFrom(int64_t(2))),
+    };
+    gert::InfershapeContextPara infershapeContextPara("AnchorResponseFlags",
+                                                      {
+                                                          {{{1, 4}, {1, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                                      },
+                                                      attrs);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{9223372028264841218LL}});
+}

@@ -22,6 +22,7 @@
 #include "op_host/tiling_templates_registry.h"
 #include "../../op_kernel/arch35/anchor_response_flags_tiling_data.h"
 #include "../../op_kernel/arch35/anchor_response_flags_tiling_key.h"
+#include <limits>
 
 namespace optiling {
 
@@ -53,6 +54,8 @@ static ge::graphStatus GetAndValidateAttrs(gert::TilingContext* context, int32_t
 
     auto numBaseAnchorsPtr = attrs->GetInt(2);
     OP_CHECK_NULL_WITH_CONTEXT(context, numBaseAnchorsPtr);
+    OP_CHECK_IF(*numBaseAnchorsPtr < 0 || *numBaseAnchorsPtr > static_cast<int64_t>(INT32_MAX),
+                OP_LOGE(context, "num_base_anchors must be in [0, INT32_MAX]"), return ge::GRAPH_FAILED);
     numBaseAnchors = static_cast<int32_t>(*numBaseAnchorsPtr);
 
     OP_CHECK_IF(featmapSizeLen != 2, OP_LOGE(context, "featmap_size must have exactly 2 elements"),
@@ -64,8 +67,6 @@ static ge::graphStatus GetAndValidateAttrs(gert::TilingContext* context, int32_t
     OP_CHECK_IF(stridesData[0] <= 0 || stridesData[0] > static_cast<int64_t>(INT32_MAX) || stridesData[1] <= 0 ||
                     stridesData[1] > static_cast<int64_t>(INT32_MAX),
                 OP_LOGE(context, "strides elements must be in [1, INT32_MAX]"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(numBaseAnchors < 0, OP_LOGE(context, "num_base_anchors must not be negative"), return ge::GRAPH_FAILED);
-
     featH = static_cast<int32_t>(featmapSizeData[0]);
     featW = static_cast<int32_t>(featmapSizeData[1]);
     strideH = static_cast<int32_t>(stridesData[0]);
@@ -112,10 +113,13 @@ static ge::graphStatus ValidateDtype(gert::TilingContext* context)
 
 // 5. Compute tiling parameters
 // 6. Core count calculation (direct scatter partitions output bytes across cores)
-static void ComputeTilingParams(int32_t featH, int32_t featW, int32_t numBaseAnchors, int64_t coreNum,
+static bool ComputeTilingParams(int32_t featH, int32_t featW, int32_t numBaseAnchors, int64_t coreNum,
                                 int64_t& totalAnchors, int64_t& perCoreBytes, int64_t& needCoreNum)
 {
     int64_t featHW = static_cast<int64_t>(featH) * featW;
+    if (numBaseAnchors > 0 && featHW > std::numeric_limits<int64_t>::max() / numBaseAnchors) {
+        return false;
+    }
     totalAnchors = featHW * numBaseAnchors;
 
     perCoreBytes = Ops::Base::CeilDiv(totalAnchors, coreNum);
@@ -124,6 +128,7 @@ static void ComputeTilingParams(int32_t featH, int32_t featW, int32_t numBaseAnc
     }
     perCoreBytes = Ops::Base::CeilDiv(perCoreBytes, CORE_PARTITION_ALIGN) * CORE_PARTITION_ALIGN;
     needCoreNum = (totalAnchors > 0) ? Ops::Base::CeilDiv(totalAnchors, perCoreBytes) : 1;
+    return true;
 }
 
 // 7. Set tiling data
@@ -234,7 +239,8 @@ static ge::graphStatus AnchorResponseFlagsTilingFunc(gert::TilingContext* contex
     int64_t totalAnchors = 0;
     int64_t perCoreBytes = 0;
     int64_t needCoreNum = 0;
-    ComputeTilingParams(featH, featW, numBaseAnchors, coreNum, totalAnchors, perCoreBytes, needCoreNum);
+    OP_CHECK_IF(!ComputeTilingParams(featH, featW, numBaseAnchors, coreNum, totalAnchors, perCoreBytes, needCoreNum),
+                OP_LOGE(context, "output anchor count overflows int64"), return ge::GRAPH_FAILED);
 
     ret = FillTilingData(context, needCoreNum, n, featH, featW, strideH, strideW, numBaseAnchors, totalAnchors,
                          perCoreBytes);

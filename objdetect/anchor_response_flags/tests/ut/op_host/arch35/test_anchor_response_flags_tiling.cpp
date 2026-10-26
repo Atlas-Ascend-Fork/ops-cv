@@ -299,3 +299,24 @@ TEST_F(AnchorResponseFlagsTiling, anchor_response_flags_strides_int32_max)
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
+
+TEST_F(AnchorResponseFlagsTiling, anchor_response_flags_output_anchor_count_overflow)
+{
+    struct AnchorResponseFlagsCompileInfo {
+    } compileInfo;
+    std::vector<gert::TilingContextPara::OpAttr> attrs = {
+        gert::TilingContextPara::OpAttr("featmap_size",
+                                        Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2147483647, 2147483647})),
+        gert::TilingContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2, 2})),
+        gert::TilingContextPara::OpAttr("num_base_anchors", Ops::Cv::AnyValue::CreateFrom(int64_t(4))),
+    };
+    gert::TilingContextPara tilingContextPara("AnchorResponseFlags",
+                                              {
+                                                  {{{1, 4}, {1, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1}, {1}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                              },
+                                              attrs, &compileInfo, "Ascend950", 48, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
