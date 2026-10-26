@@ -41,14 +41,14 @@
     <tr>
       <td>x</td>
       <td>输入</td>
-      <td>输入图像的四维Tensor，对应公式中x。</td>
+      <td>输入图像的三维Tensor，形状为(N, C, L)，对应公式中x。</td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>size</td>
       <td>输入</td>
-      <td>输出图像的高和宽。</td>
+      <td>长度为1的一维INT32 Tensor，给出输出L维的大小。</td>
       <td>INT32</td>
       <td>ND</td>
     </tr>
