@@ -66,9 +66,16 @@ $$
       <td>ND</td>
     </tr>
     <tr>
+      <td>y</td>
+      <td>输出</td>
+      <td>裁剪后的输出张量，dtype与x/size一致。</td>
+      <td>与x相同</td>
+      <td>ND</td>
+    </tr>
+    <tr>
       <td>axis</td>
-      <td>属性</td>
-      <td>裁剪起始维度，该维度之前的维度保持与x相同。取值范围[-rank(x), rank(x)-1]，负值会转换为正值。</td>
+      <td>可选属性</td>
+      <td>裁剪起始维度，缺省值为2。该维度之前的维度保持与x相同。取值范围[-rank(x), rank(x)-1]，负值会转换为正值。</td>
       <td>INT</td>
       <td>-</td>
     </tr>
@@ -79,13 +86,6 @@ $$
       <td>LIST_INT</td>
       <td>-</td>
     </tr>
-    <tr>
-      <td>y</td>
-      <td>输出</td>
-      <td>裁剪后的输出张量，dtype与x/size一致。</td>
-      <td>与x相同</td>
-      <td>ND</td>
-    </tr>
   </tbody></table>
 
 ## 约束说明
@@ -95,7 +95,7 @@ $$
 - `axis`取值范围为[-rank(x), rank(x)-1]，若为负值会自动转换为正值（axis += rank(x)）。
 - `offsets`长度为1时，从`axis`开始的所有维度使用同一偏移值；`offsets`长度大于1时，必须等于rank(x) - axis，分别对应各维度。
 - 各维度偏移需满足`offsets[i] + size.shape[i] <= x.shape[i]`且`offsets[i] >= 0`，否则报错。
-- `axis`之前的维度，`x`和`size`的对应维度大小必须一致，否则报错。
+- `axis`之前的维度，输出shape继承`x`的对应维度；`size`在`axis`之前的维度不参与裁剪。
 - 输出shape在`axis`之前的维度继承`x`的对应维度，`axis`及之后的维度取`size`的对应维度。
 
 ## 调用说明
@@ -103,14 +103,14 @@ $$
 <table><thead>
   <tr>
     <th>调用方式</th>
-    <th>调用样例</th>
+    <th>样例代码</th>
     <th>说明</th>
   </tr></thead>
 <tbody>
   <tr>
-    <td>图模式调用</td>
+    <td>GE图模式</td>
     <td><a href="./examples/test_geir_crop.cpp">test_geir_crop</a></td>
-    <td>参见<a href="../../docs/zh/invocation/quick_op_invocation.md">算子调用</a>完成算子编译和验证。</td>
+    <td>通过<a href="./op_graph/crop_proto.h">算子IR</a>构图方式调用Crop算子，参见<a href="../../docs/zh/invocation/quick_op_invocation.md">算子调用指南</a>完成算子编译和验证。</td>
   </tr>
 </tbody>
 </table>

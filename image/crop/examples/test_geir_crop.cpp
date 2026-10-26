@@ -123,6 +123,24 @@ uint32_t GetDataTypeSize(DataType dt)
     return dilation;
 }
 
+// float 转 IEEE 754 half(binary16) 位模式：不能截取 host float 低 2 字节，
+// 那样 2.0f(0x40000000) 会得到 0x0000(+0.0)；示例取值范围内该直接转换即精确
+static uint16_t FloatToFp16Bits(float val)
+{
+    uint32_t bits = 0;
+    memcpy(&bits, &val, sizeof(bits));
+    uint32_t sign = (bits >> 16) & 0x8000U;
+    int32_t exp = static_cast<int32_t>((bits >> 23) & 0xFFU) - 127 + 15;
+    uint32_t mant = bits & 0x7FFFFFU;
+    if (exp <= 0) {
+        return static_cast<uint16_t>(sign);
+    }
+    if (exp >= 31) {
+        return static_cast<uint16_t>(sign | 0x7C00U);
+    }
+    return static_cast<uint16_t>(sign | (static_cast<uint32_t>(exp) << 10) | (mant >> 13));
+}
+
 int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& input_tensor_desc, DataType data_type,
                     int value)
 {
@@ -138,11 +156,31 @@ int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& in
     }
     for (size_t i = 0; i < size; ++i) {
         size_t offset = i * GetDataTypeSize(data_type);
-        if (data_type == ge::DT_FLOAT || data_type == ge::DT_FLOAT16 || data_type == ge::DT_BF16) {
+        // 按目标 dtype 编码写入数值 value：浮点做位模式转换，整型按位宽写值
+        // （原 memset 字节模式会使 INT16 填成 0x0202=514 而非 2）
+        if (data_type == ge::DT_FLOAT) {
             float fval = static_cast<float>(value);
-            memcpy(pData + offset, &fval, GetDataTypeSize(data_type));
-        } else {
-            memset(pData + offset, value, GetDataTypeSize(data_type));
+            memcpy(pData + offset, &fval, sizeof(fval));
+        } else if (data_type == ge::DT_FLOAT16) {
+            uint16_t hval = FloatToFp16Bits(static_cast<float>(value));
+            memcpy(pData + offset, &hval, sizeof(hval));
+        } else if (data_type == ge::DT_BF16) {
+            uint32_t fbits = 0;
+            float fval = static_cast<float>(value);
+            memcpy(&fbits, &fval, sizeof(fbits));
+            uint16_t bval = static_cast<uint16_t>(fbits >> 16);
+            memcpy(pData + offset, &bval, sizeof(bval));
+        } else if (data_type == ge::DT_INT8 || data_type == ge::DT_UINT8) {
+            pData[offset] = static_cast<uint8_t>(value);
+        } else if (data_type == ge::DT_INT16 || data_type == ge::DT_UINT16) {
+            int16_t v16 = static_cast<int16_t>(value);
+            memcpy(pData + offset, &v16, sizeof(v16));
+        } else if (data_type == ge::DT_INT32 || data_type == ge::DT_UINT32) {
+            int32_t v32 = static_cast<int32_t>(value);
+            memcpy(pData + offset, &v32, sizeof(v32));
+        } else if (data_type == ge::DT_INT64 || data_type == ge::DT_UINT64) {
+            int64_t v64 = static_cast<int64_t>(value);
+            memcpy(pData + offset, &v64, sizeof(v64));
         }
     }
     input_tensor = Tensor(input_tensor_desc, pData, data_len);
@@ -199,7 +237,7 @@ int main(int argc, char* argv[])
     std::vector<ge::Tensor> input;
 
     printf("%s - INFO - [XIR]: Start to initialize ge using ge global options\n", GetTime().c_str());
-    std::map<AscendString, AscendString> global_options = {{"ge.exec.deviceId", "5"}, {"ge.graphRunMode", "1"}};
+    std::map<AscendString, AscendString> global_options = {{"ge.exec.deviceId", "0"}, {"ge.graphRunMode", "1"}};
     Status ret = ge::GEInitialize(global_options);
     if (ret != SUCCESS) {
         printf("%s - INFO - [XIR]: Initialize ge using ge global options failed\n", GetTime().c_str());

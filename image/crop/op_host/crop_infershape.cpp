@@ -49,13 +49,9 @@ static ge::graphStatus ComputeCropOutputShape(gert::InferShapeContext* context, 
     for (size_t i = 0; i < xRank; i++) {
         int64_t xDim = xShape->GetDim(i);
         int64_t sizeDim = sizeShape->GetDim(i);
-        // axis 之前：output 维度 = input 维度，校验 x==size
+        // axis 之前维度取 x（对齐 910 基线/Caffe：size 前 axis 维不参与裁剪）
         if (static_cast<int64_t>(i) < axis) {
             yShape->SetDim(i, xDim);
-            if (xDim != ge::UNKNOWN_DIM && sizeDim != ge::UNKNOWN_DIM && xDim != sizeDim) {
-                OP_LOGE(context, "Crop: dim %zu x=%ld != size=%ld (before axis)", i, xDim, sizeDim);
-                return GRAPH_FAILED;
-            }
         } else {
             // axis 及之后：output 维度 = size 维度，校验 offset+size<=x 且 offset>=0
             yShape->SetDim(i, sizeDim);

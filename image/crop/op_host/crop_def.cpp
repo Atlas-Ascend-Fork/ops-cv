@@ -60,7 +60,7 @@ public:
             .DynamicShapeSupportFlag(true)
             .NeedCheckSupportFlag(false)
             .PrecisionReduceFlag(true)
-            .ExtendCfgInfo("opFile.value", "crop_apt");
+            .ExtendCfgInfo("opFile.value", "crop");
         this->AICore().AddConfig("ascend950", aicoreConfig);
     }
 };

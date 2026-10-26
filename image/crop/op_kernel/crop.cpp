@@ -9,7 +9,7 @@
  */
 
 /*!
- * \file crop_apt.cpp
+ * \file crop.cpp
  * \brief Kernel entry for crop operator
  *
  * Template parameter:

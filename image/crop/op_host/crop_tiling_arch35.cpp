@@ -24,6 +24,8 @@
 #include "image/crop/op_kernel/arch35/crop_tiling_data.h"
 #include "image/crop/op_kernel/arch35/crop_tiling_key.h"
 
+#include <cstdint>
+
 namespace optiling {
 
 using namespace Ops::Cv::OpTiling;
@@ -49,24 +51,31 @@ static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& u
     return ge::GRAPH_SUCCESS;
 }
 
-// 行优先 strides 计算：从最后一维向前，每维 stride = 后续维度乘积
+// 行优先 strides 计算：从最后一维向前，每维 stride = 后续维度乘积；乘积溢出 int64 时报错
 template <typename ShapeType>
-static void ComputeStrides(const ShapeType& shape, int64_t* strides, int32_t ndim)
+static ge::graphStatus ComputeStrides(const ShapeType& shape, int64_t* strides, int32_t ndim)
 {
     int64_t strideVal = 1;
     for (int32_t d = ndim - 1; d >= 0; d--) {
         strides[d] = strideVal;
+        if (shape[d] != 0 && strideVal > INT64_MAX / shape[d]) {
+            return ge::GRAPH_FAILED;
+        }
         strideVal *= shape[d];
     }
+    return ge::GRAPH_SUCCESS;
 }
 
-static int64_t ComputeTotalElements(const int64_t* shape, int32_t rank)
+static ge::graphStatus ComputeTotalElements(const int64_t* shape, int32_t rank, int64_t& total)
 {
-    int64_t total = 1;
+    total = 1;
     for (int32_t i = 0; i < rank; i++) {
+        if (shape[i] != 0 && total > INT64_MAX / shape[i]) {
+            return ge::GRAPH_FAILED;
+        }
         total *= shape[i];
     }
-    return total;
+    return ge::GRAPH_SUCCESS;
 }
 
 static ge::graphStatus GetAttrsAndValidate(gert::TilingContext* context, int32_t rank, int64_t& axis,
@@ -111,12 +120,9 @@ static ge::graphStatus ComputeOutputShape(gert::TilingContext* context, const in
                                           const int64_t* offsetsArr, int32_t rank, int64_t axis, int64_t* yShape)
 {
     for (int32_t i = 0; i < rank; i++) {
-        // axis 之前的维度：output = input，需校验 x==size
+        // axis 之前维度取 x（对齐 910 基线/Caffe：size 前 axis 维不参与裁剪）
         if (static_cast<int64_t>(i) < axis) {
             yShape[i] = xShape[i];
-            OP_CHECK_IF(xShape[i] != sizeShape[i],
-                        OP_LOGE(context, "Crop: dim %d x=%ld != size=%ld (before axis)", i, xShape[i], sizeShape[i]),
-                        return ge::GRAPH_FAILED);
         } else {
             // axis 及之后维度：output = size，需校验 offset+size <= x 且 offset >= 0
             yShape[i] = sizeShape[i];
@@ -176,18 +182,33 @@ static ge::graphStatus CropTilingFunc(gert::TilingContext* context)
     auto sizeInput = context->GetInputShape(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, sizeInput);
 
+    // GEIR 通路不调用 InferShape 且会归一化非首输入的 storage_shape，size 须取 origin
+    // （对齐 blend_face_bg_part_two）
+    const auto& sizeOriginShape = sizeInput->GetOriginShape();
+
     int32_t rank = static_cast<int32_t>(xInput->GetStorageShape().GetDimNum());
-    int32_t sizeRank = static_cast<int32_t>(sizeInput->GetStorageShape().GetDimNum());
-    OP_CHECK_IF(rank != sizeRank, OP_LOGE(context, "Crop: rank(x)=%d != rank(size)=%d", rank, sizeRank),
-                return ge::GRAPH_FAILED);
     OP_CHECK_IF(rank < 1 || rank > MAX_DIMS, OP_LOGE(context, "Crop: rank=%d out of range [1, %d]", rank, MAX_DIMS),
+                return ge::GRAPH_FAILED);
+    int32_t sizeRank = static_cast<int32_t>(sizeOriginShape.GetDimNum());
+    OP_CHECK_IF(rank != sizeRank, OP_LOGE(context, "Crop: rank(x)=%d != rank(size)=%d", rank, sizeRank),
                 return ge::GRAPH_FAILED);
 
     int64_t xShapeArr[MAX_DIMS] = {};
     int64_t sizeShapeArr[MAX_DIMS] = {};
     for (int32_t i = 0; i < rank; i++) {
         xShapeArr[i] = xInput->GetStorageShape().GetDim(i);
-        sizeShapeArr[i] = sizeInput->GetStorageShape().GetDim(i);
+        sizeShapeArr[i] = sizeOriginShape.GetDim(i);
+    }
+    // 哨兵（-1/-2）与负维会经 kernel 无符号解释形成大规模越界访问，tiling 需具体非负维度
+    for (int32_t i = 0; i < rank; i++) {
+        OP_CHECK_IF(
+            xShapeArr[i] < 0,
+            OP_LOGE(context, "Crop: x dim[%d]=%ld must be concrete and non-negative at tiling", i, xShapeArr[i]),
+            return ge::GRAPH_FAILED);
+        OP_CHECK_IF(
+            sizeShapeArr[i] < 0,
+            OP_LOGE(context, "Crop: size dim[%d]=%ld must be concrete and non-negative at tiling", i, sizeShapeArr[i]),
+            return ge::GRAPH_FAILED);
     }
 
     int64_t axis = 0;
@@ -202,11 +223,17 @@ static ge::graphStatus CropTilingFunc(gert::TilingContext* context)
 
     int64_t xStridesArr[MAX_DIMS] = {};
     int64_t yStridesArr[MAX_DIMS] = {};
-    ComputeStrides(xShapeArr, xStridesArr, rank);
-    ComputeStrides(yShapeArr, yStridesArr, rank);
+    OP_CHECK_IF(ComputeStrides(xShapeArr, xStridesArr, rank) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context, "Crop: x strides overflow int64 range"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ComputeStrides(yShapeArr, yStridesArr, rank) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context, "Crop: y strides overflow int64 range"), return ge::GRAPH_FAILED);
 
-    int64_t totalElements = ComputeTotalElements(yShapeArr, rank);
-    int64_t xTotalElements = ComputeTotalElements(xShapeArr, rank);
+    int64_t totalElements = 0;
+    int64_t xTotalElements = 0;
+    OP_CHECK_IF(ComputeTotalElements(yShapeArr, rank, totalElements) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context, "Crop: output element count overflows int64 range"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ComputeTotalElements(xShapeArr, rank, xTotalElements) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context, "Crop: x element count overflows int64 range"), return ge::GRAPH_FAILED);
     int64_t perCoreElements = (totalElements > 0) ? Ops::Base::CeilDiv(totalElements, coreNum) : 0;
     // 下限保护：避免小 shape 时核数过少导致并行度不足
     if (perCoreElements > 0 && perCoreElements < PER_CORE_MIN_ELEMENTS) {

@@ -32,6 +32,14 @@ using namespace AscendC;
 // 64 位路径经实测验证寄存器无溢出风险，统一 1024 线程最大化并行度。
 constexpr int64_t THREAD_NUM = 1024;
 
+// 框架 Simt::UintDiv(uint32) 的 dividend+umulhi 以 uint32 回绕、大 dividend 时商被低估，
+// magic 算法要求该求和在 64 位完成
+__simt_callee__ __aicore__ inline uint32_t WidenedUintDiv32(uint32_t dividend, uint32_t magic, uint32_t shift)
+{
+    uint64_t high = (static_cast<uint64_t>(dividend) * magic) >> 32;
+    return static_cast<uint32_t>((static_cast<uint64_t>(dividend) + high) >> shift);
+}
+
 // UB 中转设计：元数据通过 UB 传递给 VF，避免 GM 回读延迟。
 // UB 布局：yStrides[8] + xStrides[8] + magic/shift[14] = 30 元素（magic/shift 仅 rank-1 维，末维直接取余）
 // offsets 不进 UB，在 Tiling 侧预计算为 baseOffset，kernel 中偏移输入指针实现。
@@ -59,7 +67,11 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpCropSimt(IDX_
             if (d < rank - 1) {
                 IDX_T magic = ub[OFF_MAGIC + d * 2];
                 IDX_T shift = ub[OFF_MAGIC + d * 2 + 1];
-                coord = Simt::UintDiv(rem, magic, shift);
+                if constexpr (std::is_same<IDX_T, uint32_t>::value) {
+                    coord = WidenedUintDiv32(rem, magic, shift);
+                } else {
+                    coord = Simt::UintDiv(rem, magic, shift);
+                }
                 rem -= coord * ub[OFF_Y_STRIDE + d];
             } else {
                 coord = rem;
