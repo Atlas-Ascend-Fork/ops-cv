@@ -62,8 +62,11 @@ static ge::graphStatus InferShape4UpsampleNearest3d(gert::InferShapeContext* con
         // calculate and set output D,H,W dim
         auto scales_data = reinterpret_cast<const float*>(scales->GetData());
         for (size_t i = 0; i < SUPPORTED_OUTPUT_DIM_NUM; i++) {
-            output_shape->SetDim(i + NOT_CHANGE_DIM,
-                                 static_cast<int64_t>(input_shape->GetDim(i + NOT_CHANGE_DIM) * scales_data[i]));
+            const int64_t input_dim_value = input_shape->GetDim(i + NOT_CHANGE_DIM);
+            const int64_t output_dim_value = (input_dim_value == ge::UNKNOWN_DIM) ?
+                                                 ge::UNKNOWN_DIM :
+                                                 static_cast<int64_t>(input_dim_value * scales_data[i]);
+            output_shape->SetDim(i + NOT_CHANGE_DIM, output_dim_value);
         }
     } else {
         OP_LOGE(context->GetNodeName(),

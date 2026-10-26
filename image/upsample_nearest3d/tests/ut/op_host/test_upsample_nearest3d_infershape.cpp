@@ -10,6 +10,9 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <numeric>
+#include <cstdint>
+#include <string>
+#include <vector>
 
 #include "infershape_context_faker.h"
 #include "infershape_case_executor.h"
@@ -160,3 +163,54 @@ TEST_F(UpsampleNearest3dTest, UpsampleNearest3d_infer_test1_failed)
 //     auto status = op.VerifyAllAttr(true);
 //     EXPECT_EQ(status, ge::GRAPH_SUCCESS);
 // }
+
+// Dynamic-shape regression tests for the shared UpsampleNearest3d infer-shape callback.
+static gert::StorageShape MakeUpsampleNearest3dTestShape(const std::vector<int64_t>& dims)
+{
+    gert::StorageShape shape;
+    for (const auto dim : dims) {
+        shape.MutableOriginShape().AppendDim(dim);
+        shape.MutableStorageShape().AppendDim(dim);
+    }
+    return shape;
+}
+
+static gert::InfershapeContextPara MakeUpsampleNearest3dTestContext(const std::string& opName,
+                                                                    const std::vector<int64_t>& inputDims,
+                                                                    const std::vector<int64_t>& outputSize,
+                                                                    const std::vector<float>& scales)
+{
+    using OpAttr = gert::InfershapeContextPara::OpAttr;
+    using TensorDesc = gert::InfershapeContextPara::TensorDescription;
+    return gert::InfershapeContextPara(
+        opName, {TensorDesc(MakeUpsampleNearest3dTestShape(inputDims), ge::DT_FLOAT, ge::FORMAT_ND)},
+        {TensorDesc(MakeUpsampleNearest3dTestShape({}), ge::DT_FLOAT, ge::FORMAT_ND)},
+        {OpAttr("output_size", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>(outputSize)),
+         OpAttr("scales", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>(scales))});
+}
+
+TEST_F(UpsampleNearest3dTest, UpsampleNearest3d_scales_preserves_unknown_dim)
+{
+    auto context = MakeUpsampleNearest3dTestContext("UpsampleNearest3d", {1, 1, ge::UNKNOWN_DIM, 3, 4}, {},
+                                                    {2.0f, 1.0f, 1.0f});
+    ExecuteTestCase(context, ge::GRAPH_SUCCESS, {{1, 1, ge::UNKNOWN_DIM, 3, 4}});
+}
+
+TEST_F(UpsampleNearest3dTest, UpsampleNearestExact3d_scales_preserves_unknown_dim)
+{
+    auto context = MakeUpsampleNearest3dTestContext("UpsampleNearestExact3d", {1, 1, ge::UNKNOWN_DIM, 3, 4}, {},
+                                                    {2.0f, 1.0f, 1.0f});
+    ExecuteTestCase(context, ge::GRAPH_SUCCESS, {{1, 1, ge::UNKNOWN_DIM, 3, 4}});
+}
+
+TEST_F(UpsampleNearest3dTest, UpsampleNearest3d_scales_keeps_known_dim_calculation)
+{
+    auto context = MakeUpsampleNearest3dTestContext("UpsampleNearest3d", {1, 1, 2, 3, 4}, {}, {2.0f, 1.0f, 1.0f});
+    ExecuteTestCase(context, ge::GRAPH_SUCCESS, {{1, 1, 4, 3, 4}});
+}
+
+TEST_F(UpsampleNearest3dTest, UpsampleNearest3d_output_size_without_scales)
+{
+    auto context = MakeUpsampleNearest3dTestContext("UpsampleNearest3d", {1, 1, ge::UNKNOWN_DIM, 3, 4}, {5, 6, 7}, {});
+    ExecuteTestCase(context, ge::GRAPH_SUCCESS, {{1, 1, 5, 6, 7}});
+}
