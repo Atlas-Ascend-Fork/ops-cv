@@ -58,8 +58,6 @@ static constexpr int64_t EXPECT_SIZE = 1;
 
 static const std::string LINEAR_MODE = "linear";
 
-static inline bool Is960SocVersion(const NpuArch curArch) { return curArch == NpuArch::DAV_9201; }
-
 static bool CheckNotNull(const aclTensor* self, const aclTensor* out, const aclIntArray* outputSize)
 {
     OP_CHECK_NULL(self, return false);
@@ -265,8 +263,7 @@ aclnnStatus aclnnUpsampleLinear1dGetWorkspaceSize(const aclTensor* self, const a
     }
 
     int64_t outL = (*outputSize)[DIM_ZERO];
-    auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
-    if (IsRegBase() || Is960SocVersion(curArch)) {
+    if (IsRegBase()) {
         const aclTensor* resizeOut = nullptr;
         auto selfContiguous = l0op::Contiguous(self, uniqueExecutor.get());
         CHECK_RET(selfContiguous != nullptr, ACLNN_ERR_INNER_NULLPTR);
@@ -284,6 +281,7 @@ aclnnStatus aclnnUpsampleLinear1dGetWorkspaceSize(const aclTensor* self, const a
         CHECK_RET(viewCopyResult != nullptr, ACLNN_ERR_INNER_NULLPTR);
     } else {
         const aclTensor* ResizeDOut;
+        auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
         if ((curArch == NpuArch::DAV_2201) && CheckLinear1dScales(self, out, outputSize, scale, alignCorners)) {
             auto selfRefContiguous = l0op::Contiguous(self, uniqueExecutor.get());
             CHECK_RET(selfRefContiguous != nullptr, ACLNN_ERR_INNER_NULLPTR);
