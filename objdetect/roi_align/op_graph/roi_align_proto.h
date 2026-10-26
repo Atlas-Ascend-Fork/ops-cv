@@ -24,8 +24,8 @@ namespace ge {
 * @par Inputs:
 * Three inputs, including:
 * @li features: A 5HD Tensor of type float32 or float16.
-* @li rois: ROI position. A 2D Tensor of float32 or float16 with shape (N, 5). "N" indicates the number of ROIs,
-* the value "5" indicates the indexes of images where the ROIs are located,
+* @li rois: ROI position. A 2D Tensor with the same type as "features" (float32 or float16) and shape (N, 5).
+* "N" indicates the number of ROIs, and "5" indicates the indexes of images where the ROIs are located,
 * "x0", "y0", "x1", and "y1".
 * @li rois_n: Optional INT32 input with shape (N), where N equals the number of ROIs.
 * Each element is the corresponding ROI batch index and overrides the index in `rois`. \n
