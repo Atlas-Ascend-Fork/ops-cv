@@ -73,7 +73,7 @@ $$
     </tr>
     <tr>
       <td>offset</td>
-      <td>输入（可选）</td>
+      <td>可选输入</td>
       <td>偏移量场。shape 为 <code>(num_rois, 2, pooled_h, pooled_w)</code>，第 1 维分别对应宽度和高度方向的偏移。</td>
       <td>FLOAT16、FLOAT</td>
       <td>ND</td>
@@ -94,7 +94,7 @@ $$
     </tr>
     <tr>
       <td>output_size</td>
-      <td>属性（必选）</td>
+      <td>属性</td>
       <td>输出空间大小，格式为 <code>[pooled_height, pooled_width]</code>。</td>
       <td>ListInt</td>
       <td>-</td>
@@ -122,16 +122,19 @@ $$
 - 输入 `offset` 为可选参数，若不传入则不应用偏移量，等效于 `offset` 全零。若传入，shape 必须为
   `(num_rois, 2, pooled_h, pooled_w)`，其中 `pooled_h` 和 `pooled_w` 与 `output_size` 属性一致。
 - `num_rois` 由 `rois.shape[0]` 决定，`output_size` 必须包含 2 个 `[1, INT32_MAX]` 范围内的整数。
+- 输入 `x` 的元素总数（`N * C * H * W`）不得超过 500000000；输出 `y` 的元素总数
+  （`num_rois * C * pooled_h * pooled_w`）不得超过 200000000。超过上述上限时算子返回 `GRAPH_FAILED` 拒绝执行。
 - `x` 的数据类型决定输出 `y` 的数据类型，`rois` 和 `offset` 的数据类型必须与 `x` 一致。
 - 仅支持 FLOAT16 和 FLOAT 数据类型，不支持 INT 类型。
 - `sampling_ratio` 必须在 `[0, 46340]` 范围内；`spatial_scale` 必须为大于 0 的有限值，`gamma` 必须为有限值。
 - 当 `rois.shape[0]` 为 0 时，输出 shape 为 `(0, C, pooled_h, pooled_w)`；当 `N` 为 0 且 `num_rois` 大于 0 时，输出保持 `(num_rois, C, pooled_h, pooled_w)`，所有元素为 0。
+- 支持动态 Shape 与动态 Rank：算子注册开启 DynamicShapeSupportFlag 与 DynamicRankSupportFlag，`x` 的维度可标记为 `-1`（未知维）或 `-2`（未知秩）。InferShape 对未知维/未知秩放行；维度被具体化后再由 Tiling 按上述 `[1, INT32_MAX]` 等既定范围校验，未知维（`-1`）若未具体化则无法通过 Tiling 校验。
 - ROI 的 batch 索引会截断到 `[0, N - 1]`。ROI/offset 中的 NaN 或 Inf 按 0 处理；落在 `[-1, H] × [-1, W]` 之外的采样点不参与累加。
 - 自适应采样单方向网格超过 46340 时，该 ROI 不产生有效采样点，输出为 0。
-- 运行时要求 `${OPS_REPO}` 下的 `CMakeLists.txt` 已完成编译配置。
+- 运行时要求算子仓库根目录下的 `CMakeLists.txt` 已完成编译配置。
 
 ## 调用说明
 
-| 调用方式 | 调用样例 | 说明 |
+| 调用方式 | 样例代码 | 说明 |
 |----------|----------|------|
-| 图模式 | [test_geir_deformable_roi_pool](examples/test_geir_deformable_roi_pool.cpp) | 通过[算子IR](op_graph/deformable_roi_pool_proto.h)构图方式调用DeformableRoiPool算子。 |
+| GE图模式 | [test_geir_deformable_roi_pool](examples/test_geir_deformable_roi_pool.cpp) | 通过[算子IR](op_graph/deformable_roi_pool_proto.h)构图方式调用DeformableRoiPool算子。 |

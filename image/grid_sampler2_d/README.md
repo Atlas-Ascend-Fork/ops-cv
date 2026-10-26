@@ -3,13 +3,14 @@
 ## 产品支持情况
 
 | 产品 | 是否支持 |
-|:--|:--:|
+| :--- | :---: |
 | <term>Ascend 950PR&950DT系列产品</term> | √ |
 | <term>Atlas A3系列产品</term> | √ |
 | <term>Atlas A2系列产品</term> | √ |
 | <term>Atlas 200I/500 A2推理产品</term> | × |
 | <term>Atlas推理系列产品</term> | × |
 | <term>Atlas训练系列产品</term> | × |
+
 
 ## 功能说明
 
@@ -78,6 +79,13 @@
       <td>ND</td>
     </tr>
     <tr>
+      <td>y</td>
+      <td>输出</td>
+      <td>采样结果，shape为(N, C, H<sub>out</sub>, W<sub>out</sub>)，数据类型与x一致。</td>
+      <td>FLOAT16、FLOAT32</td>
+      <td>NCHW</td>
+    </tr>
+    <tr>
       <td>interpolation_mode</td>
       <td>可选属性</td>
       <td>插值模式，支持"bilinear"、"nearest"和"bicubic"，默认值为"bilinear"。</td>
@@ -98,13 +106,6 @@
       <td>BOOL</td>
       <td>-</td>
     </tr>
-    <tr>
-      <td>y</td>
-      <td>输出</td>
-      <td>采样结果，shape为(N, C, H<sub>out</sub>, W<sub>out</sub>)，数据类型与x一致。</td>
-      <td>FLOAT16、FLOAT32</td>
-      <td>NCHW</td>
-    </tr>
   </tbody>
 </table>
 
@@ -113,12 +114,21 @@
 - `x`与`grid`均为4维张量，数据类型一致且仅支持`float16`或`float32`。
 - `grid`的最后一维必须为2，且`x`与`grid`的batch维必须一致。
 - `x`的`H_in`和`W_in`必须大于0；`grid`产生空输出时支持空tensor。
-- `x`的高宽乘积、`grid`的batch与输出高宽乘积均不能超过`INT32_MAX`。
+- `x`与`grid`的各维大小均不能超过`INT32_MAX`。
+- `x`的高宽乘积（`H_in * W_in`）不能超过`INT32_MAX`。
+- 输出像素总数（`N * H_out * W_out`）不能超过`INT32_MAX`。
+- `x`的元素总数（`N * C * H_in * W_in`）必须在64位有符号整型可表示范围内（否则拒绝）。
 - `interpolation_mode`仅支持`bilinear`、`nearest`、`bicubic`。
 - `padding_mode`仅支持`zeros`、`border`、`reflection`。
+- 形状推导（InferShape）支持动态形状与动态秩：`x`的`H_in`/`W_in`可用`-1`表示未知维（输出高宽由`grid`推导），整张量形状未知时以`-2`表示未知秩；Tiling消费的是运行期已具体化的shape，未具体化的`-1`/`-2`维/秩不进入Tiling校验。batch维在`x`与`grid`间保持一致。
+- 算子仅注册`x`=NCHW、`grid`=ND、`y`=NCHW逻辑格式；其他逻辑格式的接受/拒绝行为未声明。
+- `grid`坐标为归一化坐标（通常落在[-1, 1]）；对非有限坐标（NaN/±Inf），行为与PyTorch `grid_sample`一致（`bilinear`/`bicubic`在`zeros`下输出NaN，`nearest`映射到合法索引）。对量级极大（约`|grid| ≳ 1e8`）的退化反射坐标，本实现不保证与PyTorch逐位一致。
+- 超过容量上界（任一维大于`INT32_MAX`、`H_in * W_in`大于`INT32_MAX`、`N * H_out * W_out`大于`INT32_MAX`，或`N * C * H_in * W_in`超出64位有符号整型范围）的输入被拒绝；Kernel通路该拒绝不暴露独立错误码。
 
 ## 调用说明
 
 | 调用方式 | 样例代码 | 说明 |
 | ---- | ---- | ---- |
-| 图模式 | [test_geir_grid_sampler2_d](examples/arch35/test_geir_grid_sampler2_d.cpp) | 通过[算子IR](op_graph/grid_sampler2_d_proto.h)构图方式调用GridSampler2D算子，参见[算子调用](../../docs/zh/invocation/quick_op_invocation.md)完成编译和验证。 |
+| GE图模式 | [test_geir_grid_sampler2_d](examples/arch35/test_geir_grid_sampler2_d.cpp) | 通过[算子IR](op_graph/grid_sampler2_d_proto.h)构图方式调用GridSampler2D算子，参见[算子调用](../../docs/zh/invocation/quick_op_invocation.md)完成编译和验证。样例位于`examples/arch35`，编译运行须显式指定`--soc=ascend950`（如`bash build.sh --run_example grid_sampler2_d graph --soc=ascend950`）。 |
+
+- 本算子以GE图模式注册；自定义包按`ACLNNTYPE aclnn_exclude`构建且不含TensorFlow插件，因此包内不生成`aclnnGridSampler2D`与TensorFlow接口。ACLNN/TF数值通路使用框架内置同名接口，自定义包示例的`cust`路由不适用。

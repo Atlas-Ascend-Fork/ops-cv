@@ -31,8 +31,10 @@ constexpr int64_t PER_CORE_MIN = 8192;
 constexpr uint32_t DCACHE_SIZE = 128 * 1024;
 constexpr uint32_t STATIC_UB_ESTIMATE = 0;
 constexpr int64_t MAX_INT32_VALUE = 2147483647LL;
+constexpr int64_t MAX_INT64_VALUE = 9223372036854775807LL;
 constexpr int64_t X_INDEX = 0;
 constexpr int64_t GRID_INDEX = 1;
+constexpr int64_t OUTPUT_INDEX = 0;
 constexpr int64_t N_DIM_INDEX = 0;
 constexpr int64_t C_DIM_INDEX = 1;
 constexpr int64_t H_DIM_INDEX = 2;
@@ -85,6 +87,27 @@ static ge::graphStatus CheckInputDtypes(gert::TilingContext* context)
     OP_CHECK_IF(gridDtype != xDtype,
                 OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "x and grid", dtypeMsg.c_str(),
                                                        "x and grid must have the same dtype"),
+                return ge::GRAPH_FAILED);
+    return ge::GRAPH_SUCCESS;
+}
+
+static ge::graphStatus CheckOutputDtype(gert::TilingContext* context)
+{
+    const auto* xDesc = context->GetInputDesc(X_INDEX);
+    OP_CHECK_NULL_WITH_CONTEXT(context, xDesc);
+    const auto* yDesc = context->GetOutputDesc(OUTPUT_INDEX);
+    OP_CHECK_NULL_WITH_CONTEXT(context, yDesc);
+
+    const ge::DataType xDtype = xDesc->GetDataType();
+    const ge::DataType yDtype = yDesc->GetDataType();
+    OP_CHECK_IF(yDtype != ge::DT_FLOAT16 && yDtype != ge::DT_FLOAT,
+                OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "y", Ops::Base::ToString(yDtype).c_str(),
+                                          "float16 or float32"),
+                return ge::GRAPH_FAILED);
+    const std::string dtypeMsg = Ops::Base::ToString(xDtype) + " and " + Ops::Base::ToString(yDtype);
+    OP_CHECK_IF(yDtype != xDtype,
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "x and y", dtypeMsg.c_str(),
+                                                       "y must have the same dtype as x"),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
@@ -152,6 +175,17 @@ static ge::graphStatus CheckAndExtractShapes(gert::TilingContext* context, int64
                 OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "grid", outputPixelCount.c_str(),
                                                           "N * H_out * W_out must not exceed INT32_MAX"),
                 return ge::GRAPH_FAILED);
+
+    // The kernel derives x's max address bound from N * C * H_in * W_in in a
+    // signed 64-bit product. Each factor alone is bounded by INT32_MAX, so the
+    // four-way product can exceed INT64_MAX; constrain it here so the kernel
+    // multiplication cannot overflow before its index-width comparison.
+    const std::string xElementCount = std::to_string(N) + " * " + std::to_string(C) + " * " + std::to_string(HIn) +
+                                      " * " + std::to_string(WIn);
+    OP_CHECK_IF(N > 0 && C > 0 && static_cast<int64_t>(N) * C > MAX_INT64_VALUE / (static_cast<int64_t>(HIn) * WIn),
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "x", xElementCount.c_str(),
+                                                          "N * C * H_in * W_in must not overflow the 64-bit range"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -214,6 +248,9 @@ static ge::graphStatus GridSampler2dTilingFunc(gert::TilingContext* context)
                 OP_LOGE(context, "GetPlatformInfo error"), return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(CheckInputDtypes(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "CheckInputDtypes error"),
+                return ge::GRAPH_FAILED);
+
+    OP_CHECK_IF(CheckOutputDtype(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "CheckOutputDtype error"),
                 return ge::GRAPH_FAILED);
 
     int64_t N = 0, C = 0, HIn = 0, WIn = 0, HOut = 0, WOut = 0;

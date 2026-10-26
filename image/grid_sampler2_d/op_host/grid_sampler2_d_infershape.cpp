@@ -76,9 +76,14 @@ static ge::graphStatus InferShapeGridSampler2D(gert::InferShapeContext* context)
         OP_LOGE(context, "grid H/W must be non-negative or unknown, got H[%ld] and W[%ld]", gridHeight, gridWidth),
         return ge::GRAPH_FAILED);
 
+    const int64_t xChannel = xShape->GetDim(C_DIM_INDEX);
+    OP_CHECK_IF((xBatch != ge::UNKNOWN_DIM && xBatch < 0) || (xChannel != ge::UNKNOWN_DIM && xChannel < 0),
+                OP_LOGE(context, "x N/C must be non-negative or unknown, got N[%ld] and C[%ld]", xBatch, xChannel),
+                return ge::GRAPH_FAILED);
+
     yShape->SetDimNum(DIM_NUM_2D);
     yShape->SetDim(N_DIM_INDEX, xBatch);
-    yShape->SetDim(C_DIM_INDEX, xShape->GetDim(C_DIM_INDEX));
+    yShape->SetDim(C_DIM_INDEX, xChannel);
     yShape->SetDim(H_DIM_INDEX, gridHeight);
     yShape->SetDim(W_DIM_INDEX, gridWidth);
 

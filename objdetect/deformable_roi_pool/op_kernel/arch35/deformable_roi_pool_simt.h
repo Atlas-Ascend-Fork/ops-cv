@@ -105,13 +105,19 @@ __simt_callee__ inline void ReadRoiMeta(const __gm__ T* roisGm, int32_t n, float
     }
 
     if (N > 0) {
-        float maxIdx = static_cast<float>(N - 1);
+        // Match the reference "truncate toward zero, then clamp to [0, N-1]". The integer
+        // conversion is guarded by 2^31, which is exactly representable in fp32 and above every
+        // possible N-1 (N fits int32); comparing against float(N-1) or float(N) would be wrong
+        // because both round to even and can fall below a legal, exactly representable index
+        // (e.g. N=16777218: float(N-1)=16777216 < 16777216.0f index boundary; N=33554434:
+        // float(N)=33554432 < N-1).
         if (roiBatchIdx <= 0.0f) {
             *batchIdx = 0;
-        } else if (roiBatchIdx >= maxIdx) {
+        } else if (roiBatchIdx >= 2147483648.0f) {
             *batchIdx = N - 1;
         } else {
-            *batchIdx = static_cast<int32_t>(roiBatchIdx);
+            int32_t truncated = static_cast<int32_t>(roiBatchIdx);
+            *batchIdx = (truncated > N - 1) ? N - 1 : truncated;
         }
     } else {
         *batchIdx = 0;
@@ -142,9 +148,14 @@ __simt_callee__ inline void ReadRoiMeta(const __gm__ T* roisGm, int32_t n, float
 template <typename T>
 __simt_callee__ inline float AccumulateBin(const __gm__ T* featC, int32_t H, int32_t W, float binStartH,
                                            float binStartW, int32_t roiBinGridH, int32_t roiBinGridW, float gridH,
-                                           float gridW)
+                                           float gridW, float invCount)
 {
+    // Stable mean: scale every sample by 1/count so the running value stays bounded by max|sample|
+    // and cannot overflow to inf on large legal fp32 inputs, and carry Kahan/Neumaier compensation
+    // so that large counts (whose scaled terms are far below the running mean's ulp) do not have
+    // their low-order bits swallowed by the addition.
     float val = 0.0f;
+    float compensation = 0.0f;
     for (int32_t iy = 0; iy < roiBinGridH; iy++) {
         volatile float sampleOffsetH = (static_cast<float>(iy) + 0.5f) * gridH;
         volatile float roundedRawY = binStartH + sampleOffsetH;
@@ -201,7 +212,10 @@ __simt_callee__ inline float AccumulateBin(const __gm__ T* featC, int32_t H, int
             sample = sample + product2;
             sample = sample + product3;
             sample = sample + product4;
-            val = val + sample;
+            float term = sample * invCount - compensation;
+            float next = val + term;
+            compensation = (next - val) - term;
+            val = next;
         }
     }
     return val;
@@ -242,13 +256,13 @@ __simt_callee__ inline void ProcessChannel(const __gm__ T* featC, const __gm__ T
                 binStartW = shiftedBinStartW;
                 binStartH = shiftedBinStartH;
             }
-            float val = AccumulateBin<T>(featC, H, W, binStartH, binStartW, roiBinGridH, roiBinGridW, gridH, gridW);
-            // Direct division avoids an extra rounding step for non-power-of-two counts.
             int64_t cnt = static_cast<int64_t>(roiBinGridH) * roiBinGridW;
             if (cnt == 0) {
                 cnt = 1;
             }
-            float result = val / static_cast<float>(cnt);
+            float invCount = 1.0f / static_cast<float>(cnt);
+            float result = AccumulateBin<T>(featC, H, W, binStartH, binStartW, roiBinGridH, roiBinGridW, gridH, gridW,
+                                            invCount);
             outC[static_cast<int64_t>(ph) * pooledW + pw] = DeformableRoiPoolCastFromFloat<T>(result);
         }
     }

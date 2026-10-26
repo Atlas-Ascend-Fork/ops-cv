@@ -157,8 +157,11 @@ __simt_callee__ inline float ClipCoordinates(float coord, int32_t size)
 //   index 0, while our exact fmod mapped to index 3 — causing 0% match.
 //
 // Fix: Replicate PyTorch's EXACT algorithm (twice_span + naive fmod + min flip)
-//   so our float32 results are bit-identical to PyTorch CPU golden for all
-//   coordinate ranges, including extreme values.
+//   so our float32 results match PyTorch CPU golden for ordinary normalized
+//   coordinates. This is NOT a bit-identical guarantee for pathological
+//   coordinates: for |grid| around 1e8 and beyond, UnnormalizeNoClip's
+//   fmaf(scalingFactor, coord + 1, -0.5) and ReflectCoordinates' 2*size fmod
+//   folding can diverge from torch's reflection semantics by an O(1) amount.
 //
 // Key differences from old code:
 //   1. Uses twice_span = 2*size (NOT 2*size-1) as fmod divisor
@@ -208,12 +211,19 @@ __simt_callee__ inline float ComputeSourceIndex(float coord, int32_t size, int32
 
 __simt_callee__ inline float SafeDowngradeToIntRange(float x)
 {
-    if (x > 2147483646.0f || x < -2147483648.0f || isnan(x) || isinf(x)) {
+    if (x >= 2147483648.0f || x < -2147483648.0f || isnan(x) || isinf(x)) {
         return -100.0f;
     }
     return x;
 }
 
+// Non-finite grid coordinates (NaN/±Inf) follow the declared PyTorch reference
+// semantics, verified against torch.nn.functional.grid_sample on CPU:
+//   * bilinear: zeros keeps NaN, border/reflection clip to a finite index;
+//   * bicubic : NaN for every padding mode;
+//   * nearest : a finite (0) index under zeros, clipped under border/reflection.
+// `IsNanOrInf` gates the bilinear/bicubic NaN branch; nearest relies on
+// SafeDowngradeToIntRange mapping non-finite to an out-of-range index (-> 0).
 __simt_callee__ inline bool IsNanOrInf(float x) { return isnan(x) || isinf(x); }
 
 __simt_callee__ inline int32_t BankerRoundToInt(float x)
@@ -242,7 +252,9 @@ __simt_callee__ inline void WriteNanToOutput(__gm__ T* yGm, int32_t n, int32_t C
     float nanVal = 0.0f / 0.0f;
     for (int32_t c = 0; c < C; c++) {
         yGm[yBase] = CastToOutput<T>(nanVal);
-        yBase += yStep;
+        if (c + 1 < C) {
+            yBase += yStep;
+        }
     }
 }
 
@@ -253,22 +265,16 @@ __simt_callee__ inline bool WithinBounds2d(int32_t h, int32_t w, int32_t H, int3
 
 // ===== Bicubic helpers =====
 
-// TTK round 34 precision fix: PyTorch's get_cubic_upsample_coefficients
-// computes coeffs[3] = cubic_convolution2(x2 + 1.0, A) where x2 = 1.0 - t.
-// This involves TWO float32 roundings: first 1.0-t, then result+1.0.
-// Our previous code used 2.0-t (ONE rounding), which gives a different
-// float32 result when t < 0.5 (where 1.0-t is inexact by Sterbenz lemma).
-// Fix: match PyTorch's two-rounding computation for cx3/cy3 arguments.
-// TTK round 37: attempted fmaf() chains to match PyTorch's x86 FMA
-// disassembly (vfmsub231ss+vfmadd213ss for cc1, 3xFMA for cc2), but NPU
-// fmaf implementation differs from x86 FMA in rounding behavior, causing
-// regression (95.3% -> 92.4%, +10 failures). Reverted to round 36's
-// volatile non-FMA implementation which uses separate mul/add with double
-// rounding — this produces correct results on NPU.
-// TTK round 38: replaced function-level `#pragma STDC FP_CONTRACT OFF` with
-// file-level `#pragma clang fp contract(off)` (NPU compiler reliably honors
-// the clang variant). volatile float retained as double insurance.
-// UnnormalizeNoClip and BicubicWeightedSum keep fmaf (validated in v36).
+// Bicubic coefficient helpers. PyTorch's get_cubic_upsample_coefficients
+// evaluates coeffs[3] = cubic_convolution2(x2 + 1.0, A) with x2 = 1.0 - t.
+// The cx3/cy3 arguments below use 2.0f - t (a single rounding of the argument)
+// rather than the mathematically equivalent (1.0f - t) + 1.0f: round 34 tried
+// PyTorch's two-rounding argument, but round 37/38 reverted it because the NPU
+// fmaf rounding differs from x86 FMA and the two-rounding form regressed the
+// differential comparison (95.3% -> 92.4%). The current form pairs 2.0f - t
+// with the separate mul/add (volatile + file-level `#pragma clang fp
+// contract(off)`) evaluation, which is the validated-on-NPU formulation.
+// UnnormalizeNoClip and BicubicWeightedSum keep fmaf (validated in round 36).
 constexpr float A = -0.75f;
 
 __simt_callee__ inline float CubicConvolution1(float x, float a)
@@ -333,8 +339,14 @@ __simt_callee__ inline void BilinearSample(__gm__ T* xGm, __gm__ T* yGm, int32_t
             out += ReadAsFloat<T>(xGm[xBase + static_cast<INDEX_SIZE_T>(iySw) * WIn + ixNe]) * se;
         }
         yGm[yBase] = CastToOutput<T>(out);
-        xBase += xStep;
-        yBase += yStep;
+        // Do not advance past the last element: with a bounded int32 index
+        // width the final xBase/yBase increment could cross INT32_MAX and
+        // overflow (signed overflow is undefined). The advanced values are not
+        // read after the last iteration anyway.
+        if (c + 1 < C) {
+            xBase += xStep;
+            yBase += yStep;
+        }
     }
 }
 
@@ -354,8 +366,14 @@ __simt_callee__ inline void NearestSample(__gm__ T* xGm, __gm__ T* yGm, int32_t 
             out = ReadAsFloat<T>(xGm[xBase + static_cast<INDEX_SIZE_T>(iyNear) * WIn + ixNear]);
         }
         yGm[yBase] = CastToOutput<T>(out);
-        xBase += xStep;
-        yBase += yStep;
+        // Do not advance past the last element: with a bounded int32 index
+        // width the final xBase/yBase increment could cross INT32_MAX and
+        // overflow (signed overflow is undefined). The advanced values are not
+        // read after the last iteration anyway.
+        if (c + 1 < C) {
+            xBase += xStep;
+            yBase += yStep;
+        }
     }
 }
 
@@ -452,8 +470,14 @@ __simt_callee__ inline void BicubicSample(__gm__ T* xGm, __gm__ T* yGm, int32_t 
         }
         float out = BicubicWeightedSum(cy0, cy1, cy2, cy3, r0, r1, r2, r3);
         yGm[yBase] = CastToOutput<T>(out);
-        xBase += xStep;
-        yBase += yStep;
+        // Do not advance past the last element: with a bounded int32 index
+        // width the final xBase/yBase increment could cross INT32_MAX and
+        // overflow (signed overflow is undefined). The advanced values are not
+        // read after the last iteration anyway.
+        if (c + 1 < C) {
+            xBase += xStep;
+            yBase += yStep;
+        }
     }
 }
 
@@ -464,12 +488,16 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM_T<INDEX_SIZE_T>) inline void
     int32_t paddingMode, int32_t alignCorners, __gm__ T* xGm, __gm__ T* gridGm, __gm__ T* yGm, uint32_t magicW,
     uint32_t shiftW, uint32_t magicH, uint32_t shiftH)
 {
-    int32_t stride = static_cast<int32_t>(blockDim.x) * static_cast<int32_t>(gridDim.x);
-    int32_t baseIdx = static_cast<int32_t>(blockIdx.x) * static_cast<int32_t>(blockDim.x) +
-                      static_cast<int32_t>(threadIdx.x);
+    // 64-bit loop induction: totalPixels may equal INT32_MAX, and an int32_t
+    // `idx += stride` would overflow (UB/wrap) on the final increment, so the
+    // thread would not terminate. The 64-bit index also matches the widened
+    // address arithmetic below.
+    int64_t stride = static_cast<int64_t>(blockDim.x) * static_cast<int64_t>(gridDim.x);
+    int64_t baseIdx = static_cast<int64_t>(blockIdx.x) * static_cast<int64_t>(blockDim.x) +
+                      static_cast<int64_t>(threadIdx.x);
     uint32_t uWOut = static_cast<uint32_t>(WOut);
     uint32_t uHOut = static_cast<uint32_t>(HOut);
-    for (int32_t idx = baseIdx; idx < totalPixels; idx += stride) {
+    for (int64_t idx = baseIdx; idx < static_cast<int64_t>(totalPixels); idx += stride) {
         uint32_t uIdx = static_cast<uint32_t>(idx);
         uint32_t hw = Simt::UintDiv<uint32_t>(uIdx, magicW, shiftW);
         uint32_t wOut = uIdx - hw * uWOut;

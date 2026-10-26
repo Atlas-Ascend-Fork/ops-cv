@@ -275,6 +275,11 @@ aclnnStatus aclnnGridSampler2D(
 
     入参`interpolationMode`，仅当input数据类型为FLOAT32、FLOAT16或者BFLOAT16时，支持2：bicubic（双三次插值）。
   <!-- end id8 -->
+  <!-- npu="950" id11 -->
+  - <term>Ascend 950PR&950DT系列产品</term>：
+
+    入参`interpolationMode`为2：bicubic（双三次插值）时，`input`支持FLOAT32、FLOAT16或BFLOAT16数据类型；Double等其它数据类型不支持bicubic。
+  <!-- end id11 -->
   <!-- npu="310b" id9 -->
   - <term>Atlas 200I/500 A2推理产品</term>：
 

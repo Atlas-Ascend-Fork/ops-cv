@@ -58,6 +58,7 @@ public:
             .ExtendCfgInfo("opFile.value", "grid_sampler2_d_apt")
             .ExtendCfgInfo("opInterface.value", "grid_sampler2_d");
         this->AICore().AddConfig("ascend950", aicoreConfig);
+        this->AICore().AddConfig("ascend350", aicoreConfig);
     }
 };
 OP_ADD(GridSampler2D);

@@ -106,7 +106,7 @@ int main()
     x.update_input_desc_x(xDesc);
 
     auto grid = op::Data("grid").set_attr_index(1);
-    TensorDesc gridDesc(ge::Shape(gridShape), FORMAT_NHWC, DT_FLOAT);
+    TensorDesc gridDesc(ge::Shape(gridShape), FORMAT_ND, DT_FLOAT);
     gridDesc.SetPlacement(ge::kPlacementHost);
     grid.update_input_desc_x(gridDesc);
 
@@ -143,7 +143,7 @@ int main()
 
     vector<Tensor> inputs = {
         MakeFloatTensor(xShape, FORMAT_NCHW, xData),
-        MakeFloatTensor(gridShape, FORMAT_NHWC, gridData),
+        MakeFloatTensor(gridShape, FORMAT_ND, gridData),
     };
     vector<Tensor> outputs;
     printf("%s - INFO - [GEIR]: RunGraph\n", GetTime().c_str());

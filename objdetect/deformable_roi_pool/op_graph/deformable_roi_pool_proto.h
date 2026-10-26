@@ -41,7 +41,8 @@ float32.
 * @li sampling_ratio: A Int. Default 0 (adaptive).
 * @li gamma: A Float. Default 0.1. Offset scaling factor.
 *@par Third-party framework compatibility
-*Compatible with the PyTorch operator deformable_roi_pool.
+*Semantics follow the PyTorch operator deformable_roi_pool and the MMCV deform_roi_pool reference.
+*This operator ships only the Ascend GEIR/Kernel route; no PyTorch/TensorFlow adapter is delivered here.
 */
 #ifndef OPS_PROTO_DEF_DEFORMABLEROIPOOL
 #define OPS_PROTO_DEF_DEFORMABLEROIPOOL

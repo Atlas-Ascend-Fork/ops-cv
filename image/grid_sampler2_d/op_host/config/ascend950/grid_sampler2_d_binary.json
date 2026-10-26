@@ -8,12 +8,11 @@
           "name": "x",
           "index": 0,
           "dtype": "float16",
-          "format": "ND",
+          "format": "NCHW",
           "paramType": "required",
           "shape": [
             -2
-          ],
-          "format_match_mode": "FormatAgnostic"
+          ]
         },
         {
           "name": "grid",
@@ -23,8 +22,7 @@
           "paramType": "required",
           "shape": [
             -2
-          ],
-          "format_match_mode": "FormatAgnostic"
+          ]
         }
       ],
       "outputs": [
@@ -32,24 +30,23 @@
           "name": "y",
           "index": 0,
           "dtype": "float16",
-          "format": "ND",
+          "format": "NCHW",
           "paramType": "required",
           "shape": [
             -2
-          ],
-          "format_match_mode": "FormatAgnostic"
+          ]
         }
       ],
       "attrs": [
         {
           "name": "interpolation_mode",
           "dtype": "str",
-          "value": null
+          "value": "ALL"
         },
         {
           "name": "padding_mode",
           "dtype": "str",
-          "value": null
+          "value": "ALL"
         },
         {
           "name": "align_corners",
@@ -65,12 +62,11 @@
           "name": "x",
           "index": 0,
           "dtype": "float32",
-          "format": "ND",
+          "format": "NCHW",
           "paramType": "required",
           "shape": [
             -2
-          ],
-          "format_match_mode": "FormatAgnostic"
+          ]
         },
         {
           "name": "grid",
@@ -80,8 +76,7 @@
           "paramType": "required",
           "shape": [
             -2
-          ],
-          "format_match_mode": "FormatAgnostic"
+          ]
         }
       ],
       "outputs": [
@@ -89,24 +84,23 @@
           "name": "y",
           "index": 0,
           "dtype": "float32",
-          "format": "ND",
+          "format": "NCHW",
           "paramType": "required",
           "shape": [
             -2
-          ],
-          "format_match_mode": "FormatAgnostic"
+          ]
         }
       ],
       "attrs": [
         {
           "name": "interpolation_mode",
           "dtype": "str",
-          "value": null
+          "value": "ALL"
         },
         {
           "name": "padding_mode",
           "dtype": "str",
-          "value": null
+          "value": "ALL"
         },
         {
           "name": "align_corners",

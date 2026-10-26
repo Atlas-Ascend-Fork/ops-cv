@@ -152,3 +152,31 @@ TEST_F(GridSampler2DInfershape, grid_sampler2_d_infershape_negative_grid_width_r
                                                       });
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
 }
+
+// Concrete negative batch (N) on x is rejected before writing the output shape.
+TEST_F(GridSampler2DInfershape, grid_sampler2_d_infershape_negative_x_batch_rejected)
+{
+    gert::InfershapeContextPara infershapeContextPara("GridSampler2D",
+                                                      {
+                                                          {{{-2, 3, 8, 8}, {-2, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{-2, 5, 6, 2}, {-2, 5, 6, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+// Concrete negative channel (C) on x is rejected before writing the output shape.
+TEST_F(GridSampler2DInfershape, grid_sampler2_d_infershape_negative_x_channel_rejected)
+{
+    gert::InfershapeContextPara infershapeContextPara("GridSampler2D",
+                                                      {
+                                                          {{{1, -2, 8, 8}, {1, -2, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{1, 5, 6, 2}, {1, 5, 6, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
