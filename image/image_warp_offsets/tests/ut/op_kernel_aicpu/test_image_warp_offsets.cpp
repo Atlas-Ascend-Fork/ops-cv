@@ -188,6 +188,18 @@ TEST_F(TEST_IMAGE_WARP_OFFSETS_UT, NEGATIVE_INT32_OFFSET_FAILED)
     RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
 }
 
+TEST_F(TEST_IMAGE_WARP_OFFSETS_UT, POSITIVE_INT32_OFFSET_OOB_FAILED)
+{
+    vector<DataType> data_types = {DT_FLOAT16, DT_INT32, DT_FLOAT16};
+    vector<vector<int64_t>> shapes = {{1, 4, 2, 3}, {1, 4, 2, 2}, {1, 4, 2, 2, 3}};
+    Eigen::half input0_data[24] = {Eigen::half(1.0f)};
+    int32_t input1_data[16] = {0, 1, 2, 3, 6, 7, 8, 9, 12, 13, 14, 15, 18, 19, 20, 22};
+    Eigen::half output_data[48] = {Eigen::half(0.0f)};
+    vector<void*> data = {(void*)input0_data, (void*)input1_data, (void*)output_data};
+    CREATE_NODEDEF(shapes, data_types, data);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
+}
+
 TEST_F(TEST_IMAGE_WARP_OFFSETS_UT, DT_FLOAT16_DT_FLOAT_DT_FLOAT16_SUCCESS)
 {
     vector<DataType> data_types = {DT_FLOAT16, DT_FLOAT, DT_FLOAT16};

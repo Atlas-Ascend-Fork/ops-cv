@@ -71,11 +71,11 @@ uint32_t ImageWarpOffsetsCpuKernel::DoCompute(const CpuKernelContext& ctx)
                 for (int64_t i_h = start; i_h < end; ++i_h) {
                     for (int64_t i_w = 0; i_w < output_shape[3]; ++i_w) {
                         const TIndex index_value = input1(i_n, i_i, i_h, i_w);
-                        if ((index_value < 0) || (index_value >= in_hxwxc)) {
+                        if ((index_value < 0) || (index_value > in_hxwxc - kImageChannels)) {
                             work_ret.store(KERNEL_STATUS_PARAM_INVALID, std::memory_order_relaxed);
                             string err_msg = ConcatString(
                                 kImageWarpOffsets, " op input[1] value[", i_n, "][", i_i, "][", i_h, "][", i_w, "]=[",
-                                index_value, "] should be in range [0, ", in_hxwxc, "), image size is [",
+                                index_value, "] should select 3 values within [0, ", in_hxwxc, "), image size is [",
                                 input0_shape[1], " x ", input0_shape[2], " x ", input0_shape[3], "]");
                             KERNEL_LOG_ERROR("%s", err_msg.c_str());
                             return;
