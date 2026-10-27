@@ -70,9 +70,10 @@ private:
 
     /**
      * @brief init theta from input_theta and default_theta
+     * @note The index is consumed by value so one batch cannot advance the slice used by the next batch.
      */
     template <typename T1>
-    void InitTheta(const T1* input_theta, uint32_t& input_theta_idx, std::vector<float>& theta);
+    void InitTheta(const T1* input_theta, uint32_t input_theta_idx, std::vector<float>& theta);
 
     /**
      * @brief compute input grid from output grid using theta
@@ -114,6 +115,8 @@ private:
     int32_t stn_ori_channel_ = 0;
     std::vector<float> theta_;
     std::vector<int64_t> theta_valid_;
+    // Zero for a [2, 3] transform shared by every batch, six for a per-batch [batch, 2, 3] tensor.
+    uint32_t theta_batch_stride_ = 0;
     Format date_format_ = FORMAT_ND;
     DataType input_data_type_ = DT_FLOAT;
     DataType input_theta_type_ = DT_FLOAT;

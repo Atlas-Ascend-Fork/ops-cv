@@ -109,9 +109,9 @@ int CreateOppInGraph(DataType inDtype1, DataType inDtype2, std::vector<ge::Tenso
     Status ret = SUCCESS;
     // 自定义代码：添加单算子定义到图中
     auto add1 = op::SpatialTransformer("SpatialTransformer");
-    std::vector<std::vector<int64_t>> shapes = {{1, 1, 2, 3}, {2}, {1, 1, 2, 3}};
+    std::vector<std::vector<int64_t>> shapes = {{1, 1, 2, 3}, {2, 3}, {1, 1, 2, 3}};
     float x_data[6] = {-39.0, -47.0, -37.0, 4.0, -70.0, -47.0};
-    float theta_data[2] = {-1.0, -2.0};
+    float theta_data[6] = {-1.0, -2.0, 0.0, 0.0, 0.0, 0.0};
 
     ADD_INPUT(1, x, inDtype1, shapes[0], x_data);
     ADD_INPUT(2, theta, inDtype2, shapes[1], theta_data);

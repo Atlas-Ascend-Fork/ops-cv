@@ -174,6 +174,38 @@ KernelStatus SpatialTransformerCpuKernel::GetInputAndCheckValid(const CpuKernelC
         return KERNEL_STATUS_PARAM_INVALID;
     }
 
+    // theta is either one [2, 3] transform shared by every batch or [batch, 2, 3]. Validate the layout
+    // up front because InitTheta walks the flat buffer for each batch.
+    theta_batch_stride_ = 0;
+    if (input_theta_ != nullptr) {
+        auto theta_shape = input_theta_->GetTensorShape();
+        KERNEL_CHECK_NULLPTR(theta_shape, KERNEL_STATUS_PARAM_INVALID, "[%s] input theta shape is null.",
+                             kSpatialTransformer);
+        const int32_t theta_rank = theta_shape->GetDims();
+        KERNEL_CHECK_FALSE(theta_rank == 2 || theta_rank == 3, KERNEL_STATUS_PARAM_INVALID,
+                           "[%s] input theta must be 2D or 3D, but got %dD.", kSpatialTransformer, theta_rank);
+
+        bool theta_dims_valid = false;
+        if (theta_rank == 2) {
+            theta_dims_valid = theta_shape->GetDimSize(kDimSizeIndex0) == 2 &&
+                               theta_shape->GetDimSize(kDimSizeIndex1) == 3;
+        } else {
+            theta_dims_valid = theta_shape->GetDimSize(kDimSizeIndex1) == 2 &&
+                               theta_shape->GetDimSize(kDimSizeIndex2) == 3;
+        }
+        KERNEL_CHECK_FALSE(theta_dims_valid, KERNEL_STATUS_PARAM_INVALID,
+                           "[%s] input theta must have shape [2, 3] or [batch, 2, 3], but got %s.", kSpatialTransformer,
+                           GetShapeString(input_theta_).c_str());
+
+        if (theta_rank == 3) {
+            const int64_t theta_batch = theta_shape->GetDimSize(kDimSizeIndex0);
+            KERNEL_CHECK_FALSE(theta_batch == static_cast<int64_t>(input_n_), KERNEL_STATUS_PARAM_INVALID,
+                               "[%s] input theta batch[%ld] must match x batch[%d].", kSpatialTransformer, theta_batch,
+                               input_n_);
+            theta_batch_stride_ = kTotalThetaNumber;
+        }
+    }
+
     return KERNEL_STATUS_OK;
 }
 
@@ -218,7 +250,7 @@ KernelStatus SpatialTransformerCpuKernel::GetAttrs(const CpuKernelContext& ctx)
 }
 
 template <typename T1>
-void SpatialTransformerCpuKernel::InitTheta(const T1* input_theta, uint32_t& input_theta_idx, std::vector<float>& theta)
+void SpatialTransformerCpuKernel::InitTheta(const T1* input_theta, uint32_t input_theta_idx, std::vector<float>& theta)
 {
     uint32_t predf_theta_idx = 0;
     for (uint32_t j = 0; j < kTotalThetaNumber; j++) {
@@ -365,11 +397,12 @@ KernelStatus SpatialTransformerCpuKernel::DoCompute4D()
 
     // init var
     std::vector<float> theta(kIndex6);
-    uint32_t input_theta_idx = 0;
     int32_t output_idx = 0;
     int32_t input_idx = 0;
 
     for (int32_t i = 0; i < input_n_; i++) {
+        // A shared [2, 3] theta restarts at zero; a [batch, 2, 3] theta starts at its own six values.
+        const uint32_t input_theta_idx = static_cast<uint32_t>(i) * theta_batch_stride_;
         InitTheta(input_theta, input_theta_idx, theta);
         ComputeGrid(theta, input_grid);
 
@@ -416,11 +449,12 @@ KernelStatus SpatialTransformerCpuKernel::DoCompute5D()
     }
     // init var
     std::vector<float> theta(kIndex6);
-    uint32_t input_theta_idx = 0;
     uint32_t input_idx = 0;
     uint32_t output_index = 0;
 
     for (int32_t i = 0; i < input_n_; i++) {
+        // A shared [2, 3] theta restarts at zero; a [batch, 2, 3] theta starts at its own six values.
+        const uint32_t input_theta_idx = static_cast<uint32_t>(i) * theta_batch_stride_;
         InitTheta(input_theta, input_theta_idx, theta);
         ComputeGrid(theta, input_grid);
 
@@ -468,11 +502,12 @@ KernelStatus SpatialTransformerCpuKernel::DoCompute5D_C1()
 
     // init var
     std::vector<float> theta(kIndex6);
-    uint32_t input_theta_idx = 0;
     int32_t output_idx = 0;
     int32_t input_idx = 0;
 
     for (int32_t i = 0; i < input_n_; i++) {
+        // A shared [2, 3] theta restarts at zero; a [batch, 2, 3] theta starts at its own six values.
+        const uint32_t input_theta_idx = static_cast<uint32_t>(i) * theta_batch_stride_;
         InitTheta(input_theta, input_theta_idx, theta);
         ComputeGrid(theta, input_grid);
 

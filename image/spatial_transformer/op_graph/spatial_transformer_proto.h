@@ -31,7 +31,7 @@ namespace ge {
  *            The format must be NCHW or NC1HWC0.
  * @li theta: A Tensor. Must be one of following types: float, float16, double, uint8, int8,
  *              uint16, int16, int32, uint32, uint64, int64.
- *              3-D tensor with shape [batch, 2, 3] or [2, 3] containing
+ *              2-D tensor with shape [2, 3] or 3-D tensor with shape [batch, 2, 3] containing
  *              affine transformation parameters. \n
  *
  *@par Outputs:

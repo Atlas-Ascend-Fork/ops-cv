@@ -43,7 +43,8 @@ void RunRankValidationCase(const vector<vector<int64_t>>& shapes, Format format)
 {
     vector<DataType> data_types = {DT_INT8, DT_FLOAT16, DT_INT8};
     int8_t input_x[kRankValidationBufferSize] = {-39, -47, -37, 4, -70, -47};
-    Eigen::half input_theta[2] = {Eigen::half(-1), Eigen::half(-2)};
+    Eigen::half input_theta[6] = {Eigen::half(-1), Eigen::half(-2), Eigen::half(0),
+                                  Eigen::half(0),  Eigen::half(0),  Eigen::half(0)};
     int8_t output[kRankValidationBufferSize] = {0};
     vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
     vector<int64_t> use_default_theta = {1, 0, 1, 0, 1, 1};
@@ -56,7 +57,7 @@ void RunThetaAttrValidationCase(const vector<int64_t>& use_default_theta, const 
                                 uint32_t expected_status)
 {
     vector<DataType> data_types = {DT_INT8, DT_FLOAT16, DT_INT8};
-    vector<vector<int64_t>> shapes = {{1, 1, 2, 3}, {6}, {1, 1, 2, 3}};
+    vector<vector<int64_t>> shapes = {{1, 1, 2, 3}, {2, 3}, {1, 1, 2, 3}};
     int8_t input_x[6] = {-39, -47, -37, 4, -70, -47};
     Eigen::half input_theta[6] = {Eigen::half(1), Eigen::half(0), Eigen::half(0),
                                   Eigen::half(0), Eigen::half(1), Eigen::half(0)};
@@ -64,6 +65,27 @@ void RunThetaAttrValidationCase(const vector<int64_t>& use_default_theta, const 
     vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
     CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NCHW, 1, use_default_theta, default_theta);
     RUN_KERNEL(node_def, HOST, expected_status);
+}
+
+void RunSharedTheta5DBatchCase(int32_t stn_ori_channel)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 1, 1, 16}, {2, 3}, {2, 1, 1, 1, 16}};
+    constexpr uint64_t data_size = 2 * 1 * 1 * 1 * 16;
+    float input_x[data_size] = {0.0f};
+    for (int32_t batch = 0; batch < 2; ++batch) {
+        for (int32_t channel = 0; channel < stn_ori_channel; ++channel) {
+            input_x[batch * 16 + channel] = static_cast<float>(batch * 16 + channel + 1);
+        }
+    }
+    float input_theta[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+    CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NC1HWC0, stn_ori_channel, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+    EXPECT_TRUE(CompareResult(output, input_x, data_size));
 }
 } // namespace
 
@@ -87,14 +109,15 @@ TEST_F(TEST_SPATIAL_TRANSFORMER_UT, DEFAULT_THETA_LENGTH_FAIL)
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, 4D_SUCC)
 {
     vector<DataType> data_types = {DT_INT8, DT_FLOAT16, DT_INT8};
-    vector<vector<int64_t>> shapes = {{1, 1, 2, 3}, {2}, {1, 1, 2, 3}};
+    vector<vector<int64_t>> shapes = {{1, 1, 2, 3}, {2, 3}, {1, 1, 2, 3}};
 
     constexpr uint64_t input1_size = 1 * 1 * 2 * 3;
     int8_t input1[input1_size] = {-39, -47, -37, 4, -70, -47};
 
-    constexpr uint64_t input2_size = 2;
+    constexpr uint64_t input2_size = 6;
 
-    Eigen::half input2[input2_size] = {Eigen::half(-1), Eigen::half(-2)};
+    Eigen::half input2[input2_size] = {Eigen::half(-1), Eigen::half(-2), Eigen::half(0),
+                                       Eigen::half(0),  Eigen::half(0),  Eigen::half(0)};
 
     constexpr uint64_t output_size = 1 * 1 * 2 * 3;
     int8_t output[output_size] = {0};
@@ -114,7 +137,7 @@ TEST_F(TEST_SPATIAL_TRANSFORMER_UT, 4D_SUCC)
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, 5D_SUCC)
 {
     vector<DataType> data_types = {DT_FLOAT16, DT_INT8, DT_FLOAT16};
-    vector<vector<int64_t>> shapes = {{1, 1, 2, 3, 16}, {2}, {1, 1, 2, 3, 16}};
+    vector<vector<int64_t>> shapes = {{1, 1, 2, 3, 16}, {2, 3}, {1, 1, 2, 3, 16}};
 
     // read data from file for input1
     constexpr uint64_t input1_size = 1 * 1 * 2 * 3 * 16;
@@ -131,8 +154,8 @@ TEST_F(TEST_SPATIAL_TRANSFORMER_UT, 5D_SUCC)
     }
 
     // read data from file for input2
-    constexpr uint64_t input2_size = 2;
-    int8_t input2[input2_size] = {-2, -1};
+    constexpr uint64_t input2_size = 6;
+    int8_t input2[input2_size] = {-2, -1, 0, 0, 0, 0};
 
     constexpr uint64_t output_size = 1 * 1 * 2 * 3 * 16;
     Eigen::half output[output_size] = {half_zero};
@@ -163,7 +186,7 @@ TEST_F(TEST_SPATIAL_TRANSFORMER_UT, 5D_SUCC)
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, 5D_C1_SUCC)
 {
     vector<DataType> data_types = {DT_FLOAT16, DT_FLOAT16, DT_FLOAT16};
-    vector<vector<int64_t>> shapes = {{1, 1, 2, 3, 16}, {2}, {1, 1, 2, 3, 16}};
+    vector<vector<int64_t>> shapes = {{1, 1, 2, 3, 16}, {2, 3}, {1, 1, 2, 3, 16}};
 
     // read data from file for input1
     constexpr uint64_t input1_size = 1 * 1 * 2 * 3 * 16;
@@ -180,8 +203,9 @@ TEST_F(TEST_SPATIAL_TRANSFORMER_UT, 5D_C1_SUCC)
     }
 
     // read data from file for input2
-    constexpr uint64_t input2_size = 2;
-    Eigen::half input2[input2_size] = {Eigen::half(-2), Eigen::half(-1)};
+    constexpr uint64_t input2_size = 6;
+    Eigen::half input2[input2_size] = {Eigen::half(-2), Eigen::half(-1), Eigen::half(0),
+                                       Eigen::half(0),  Eigen::half(0),  Eigen::half(0)};
 
     constexpr uint64_t output_size = 1 * 1 * 2 * 3 * 16;
     Eigen::half output[output_size] = {half_zero};
@@ -255,12 +279,13 @@ TEST_F(TEST_SPATIAL_TRANSFORMER_UT, OPTIONAL_THETA_REQUIRED_FAIL)
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, OUTPUT_FORMAT_MISMATCH_FAIL)
 {
     vector<int64_t> x_shape = {1, 1, 2, 3};
-    vector<int64_t> theta_shape = {2};
+    vector<int64_t> theta_shape = {2, 3};
     vector<int64_t> y_shape = {1, 1, 2, 3, 16};
     vector<DataType> data_types = {DT_INT8, DT_FLOAT16, DT_INT8};
 
     int8_t input_x[6] = {-39, -47, -37, 4, -70, -47};
-    Eigen::half input_theta[2] = {Eigen::half(-1), Eigen::half(-2)};
+    Eigen::half input_theta[6] = {Eigen::half(-1), Eigen::half(-2), Eigen::half(0),
+                                  Eigen::half(0),  Eigen::half(0),  Eigen::half(0)};
     int8_t output[96] = {0};
 
     vector<int64_t> use_default_theta = {1, 0, 1, 0, 1, 1};
@@ -278,30 +303,165 @@ TEST_F(TEST_SPATIAL_TRANSFORMER_UT, OUTPUT_FORMAT_MISMATCH_FAIL)
 }
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, NCHW_RANK_3_FAIL)
 {
-    RunRankValidationCase({{1, 1, 6}, {2}, {1, 1, 2, 3}}, FORMAT_NCHW);
+    RunRankValidationCase({{1, 1, 6}, {2, 3}, {1, 1, 2, 3}}, FORMAT_NCHW);
 }
 
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, NCHW_RANK_5_FAIL)
 {
-    RunRankValidationCase({{1, 1, 2, 3, 1}, {2}, {1, 1, 2, 3}}, FORMAT_NCHW);
+    RunRankValidationCase({{1, 1, 2, 3, 1}, {2, 3}, {1, 1, 2, 3}}, FORMAT_NCHW);
 }
 
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, NCHW_OUTPUT_RANK_3_FAIL)
 {
-    RunRankValidationCase({{1, 1, 2, 3}, {2}, {1, 1, 6}}, FORMAT_NCHW);
+    RunRankValidationCase({{1, 1, 2, 3}, {2, 3}, {1, 1, 6}}, FORMAT_NCHW);
 }
 
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, NCHW_OUTPUT_RANK_5_FAIL)
 {
-    RunRankValidationCase({{1, 1, 2, 3}, {2}, {1, 1, 2, 3, 1}}, FORMAT_NCHW);
+    RunRankValidationCase({{1, 1, 2, 3}, {2, 3}, {1, 1, 2, 3, 1}}, FORMAT_NCHW);
 }
 
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, NC1HWC0_RANK_4_FAIL)
 {
-    RunRankValidationCase({{1, 1, 2, 3}, {2}, {1, 1, 2, 3, 16}}, FORMAT_NC1HWC0);
+    RunRankValidationCase({{1, 1, 2, 3}, {2, 3}, {1, 1, 2, 3, 16}}, FORMAT_NC1HWC0);
 }
 
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, NC1HWC0_OUTPUT_RANK_4_FAIL)
 {
-    RunRankValidationCase({{1, 1, 2, 3, 16}, {2}, {1, 1, 2, 3}}, FORMAT_NC1HWC0);
+    RunRankValidationCase({{1, 1, 2, 3, 16}, {2, 3}, {1, 1, 2, 3}}, FORMAT_NC1HWC0);
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, SHARED_THETA_BATCH_SUCC)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 2, 3}, {2, 3}, {2, 1, 2, 3}};
+    constexpr uint64_t data_size = 2 * 1 * 2 * 3;
+    float input_x[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+    float input_theta[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+    CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NCHW, 1, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+
+    EXPECT_TRUE(CompareResult(output, input_x, data_size));
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, SHARED_THETA_BATCH_MASKED_SUCC)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 2, 3}, {2, 3}, {2, 1, 2, 3}};
+    constexpr uint64_t data_size = 2 * 1 * 2 * 3;
+    float input_x[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+    float input_theta[6] = {1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta = {0, 1, 0, 1, 0, 1};
+    vector<float> default_theta = {0.0f, 0.0f, 0.0f};
+    CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NCHW, 1, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+
+    // Both batches share the same compact theta slice, so the second batch must not continue past it.
+    EXPECT_TRUE(CompareResult(output, input_x, data_size));
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, SHARED_THETA_5D_BATCH_SUCC) { RunSharedTheta5DBatchCase(16); }
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, SHARED_THETA_5D_C1_BATCH_SUCC) { RunSharedTheta5DBatchCase(1); }
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, THETA_BATCH_ONE_MISMATCH_FAIL)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 2, 3}, {1, 2, 3}, {2, 1, 2, 3}};
+    constexpr uint64_t data_size = 2 * 1 * 2 * 3;
+    float input_x[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+    float input_theta[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+    CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NCHW, 1, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, PER_BATCH_THETA_MASKED_SUCC)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 2, 3}, {2, 2, 3}, {2, 1, 2, 3}};
+    constexpr uint64_t data_size = 2 * 1 * 2 * 3;
+    float input_x[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+    float input_theta[12] = {1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta = {0, 1, 0, 1, 0, 1};
+    vector<float> default_theta = {0.0f, 0.0f, 0.0f};
+    CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NCHW, 1, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+
+    // The second batch must start at its own six coefficients and flip its rows.
+    float output_exp[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 14.0f, 15.0f, 16.0f, 11.0f, 12.0f, 13.0f};
+    EXPECT_TRUE(CompareResult(output, output_exp, data_size));
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, UNDERSIZED_THETA_FAIL)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 2, 3}, {2}, {2, 1, 2, 3}};
+    constexpr uint64_t data_size = 2 * 1 * 2 * 3;
+    float input_x[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+    float input_theta[2] = {1.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+    CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NCHW, 1, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, THETA_RANK_1_FAIL)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 2, 3}, {6}, {2, 1, 2, 3}};
+    constexpr uint64_t data_size = 2 * 1 * 2 * 3;
+    float input_x[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+    float input_theta[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+    CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NCHW, 1, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, THETA_BATCH_MISMATCH_FAIL)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 2, 3}, {3, 2, 3}, {2, 1, 2, 3}};
+    constexpr uint64_t data_size = 2 * 1 * 2 * 3;
+    constexpr uint64_t theta_size = 3 * 2 * 3;
+    float input_x[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+    float input_theta[theta_size] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+    CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NCHW, 1, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, THETA_DIMS_MISMATCH_FAIL)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 2, 3}, {3, 3}, {2, 1, 2, 3}};
+    constexpr uint64_t data_size = 2 * 1 * 2 * 3;
+    constexpr uint64_t theta_size = 3 * 3;
+    float input_x[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+    float input_theta[theta_size] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+    CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NCHW, 1, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
 }
