@@ -247,12 +247,16 @@ static ge::graphStatus ComputeGeometry(gert::TilingContext* context, Col2ImV2Geo
                                                       "outH*outW/outW+padW/outH+padH must be <= INT32_MAX"),
                 return ge::GRAPH_FAILED);
     int64_t channel = xShape.GetDim(1) / kernelArea;
-    geom.totalLength = xShape.GetDim(0) * channel * outHW;
-    OP_CHECK_IF(geom.totalLength > INT32_MAX,
-                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x, output_size",
-                                                      ("totalLength=" + std::to_string(geom.totalLength)).c_str(),
-                                                      "totalLength must be <= INT32_MAX"),
-                return ge::GRAPH_FAILED);
+    const int64_t batch = xShape.GetDim(0);
+    // Check the product before multiplying: shape metadata can exceed int64
+    // even though each individual dimension is positive and valid.
+    const int64_t maxBatchChannel = INT32_MAX / outHW;
+    OP_CHECK_IF(
+        batch > 0 && channel > maxBatchChannel / batch,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x, output_size", "totalLength exceeds INT32_MAX",
+                                              "totalLength must be <= INT32_MAX"),
+        return ge::GRAPH_FAILED);
+    geom.totalLength = batch * channel * outHW;
     return ge::GRAPH_SUCCESS;
 }
 
