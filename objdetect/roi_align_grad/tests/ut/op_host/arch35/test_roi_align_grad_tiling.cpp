@@ -84,3 +84,28 @@ TEST_F(ROIAlignGradTiling, roi_align_grad_mode0)
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
+
+TEST_F(ROIAlignGradTiling, rejects_sample_num_above_int32_before_narrowing)
+{
+    struct ROIAlignGradCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ROIAlignGrad",
+        {
+            {{{1, 1, 1, 1}, {1, 1, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 5}, {1, 5}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 2, 2}, {1, 1, 2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            OpAttr("xdiff_shape", AV::CreateFrom(std::vector<int64_t>{1, 1, 2, 2})),
+            OpAttr("pooled_width", AV::CreateFrom(int64_t(1))),
+            OpAttr("pooled_height", AV::CreateFrom(int64_t(1))),
+            OpAttr("spatial_scale", AV::CreateFrom(float(1.0))),
+            OpAttr("sample_num", AV::CreateFrom(int64_t(4294967296LL))),
+            OpAttr("roi_end_mode", AV::CreateFrom(int64_t(1))),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}

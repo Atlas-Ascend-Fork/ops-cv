@@ -17,6 +17,8 @@
  * Sets tiling key based on roiEndMode (R001/R007: compile-time branch elimination).
  */
 
+#include <limits>
+
 #include "log/log.h"
 #include "platform/platform_ascendc.h"
 #include "util/math_util.h"
@@ -162,11 +164,14 @@ static ge::graphStatus ParseOpAttrs(gert::TilingContext* context, RoiAlignGradTi
     OP_CHECK_NULL_WITH_CONTEXT(context, spatialScalePtr);
     params.spatialScale = *spatialScalePtr;
 
-    params.sampleNum = DEFAULT_SAMPLE_NUM;
     const auto* sampleNumPtr = attrs->GetAttrPointer<int64_t>(ATTR_SAMPLE_NUM_IDX);
-    if (sampleNumPtr != nullptr) {
-        params.sampleNum = static_cast<int32_t>(*sampleNumPtr);
-    }
+    const int64_t sampleNumValue = (sampleNumPtr != nullptr) ? *sampleNumPtr : DEFAULT_SAMPLE_NUM;
+    OP_CHECK_IF(sampleNumValue < 0 || sampleNumValue > std::numeric_limits<int32_t>::max(),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "sample_num",
+                                                      std::to_string(sampleNumValue).c_str(),
+                                                      "sample_num must be in [0, INT32_MAX]"),
+                return ge::GRAPH_FAILED);
+    params.sampleNum = static_cast<int32_t>(sampleNumValue);
 
     params.roiEndMode = DEFAULT_ROI_END_MODE;
     const auto* roiEndModePtr = attrs->GetAttrPointer<int64_t>(ATTR_ROI_END_MODE_IDX);
