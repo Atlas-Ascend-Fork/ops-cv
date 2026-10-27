@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -9,9 +9,6 @@
  */
 
 #include "roi_align.h"
-#include <string>
-#include <vector>
-#include "base/err_msg.h"
 #include "opdev/make_op_executor.h"
 #include "opdev/op_def.h"
 #include "opdev/op_dfx.h"
@@ -48,8 +45,7 @@ const aclTensor* ROIAlign(const aclTensor* self, const aclTensor* rois, const ac
     auto out = executor->AllocTensor(outStorageShape, outOriginalShape, self->GetDataType(), self->GetStorageFormat(),
                                      self->GetOriginalFormat());
     if (out == nullptr) {
-        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
-                               "ROIAlign AllocTensor returned nullptr; propagate allocator first error");
+        OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "alloc out tensor failed");
         return nullptr;
     }
 
@@ -80,8 +76,7 @@ const aclTensor* ROIAlignV2(const aclTensor* self, const aclTensor* boxes, float
     auto out = executor->AllocTensor(outStorageShape, outOriginalShape, self->GetDataType(), self->GetStorageFormat(),
                                      self->GetOriginalFormat());
     if (out == nullptr) {
-        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
-                               "ROIAlignV2 AllocTensor returned nullptr; propagate allocator first error");
+        OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "alloc out tensor failed");
         return nullptr;
     }
 
@@ -89,15 +84,8 @@ const aclTensor* ROIAlignV2(const aclTensor* self, const aclTensor* boxes, float
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(
         ROIAlign, OP_INPUT(self, boxes), OP_OUTPUT(out),
         OP_ATTR(spatialScale, outputHeight, outputWidth, samplingRatio, roiEndMode, mode));
-    if (ret != ACLNN_SUCCESS) {
-        const std::string reason = "ADD_TO_LAUNCHER_LIST_AICORE failed, rc=" +
-                                   std::to_string(static_cast<int32_t>(ret)) + ". Kernel is ROIAlign.";
-        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "%s", reason.c_str());
-        const std::vector<const char*> keys = {"opName", "reason"};
-        const std::vector<const char*> values = {"ROIAlign", reason.c_str()};
-        REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
-        return nullptr;
-    }
+    OP_CHECK(ret == ACLNN_SUCCESS, OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "ROIAlignV2 ADD_TO_LAUNCHER_LIST_AICORE failed."),
+             return nullptr);
 
     return out;
 }

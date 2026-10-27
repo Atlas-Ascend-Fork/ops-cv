@@ -21,8 +21,6 @@
  */
 
 #include <algorithm>
-#include <string>
-#include <vector>
 #include "log/log.h"
 #include "platform/platform_ascendc.h"
 #include "util/math_util.h"
@@ -66,53 +64,16 @@ static constexpr size_t CHANNEL_DIM = 3;
 
 struct RoiAlignRotatedGradCompileInfo {};
 
-template <typename Context>
-static const char* OpNameOf(Context* context)
-{
-    if (context == nullptr || context->GetNodeName() == nullptr) {
-        return "RoiAlignRotatedGrad";
-    }
-    return context->GetNodeName();
-}
-
-template <typename Context>
-static bool RequireNotNull(Context* context, const void* ptr, const char* what)
-{
-    if (ptr != nullptr) {
-        return true;
-    }
-    OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "%s is nullptr", what);
-    return false;
-}
-
-template <typename Context>
-static void ReportTilingFailure(Context* context, const std::string& reason)
-{
-    const char* opName = OpNameOf(context);
-    OP_LOGE_WITHOUT_REPORT(opName, "%s", reason.c_str());
-    const std::vector<const char*> keys = {"opName", "reason"};
-    const std::vector<const char*> values = {opName, reason.c_str()};
-    REPORT_PREDEFINED_ERR_MSG("EZ1008", keys, values);
-}
-
 // ══ 平台信息获取 ════════════════════════════════════════════════════════════
 static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& ubSize, int64_t& coreNum)
 {
     fe::PlatFormInfos* platformInfoPtr = context->GetPlatformInfo();
-    if (!RequireNotNull(context, platformInfoPtr, "platformInfoPtr")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfoPtr);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfoPtr);
     coreNum = ascendcPlatform.GetCoreNumAiv();
-    if (coreNum == 0) {
-        ReportTilingFailure(context, "coreNum is 0");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(coreNum == 0, OP_LOGE(context, "coreNum is 0"), return ge::GRAPH_FAILED);
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSize);
-    if (ubSize == 0) {
-        ReportTilingFailure(context, "ubSize is 0");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(ubSize == 0, OP_LOGE(context, "ubSize is 0"), return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -120,26 +81,18 @@ static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& u
 static ge::graphStatus ValidateDtype(gert::TilingContext* context)
 {
     auto xGradDesc = context->GetInputDesc(kXGradIdx);
-    if (!RequireNotNull(context, xGradDesc, "xGradDesc")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, xGradDesc);
     // SE "参数约束"小节单参数约束: x_grad dtype ∈ {float32}（唯一组合）
-    if (xGradDesc->GetDataType() != ge::DT_FLOAT) {
-        const std::string actual = Ops::Base::ToString(xGradDesc->GetDataType());
-        OP_LOGE_FOR_INVALID_DTYPE(OpNameOf(context), "x_grad", actual.c_str(), "FLOAT");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(xGradDesc->GetDataType() != ge::DT_FLOAT,
+                OP_LOGE(context, "x_grad dtype must be float32, got %d", xGradDesc->GetDataType()),
+                return ge::GRAPH_FAILED);
 
     auto roisDesc = context->GetInputDesc(kRoisIdx);
-    if (!RequireNotNull(context, roisDesc, "roisDesc")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, roisDesc);
     // SE "参数约束"小节单参数约束: rois dtype ∈ {float32}（唯一组合）
-    if (roisDesc->GetDataType() != ge::DT_FLOAT) {
-        const std::string actual = Ops::Base::ToString(roisDesc->GetDataType());
-        OP_LOGE_FOR_INVALID_DTYPE(OpNameOf(context), "rois", actual.c_str(), "FLOAT");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(roisDesc->GetDataType() != ge::DT_FLOAT,
+                OP_LOGE(context, "rois dtype must be float32, got %d", roisDesc->GetDataType()),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -148,60 +101,33 @@ static ge::graphStatus ValidateDtype(gert::TilingContext* context)
 static ge::graphStatus ValidateAttr(gert::TilingContext* context)
 {
     auto attrs = context->GetAttrs();
-    if (!RequireNotNull(context, attrs, "attrs")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
 
     // SE "参数约束"小节单参数约束: y_grad_shape 长度 == 4 且各元素 ≥ 0（C7）
     auto yGradShape = attrs->GetListInt(kYGradShapeIdx);
-    if (!RequireNotNull(context, yGradShape, "yGradShape")) {
-        return ge::GRAPH_FAILED;
-    }
-    if (yGradShape->GetSize() != Y_GRAD_SHAPE_LEN) {
-        const std::string actual = std::to_string(yGradShape->GetSize());
-        OP_LOGE_FOR_INVALID_LISTSIZE(OpNameOf(context), "y_grad_shape", actual.c_str(), "4");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, yGradShape);
+    OP_CHECK_IF(yGradShape->GetSize() != Y_GRAD_SHAPE_LEN,
+                OP_LOGE(context, "y_grad_shape length must be 4, got %zu", yGradShape->GetSize()),
+                return ge::GRAPH_FAILED);
     for (size_t i = 0; i < Y_GRAD_SHAPE_LEN; i++) {
-        if (yGradShape->GetData()[i] < 0) {
-            const std::string actual = std::to_string(yGradShape->GetData()[i]);
-            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "y_grad_shape", actual.c_str(),
-                                                  "each element must be greater than or equal to 0");
-            return ge::GRAPH_FAILED;
-        }
+        OP_CHECK_IF(yGradShape->GetData()[i] < 0,
+                    OP_LOGE(context, "y_grad_shape[%zu] must be non-negative, got %ld", i, yGradShape->GetData()[i]),
+                    return ge::GRAPH_FAILED);
     }
 
     // SE "参数约束"小节单参数约束: pooled_h > 0、pooled_w > 0（C8，REG_OP 注释约束）
     const int64_t* pooledH = attrs->GetAttrPointer<int64_t>(kPooledHIdx);
     const int64_t* pooledW = attrs->GetAttrPointer<int64_t>(kPooledWIdx);
-    if (!RequireNotNull(context, pooledH, "pooledH")) {
-        return ge::GRAPH_FAILED;
-    }
-    if (!RequireNotNull(context, pooledW, "pooledW")) {
-        return ge::GRAPH_FAILED;
-    }
-    if (*pooledH <= 0) {
-        const std::string actual = std::to_string(*pooledH);
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "pooled_h", actual.c_str(), "must be > 0");
-        return ge::GRAPH_FAILED;
-    }
-    if (*pooledW <= 0) {
-        const std::string actual = std::to_string(*pooledW);
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "pooled_w", actual.c_str(), "must be > 0");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, pooledH);
+    OP_CHECK_NULL_WITH_CONTEXT(context, pooledW);
+    OP_CHECK_IF(*pooledH <= 0, OP_LOGE(context, "pooled_h must be > 0, got %ld", *pooledH), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(*pooledW <= 0, OP_LOGE(context, "pooled_w must be > 0, got %ld", *pooledW), return ge::GRAPH_FAILED);
 
     // SE "参数约束"小节单参数约束: sampling_ratio ≥ 0（C9，0 = 稠密采样）
     const int64_t* samplingRatio = attrs->GetAttrPointer<int64_t>(kSamplingRatioIdx);
-    if (!RequireNotNull(context, samplingRatio, "samplingRatio")) {
-        return ge::GRAPH_FAILED;
-    }
-    if (*samplingRatio < 0) {
-        const std::string actual = std::to_string(*samplingRatio);
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "sampling_ratio", actual.c_str(),
-                                              "must be greater than or equal to 0");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, samplingRatio);
+    OP_CHECK_IF(*samplingRatio < 0, OP_LOGE(context, "sampling_ratio must be >= 0, got %ld", *samplingRatio),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -209,71 +135,45 @@ static ge::graphStatus ValidateAttr(gert::TilingContext* context)
 static ge::graphStatus ValidateShape(gert::TilingContext* context)
 {
     auto xGradShapePtr = context->GetInputShape(kXGradIdx);
-    if (!RequireNotNull(context, xGradShapePtr, "xGradShapePtr")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, xGradShapePtr);
     auto xGradShape = xGradShapePtr->GetStorageShape();
     auto roisShapePtr = context->GetInputShape(kRoisIdx);
-    if (!RequireNotNull(context, roisShapePtr, "roisShapePtr")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, roisShapePtr);
     auto roisShape = roisShapePtr->GetStorageShape();
     auto attrs = context->GetAttrs();
-    if (!RequireNotNull(context, attrs, "attrs")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
     auto yGradShape = attrs->GetListInt(kYGradShapeIdx)->GetData();
     const int64_t pooledHeight = *(attrs->GetAttrPointer<int64_t>(kPooledHIdx));
     const int64_t pooledWidth = *(attrs->GetAttrPointer<int64_t>(kPooledWIdx));
 
     // SE "参数约束"小节单参数约束: x_grad rank == 4，[N, pooled_h, pooled_w, C]（C1）
-    if (xGradShape.GetDimNum() != X_GRAD_RANK) {
-        const std::string actual = std::to_string(xGradShape.GetDimNum()) + "D";
-        OP_LOGE_FOR_INVALID_SHAPEDIM(OpNameOf(context), "x_grad", actual.c_str(), "4D");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(xGradShape.GetDimNum() != X_GRAD_RANK,
+                OP_LOGE(context, "x_grad rank must be 4, got %zu", xGradShape.GetDimNum()), return ge::GRAPH_FAILED);
     // SE "参数约束"小节单参数约束: rois rank == 2 且 dim0 == 6（转置布局 [6,N]）（C2）
-    if (roisShape.GetDimNum() != ROIS_RANK) {
-        const std::string actual = std::to_string(roisShape.GetDimNum()) + "D";
-        OP_LOGE_FOR_INVALID_SHAPEDIM(OpNameOf(context), "rois", actual.c_str(), "2D");
-        return ge::GRAPH_FAILED;
-    }
-    if (roisShape.GetDim(0) != ROI_FIELD_NUM) {
-        const std::string actual = "[" + std::to_string(roisShape.GetDim(0)) + "]";
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "rois", actual.c_str(),
-                                              "the coordinate dimension must be 6");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(
+        roisShape.GetDimNum() != ROIS_RANK || roisShape.GetDim(0) != ROI_FIELD_NUM,
+        OP_LOGE(context, "rois must be [6, N], got rank %zu dim0 %ld", roisShape.GetDimNum(), roisShape.GetDim(0)),
+        return ge::GRAPH_FAILED);
     // SE "参数约束"小节跨参数约束: x_grad.dim(0) == rois.dim(1)（roi 数量一致）（C3）
-    if (xGradShape.GetDim(0) != roisShape.GetDim(1)) {
-        const std::string actual = "[" + std::to_string(xGradShape.GetDim(0)) + "] and [" +
-                                   std::to_string(roisShape.GetDim(1)) + "]";
-        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(OpNameOf(context), "x_grad, rois", actual.c_str(),
-                                               "the number of x_grad and rois must be the same");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(xGradShape.GetDim(0) != roisShape.GetDim(1),
+                OP_LOGE(context, "x_grad dim0 %ld must equal rois dim1 %ld", xGradShape.GetDim(0), roisShape.GetDim(1)),
+                return ge::GRAPH_FAILED);
     // SE "参数约束"小节跨参数约束: x_grad.dim(1) == pooled_h 且 dim(2) == pooled_w（C4）
-    if (xGradShape.GetDim(HEIGHT_DIM) != pooledHeight || xGradShape.GetDim(WIDTH_DIM) != pooledWidth) {
-        const std::string actual = Ops::Base::ToString(xGradShape);
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "x_grad", actual.c_str(),
-                                              "the pooled height and width must equal pooled_h and pooled_w");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(xGradShape.GetDim(1) != pooledHeight || xGradShape.GetDim(2) != pooledWidth,
+                OP_LOGE(context, "x_grad dim1/dim2 [%ld, %ld] must equal pooled_h/pooled_w [%ld, %ld]",
+                        xGradShape.GetDim(1), xGradShape.GetDim(2), pooledHeight, pooledWidth),
+                return ge::GRAPH_FAILED);
     // SE "参数约束"小节跨参数约束: x_grad.dim(3) == y_grad_shape[3]（通道数一致）（C5）
-    if (xGradShape.GetDim(CHANNEL_DIM) != yGradShape[CHANNEL_DIM]) {
-        const std::string actual = "[" + std::to_string(xGradShape.GetDim(CHANNEL_DIM)) + "]";
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "x_grad", actual.c_str(),
-                                              "the channel dimension must equal y_grad_shape[3]");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(xGradShape.GetDim(3) != yGradShape[CHANNEL_DIM],
+                OP_LOGE(context, "x_grad dim3 %ld must equal y_grad_shape[3] %ld", xGradShape.GetDim(3),
+                        yGradShape[CHANNEL_DIM]),
+                return ge::GRAPH_FAILED);
     // SE "参数约束"小节单参数约束: C ∈ [0,1024]、pooled_h/pooled_w ∈ [0,1024]（C6，910B README 约束）
-    if (xGradShape.GetDim(CHANNEL_DIM) > DIM_LIMIT || xGradShape.GetDim(HEIGHT_DIM) > DIM_LIMIT ||
-        xGradShape.GetDim(WIDTH_DIM) > DIM_LIMIT) {
-        const std::string actual = Ops::Base::ToString(xGradShape);
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "x_grad", actual.c_str(),
-                                              "C, pooled_h and pooled_w must not exceed 1024");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(
+        xGradShape.GetDim(3) > DIM_LIMIT || xGradShape.GetDim(1) > DIM_LIMIT || xGradShape.GetDim(2) > DIM_LIMIT,
+        OP_LOGE(context, "x_grad dims exceed limit 1024, got C=%ld PH=%ld PW=%ld", xGradShape.GetDim(3),
+                xGradShape.GetDim(1), xGradShape.GetDim(2)),
+        return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -281,20 +181,14 @@ static ge::graphStatus ValidateShape(gert::TilingContext* context)
 static ge::graphStatus ValidateInputs(gert::TilingContext* context)
 {
     // SE "参数约束"小节: dtype 列（float32 唯一组合）
-    if (ValidateDtype(context) != ge::GRAPH_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "ValidateDtype failed; propagate the first error");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(ValidateDtype(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateDtype failed"),
+                return ge::GRAPH_FAILED);
     // SE "参数约束"小节: 属性行值域列（C7~C9）
-    if (ValidateAttr(context) != ge::GRAPH_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "ValidateAttr failed; propagate the first error");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(ValidateAttr(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateAttr failed"),
+                return ge::GRAPH_FAILED);
     // SE "参数约束"小节: shape 列 + 跨参数约束（C1~C6）
-    if (ValidateShape(context) != ge::GRAPH_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "ValidateShape failed; propagate the first error");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(ValidateShape(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateShape failed"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -303,9 +197,7 @@ static ge::graphStatus ComputeTiling(gert::TilingContext* context, RoiAlignRotat
                                      int64_t coreNum)
 {
     auto attrs = context->GetAttrs();
-    if (!RequireNotNull(context, attrs, "attrs")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
 
     // ---- 1. 读取属性（对标 910B 属性索引）----
     auto yGradShape = attrs->GetListInt(kYGradShapeIdx)->GetData();
@@ -318,9 +210,7 @@ static ge::graphStatus ComputeTiling(gert::TilingContext* context, RoiAlignRotat
 
     // ---- 2. roiNum 从 rois shape 元信息获取（无值依赖，SE §6.7）----
     auto roisShapePtr = context->GetInputShape(kRoisIdx);
-    if (!RequireNotNull(context, roisShapePtr, "roisShapePtr")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, roisShapePtr);
     auto roisShape = roisShapePtr->GetStorageShape();
 
     tiling->batchSize = yGradShape[BATCH_DIM];
@@ -366,9 +256,7 @@ static ge::graphStatus GetWorkspaceSize(gert::TilingContext* context)
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
     uint64_t sysWorkspaceSize = ascendcPlatform.GetLibApiWorkSpaceSize();
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
-    if (!RequireNotNull(context, currentWorkspace, "currentWorkspace")) {
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
     currentWorkspace[0] = static_cast<size_t>(sysWorkspaceSize);
     return ge::GRAPH_SUCCESS;
 }
@@ -378,47 +266,34 @@ static ge::graphStatus RoiAlignRotatedGradTilingFunc(gert::TilingContext* contex
 {
     uint64_t ubSize;
     int64_t coreNum;
-    if (GetPlatformInfo(context, ubSize, coreNum) != ge::GRAPH_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "GetPlatformInfo failed; propagate the first error");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(GetPlatformInfo(context, ubSize, coreNum) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context, "GetPlatformInfo error"), return ge::GRAPH_FAILED);
 
-    if (ValidateInputs(context) != ge::GRAPH_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "ValidateInputs failed; propagate the first error");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(ValidateInputs(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateInputs failed"),
+                return ge::GRAPH_FAILED);
 
     RoiAlignRotatedGradTilingData* tiling = context->GetTilingData<RoiAlignRotatedGradTilingData>();
-    if (!RequireNotNull(context, tiling, "tiling")) {
-        return ge::GRAPH_FAILED;
-    }
-    if (memset_s(tiling, sizeof(RoiAlignRotatedGradTilingData), 0, sizeof(RoiAlignRotatedGradTilingData)) != EOK) {
-        ReportTilingFailure(context, "memset_s tiling data failed");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
+    OP_CHECK_IF(
+        memset_s(tiling, sizeof(RoiAlignRotatedGradTilingData), 0, sizeof(RoiAlignRotatedGradTilingData)) != EOK,
+        OP_LOGE(context, "set tiling data error"), return ge::GRAPH_FAILED);
 
-    if (ComputeTiling(context, tiling, coreNum) != ge::GRAPH_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "ComputeTiling failed; propagate the first error");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(ComputeTiling(context, tiling, coreNum) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ComputeTiling error"),
+                return ge::GRAPH_FAILED);
 
     DumpTilingData(context, tiling);
 
-    if (GetWorkspaceSize(context) != ge::GRAPH_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "GetWorkspaceSize failed; propagate the first error");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF(GetWorkspaceSize(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "GetWorkspaceSize error"),
+                return ge::GRAPH_FAILED);
 
     context->SetBlockDim(tiling->needCoreNum);
-    if (ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE) {
-        ReportTilingFailure(context, "ubSize is not large enough for DCACHE_SIZE");
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF((ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE),
+                OP_LOGE(context, "ubSize %lu <= DCACHE_SIZE + STATIC_UB_ESTIMATE", ubSize), return ge::GRAPH_FAILED);
     auto res = context->SetLocalMemorySize(static_cast<uint32_t>(ubSize - DCACHE_SIZE - STATIC_UB_ESTIMATE));
-    if (res != ge::GRAPH_SUCCESS) {
-        ReportTilingFailure(context, "SetLocalMemorySize failed, ubSize=" + std::to_string(ubSize));
-        return ge::GRAPH_FAILED;
-    }
+    OP_CHECK_IF((res != ge::GRAPH_SUCCESS),
+                OP_LOGE(context, "SetLocalMemorySize failed, ubSize=%lu, DCACHE_SIZE=%u, STATIC_UB_ESTIMATE=%u", ubSize,
+                        DCACHE_SIZE, STATIC_UB_ESTIMATE),
+                return ge::GRAPH_FAILED);
     // 单一场景模式，不枚举 dtype（float32 由 DTYPE_X_GRAD 宏自动实例化，MDE §3.2）
     context->SetTilingKey(GET_TPL_TILING_KEY(ROI_ALIGN_ROTATED_GRAD_TPL_SCATTER));
     return ge::GRAPH_SUCCESS;

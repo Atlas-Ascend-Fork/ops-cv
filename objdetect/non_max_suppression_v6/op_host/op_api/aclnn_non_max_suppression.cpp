@@ -13,16 +13,12 @@
 #include "aclnn_kernels/contiguous.h"
 #include "aclnn_kernels/common/op_error_check.h"
 #include "aclnn/aclnn_base.h"
-#include <string>
-#include <vector>
-#include "base/err_msg.h"
 #include "opdev/common_types.h"
 #include "opdev/data_type_utils.h"
 #include "opdev/format_utils.h"
 #include "opdev/op_dfx.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
-#include "opdev/platform.h"
 #include "opdev/tensor_view_utils.h"
 #include "opdev/make_op_executor.h"
 
@@ -197,14 +193,8 @@ aclnnStatus aclnnNonMaxSuppressionGetWorkspaceSize(const aclTensor* boxes, const
 
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
     if (curArch != NpuArch::DAV_2002) {
-        const std::string soc = op::ToString(GetCurrentPlatformInfo().GetSocVersion()).GetString();
-        const std::string reason = "SoC " + soc +
-                                   " is not supported. Supported SoC is Ascend310P. Kernel is NonMaxSuppressionV6, "
-                                   "dtype is FLOAT or FLOAT16, format is ND.";
-        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_RUNTIME_ERROR, "%s", reason.c_str());
-        const std::vector<const char*> keys = {"opName", "reason"};
-        const std::vector<const char*> values = {"aclnnNonMaxSuppression", reason.c_str()};
-        REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
+        OP_LOGE(ACLNN_ERR_RUNTIME_ERROR, "aclnnNonMaxSuppression does not support npuArch %u",
+                static_cast<uint32_t>(curArch));
         return ACLNN_ERR_RUNTIME_ERROR;
     }
 

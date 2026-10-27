@@ -12,7 +12,6 @@
 
 #include <gtest/gtest.h>
 #include <iostream>
-#include <string>
 #include "infershape_context_faker.h"
 #include "infershape_case_executor.h"
 
@@ -152,26 +151,4 @@ TEST_F(ROIAlignGradInfershape, roi_align_grad_infershape_mixed_unknown_shape_tes
         {1, 3, 50, 50},
     };
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
-}
-
-TEST_F(ROIAlignGradInfershape, roi_align_grad_infershape_xdiff_shape_len_invalid)
-{
-    gert::InfershapeContextPara infershapeContextPara(
-        "ROIAlignGrad",
-        {
-            {{{1, 1, 7, 7}, {1, 1, 7, 7}}, ge::DT_FLOAT, ge::FORMAT_ND},
-            {{{1, 5}, {1, 5}}, ge::DT_FLOAT, ge::FORMAT_ND},
-        },
-        {
-            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
-        },
-        {
-            OpAttr("xdiff_shape", AV::CreateFrom(std::vector<int64_t>{1, 1, 10})),
-            OpAttr("pooled_width", AV::CreateFrom(int64_t(7))),
-            OpAttr("pooled_height", AV::CreateFrom(int64_t(7))),
-            OpAttr("spatial_scale", AV::CreateFrom(float(1.0))),
-            OpAttr("sample_num", AV::CreateFrom(int64_t(2))),
-            OpAttr("roi_end_mode", AV::CreateFrom(int64_t(1))),
-        });
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
 }

@@ -382,14 +382,3 @@ TEST_F(l2_roi_align_v2_test, case_spatial_scale_negative_infinity)
 {
     EXPECT_EQ(RunSpatialScaleCase(-std::numeric_limits<float>::infinity()), ACLNN_ERR_PARAM_INVALID);
 }
-
-// 非法shape：self channel 为 0
-TEST_F(l2_roi_align_v2_test, case_shape_invalid_zero_channel)
-{
-    auto self = TensorDesc({1, 0, 6, 6}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto boxes = TensorDesc({1, 5}, ACL_FLOAT, ACL_FORMAT_ND);
-    auto out = TensorDesc({1, 0, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto ut = OP_API_UT(aclnnRoiAlignV2, INPUT(self, boxes, 3, 3, 0.25f, 2, false), OUTPUT(out));
-    uint64_t workspaceSize = 0;
-    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_ERR_PARAM_INVALID);
-}

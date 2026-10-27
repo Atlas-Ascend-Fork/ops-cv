@@ -38,7 +38,7 @@ namespace {
 static Status SetRoiAlignRotatedByNode(ge::Operator& op_dest, int input_size, int output_size)
 {
     if (input_size != REQ_INPUT_NUM || output_size != REQ_OUTPUT_NUM) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "input num must be 2, output num must be 1.");
+        OP_LOGE(GetOpName(op_dest).c_str(), "input num must be 2, output num must be 1.");
         return FAILED;
     }
     op_dest.DynamicInputRegister("x", input_size);
@@ -53,7 +53,7 @@ static bool IsRegbasePlatform()
     fe::OptionalInfo optionalInfo;
     if (fe::PlatformInfoManager::Instance().GetPlatformInfoWithOutSocVersion(platformInfo, optionalInfo) !=
         ge::GRAPH_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT("RoiAlignRotated", "Get platform info failed, fallback to legacy transposed path.");
+        OP_LOGE("RoiAlignRotated", "Get platform info failed, fallback to legacy transposed path.");
         return false;
     }
     const bool isRegbase = (platformInfo.str_info.short_soc_version == "Ascend950");
@@ -102,7 +102,7 @@ static Status ParseParamsRoiAlignRotated(const ge::Operator& op_src, ge::Operato
                         } else {
                             std::string spatial_scale_str = attr["f"];
                             if (StrToFloat(spatial_scale_str, spatial_scale) != SUCCESS) {
-                                OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "parse spatial_scale failed.");
+                                OP_LOGE(GetOpName(op_dest).c_str(), "parse spatial_scale failed.");
                                 return FAILED;
                             }
                         }
@@ -112,16 +112,15 @@ static Status ParseParamsRoiAlignRotated(const ge::Operator& op_src, ge::Operato
             }
         }
     } catch (const nlohmann::json::exception& e) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
         return FAILED;
     } catch (...) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
         return FAILED;
     }
 
     if (required_attr_num != REQ_ATTR_NUM) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(),
-                               "attr output_height, output_width, spatial_scale are required.");
+        OP_LOGE(GetOpName(op_dest).c_str(), "attr output_height, output_width, spatial_scale are required.");
         return FAILED;
     }
 
@@ -148,7 +147,7 @@ Status ParseOpToGraphRoiAlignRotated(const ge::Operator& op, ge::Graph& graph)
 {
     std::string ori_name;
     if (op.GetAttr("name", ori_name) != SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT("ParseOpToGraphRoiAlignRotated", "get name from op failed.");
+        OP_LOGE("ParseOpToGraphRoiAlignRotated", "get name from op failed.");
         return FAILED;
     }
 
@@ -164,7 +163,7 @@ Status ParseOpToGraphRoiAlignRotated(const ge::Operator& op, ge::Graph& graph)
         op.GetAttr("sampling_ratio", sampling_ratio) != ge::GRAPH_SUCCESS ||
         op.GetAttr("aligned", aligned) != ge::GRAPH_SUCCESS ||
         op.GetAttr("clockwise", clockwise) != ge::GRAPH_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op).c_str(), "get attr failed.");
+        OP_LOGE(GetOpName(op).c_str(), "get attr failed.");
         return FAILED;
     }
 

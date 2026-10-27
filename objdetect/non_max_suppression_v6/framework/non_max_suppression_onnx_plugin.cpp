@@ -55,10 +55,10 @@ static Status ParseParamsNonMaxSuppression(const ge::Operator& op_src, ge::Opera
             }
         }
     } catch (const nlohmann::json::exception& e) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
         return FAILED;
     } catch (...) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
         return FAILED;
     }
 
@@ -77,11 +77,11 @@ namespace {
 static Status GetAttrByName(const ge::Operator& op, int& input_size, int& center_point_box)
 {
     if (op.GetAttr("input_size", input_size) != SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op).c_str(), "get input_size from op failed.");
+        OP_LOGE(GetOpName(op).c_str(), "get input_size from op failed.");
         return FAILED;
     }
     if (op.GetAttr("center_point_box", center_point_box) != SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op).c_str(), "get center_point_box from op failed.");
+        OP_LOGE(GetOpName(op).c_str(), "get center_point_box from op failed.");
         return FAILED;
     }
     return SUCCESS;
@@ -92,7 +92,7 @@ static Status ParseOpToGraphNonMaxSuppression(const ge::Operator& op, Graph& gra
 {
     std::string ori_name;
     if (op.GetAttr("name", ori_name) != SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op).c_str(), "get name from op failed.");
+        OP_LOGE(GetOpName(op).c_str(), "get name from op failed.");
         return FAILED;
     }
 
@@ -139,7 +139,7 @@ static Status ParseOpToGraphNonMaxSuppression(const ge::Operator& op, Graph& gra
             .set_input_score_threshold(score_threshold)
             .set_attr_center_point_box(center_point_box);
     } else {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op).c_str(), "The input_size is invalid.");
+        OP_LOGE(GetOpName(op).c_str(), "The input_size is invalid.");
         return FAILED;
     }
 

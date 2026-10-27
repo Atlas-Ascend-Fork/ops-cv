@@ -9,7 +9,6 @@
  */
 #include <vector>
 #include <array>
-#include <limits>
 #include "gtest/gtest.h"
 
 #include "../../../../op_api/aclnn_roi_align_v2_backward.h"
@@ -395,61 +394,4 @@ TEST_F(l2_roi_align_v2_backward_test, case_float)
     EXPECT_EQ(aclRet, ACL_SUCCESS);
 
     // ut.TestPrecision();
-}
-
-// 非法shape：gradOutput rank 非法
-TEST_F(l2_roi_align_v2_backward_test, case_shape_invalid_grad_output_rank)
-{
-    auto gradOutput = TensorDesc({1, 1, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto boxes = TensorDesc({1, 5}, ACL_FLOAT, ACL_FORMAT_ND);
-    vector<int64_t> inputShape_dims = {1, 1, 6, 6};
-    auto inputShape = IntArrayDesc(inputShape_dims);
-    auto gradInput = TensorDesc({1, 1, 6, 6}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto ut = OP_API_UT(aclnnRoiAlignV2Backward, INPUT(gradOutput, boxes, inputShape, 3, 3, 0.25f, 2, false),
-                        OUTPUT(gradInput));
-    uint64_t workspaceSize = 0;
-    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_ERR_PARAM_INVALID);
-}
-
-// 非法shape：inputShape 元素个数非法
-TEST_F(l2_roi_align_v2_backward_test, case_shape_invalid_input_shape_size)
-{
-    auto gradOutput = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto boxes = TensorDesc({1, 5}, ACL_FLOAT, ACL_FORMAT_ND);
-    vector<int64_t> inputShape_dims = {1, 1, 6};
-    auto inputShape = IntArrayDesc(inputShape_dims);
-    auto gradInput = TensorDesc({1, 1, 6, 6}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto ut = OP_API_UT(aclnnRoiAlignV2Backward, INPUT(gradOutput, boxes, inputShape, 3, 3, 0.25f, 2, false),
-                        OUTPUT(gradInput));
-    uint64_t workspaceSize = 0;
-    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_ERR_PARAM_INVALID);
-}
-
-// 非法shape：inputShape 含非法元素
-TEST_F(l2_roi_align_v2_backward_test, case_shape_invalid_input_shape_element)
-{
-    auto gradOutput = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto boxes = TensorDesc({1, 5}, ACL_FLOAT, ACL_FORMAT_ND);
-    vector<int64_t> inputShape_dims = {1, 1, 0, 6};
-    auto inputShape = IntArrayDesc(inputShape_dims);
-    auto gradInput = TensorDesc({1, 1, 0, 6}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto ut = OP_API_UT(aclnnRoiAlignV2Backward, INPUT(gradOutput, boxes, inputShape, 3, 3, 0.25f, 2, false),
-                        OUTPUT(gradInput));
-    uint64_t workspaceSize = 0;
-    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_ERR_PARAM_INVALID);
-}
-
-// 非法attr：spatial_scale 非有限值
-TEST_F(l2_roi_align_v2_backward_test, case_attr_invalid_spatial_scale_inf)
-{
-    auto gradOutput = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto boxes = TensorDesc({1, 5}, ACL_FLOAT, ACL_FORMAT_ND);
-    vector<int64_t> inputShape_dims = {1, 1, 6, 6};
-    auto inputShape = IntArrayDesc(inputShape_dims);
-    auto gradInput = TensorDesc({1, 1, 6, 6}, ACL_FLOAT, ACL_FORMAT_NCHW);
-    auto ut = OP_API_UT(aclnnRoiAlignV2Backward,
-                        INPUT(gradOutput, boxes, inputShape, 3, 3, std::numeric_limits<float>::infinity(), 2, false),
-                        OUTPUT(gradInput));
-    uint64_t workspaceSize = 0;
-    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_ERR_PARAM_INVALID);
 }

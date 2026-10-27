@@ -43,7 +43,7 @@ static Status ParseParamsNpuRoiAlign(const ge::Operator& op_src, ge::Operator& o
                         } else {
                             std::string spatial_scale_str = attr["f"];
                             if (StrToFloat(spatial_scale_str, spatial_scale) != SUCCESS) {
-                                OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "parse spatial_scale failed.");
+                                OP_LOGE(GetOpName(op_dest).c_str(), "parse spatial_scale failed.");
                                 return FAILED;
                             }
                         }
@@ -66,17 +66,16 @@ static Status ParseParamsNpuRoiAlign(const ge::Operator& op_src, ge::Operator& o
             }
         }
     } catch (const nlohmann::json::exception& e) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
         return FAILED;
     } catch (...) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
         return FAILED;
     }
 
     // Node must have 3 required attributes.
     if (req_attr_count != req_attr_num) {
-        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(),
-                               "Node must have attr spatial_scale, pooled_height, pooled_width");
+        OP_LOGE(GetOpName(op_dest).c_str(), "Node must have attr spatial_scale, pooled_height, pooled_width");
         return FAILED;
     }
     op_dest.SetAttr("sample_num", sample_num);

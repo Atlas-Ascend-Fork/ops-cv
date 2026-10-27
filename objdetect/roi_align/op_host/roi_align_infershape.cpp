@@ -20,7 +20,6 @@
 #include "register/op_impl_registry.h"
 #include "log/log.h"
 #include "op_common/op_host/util/shape_util.h"
-#include <string>
 
 using namespace ge;
 using Ops::Base::IsUnknownRank;
@@ -55,42 +54,38 @@ static constexpr int64_t MIN_POOLED_SIZE = 1;
 
 static ge::graphStatus InferShapeROIAlign(gert::InferShapeContext* context)
 {
-    const char* opName = context->GetNodeName() == nullptr ? "ROIAlign" : context->GetNodeName();
-    OP_LOGD(opName, "Begin InferShapeROIAlign");
+    OP_LOGD(context->GetNodeName(), "Begin InferShapeROIAlign");
 
     // Get input shapes
     const gert::Shape* featuresShape = context->GetInputShape(IDX_FEATURES);
+    OP_CHECK_NULL_WITH_CONTEXT(context, featuresShape);
     const gert::Shape* roisShape = context->GetInputShape(IDX_ROIS);
+    OP_CHECK_NULL_WITH_CONTEXT(context, roisShape);
+
     gert::Shape* outShape = context->GetOutputShape(IDX_OUTPUT);
-    if (featuresShape == nullptr || roisShape == nullptr || outShape == nullptr) {
-        OP_LOGE_WITHOUT_REPORT(opName, "Input or output shape is nullptr");
-        return GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, outShape);
     // UnknownRank: if either input is unknown rank, output rank cannot be determined
     if (IsUnknownRank(*featuresShape) || IsUnknownRank(*roisShape)) {
-        OP_LOGD(opName, "input is UnknownRank, set output to UnknownRank");
+        OP_LOGD(context->GetNodeName(), "input is UnknownRank, set output to UnknownRank");
         SetUnknownRank(*outShape);
         return GRAPH_SUCCESS;
     }
     // Validate features is 4D (N, C, H, W)
     if (featuresShape->GetDimNum() != FEATURES_DIM_NUM) {
-        const std::string actualDim = std::to_string(featuresShape->GetDimNum()) + "D";
-        OP_LOGE_FOR_INVALID_SHAPEDIM(opName, "features", actualDim.c_str(), "4D");
+        OP_LOGE(context, "ROIAlign: features must be 4D [N,C,H,W], got %zu", featuresShape->GetDimNum());
         return GRAPH_FAILED;
     }
 
     // Validate rois is 2D (K, 5)
     if (roisShape->GetDimNum() != ROIS_DIM_NUM) {
-        const std::string actualDim = std::to_string(roisShape->GetDimNum()) + "D";
-        OP_LOGE_FOR_INVALID_SHAPEDIM(opName, "rois", actualDim.c_str(), "2D");
+        OP_LOGE(context, "ROIAlign: rois must be 2D [K,5], got %zu", roisShape->GetDimNum());
         return GRAPH_FAILED;
     }
     // UnknownShape: allow dim[1] to be -1 (unknown), otherwise must be 5
     // Unknown dims (-1) propagate naturally to output via GetDim/SetDim below
     if (roisShape->GetDim(ROIS_DIM_COORDS) != ROIS_COORD_DIM_SIZE &&
         roisShape->GetDim(ROIS_DIM_COORDS) != UNKNOWN_DIM_VALUE) {
-        const std::string actual = std::to_string(roisShape->GetDim(ROIS_DIM_COORDS));
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(opName, "rois", actual.c_str(), "the coordinate dimension must be 5");
+        OP_LOGE(context, "ROIAlign: rois dim[1] must be 5, got %ld", roisShape->GetDim(ROIS_DIM_COORDS));
         return GRAPH_FAILED;
     }
 
@@ -98,22 +93,13 @@ static ge::graphStatus InferShapeROIAlign(gert::InferShapeContext* context)
     // 0: spatial_scale(Float), 1: pooled_height(Int), 2: pooled_width(Int)
     // 3: sample_num(Int), 4: roi_end_mode(Int), 5: pool_mode(String)
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
-    if (attrs == nullptr) {
-        OP_LOGE_WITHOUT_REPORT(opName, "attrs is nullptr");
-        return GRAPH_FAILED;
-    }
+    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
     const int64_t* pooledHPtr = attrs->GetInt(ATTR_IDX_POOLED_HEIGHT);
     const int64_t* pooledWPtr = attrs->GetInt(ATTR_IDX_POOLED_WIDTH);
     int64_t pooledH = (pooledHPtr != nullptr) ? *pooledHPtr : DEFAULT_POOLED_SIZE;
     int64_t pooledW = (pooledWPtr != nullptr) ? *pooledWPtr : DEFAULT_POOLED_SIZE;
-    if (pooledH < MIN_POOLED_SIZE) {
-        const std::string actual = std::to_string(pooledH);
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(opName, "pooled_height", actual.c_str(), "must be >= 1");
-        return GRAPH_FAILED;
-    }
-    if (pooledW < MIN_POOLED_SIZE) {
-        const std::string actual = std::to_string(pooledW);
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(opName, "pooled_width", actual.c_str(), "must be >= 1");
+    if (pooledH < MIN_POOLED_SIZE || pooledW < MIN_POOLED_SIZE) {
+        OP_LOGE(context, "ROIAlign: pooled_height/width must be >= 1");
         return GRAPH_FAILED;
     }
 
@@ -127,7 +113,7 @@ static ge::graphStatus InferShapeROIAlign(gert::InferShapeContext* context)
         outShape->SetDim(1, C);
         outShape->SetDim(FEATURES_DIM_H, pooledH);
         outShape->SetDim(FEATURES_DIM_W, pooledW);
-        OP_LOGD(opName, "End InferShapeROIAlign from empty tensor");
+        OP_LOGD(context->GetNodeName(), "End InferShapeROIAlign from empty tensor");
         return GRAPH_SUCCESS;
     }
     outShape->SetDimNum(OUTPUT_DIM_NUM);
@@ -136,7 +122,7 @@ static ge::graphStatus InferShapeROIAlign(gert::InferShapeContext* context)
     outShape->SetDim(FEATURES_DIM_H, pooledH);
     outShape->SetDim(FEATURES_DIM_W, pooledW);
 
-    OP_LOGD(opName, "End InferShapeROIAlign");
+    OP_LOGD(context->GetNodeName(), "End InferShapeROIAlign");
     return GRAPH_SUCCESS;
 }
 

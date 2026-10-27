@@ -17,7 +17,6 @@
 
 #include "register/op_impl_registry.h"
 #include "log/log.h"
-#include <string>
 
 namespace ops {
 using namespace ge;
@@ -32,15 +31,8 @@ static ge::graphStatus InferDataTypeRoiAlignRotatedGrad(gert::InferDataTypeConte
     // dtype 约束校验：x_grad/rois 均 float32（唯一支持组合，SE 参数约束表 dtype 列）
     auto xGradDtype = context->GetInputDataType(IDX_0);
     auto roisDtype = context->GetInputDataType(IDX_1);
-    const char* opName = context->GetNodeName() == nullptr ? "RoiAlignRotatedGrad" : context->GetNodeName();
-    if (xGradDtype != ge::DT_FLOAT) {
-        const std::string actual = Ops::Base::ToString(xGradDtype);
-        OP_LOGE_FOR_INVALID_DTYPE(opName, "x_grad", actual.c_str(), "FLOAT");
-        return ge::GRAPH_FAILED;
-    }
-    if (roisDtype != ge::DT_FLOAT) {
-        const std::string actual = Ops::Base::ToString(roisDtype);
-        OP_LOGE_FOR_INVALID_DTYPE(opName, "rois", actual.c_str(), "FLOAT");
+    if (xGradDtype != ge::DT_FLOAT || roisDtype != ge::DT_FLOAT) {
+        OP_LOGE(context, "x_grad/rois dtype must be float32, got %d/%d", xGradDtype, roisDtype);
         return ge::GRAPH_FAILED;
     }
 
