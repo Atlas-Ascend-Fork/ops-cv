@@ -43,6 +43,38 @@ TEST(BatchMultiClassNonMaxSuppressionInfershape, derives_public_output_layout)
     ExecuteTestCase(context, ge::GRAPH_SUCCESS, {{2, 5, 4}, {2, 5}, {2, 5}, {2}});
 }
 
+TEST(BatchMultiClassNonMaxSuppressionInfershape, rejects_out_of_range_max_total_size)
+{
+    for (const int64_t maxTotalSize : {-1, 0, 1001}) {
+        SCOPED_TRACE(::testing::Message() << "max_total_size=" << maxTotalSize);
+        gert::InfershapeContextPara context("BatchMultiClassNonMaxSuppression",
+                                            {{{{2, 8, 1, 4}, {2, 8, 1, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                             {{{2, 8, 3}, {2, 8, 3}}, ge::DT_FLOAT16, ge::FORMAT_ND}},
+                                            {{{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                             {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                             {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                             {{{}, {}}, ge::DT_INT32, ge::FORMAT_ND}},
+                                            GetAttrs(maxTotalSize));
+        ExecuteTestCase(context, ge::GRAPH_FAILED);
+    }
+}
+
+TEST(BatchMultiClassNonMaxSuppressionInfershape, accepts_max_total_size_limits)
+{
+    for (const int64_t maxTotalSize : {1, 1000}) {
+        SCOPED_TRACE(::testing::Message() << "max_total_size=" << maxTotalSize);
+        gert::InfershapeContextPara context("BatchMultiClassNonMaxSuppression",
+                                            {{{{2, 8, 1, 4}, {2, 8, 1, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                             {{{2, 8, 3}, {2, 8, 3}}, ge::DT_FLOAT16, ge::FORMAT_ND}},
+                                            {{{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                             {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                             {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                             {{{}, {}}, ge::DT_INT32, ge::FORMAT_ND}},
+                                            GetAttrs(maxTotalSize));
+        ExecuteTestCase(context, ge::GRAPH_SUCCESS, {{2, maxTotalSize, 4}, {2, maxTotalSize}, {2, maxTotalSize}, {2}});
+    }
+}
+
 namespace {
 void ExpectLegacyShape(const gert::StorageShape& boxes, const gert::StorageShape& scores, bool transposeBox,
                        int64_t expectedBatch)

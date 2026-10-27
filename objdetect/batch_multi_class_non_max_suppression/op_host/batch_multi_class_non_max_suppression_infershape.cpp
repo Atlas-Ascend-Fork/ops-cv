@@ -19,6 +19,7 @@ constexpr int64_t kNmsedClassesIndex = 2;
 constexpr int64_t kNmsedNumIndex = 3;
 constexpr int64_t kMaxTotalSizeAttrIndex = 3;
 constexpr int64_t kTransposeBoxAttrIndex = 5;
+constexpr int64_t kMaxTotalSize = 1000;
 } // namespace
 
 namespace ops {
@@ -31,6 +32,8 @@ static ge::graphStatus InferShapeForBatchMultiClassNonMaxSuppression(gert::Infer
     OP_CHECK_IF(scoresShape->GetDimNum() == 0, OP_LOGE(context, "scores shape is empty."), return ge::GRAPH_FAILED);
     const int64_t* maxTotalSize = attrs->GetAttrPointer<int64_t>(kMaxTotalSizeAttrIndex);
     OP_CHECK_NULL_WITH_CONTEXT(context, maxTotalSize);
+    OP_CHECK_IF(*maxTotalSize < 1 || *maxTotalSize > kMaxTotalSize,
+                OP_LOGE(context, "max_total_size must be in [1, %ld].", kMaxTotalSize), return ge::GRAPH_FAILED);
     const bool* transposeBoxAttr = attrs->GetAttrPointer<bool>(kTransposeBoxAttrIndex);
     const bool transposeBox = transposeBoxAttr != nullptr && *transposeBoxAttr;
 
