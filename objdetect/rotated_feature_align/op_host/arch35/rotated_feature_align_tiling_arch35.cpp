@@ -16,6 +16,7 @@
 #include "op_host/tiling_templates_registry.h"
 #include "../../op_kernel/arch35/rotated_feature_align_tiling_data.h"
 #include "../../op_kernel/arch35/rotated_feature_align_tiling_key.h"
+#include <cmath>
 
 namespace optiling {
 
@@ -104,8 +105,13 @@ static ge::graphStatus ValidateShape(gert::TilingContext* context)
     return ge::GRAPH_SUCCESS;
 }
 
-static ge::graphStatus ValidateAttr(gert::TilingContext* context, int64_t points)
+static ge::graphStatus ValidateAttr(gert::TilingContext* context, float spatialScale, int64_t points)
 {
+    OP_CHECK_IF(
+        !std::isfinite(spatialScale),
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "spatial_scale",
+                                              std::to_string(spatialScale).c_str(), "spatial_scale must be finite"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(points != POINTS_CENTER_ONLY && points != POINTS_CENTER_AND_CORNERS,
                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "points", std::to_string(points).c_str(),
                                                       "points must be 1 (center only) or 5 (center + 4 corners)"),
@@ -113,14 +119,14 @@ static ge::graphStatus ValidateAttr(gert::TilingContext* context, int64_t points
     return ge::GRAPH_SUCCESS;
 }
 
-static ge::graphStatus ValidateInputs(gert::TilingContext* context, int64_t points)
+static ge::graphStatus ValidateInputs(gert::TilingContext* context, float spatialScale, int64_t points)
 {
     OP_CHECK_IF(ValidateDtype(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateDtype failed"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(ValidateShape(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateShape failed"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(ValidateAttr(context, points) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateAttr failed"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ValidateAttr(context, spatialScale, points) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context, "ValidateAttr failed"), return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -189,8 +195,8 @@ static ge::graphStatus RotatedFeatureAlignTilingFunc(gert::TilingContext* contex
     const int64_t* pointsPtr = attrs->GetAttrPointer<int64_t>(ATTR_POINTS_IDX);
     const int64_t points = (pointsPtr == nullptr) ? ATTR_POINTS_DEFAULT : *pointsPtr;
 
-    OP_CHECK_IF(ValidateInputs(context, points) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateInputs failed"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ValidateInputs(context, *spatialScalePtr, points) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context, "ValidateInputs failed"), return ge::GRAPH_FAILED);
 
     uint64_t ubSize = 0;
     int64_t coreNum = 0;
