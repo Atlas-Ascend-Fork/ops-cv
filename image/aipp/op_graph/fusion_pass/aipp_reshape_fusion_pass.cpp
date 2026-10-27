@@ -24,7 +24,7 @@
 #include "graph/utils/type_utils.h"
 #include "log/log.h"
 #include "register/register_custom_pass.h"
-
+#include "version/ge-compiler_version.h"
 using namespace ge;
 using namespace fusion;
 
@@ -555,6 +555,7 @@ ge::Status AippReshapeFusionPass::Run(ge::GraphPtr& graph, ge::CustomPassContext
     OP_LOGD(kPassName, "Aipp images writeback success");
     return SUCCESS;
 }
-
+#if GE_COMPILER_VERSION_NUM >= 90200000U
 REG_FUSION_PASS(AippReshapeFusionPass).Stage(CustomPassStage::kAfterInferShape);
+#endif
 } // namespace Ops

@@ -785,6 +785,25 @@ TEST_F(aipp_kernel_test, test_yuv_pass_through_fp16)
     RunAippKernelTest("test_yuv_pass_through_fp16", tilingContextPara);
 }
 
+// TilingKey=2 + odd crop: YUV420SP pass-through (YUV444 output) with 63x63 crop,
+// regression for edge-unwritten bug in SimtComputeYuv420ToYuv444
+TEST_F(aipp_kernel_test, test_yuv_pass_through_odd_crop_fp16)
+{
+    AippCompileInfo compileInfo = {56, 253952};
+    string socVersion = "Ascend950";
+    gert::TilingContextPara tilingContextPara(
+        "Aipp",
+        {{{{1, 64, 64, 3}, {1, 64, 64, 3}}, ge::DT_UINT8, ge::FORMAT_NHWC}, {{{1}, {1}}, ge::DT_UINT8, ge::FORMAT_ND}},
+        {{{{1, 3, 63, 63}, {1, 3, 63, 63}}, ge::DT_FLOAT16, ge::FORMAT_NCHW}},
+        {gert::TilingContextPara::OpAttr(
+            "aipp_config_path",
+            Ops::Cv::AnyValue::CreateFrom<string>(R"({"aipp_mode":"static","input_format":"YUV420SP_U8","crop":true,)"
+                                                  R"("crop_size_h":63,"crop_size_w":63})"))},
+        &compileInfo, socVersion);
+
+    RunAippKernelTest("test_yuv_pass_through_odd_crop_fp16", tilingContextPara);
+}
+
 // TilingKey=3: RGB-to-YUV (RGB888_U8 with csc -> FP16 NCHW)
 TEST_F(aipp_kernel_test, test_rgb_to_yuv_fp16)
 {
@@ -848,6 +867,143 @@ TEST_F(aipp_kernel_test, test_yuv_to_rgb_fp16)
         &compileInfo, socVersion);
 
     RunAippKernelTest("test_yuv_to_rgb_fp16", tilingContextPara);
+}
+
+// TilingKey=5 + odd crop: YUV-to-RGB with 63x63 crop (odd H and W), regression for edge-unwritten bug
+TEST_F(aipp_kernel_test, test_yuv_to_rgb_odd_crop_fp16)
+{
+    AippCompileInfo compileInfo = {56, 253952};
+    string socVersion = "Ascend950";
+    gert::TilingContextPara tilingContextPara(
+        "Aipp",
+        {{{{1, 64, 64, 3}, {1, 64, 64, 3}}, ge::DT_UINT8, ge::FORMAT_NHWC}, {{{1}, {1}}, ge::DT_UINT8, ge::FORMAT_ND}},
+        {{{{1, 3, 63, 63}, {1, 3, 63, 63}}, ge::DT_FLOAT16, ge::FORMAT_NCHW}},
+        {gert::TilingContextPara::OpAttr(
+            "aipp_config_path",
+            Ops::Cv::AnyValue::CreateFrom<string>(R"({"aipp_mode":"static","input_format":"YUV420SP_U8","crop":true,)"
+                                                  R"("crop_size_h":63,"crop_size_w":63,"csc_switch":true,)"
+                                                  R"("matrix_r0c0":298,"matrix_r0c1":0,"matrix_r0c2":409,)"
+                                                  R"("matrix_r1c0":298,"matrix_r1c1":-100,"matrix_r1c2":-208,)"
+                                                  R"("matrix_r2c0":298,"matrix_r2c1":516,"matrix_r2c2":0,)"
+                                                  R"("input_bias_0":16,"input_bias_1":128,"input_bias_2":128})"))},
+        &compileInfo, socVersion);
+
+    RunAippKernelTest("test_yuv_to_rgb_odd_crop_fp16", tilingContextPara);
+}
+
+// TilingKey=5 + odd crop (H only odd): 63x64 crop, last row unwritten before fix
+TEST_F(aipp_kernel_test, test_yuv_to_rgb_odd_crop_h_only_fp16)
+{
+    AippCompileInfo compileInfo = {56, 253952};
+    string socVersion = "Ascend950";
+    gert::TilingContextPara tilingContextPara(
+        "Aipp",
+        {{{{1, 64, 64, 3}, {1, 64, 64, 3}}, ge::DT_UINT8, ge::FORMAT_NHWC}, {{{1}, {1}}, ge::DT_UINT8, ge::FORMAT_ND}},
+        {{{{1, 3, 63, 64}, {1, 3, 63, 64}}, ge::DT_FLOAT16, ge::FORMAT_NCHW}},
+        {gert::TilingContextPara::OpAttr(
+            "aipp_config_path",
+            Ops::Cv::AnyValue::CreateFrom<string>(R"({"aipp_mode":"static","input_format":"YUV420SP_U8","crop":true,)"
+                                                  R"("crop_size_h":63,"crop_size_w":64,"csc_switch":true,)"
+                                                  R"("matrix_r0c0":298,"matrix_r0c1":0,"matrix_r0c2":409,)"
+                                                  R"("matrix_r1c0":298,"matrix_r1c1":-100,"matrix_r1c2":-208,)"
+                                                  R"("matrix_r2c0":298,"matrix_r2c1":516,"matrix_r2c2":0,)"
+                                                  R"("input_bias_0":16,"input_bias_1":128,"input_bias_2":128})"))},
+        &compileInfo, socVersion);
+
+    RunAippKernelTest("test_yuv_to_rgb_odd_crop_h_only_fp16", tilingContextPara);
+}
+
+// TilingKey=5 + odd crop (W only odd): 64x63 crop, last column unwritten before fix
+TEST_F(aipp_kernel_test, test_yuv_to_rgb_odd_crop_w_only_fp16)
+{
+    AippCompileInfo compileInfo = {56, 253952};
+    string socVersion = "Ascend950";
+    gert::TilingContextPara tilingContextPara(
+        "Aipp",
+        {{{{1, 64, 64, 3}, {1, 64, 64, 3}}, ge::DT_UINT8, ge::FORMAT_NHWC}, {{{1}, {1}}, ge::DT_UINT8, ge::FORMAT_ND}},
+        {{{{1, 3, 64, 63}, {1, 3, 64, 63}}, ge::DT_FLOAT16, ge::FORMAT_NCHW}},
+        {gert::TilingContextPara::OpAttr(
+            "aipp_config_path",
+            Ops::Cv::AnyValue::CreateFrom<string>(R"({"aipp_mode":"static","input_format":"YUV420SP_U8","crop":true,)"
+                                                  R"("crop_size_h":64,"crop_size_w":63,"csc_switch":true,)"
+                                                  R"("matrix_r0c0":298,"matrix_r0c1":0,"matrix_r0c2":409,)"
+                                                  R"("matrix_r1c0":298,"matrix_r1c1":-100,"matrix_r1c2":-208,)"
+                                                  R"("matrix_r2c0":298,"matrix_r2c1":516,"matrix_r2c2":0,)"
+                                                  R"("input_bias_0":16,"input_bias_1":128,"input_bias_2":128})"))},
+        &compileInfo, socVersion);
+
+    RunAippKernelTest("test_yuv_to_rgb_odd_crop_w_only_fp16", tilingContextPara);
+}
+
+// TilingKey=5 + odd crop with even start offset: load_start_pos (4,6), crop 59x61
+TEST_F(aipp_kernel_test, test_yuv_to_rgb_odd_crop_offset_fp16)
+{
+    AippCompileInfo compileInfo = {56, 253952};
+    string socVersion = "Ascend950";
+    gert::TilingContextPara tilingContextPara(
+        "Aipp",
+        {{{{1, 64, 64, 3}, {1, 64, 64, 3}}, ge::DT_UINT8, ge::FORMAT_NHWC}, {{{1}, {1}}, ge::DT_UINT8, ge::FORMAT_ND}},
+        {{{{1, 3, 59, 57}, {1, 3, 59, 57}}, ge::DT_FLOAT16, ge::FORMAT_NCHW}},
+        {gert::TilingContextPara::OpAttr(
+            "aipp_config_path",
+            Ops::Cv::AnyValue::CreateFrom<string>(R"({"aipp_mode":"static","input_format":"YUV420SP_U8","crop":true,)"
+                                                  R"("load_start_pos_h":4,"load_start_pos_w":6,)"
+                                                  R"("crop_size_h":59,"crop_size_w":57,"csc_switch":true,)"
+                                                  R"("matrix_r0c0":298,"matrix_r0c1":0,"matrix_r0c2":409,)"
+                                                  R"("matrix_r1c0":298,"matrix_r1c1":-100,"matrix_r1c2":-208,)"
+                                                  R"("matrix_r2c0":298,"matrix_r2c1":516,"matrix_r2c2":0,)"
+                                                  R"("input_bias_0":16,"input_bias_1":128,"input_bias_2":128})"))},
+        &compileInfo, socVersion);
+
+    RunAippKernelTest("test_yuv_to_rgb_odd_crop_offset_fp16", tilingContextPara);
+}
+
+// TilingKey=5 + odd crop + batch 2: verifies nIdx decomposition with ceil block grid
+TEST_F(aipp_kernel_test, test_yuv_to_rgb_odd_crop_batch2_fp16)
+{
+    AippCompileInfo compileInfo = {56, 253952};
+    string socVersion = "Ascend950";
+    gert::TilingContextPara tilingContextPara(
+        "Aipp",
+        {{{{2, 64, 64, 3}, {2, 64, 64, 3}}, ge::DT_UINT8, ge::FORMAT_NHWC}, {{{1}, {1}}, ge::DT_UINT8, ge::FORMAT_ND}},
+        {{{{2, 3, 63, 63}, {2, 3, 63, 63}}, ge::DT_FLOAT16, ge::FORMAT_NCHW}},
+        {gert::TilingContextPara::OpAttr(
+            "aipp_config_path",
+            Ops::Cv::AnyValue::CreateFrom<string>(R"({"aipp_mode":"static","input_format":"YUV420SP_U8","crop":true,)"
+                                                  R"("crop_size_h":63,"crop_size_w":63,"csc_switch":true,)"
+                                                  R"("matrix_r0c0":298,"matrix_r0c1":0,"matrix_r0c2":409,)"
+                                                  R"("matrix_r1c0":298,"matrix_r1c1":-100,"matrix_r1c2":-208,)"
+                                                  R"("matrix_r2c0":298,"matrix_r2c1":516,"matrix_r2c2":0,)"
+                                                  R"("input_bias_0":16,"input_bias_1":128,"input_bias_2":128})"))},
+        &compileInfo, socVersion);
+
+    RunAippKernelTest("test_yuv_to_rgb_odd_crop_batch2_fp16", tilingContextPara);
+}
+
+// TilingKey=5 + odd crop + even padding: output 67x71, skipped lanes interplay with padding
+TEST_F(aipp_kernel_test, test_yuv_to_rgb_odd_crop_padding_fp16)
+{
+    AippCompileInfo compileInfo = {56, 253952};
+    string socVersion = "Ascend950";
+    // input: 1x64x64x3(YUV420SP), crop 63x63, padding l/r=4 t/b=2 -> output: 1x3x67x71
+    gert::TilingContextPara tilingContextPara(
+        "Aipp",
+        {{{{1, 64, 64, 3}, {1, 64, 64, 3}}, ge::DT_UINT8, ge::FORMAT_NHWC}, {{{1}, {1}}, ge::DT_UINT8, ge::FORMAT_ND}},
+        {{{{1, 3, 67, 71}, {1, 3, 67, 71}}, ge::DT_FLOAT16, ge::FORMAT_NCHW}},
+        {gert::TilingContextPara::OpAttr(
+            "aipp_config_path",
+            Ops::Cv::AnyValue::CreateFrom<string>(R"({"aipp_mode":"static","input_format":"YUV420SP_U8","crop":true,)"
+                                                  R"("crop_size_h":63,"crop_size_w":63,"csc_switch":true,)"
+                                                  R"("matrix_r0c0":298,"matrix_r0c1":0,"matrix_r0c2":409,)"
+                                                  R"("matrix_r1c0":298,"matrix_r1c1":-100,"matrix_r1c2":-208,)"
+                                                  R"("matrix_r2c0":298,"matrix_r2c1":516,"matrix_r2c2":0,)"
+                                                  R"("input_bias_0":16,"input_bias_1":128,"input_bias_2":128,)"
+                                                  R"("padding":true,"left_padding_size":4,"right_padding_size":4,)"
+                                                  R"("top_padding_size":2,"bottom_padding_size":2,)"
+                                                  R"("padding_value":0.5})"))},
+        &compileInfo, socVersion);
+
+    RunAippKernelTest("test_yuv_to_rgb_odd_crop_padding_fp16", tilingContextPara);
 }
 
 // TilingKey=6: YUV-to-Gray (YUV400_U8 -> FP16 NCHW, 1 channel output)

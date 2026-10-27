@@ -314,6 +314,7 @@ function(gen_cust_proto_symbol)
     cust_proto
     PUBLIC $<BUILD_INTERFACE:intf_pub_cxx17>
     ge_compiler
+    ge_common
     )
 
   if(NEED_LINK_ES)

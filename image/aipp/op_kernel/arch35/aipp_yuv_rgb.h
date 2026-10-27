@@ -128,6 +128,9 @@ __simt_callee__ __attribute__((always_inline)) inline void ProcessYuvRgbBlock(
         RgbPack<DataType> dstRgbIdxIndex = dstRgbIdx[i];
         uint32_t pixelH = (i >= YUV_DEAL_NUM_2) ? actualH + 1 : actualH;
         uint32_t pixelW = (i == YUV_DEAL_NUM_1 || i == YUV_DEAL_NUM_3) ? actualW + 1 : actualW;
+        if (pixelH >= tD.outputSizeH || pixelW >= tD.outputSizeW) {
+            continue;
+        }
         if (IsPixelInPaddingForYuv(pixelH, pixelW, tD, allEvenPadding, blockAllInPadding)) {
             AssignPadValue(outputGM[dstRgbIdxIndex.r], padValue);
             AssignPadValue(outputGM[dstRgbIdxIndex.g], padValue);
@@ -147,13 +150,15 @@ __simt_vf__ LAUNCH_BOUND(MAX_THREAD_NUM) __aicore__
 {
     uint32_t outputSizeH = tD.outputSizeH;
     uint32_t outputSizeW = tD.outputSizeW;
+    uint32_t blockCountH = (outputSizeH + 1) >> 1;
+    uint32_t blockCountW = (outputSizeW + 1) >> 1;
 
     for (DataType idx = threadIdx.x + blockId * blockDim.x; idx < batchSize; idx += blockNum * blockDim.x) {
         CoordPack<DataType> coord;
-        coord.nIdx = idx / ((outputSizeH >> 1) * (outputSizeW >> 1));
-        DataType newIdx = idx - coord.nIdx * ((outputSizeH >> 1) * (outputSizeW >> 1));
-        coord.hIdx = newIdx / (outputSizeW >> 1);
-        coord.wIdx = newIdx - coord.hIdx * (outputSizeW >> 1);
+        coord.nIdx = idx / (blockCountH * blockCountW);
+        DataType newIdx = idx - coord.nIdx * (blockCountH * blockCountW);
+        coord.hIdx = newIdx / blockCountW;
+        coord.wIdx = newIdx - coord.hIdx * blockCountW;
         if (dynamicTilingKey != 0) {
             UpdateDynamicBatchPara(coord, tD, gmParams);
         }
@@ -167,6 +172,9 @@ __simt_vf__ LAUNCH_BOUND(MAX_THREAD_NUM) __aicore__
 
         bool allEvenPadding = (topPaddingSize % DIGIT_2 == 0) && (bottomPaddingSize % DIGIT_2 == 0) &&
                               (leftPaddingSize % DIGIT_2 == 0) && (rightPaddingSize % DIGIT_2 == 0);
+        // Block-level padding fast path is exact only when the crop region boundary is 2x2-block aligned
+        bool blockAligned = allEvenPadding && (tD.cropParam.cropSizeH % DIGIT_2 == 0) &&
+                            (tD.cropParam.cropSizeW % DIGIT_2 == 0);
 
         RgbPack<DataType> dstRgbIdx[YUV_PER_DEAL_NUM];
         ComputeYuvRgbDstIdx(dstRgbIdx, coord, tD);
@@ -174,11 +182,11 @@ __simt_vf__ LAUNCH_BOUND(MAX_THREAD_NUM) __aicore__
         uint32_t actualH = coord.hIdx * DIGIT_2;
         uint32_t actualW = coord.wIdx * DIGIT_2;
 
-        bool blockAllInPadding = (paddingSwitch != 0 && allEvenPadding) &&
+        bool blockAllInPadding = (paddingSwitch != 0 && blockAligned) &&
                                  ((actualH < topPaddingSize) || (actualH >= topPaddingSize + tD.cropParam.cropSizeH) ||
                                   (actualW < leftPaddingSize) || (actualW >= leftPaddingSize + tD.cropParam.cropSizeW));
 
-        ProcessYuvRgbBlock<T, DataType>(yuvGM, outputGM, dstRgbIdx, coord, tD, padValue, allEvenPadding,
+        ProcessYuvRgbBlock<T, DataType>(yuvGM, outputGM, dstRgbIdx, coord, tD, padValue, blockAligned,
                                         blockAllInPadding);
     }
 }
@@ -186,8 +194,9 @@ __simt_vf__ LAUNCH_BOUND(MAX_THREAD_NUM) __aicore__
 template <typename T, typename DataType>
 __aicore__ inline void AippYuvRgb<T, DataType>::Process(GM_ADDR x, GM_ADDR y)
 {
-    uint64_t batchSize = static_cast<uint64_t>(this->tilingData_.batchNum) * ((this->tilingData_.outputSizeH) >> 1) *
-                         ((this->tilingData_.outputSizeW) >> 1);
+    uint64_t blockCountH = (this->tilingData_.outputSizeH + 1) >> 1;
+    uint64_t blockCountW = (this->tilingData_.outputSizeW + 1) >> 1;
+    uint64_t batchSize = static_cast<uint64_t>(this->tilingData_.batchNum) * blockCountH * blockCountW;
 
     asc_vf_call<Aipp_Kernel::SimtComputeYuvRgb<T, DataType>>(dim3(this->blockDimX_), (__gm__ uint8_t*)x, (__gm__ T*)y,
                                                              this->tilingData_, this->gmParams_, this->blockIdx_,

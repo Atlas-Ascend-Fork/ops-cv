@@ -145,6 +145,9 @@ __simt_callee__ __attribute__((always_inline)) inline void ProcessYuv444Block(
     for (uint8_t i = 0; i < YUV_PER_DEAL_NUM; i++) {
         uint32_t pixelH = (i >= YUV_DEAL_NUM_2) ? actualH + 1 : actualH;
         uint32_t pixelW = (i == YUV_DEAL_NUM_1 || i == YUV_DEAL_NUM_3) ? actualW + 1 : actualW;
+        if (pixelH >= tD.outputSizeH || pixelW >= tD.outputSizeW) {
+            continue;
+        }
         if (IsPixelInPaddingForYuv(pixelH, pixelW, tD, allEvenPadding, blockAllInPadding)) {
             AssignPadValue(outputGM[dstYIdx[i]], padValue);
             AssignPadValue(outputGM[dstUIdx[i]], padValue);
@@ -166,14 +169,16 @@ __simt_vf__ LAUNCH_BOUND(MAX_THREAD_NUM) __aicore__
 {
     const uint32_t outputSizeH = tD.outputSizeH;
     const uint32_t outputSizeW = tD.outputSizeW;
+    const uint32_t blockCountH = (outputSizeH + 1) >> 1;
+    const uint32_t blockCountW = (outputSizeW + 1) >> 1;
 
     for (DataType idx = threadIdx.x + blockId * blockDim.x; idx < batchSize; idx += blockNum * blockDim.x) {
         // 1. Decode idx → 2x2-block coordinate (nIdx, hIdx, wIdx)
         CoordPack<DataType> coord;
-        coord.nIdx = idx / ((outputSizeH >> 1) * (outputSizeW >> 1));
-        DataType rem = idx - coord.nIdx * ((outputSizeH >> 1) * (outputSizeW >> 1));
-        coord.hIdx = rem / (outputSizeW >> 1);
-        coord.wIdx = rem - coord.hIdx * (outputSizeW >> 1);
+        coord.nIdx = idx / (blockCountH * blockCountW);
+        DataType rem = idx - coord.nIdx * (blockCountH * blockCountW);
+        coord.hIdx = rem / blockCountW;
+        coord.wIdx = rem - coord.hIdx * blockCountW;
         if (dynamicTilingKey != 0) {
             UpdateDynamicBatchPara(coord, tD, gmParams);
         }
@@ -185,6 +190,9 @@ __simt_vf__ LAUNCH_BOUND(MAX_THREAD_NUM) __aicore__
         const float padValue = tD.paddingParam.padValue;
         const bool allEvenPadding = (topPaddingSize % DIGIT_2 == 0) && (bottomPaddingSize % DIGIT_2 == 0) &&
                                     (leftPaddingSize % DIGIT_2 == 0) && (rightPaddingSize % DIGIT_2 == 0);
+        // Block-level padding fast path is exact only when the crop region boundary is 2x2-block aligned
+        const bool blockAligned = allEvenPadding && (tD.cropParam.cropSizeH % DIGIT_2 == 0) &&
+                                  (tD.cropParam.cropSizeW % DIGIT_2 == 0);
 
         // 2. Compute destination indices for this 2x2 block
         DataType dstYIdx[YUV_PER_DEAL_NUM];
@@ -194,7 +202,7 @@ __simt_vf__ LAUNCH_BOUND(MAX_THREAD_NUM) __aicore__
         // 3. Fast-path: check if entire 2x2 block is in padding
         const uint32_t actualH = coord.hIdx * DIGIT_2;
         const uint32_t actualW = coord.wIdx * DIGIT_2;
-        const bool blockAllInPadding = (tD.paddingParam.paddingSwitch != 0 && allEvenPadding) &&
+        const bool blockAllInPadding = (tD.paddingParam.paddingSwitch != 0 && blockAligned) &&
                                        ((actualH < topPaddingSize) ||
                                         (actualH >= topPaddingSize + tD.cropParam.cropSizeH) ||
                                         (actualW < leftPaddingSize) ||
@@ -202,15 +210,16 @@ __simt_vf__ LAUNCH_BOUND(MAX_THREAD_NUM) __aicore__
 
         // 4. Process block (padding check + CSC + DataConversion per pixel)
         ProcessYuv444Block<T, DataType>(inputGM, outputGM, dstYIdx, dstUBase, dstVBase, coord, tD, padValue,
-                                        allEvenPadding, blockAllInPadding);
+                                        blockAligned, blockAllInPadding);
     }
 }
 
 template <typename T, typename DataType>
 __aicore__ inline void AippYuv<T, DataType>::Process(GM_ADDR x, GM_ADDR y)
 {
-    uint64_t batchSize = (uint64_t)this->tilingData_.batchNum * ((uint64_t)this->tilingData_.outputSizeH >> 1) *
-                         ((uint64_t)this->tilingData_.outputSizeW >> 1);
+    uint64_t blockCountH = (static_cast<uint64_t>(this->tilingData_.outputSizeH) + 1) >> 1;
+    uint64_t blockCountW = (static_cast<uint64_t>(this->tilingData_.outputSizeW) + 1) >> 1;
+    uint64_t batchSize = (uint64_t)this->tilingData_.batchNum * blockCountH * blockCountW;
 
     asc_vf_call<Aipp_Kernel::SimtComputeYuv420ToYuv444<T, DataType>>(
         dim3(this->blockDimX_), (__gm__ uint8_t*)x, (__gm__ T*)y, this->tilingData_, this->gmParams_, this->blockIdx_,
