@@ -63,7 +63,7 @@ $$
   <tr>
     <td>out_backprop</td>
     <td>输入</td>
-    <td>输出梯度，4D，shape与前向输出一致。NHWC格式时shape为(N, Ho, Wo, C)。</td>
+    <td>输出梯度，4D，shape与前向输出一致。NHWC格式时shape为(N, Ho, Wo, C)，NCHW格式时shape为(N, C, Ho, Wo)。</td>
     <td>float32</td>
     <td>ND</td>
   </tr>
@@ -132,7 +132,7 @@ $$
   - padding_mode取值必须为{"SAME", "VALID", "CALCULATED"}之一。
   - pads长度必须为4，CALCULATED模式下pads[i]需小于window_h/w（window_h = (filter_h - 1) * rate_h + 1）。
   - data_format取值必须为{"NHWC", "NCHW"}之一。
-- **format约束**：x、out_backprop、y三者format相同，均为ND；format需与data_format一致。
+- **format约束**：x、filter、out_backprop、y的GE内存布局格式均为ND；data_format仅定义4D shape的维度顺序，NHWC为(N,H,W,C)，NCHW为(N,C,H,W)。
 - **值域约束**：argmax比较使用`>`严格大于，选择第一个最大值对应的位置进行梯度累加，相同值不累加到多个位置。CALCULATED模式下padding区域使用极小值填充，确保不参与argmax。
 
 ## 调用说明
