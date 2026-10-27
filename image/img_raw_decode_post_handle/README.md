@@ -30,11 +30,15 @@ d = \frac{v_{f32} - 56.0}{967.0} \times mask
 $$
 
 $$
-d = exp(ln(d) \times gamma)
+g =
+\begin{cases}
+\exp(\ln(\max(d, 10^{-38})) \times \gamma), & d > 0, \\
+\exp(-\infty \times \gamma), & d \le 0\; (\gamma > 0\text{ 时该项为 }0).
+\end{cases}
 $$
 
 $$
-d = d \times 967.0 + 56.0
+d = g \times 967.0 + 56.0
 $$
 
 $$
