@@ -135,7 +135,7 @@ $$
 - 输出宽度w_out必须大于等于16。
 - h_gm必须大于等于h_out/2，w_gm必须大于等于w_out/2。
 - 不支持空tensor。
-- 不支持非连续tensor。
+- 非连续tensor会自动转换为连续tensor后处理。
 - 该算子输出为uint16整数类型，gamma校正路径涉及ln/exp浮点运算，允许atol=2的整数容差比对。
 
 ## 调用说明
