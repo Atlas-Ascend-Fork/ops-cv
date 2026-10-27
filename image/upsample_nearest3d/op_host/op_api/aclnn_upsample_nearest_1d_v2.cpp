@@ -29,6 +29,9 @@
 #include "op_api/aclnn_check.h"
 #include "aclnn_kernels/common/op_error_check.h"
 #include "opdev/platform.h"
+#include <iomanip>
+#include <sstream>
+#include <string>
 
 using namespace op;
 #ifdef __cplusplus
@@ -40,6 +43,7 @@ static const size_t DIM_IDX_2 = 2;
 static const int64_t ZERO = 0;
 static const uint64_t ONE = 1;
 static const double DOUBLE_ONE = 1.0;
+static const int64_t SCALE_PRECISION_LEN = 6; // 清洗 aclnn float 入参二进制噪声保留的十进制小数位
 
 static const std::initializer_list<op::DataType> ASCEND910_DTYPE_SUPPORT_LIST = {
     op::DataType::DT_FLOAT16, op::DataType::DT_FLOAT, op::DataType::DT_DOUBLE, op::DataType::DT_UINT8};
@@ -241,7 +245,15 @@ static const aclTensor* upsampleNearest1dAiCoreCompute(const aclTensor* selfCont
 {
     auto self = View4dAs5d(selfContiguous, executor);
     CHECK_RET(self != nullptr, nullptr);
-    float scalesW = scaleL > 0 ? static_cast<float>(DOUBLE_ONE / static_cast<double>(scaleL)) : 0;
+    // 通过十进制字符串清洗 aclnn float 入参的二进制噪声后再取倒数，
+    // 对常规量级 scale 的结果与参考实现以 double 精度计算 1/scale 的语义对齐，避免取整边界差 1
+    std::stringstream scaleLStream;
+    scaleLStream << std::fixed << std::setprecision(SCALE_PRECISION_LEN) << scaleL;
+    // 清洗结果可能被量化为 0（scaleL < 0.5e-6 时），此时回退原始 scale 取倒数，避免 1/0 得到 inf
+    const double cleanedScaleL = std::stod(scaleLStream.str());
+    float scalesW = scaleL > 0 ? static_cast<float>(DOUBLE_ONE /
+                                                    (cleanedScaleL > 0 ? cleanedScaleL : static_cast<double>(scaleL))) :
+                                 0;
 
     vector<float> scalesList{};
     scalesList.push_back(1.0);

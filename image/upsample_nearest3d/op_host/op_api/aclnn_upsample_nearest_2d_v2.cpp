@@ -9,6 +9,8 @@
  */
 #include "aclnn_upsample_nearest_2d_v2.h"
 #include <iomanip>
+#include <sstream>
+#include <string>
 #include "image/resize_nearest_neighbor_v2/op_api/resize_nearest_neighbor_v2.h"
 #include "image/upsample_nearest/op_host/op_api/upsample_nearest_exact2d.h"
 #include "upsample_nearest_3d.h"
@@ -44,6 +46,7 @@ static const int64_t THREE = 3;
 static const float HALF_FLOAT = 0.5f;  // 特殊处理后的scale
 static const int64_t SMALL_SIZE = 128; // 用于判断是否特殊处理scale的shape的大小
 static const double DOUBLE_ONE = 1.0;
+static const int64_t SCALE_PRECISION_LEN = 6; // 清洗 aclnn float 入参二进制噪声保留的十进制小数位
 
 static const std::initializer_list<op::DataType> ASCEND910_DTYPE_DTYPE_SUPPORT_LIST = {
     op::DataType::DT_FLOAT16, op::DataType::DT_FLOAT, op::DataType::DT_DOUBLE, op::DataType::DT_UINT8};
@@ -279,8 +282,17 @@ const aclTensor* upsampleNearest2dAiCoreCompute(const aclTensor* selfContiguous,
 {
     float scaleH = (*scales)[ONE];
     float scaleW = (*scales)[TWO];
-    float scalesH = static_cast<float>(DOUBLE_ONE / static_cast<double>(scaleH));
-    float scalesW = static_cast<float>(DOUBLE_ONE / static_cast<double>(scaleW));
+    // 通过十进制字符串清洗 aclnn float 入参的二进制噪声后再取倒数，
+    // 对常规量级 scale 的结果与参考实现以 double 精度计算 1/scale 的语义对齐，避免取整边界差 1
+    std::stringstream scaleHStream;
+    std::stringstream scaleWStream;
+    scaleHStream << std::fixed << std::setprecision(SCALE_PRECISION_LEN) << scaleH;
+    scaleWStream << std::fixed << std::setprecision(SCALE_PRECISION_LEN) << scaleW;
+    // 清洗结果可能被量化为 0（scale < 0.5e-6 时），此时回退原始 scale 取倒数，避免 1/0 得到 inf
+    const double cleanedScaleH = std::stod(scaleHStream.str());
+    const double cleanedScaleW = std::stod(scaleWStream.str());
+    float scalesH = static_cast<float>(DOUBLE_ONE / (cleanedScaleH > 0 ? cleanedScaleH : static_cast<double>(scaleH)));
+    float scalesW = static_cast<float>(DOUBLE_ONE / (cleanedScaleW > 0 ? cleanedScaleW : static_cast<double>(scaleW)));
 
     const int64_t inputH = selfContiguous->GetViewShape().GetDim(TWO);
     const int64_t inputW = selfContiguous->GetViewShape().GetDim(THREE);
