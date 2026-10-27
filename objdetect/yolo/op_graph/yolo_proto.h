@@ -31,10 +31,12 @@ namespace ge {
 
  *@par Outputs:
  *Three outputs, including:
- * @li coord_data: A 3D Tensor with shape (N, boxes*coords, H*W). Must be one of the following types: float16, float32.
- * @li obj_prob: A 2D Tensor with shape (N, boxes*H*W). Must be one of the following types: float16, float32.
- * @li classes_prob: A 3D Tensor with shape (N, classes, boxes*H*W). Must be one of the following types: float16,
- float32. \n
+ * @li coord_data: A 3D Tensor with shape (N, boxes*coords, CeilX(H*W*2+32, 32)/2). The first H*W elements in the
+ * last dimension contain valid data; the aligned padding is zero. Must be float16 or float32.
+ * @li obj_prob: A 2D Tensor with shape (N, CeilX(boxes*H*W*2+32, 32)/2). The first boxes*H*W elements contain valid
+ * data; the aligned padding is zero. Must be float16 or float32.
+ * @li classes_prob: A 3D Tensor with shape (N, classes, CeilX(boxes*H*W*2+32, 32)/2). The first boxes*H*W elements
+ * contain valid data; the aligned padding is zero. Must be float16 or float32. \n
 
  *@par Attributes:
  * @li boxes: An optional int, the number of anchor boxes, default value is 3.
