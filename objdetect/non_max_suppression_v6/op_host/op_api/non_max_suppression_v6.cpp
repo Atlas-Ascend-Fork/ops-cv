@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -13,6 +13,9 @@
  * \brief
  */
 #include "non_max_suppression_v6.h"
+#include <string>
+#include <vector>
+#include "base/err_msg.h"
 #include "opdev/common_types.h"
 #include "opdev/data_type_utils.h"
 #include "opdev/format_utils.h"
@@ -43,16 +46,24 @@ const aclTensor* NonMaxSuppressionV6(const aclTensor* boxes, const aclTensor* sc
     aclTensor* out = executor->AllocTensor(selectedIndices->GetViewShape(), selectedIndices->GetDataType(),
                                            selectedIndices->GetViewFormat());
     if (out == nullptr) {
-        OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "alloc out tensor failed");
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                               "NonMaxSuppressionV6 AllocTensor returned nullptr; propagate allocator first error");
         return nullptr;
     }
 
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(NonMaxSuppressionV6,
                                            OP_INPUT(boxes, scores, maxOutputBoxesSize, iouThd, scoreThd),
                                            OP_OUTPUT(out), OP_ATTR(centerPointBox, maxBoxesSize));
-    OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "NonMaxSuppressionV6AiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
-             return nullptr);
+    if (ret != ACLNN_SUCCESS) {
+        const std::string reason = "ADD_TO_LAUNCHER_LIST_AICORE failed, rc=" +
+                                   std::to_string(static_cast<int32_t>(ret)) +
+                                   ". Kernel is NonMaxSuppressionV6, format is ND.";
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "%s", reason.c_str());
+        const std::vector<const char*> keys = {"opName", "reason"};
+        const std::vector<const char*> values = {"NonMaxSuppressionV6", reason.c_str()};
+        REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
+        return nullptr;
+    }
     return out;
 }
 } // namespace l0op

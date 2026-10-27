@@ -9,6 +9,7 @@
  */
 #include <vector>
 #include <array>
+#include <limits>
 #include "gtest/gtest.h"
 
 #include "../../../../op_api/aclnn_roi_align.h"
@@ -445,4 +446,32 @@ TEST_F(l2_roi_align_test, case_float16)
     EXPECT_EQ(aclRet, ACL_SUCCESS);
 
     ut.TestPrecision();
+}
+
+// 非法format：self 为 NHWC
+TEST_F(l2_roi_align_test, case_format_invalid_nhwc)
+{
+    auto self = TensorDesc({1, 1, 6, 6}, ACL_FLOAT, ACL_FORMAT_NHWC);
+    auto rois = TensorDesc({1, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto batchIndices = TensorDesc({1}, ACL_INT32, ACL_FORMAT_ND);
+    auto out = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnRoiAlign, INPUT(self, rois, batchIndices, "avg", 3, 3, 2, 0.25f), OUTPUT(out));
+    uint64_t workspaceSize = 0;
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_ERR_PARAM_INVALID);
+}
+
+// 非法attr：spatial_scale 非有限值
+TEST_F(l2_roi_align_test, case_attr_invalid_spatial_scale_inf)
+{
+    auto self = TensorDesc({1, 1, 6, 6}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto rois = TensorDesc({1, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto batchIndices = TensorDesc({1}, ACL_INT32, ACL_FORMAT_ND);
+    auto out = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnRoiAlign,
+                        INPUT(self, rois, batchIndices, "avg", 3, 3, 2, std::numeric_limits<float>::infinity()),
+                        OUTPUT(out));
+    uint64_t workspaceSize = 0;
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_ERR_PARAM_INVALID);
 }

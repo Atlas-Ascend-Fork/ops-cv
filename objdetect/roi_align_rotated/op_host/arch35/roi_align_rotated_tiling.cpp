@@ -18,6 +18,7 @@
  */
 
 #include <string>
+#include <vector>
 
 #include "log/log.h"
 #include "platform/platform_ascendc.h"
@@ -47,6 +48,35 @@ static constexpr int32_t kAttrSamplingRatioIdx = 3;
 static constexpr int32_t kAttrAlignedIdx = 4;
 static constexpr int32_t kAttrClockwiseIdx = 5;
 
+template <typename Context>
+static const char* OpNameOf(Context* context)
+{
+    if (context == nullptr || context->GetNodeName() == nullptr) {
+        return "RoiAlignRotated";
+    }
+    return context->GetNodeName();
+}
+
+template <typename Context>
+static bool RequireNotNull(Context* context, const void* ptr, const char* what)
+{
+    if (ptr != nullptr) {
+        return true;
+    }
+    OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "%s is nullptr", what);
+    return false;
+}
+
+template <typename Context>
+static void ReportTilingFailure(Context* context, const std::string& reason)
+{
+    const char* opName = OpNameOf(context);
+    OP_LOGE_WITHOUT_REPORT(opName, "%s", reason.c_str());
+    const std::vector<const char*> keys = {"opName", "reason"};
+    const std::vector<const char*> values = {opName, reason.c_str()};
+    REPORT_PREDEFINED_ERR_MSG("EZ1008", keys, values);
+}
+
 namespace {
 // ========== 解析/校验/切分状态（函数间传递）==========
 struct Arch35TilingState {
@@ -74,13 +104,21 @@ struct Arch35TilingState {
 ge::graphStatus ValidateFormat(gert::TilingContext* context)
 {
     auto xDesc = context->GetInputDesc(kXIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xDesc);
+    if (!RequireNotNull(context, xDesc, "xDesc")) {
+        return ge::GRAPH_FAILED;
+    }
     const ge::Format xFormat = xDesc->GetFormat().GetStorageFormat();
-    OP_CHECK_IF(
-        xFormat != ge::FORMAT_NCHW && xFormat != ge::FORMAT_ND,
-        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON(context->GetNodeName(), "x", Ops::Base::ToString(xFormat).c_str(),
-                                                "only supports NCHW and ND (interpreted as NCHW layout) on ascend950"),
-        return ge::GRAPH_FAILED);
+    if (xFormat != ge::FORMAT_NCHW && xFormat != ge::FORMAT_ND) {
+        const char* opName = OpNameOf(context);
+        const std::string incorrectFormat = Ops::Base::ToString(xFormat);
+        const char* reason = "only supports NCHW and ND (interpreted as NCHW layout) on ascend950";
+        OP_LOGE_WITHOUT_REPORT(opName, "Parameter %s of %s has incorrect format %s. Reason: %s.", "x", opName,
+                               incorrectFormat.c_str(), reason);
+        const std::vector<const char*> keys = {"param_name", "op_name", "incorrect_format", "reason"};
+        const std::vector<const char*> values = {"x", opName, incorrectFormat.c_str(), reason};
+        REPORT_PREDEFINED_ERR_MSG("EZ0035", keys, values);
+        return ge::GRAPH_FAILED;
+    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -88,13 +126,17 @@ ge::graphStatus ValidateFormat(gert::TilingContext* context)
 ge::graphStatus ValidateDtype(gert::TilingContext* context)
 {
     auto xDesc = context->GetInputDesc(kXIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xDesc);
+    if (!RequireNotNull(context, xDesc, "xDesc")) {
+        return ge::GRAPH_FAILED;
+    }
     OP_CHECK_IF(xDesc->GetDataType() != ge::DT_FLOAT,
                 OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "x",
                                           Ops::Base::ToString(xDesc->GetDataType()).c_str(), "float32"),
                 return ge::GRAPH_FAILED);
     auto roisDesc = context->GetInputDesc(kRoisIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, roisDesc);
+    if (!RequireNotNull(context, roisDesc, "roisDesc")) {
+        return ge::GRAPH_FAILED;
+    }
     OP_CHECK_IF(roisDesc->GetDataType() != ge::DT_FLOAT,
                 OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "rois",
                                           Ops::Base::ToString(roisDesc->GetDataType()).c_str(), "float32"),
@@ -106,7 +148,9 @@ ge::graphStatus ValidateDtype(gert::TilingContext* context)
 ge::graphStatus ValidateShape(gert::TilingContext* context, Arch35TilingState& st)
 {
     auto xInput = context->GetInputShape(kXIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xInput);
+    if (!RequireNotNull(context, xInput, "xInput")) {
+        return ge::GRAPH_FAILED;
+    }
     auto xShape = xInput->GetStorageShape();
     // x rank == 4
     const std::string xDimNum = std::to_string(xShape.GetDimNum()) + "D";
@@ -114,7 +158,9 @@ ge::graphStatus ValidateShape(gert::TilingContext* context, Arch35TilingState& s
                 OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "x", xDimNum.c_str(), "4D"),
                 return ge::GRAPH_FAILED);
     auto roisInput = context->GetInputShape(kRoisIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, roisInput);
+    if (!RequireNotNull(context, roisInput, "roisInput")) {
+        return ge::GRAPH_FAILED;
+    }
     auto roisShape = roisInput->GetStorageShape();
     // rois rank == 2
     const std::string roisDimNum = std::to_string(roisShape.GetDimNum()) + "D";
@@ -122,17 +168,17 @@ ge::graphStatus ValidateShape(gert::TilingContext* context, Arch35TilingState& s
                 OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "rois", roisDimNum.c_str(), "2D"),
                 return ge::GRAPH_FAILED);
     // rois.dim(1) == 6（旋转 ROI 固定 6 字段行主序）
+    const std::string roisLast = "[" + std::to_string(roisShape.GetDim(1)) + "]";
     OP_CHECK_IF(roisShape.GetDim(1) != 6,
-                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "rois",
-                                                      std::to_string(roisShape.GetDim(1)).c_str(),
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "rois", roisLast.c_str(),
                                                       "rois dim[1] must be 6 (rotated ROI, row-major)"),
                 return ge::GRAPH_FAILED);
     // C/H/W 写入 tiling data 的 int32 字段，超界拒绝（防 FillTilingData 截断）
     const std::string xShapeMsg = Ops::Base::ToString(xShape);
     OP_CHECK_IF(
         xShape.GetDim(1) > MAX_INT32_VALUE || xShape.GetDim(2) > MAX_INT32_VALUE || xShape.GetDim(3) > MAX_INT32_VALUE,
-        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(context->GetNodeName(), "x", xShapeMsg.c_str(),
-                                               "C/H/W must not exceed INT32_MAX"),
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "x", xShapeMsg.c_str(),
+                                              "C/H/W must not exceed INT32_MAX"),
         return ge::GRAPH_FAILED);
     st.roisNum = roisShape.GetDim(0);
     st.channels = xShape.GetDim(1);
@@ -163,15 +209,23 @@ ge::graphStatus ValidateAttr(gert::TilingContext* context, const Arch35TilingSta
 ge::graphStatus GetAttrs(gert::TilingContext* context, Arch35TilingState& st)
 {
     auto attrs = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+    if (!RequireNotNull(context, attrs, "attrs")) {
+        return ge::GRAPH_FAILED;
+    }
     const auto* pooledHPtr = attrs->GetAttrPointer<int64_t>(kAttrPooledHIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, pooledHPtr);
+    if (!RequireNotNull(context, pooledHPtr, "pooledHPtr")) {
+        return ge::GRAPH_FAILED;
+    }
     st.pooledH = *pooledHPtr;
     const auto* pooledWPtr = attrs->GetAttrPointer<int64_t>(kAttrPooledWIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, pooledWPtr);
+    if (!RequireNotNull(context, pooledWPtr, "pooledWPtr")) {
+        return ge::GRAPH_FAILED;
+    }
     st.pooledW = *pooledWPtr;
     const auto* spatialScalePtr = attrs->GetAttrPointer<float>(kAttrSpatialScaleIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, spatialScalePtr);
+    if (!RequireNotNull(context, spatialScalePtr, "spatialScalePtr")) {
+        return ge::GRAPH_FAILED;
+    }
     st.spatialScale = *spatialScalePtr;
     // sampling_ratio/aligned/clockwise 为可选属性，带默认值（0/true/false）
     const auto* samplingRatioPtr = attrs->GetAttrPointer<int64_t>(kAttrSamplingRatioIdx);
@@ -235,35 +289,51 @@ void DumpTilingData(gert::TilingContext* context, const RoiAlignRotatedArch35Til
 ge::graphStatus Tiling4RoiAlignRotatedRegbase(gert::TilingContext* context)
 {
     // 0. format 安全闸门（950 仅 NCHW/ND，防静默语义错乱）
-    OP_CHECK_IF(ValidateFormat(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateFormat failed"),
-                return ge::GRAPH_FAILED);
+    if (ValidateFormat(context) != ge::GRAPH_SUCCESS) {
+        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "ValidateFormat failed; propagate the first error");
+        return ge::GRAPH_FAILED;
+    }
     // 1. 属性读取 + 结构校验
     Arch35TilingState st;
-    OP_CHECK_IF(GetAttrs(context, st) != ge::GRAPH_SUCCESS, OP_LOGE(context, "GetAttrs error"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(ValidateDtype(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateDtype failed"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(ValidateShape(context, st) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateShape failed"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(ValidateAttr(context, st) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateAttr failed"),
-                return ge::GRAPH_FAILED);
+    if (GetAttrs(context, st) != ge::GRAPH_SUCCESS) {
+        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "GetAttrs failed; propagate the first error");
+        return ge::GRAPH_FAILED;
+    }
+    if (ValidateDtype(context) != ge::GRAPH_SUCCESS) {
+        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "ValidateDtype failed; propagate the first error");
+        return ge::GRAPH_FAILED;
+    }
+    if (ValidateShape(context, st) != ge::GRAPH_SUCCESS) {
+        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "ValidateShape failed; propagate the first error");
+        return ge::GRAPH_FAILED;
+    }
+    if (ValidateAttr(context, st) != ge::GRAPH_SUCCESS) {
+        OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "ValidateAttr failed; propagate the first error");
+        return ge::GRAPH_FAILED;
+    }
 
     // 2. 平台信息（读 TilingParse 编译期预计算缓存：核数 / UB，免运行期重复查询）
     const RoiAlignRotatedArch35CompileInfo* compileInfo = context->GetCompileInfo<RoiAlignRotatedArch35CompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
-    OP_CHECK_IF(
-        compileInfo->coreNum == 0 || compileInfo->ubSize == 0,
-        OP_LOGE(context, "invalid compile info: coreNum=%lu, ubSize=%lu", compileInfo->coreNum, compileInfo->ubSize),
-        return ge::GRAPH_FAILED);
+    if (!RequireNotNull(context, compileInfo, "compileInfo")) {
+        return ge::GRAPH_FAILED;
+    }
+    if (compileInfo->coreNum == 0 || compileInfo->ubSize == 0) {
+        ReportTilingFailure(context, "invalid compile info: coreNum=" + std::to_string(compileInfo->coreNum) +
+                                         ", ubSize=" + std::to_string(compileInfo->ubSize));
+        return ge::GRAPH_FAILED;
+    }
     st.coreNum = static_cast<int64_t>(compileInfo->coreNum);
     st.ubSize = compileInfo->ubSize;
 
     // 3. 切分 + tiling data 填充
     RoiAlignRotatedArch35TilingData* tiling = context->GetTilingData<RoiAlignRotatedArch35TilingData>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
-    OP_CHECK_IF(
-        memset_s(tiling, sizeof(RoiAlignRotatedArch35TilingData), 0, sizeof(RoiAlignRotatedArch35TilingData)) != EOK,
-        OP_LOGE(context, "set tiling data error"), return ge::GRAPH_FAILED);
+    if (!RequireNotNull(context, tiling, "tiling")) {
+        return ge::GRAPH_FAILED;
+    }
+    if (memset_s(tiling, sizeof(RoiAlignRotatedArch35TilingData), 0, sizeof(RoiAlignRotatedArch35TilingData)) != EOK) {
+        ReportTilingFailure(context, "memset_s tiling data failed");
+        return ge::GRAPH_FAILED;
+    }
     ComputeTiling(st, tiling);
     FillTilingData(tiling, st);
     DumpTilingData(context, tiling);
@@ -274,16 +344,22 @@ ge::graphStatus Tiling4RoiAlignRotatedRegbase(gert::TilingContext* context)
     // 5. workspace：用户段 0 + 系统段（无核间交换，系统段必须无条件分配；系统段大小读编译期缓存）
     uint64_t sysWorkspaceSize = compileInfo->libApiWorkSpaceSize;
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
+    if (!RequireNotNull(context, currentWorkspace, "currentWorkspace")) {
+        return ge::GRAPH_FAILED;
+    }
     currentWorkspace[0] = static_cast<size_t>(sysWorkspaceSize);
 
     // 6. SetBlockDim / SetLocalMemorySize（DCache 32KB 预留，无静态 UB）
     context->SetBlockDim(static_cast<uint32_t>(st.needCoreNum));
-    OP_CHECK_IF(st.ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE,
-                OP_LOGE(context, "ubSize %lu <= DCACHE_SIZE + STATIC_UB_ESTIMATE", st.ubSize), return ge::GRAPH_FAILED);
+    if (st.ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE) {
+        ReportTilingFailure(context, "ubSize is not large enough for DCACHE_SIZE");
+        return ge::GRAPH_FAILED;
+    }
     auto res = context->SetLocalMemorySize(static_cast<uint32_t>(st.ubSize - DCACHE_SIZE - STATIC_UB_ESTIMATE));
-    OP_CHECK_IF(res != ge::GRAPH_SUCCESS, OP_LOGE(context, "SetLocalMemorySize failed, ubSize=%lu", st.ubSize),
-                return ge::GRAPH_FAILED);
+    if (res != ge::GRAPH_SUCCESS) {
+        ReportTilingFailure(context, "SetLocalMemorySize failed, ubSize=" + std::to_string(st.ubSize));
+        return ge::GRAPH_FAILED;
+    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -291,17 +367,22 @@ ge::graphStatus Tiling4RoiAlignRotatedRegbase(gert::TilingContext* context)
 static ge::graphStatus TilingParseForRoiAlignRotatedArch35(gert::TilingParseContext* context)
 {
     fe::PlatFormInfos* platform = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platform);
+    if (!RequireNotNull(context, platform, "platform")) {
+        return ge::GRAPH_FAILED;
+    }
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platform);
     auto compileInfo = context->GetCompiledInfo<RoiAlignRotatedArch35CompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    if (!RequireNotNull(context, compileInfo, "compileInfo")) {
+        return ge::GRAPH_FAILED;
+    }
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAiv();
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, compileInfo->ubSize);
     compileInfo->libApiWorkSpaceSize = ascendcPlatform.GetLibApiWorkSpaceSize();
-    OP_CHECK_IF(compileInfo->coreNum == 0 || compileInfo->ubSize == 0 || compileInfo->libApiWorkSpaceSize == 0,
-                OP_LOGE(context, "invalid platform info: coreNum=%lu, ubSize=%lu, libApiWorkSpaceSize=%lu",
-                        compileInfo->coreNum, compileInfo->ubSize, compileInfo->libApiWorkSpaceSize),
-                return ge::GRAPH_FAILED);
+    if (compileInfo->coreNum == 0 || compileInfo->ubSize == 0 || compileInfo->libApiWorkSpaceSize == 0) {
+        ReportTilingFailure(context, "invalid platform info: coreNum=" + std::to_string(compileInfo->coreNum) +
+                                         ", ubSize=" + std::to_string(compileInfo->ubSize));
+        return ge::GRAPH_FAILED;
+    }
     return ge::GRAPH_SUCCESS;
 }
 

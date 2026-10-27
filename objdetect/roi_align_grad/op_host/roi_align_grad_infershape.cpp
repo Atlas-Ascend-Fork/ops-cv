@@ -27,36 +27,64 @@ namespace ops {
 static constexpr int64_t IDX_0 = 0;
 static constexpr int32_t IDX_ATTR_XDIFF_SHAPE = 0;
 
+static const char* OpNameOf(gert::InferShapeContext* context)
+{
+    if (context == nullptr || context->GetNodeName() == nullptr) {
+        return "ROIAlignGrad";
+    }
+    return context->GetNodeName();
+}
+
+static bool RequireNotNull(gert::InferShapeContext* context, const void* ptr, const char* what)
+{
+    if (ptr != nullptr) {
+        return true;
+    }
+    OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "%s is nullptr", what);
+    return false;
+}
+
 static ge::graphStatus InferShapeROIAlignGrad(gert::InferShapeContext* context)
 {
     OP_LOGD(context->GetNodeName(), "Begin InferShapeROIAlignGrad");
 
     auto attrs = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+    if (!RequireNotNull(context, attrs, "attrs")) {
+        return GRAPH_FAILED;
+    }
 
     const auto* xdiffShapeVec = attrs->GetListInt(IDX_ATTR_XDIFF_SHAPE);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xdiffShapeVec);
+    if (!RequireNotNull(context, xdiffShapeVec, "xdiffShapeVec")) {
+        return GRAPH_FAILED;
+    }
 
     size_t shapeSize = xdiffShapeVec->GetSize();
-    OP_CHECK_IF(shapeSize != 4,
-                OP_LOGE_FOR_INVALID_LISTSIZE(context->GetNodeName(), "xdiff_shape", std::to_string(shapeSize), "4"),
-                return GRAPH_FAILED);
+    if (shapeSize != 4) {
+        const std::string actual = std::to_string(shapeSize);
+        OP_LOGE_FOR_INVALID_LISTSIZE(OpNameOf(context), "xdiff_shape", actual.c_str(), "4");
+        return GRAPH_FAILED;
+    }
 
     const int64_t* shapeData = xdiffShapeVec->GetData();
-    OP_CHECK_NULL_WITH_CONTEXT(context, shapeData);
+    if (!RequireNotNull(context, shapeData, "shapeData")) {
+        return GRAPH_FAILED;
+    }
     int64_t B = shapeData[0];
     int64_t C = shapeData[1];
     int64_t H = shapeData[2];
     int64_t W = shapeData[3];
-    OP_CHECK_IF(B <= 0 || C <= 0 || H <= 0 || W <= 0,
-                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
-                    context->GetNodeName(), "xdiff_shape",
-                    std::to_string(B) + ", " + std::to_string(C) + ", " + std::to_string(H) + ", " + std::to_string(W),
-                    "xdiff_shape elements must be positive"),
-                return GRAPH_FAILED);
+    if (B <= 0 || C <= 0 || H <= 0 || W <= 0) {
+        const std::string actual = std::to_string(B) + ", " + std::to_string(C) + ", " + std::to_string(H) + ", " +
+                                   std::to_string(W);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "xdiff_shape", actual.c_str(),
+                                              "xdiff_shape elements must be positive");
+        return GRAPH_FAILED;
+    }
 
     gert::Shape* outShape = context->GetOutputShape(IDX_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context, outShape);
+    if (!RequireNotNull(context, outShape, "outShape")) {
+        return GRAPH_FAILED;
+    }
     outShape->SetDimNum(4);
     outShape->SetDim(0, B);
     outShape->SetDim(1, C);

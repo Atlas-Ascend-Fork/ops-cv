@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -9,6 +9,7 @@
  */
 #include <gtest/gtest.h>
 #include <iostream>
+#include <string>
 #include "infershape_context_faker.h"
 #include "infershape_case_executor.h"
 #include "base/registry/op_impl_space_registry_v2.h"
@@ -81,6 +82,19 @@ TEST_F(IouV2, IouV2_infershape_rejects_invalid_rank)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
 }
 
+TEST_F(IouV2, IouV2_infershape_rejects_aligned_count_mismatch)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IouV2", {{{{4, 8}, {4, 8}}, ge::DT_FLOAT, ge::FORMAT_ND}, {{{4, 4}, {4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {gert::InfershapeContextPara::OpAttr("mode", Ops::Cv::AnyValue::CreateFrom<std::string>("iou")),
+         gert::InfershapeContextPara::OpAttr("eps", Ops::Cv::AnyValue::CreateFrom<float>(1.0)),
+         gert::InfershapeContextPara::OpAttr("aligned", Ops::Cv::AnyValue::CreateFrom<bool>(true))});
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
 TEST_F(IouV2, IouV2_infershape_unknown_rank_is_propagated)
 {
     gert::InfershapeContextPara infershapeContextPara(
@@ -123,7 +137,6 @@ TEST_F(IouV2, IouV2_inferdatatype_rejects_mixed_input_dtype)
     auto holder = builder.Build();
     auto* context = holder.GetContext();
     ASSERT_NE(context, nullptr);
-
     EXPECT_EQ(opImpl->infer_datatype(context), ge::GRAPH_FAILED);
 }
 

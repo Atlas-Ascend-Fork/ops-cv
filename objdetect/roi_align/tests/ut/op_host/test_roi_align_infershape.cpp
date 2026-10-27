@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 #include <iostream>
+#include <string>
 #include "infershape_context_faker.h"
 #include "infershape_case_executor.h"
 
@@ -153,4 +154,70 @@ TEST_F(ROIAlignInfershape, roi_align_infershape_float16_basic)
         {3, 8, 2, 2},
     };
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+TEST_F(ROIAlignInfershape, roi_align_infershape_rejects_features_rank)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ROIAlign",
+        {
+            {{{1, 4, 8}, {1, 4, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2, 5}, {2, 5}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr("spatial_scale", Ops::Cv::AnyValue::CreateFrom<float>(1.0f)),
+            gert::InfershapeContextPara::OpAttr("pooled_height", Ops::Cv::AnyValue::CreateFrom<int64_t>(4)),
+            gert::InfershapeContextPara::OpAttr("pooled_width", Ops::Cv::AnyValue::CreateFrom<int64_t>(4)),
+            gert::InfershapeContextPara::OpAttr("sample_num", Ops::Cv::AnyValue::CreateFrom<int64_t>(2)),
+            gert::InfershapeContextPara::OpAttr("roi_end_mode", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
+            gert::InfershapeContextPara::OpAttr("pool_mode", Ops::Cv::AnyValue::CreateFrom<std::string>("avg")),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(ROIAlignInfershape, roi_align_infershape_rejects_rois_coord)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ROIAlign",
+        {
+            {{{1, 4, 8, 8}, {1, 4, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2, 4}, {2, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr("spatial_scale", Ops::Cv::AnyValue::CreateFrom<float>(1.0f)),
+            gert::InfershapeContextPara::OpAttr("pooled_height", Ops::Cv::AnyValue::CreateFrom<int64_t>(4)),
+            gert::InfershapeContextPara::OpAttr("pooled_width", Ops::Cv::AnyValue::CreateFrom<int64_t>(4)),
+            gert::InfershapeContextPara::OpAttr("sample_num", Ops::Cv::AnyValue::CreateFrom<int64_t>(2)),
+            gert::InfershapeContextPara::OpAttr("roi_end_mode", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
+            gert::InfershapeContextPara::OpAttr("pool_mode", Ops::Cv::AnyValue::CreateFrom<std::string>("avg")),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(ROIAlignInfershape, roi_align_infershape_rejects_pooled_height)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ROIAlign",
+        {
+            {{{1, 4, 8, 8}, {1, 4, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2, 5}, {2, 5}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr("spatial_scale", Ops::Cv::AnyValue::CreateFrom<float>(1.0f)),
+            gert::InfershapeContextPara::OpAttr("pooled_height", Ops::Cv::AnyValue::CreateFrom<int64_t>(0)),
+            gert::InfershapeContextPara::OpAttr("pooled_width", Ops::Cv::AnyValue::CreateFrom<int64_t>(4)),
+            gert::InfershapeContextPara::OpAttr("sample_num", Ops::Cv::AnyValue::CreateFrom<int64_t>(2)),
+            gert::InfershapeContextPara::OpAttr("roi_end_mode", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
+            gert::InfershapeContextPara::OpAttr("pool_mode", Ops::Cv::AnyValue::CreateFrom<std::string>("avg")),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
 }

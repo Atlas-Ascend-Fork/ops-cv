@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -35,7 +35,8 @@ const aclTensor* IouV2(const aclTensor* bBoxes, const aclTensor* gtBoxes, const 
 
     auto out = executor->AllocTensor(outShape, bBoxes->GetDataType(), op::Format::FORMAT_ND);
     if (out == nullptr) {
-        OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "IouV2 alloc out tensor failed");
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                               "IouV2 AllocTensor returned nullptr; propagate allocator first error");
         return nullptr;
     }
 
