@@ -26,10 +26,14 @@ namespace ge {
 * @brief Extract "patches" from "images" and stacks them in the "depth"
 * dimension of the output . \n
 * @par Inputs:
-* x: A Tensor with shape [batch, depth, in_rows, in_cols] or [batch, depth1, in_rows, in_cols, depth0].
+* x: For Ascend950 and later products, a 4D Tensor with shape
+* [batch, in_rows, in_cols, depth] (NHWC) or [batch, depth, in_rows, in_cols] (NCHW).
+* For Atlas A2/A3 and other legacy products, the supported shape is
+* [batch, depth, in_rows, in_cols] or [batch, depth1, in_rows, in_cols, depth0].
 * Support dtype: [float16, float32, bfloat16, int8, uint8]
-* Support format: When x dtype is in [float16, float32, bfloat16], format support: [NCHW, NC1HWC0].
-* When x dtype is in [int8, uint8], format support: [NC1HWC0].
+* Support format: For Ascend950 and later products, [NHWC, NCHW]. For Atlas A2/A3
+* and other legacy products, float16/float32/bfloat16 support [NCHW, NC1HWC0],
+* while int8/uint8 support [NC1HWC0].
 * @par Attributes:
 * @li ksizes: A required list or tuple. The size of the sliding window for each
 * dimension of images. Spatial values must be at least 1, and batch/channel
@@ -50,7 +54,8 @@ namespace ge {
 * ksize_cols * depth] containing image patches with size ksize_rows x ksize_cols
 * x depth vectorized in the "depth" dimension. Note "out_rows" and "out_cols"
 * are the dimensions of the output patches . Support dtype: [float16, float32, bfloat16, int8, uint8],
-* Support format: [NHWC] \n
+* Support format: For Ascend950 and later products, the same format as x (NHWC
+* or NCHW). For Atlas A2/A3 and other legacy products, [NHWC]. \n
 
 * @attention Constraints:
 * "ksizes", "strides" and "rates" are lists of integers . \n
