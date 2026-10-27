@@ -17,6 +17,7 @@
 
 #include <gtest/gtest.h>
 #include <iostream>
+#include <string>
 #include <vector>
 #include "any_value.h"
 #include "infershape_context_faker.h"

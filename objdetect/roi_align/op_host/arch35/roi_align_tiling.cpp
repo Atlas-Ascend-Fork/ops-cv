@@ -27,10 +27,30 @@
 #include "../../op_kernel/arch35/roi_align_tiling_key.h"
 #include <cstring>
 #include <string>
+#include <vector>
+
+#define ROI_ALIGN_CHECK_NULL(context, ptr)                                                                 \
+    do {                                                                                                   \
+        if ((ptr) == nullptr) {                                                                            \
+            const char* roiAlignNodeName = ((context) == nullptr || (context)->GetNodeName() == nullptr) ? \
+                                               "ROIAlign" :                                                \
+                                               (context)->GetNodeName();                                   \
+            OP_LOGE_WITHOUT_REPORT(roiAlignNodeName, "%s is nullptr", #ptr);                               \
+            return ge::GRAPH_FAILED;                                                                       \
+        }                                                                                                  \
+    } while (0)
 
 namespace optiling {
 
 using namespace Ops::Cv::OpTiling;
+
+static void ReportTilingFailure(const std::string& detail)
+{
+    OP_LOGE_WITHOUT_REPORT("ROIAlign", "%s", detail.c_str());
+    const std::vector<const char*> keys = {"opName", "reason"};
+    const std::vector<const char*> values = {"ROIAlign", detail.c_str()};
+    REPORT_PREDEFINED_ERR_MSG("EZ1008", keys, values);
+}
 
 constexpr int64_t PER_CORE_MIN = 1024;
 constexpr int64_t WARP_SIZE = 32;
@@ -94,12 +114,18 @@ struct ROIAlignCompileInfo {};
 static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& ubSize, int64_t& coreNum)
 {
     fe::PlatFormInfos* platformInfoPtr = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfoPtr);
+    ROI_ALIGN_CHECK_NULL(context, platformInfoPtr);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfoPtr);
     coreNum = ascendcPlatform.GetCoreNumAiv();
-    OP_CHECK_IF(coreNum == 0, OP_LOGE(context, "coreNum is 0"), return ge::GRAPH_FAILED);
+    if (coreNum == 0) {
+        ReportTilingFailure("coreNum is 0");
+        return ge::GRAPH_FAILED;
+    }
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSize);
-    OP_CHECK_IF(ubSize == 0, OP_LOGE(context, "ubSize is 0"), return ge::GRAPH_FAILED);
+    if (ubSize == 0) {
+        ReportTilingFailure("ubSize is 0");
+        return ge::GRAPH_FAILED;
+    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -107,14 +133,16 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
 {
     uint64_t ubSize;
     int64_t maxCoreNum;
-    OP_CHECK_IF(GetPlatformInfo(context, ubSize, maxCoreNum) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "GetPlatformInfo error"), return ge::GRAPH_FAILED);
+    if (GetPlatformInfo(context, ubSize, maxCoreNum) != ge::GRAPH_SUCCESS) {
+        OP_LOGE_WITHOUT_REPORT("ROIAlign", "GetPlatformInfo failed; propagate the first error");
+        return ge::GRAPH_FAILED;
+    }
 
     // Get input shapes
     auto featuresInput = context->GetInputShape(IDX_FEATURES);
-    OP_CHECK_NULL_WITH_CONTEXT(context, featuresInput);
+    ROI_ALIGN_CHECK_NULL(context, featuresInput);
     auto roisInput = context->GetInputShape(IDX_ROIS);
-    OP_CHECK_NULL_WITH_CONTEXT(context, roisInput);
+    ROI_ALIGN_CHECK_NULL(context, roisInput);
     auto featuresShape = EnsureNotScalar(featuresInput->GetStorageShape());
     auto roisShape = EnsureNotScalar(roisInput->GetStorageShape());
 
@@ -135,8 +163,8 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
     // README约束#4: features 和 rois 必须使用相同 dtype (float16 或 float32)
     auto featuresTensor = context->GetInputTensor(IDX_FEATURES);
     auto roisTensor = context->GetInputTensor(IDX_ROIS);
-    OP_CHECK_NULL_WITH_CONTEXT(context, featuresTensor);
-    OP_CHECK_NULL_WITH_CONTEXT(context, roisTensor);
+    ROI_ALIGN_CHECK_NULL(context, featuresTensor);
+    ROI_ALIGN_CHECK_NULL(context, roisTensor);
     if (featuresTensor->GetDataType() != roisTensor->GetDataType()) {
         std::string dtypeMsg = Ops::Base::ToString(featuresTensor->GetDataType()) + " and " +
                                Ops::Base::ToString(roisTensor->GetDataType());
@@ -150,7 +178,7 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
         return ge::GRAPH_FAILED;
     }
     auto outputShape = context->GetOutputShape(IDX_OUTPUT);
-    OP_CHECK_NULL_WITH_CONTEXT(context, outputShape);
+    ROI_ALIGN_CHECK_NULL(context, outputShape);
 
     int64_t cDim = featuresShape.GetDim(FEATURES_DIM_C);
     int64_t hDim = featuresShape.GetDim(FEATURES_DIM_H);
@@ -162,7 +190,7 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
     int64_t K = kDim;
     // Get attributes by index (matching REG_OP attr order):
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+    ROI_ALIGN_CHECK_NULL(context, attrs);
     const float* spatialScalePtr = attrs->GetFloat(ATTR_IDX_SPATIAL_SCALE);
     const int64_t* pooledHPtr = attrs->GetInt(ATTR_IDX_POOLED_HEIGHT);
     const int64_t* pooledWPtr = attrs->GetInt(ATTR_IDX_POOLED_WIDTH);
@@ -215,8 +243,8 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
         return ge::GRAPH_FAILED);
     // README约束#6: spatial_scale 必须 > 0
     OP_CHECK_IF(spatialScale <= 0.0f,
-                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "spatial_scale",
-                                                      std::to_string(spatialScale).c_str(), "must be > 0"),
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "spatial_scale", std::to_string(spatialScale).c_str(),
+                                          "must be > 0"),
                 return ge::GRAPH_FAILED);
 
     // Check optional input rois_n
@@ -230,17 +258,17 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
                                                      std::to_string(roisNStorageShape.GetDimNum()).c_str(), "1D [K]"),
                         return ge::GRAPH_FAILED);
             auto roisNTensor = context->GetInputTensor(IDX_ROIS_N);
-            OP_CHECK_NULL_WITH_CONTEXT(context, roisNTensor);
+            ROI_ALIGN_CHECK_NULL(context, roisNTensor);
             OP_CHECK_IF(roisNTensor->GetDataType() != ge::DT_INT32,
                         OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "rois_n",
                                                   Ops::Base::ToString(roisNTensor->GetDataType()).c_str(), "INT32"),
                         return ge::GRAPH_FAILED);
-            OP_CHECK_IF(roisNStorageShape.GetDim(ROIS_DIM_ROIS_N_COUNT) != K,
-                        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
-                            context->GetNodeName(), "rois_n",
-                            std::to_string(roisNStorageShape.GetDim(ROIS_DIM_ROIS_N_COUNT)).c_str(),
-                            "rois_n count must equal rois K"),
-                        return ge::GRAPH_FAILED);
+            OP_CHECK_IF(
+                roisNStorageShape.GetDim(ROIS_DIM_ROIS_N_COUNT) != K,
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "rois_n",
+                                          std::to_string(roisNStorageShape.GetDim(ROIS_DIM_ROIS_N_COUNT)).c_str(),
+                                          "rois_n count must equal rois K"),
+                return ge::GRAPH_FAILED);
             hasRoisN = ROIS_N_PRESENT;
         }
     }
@@ -260,9 +288,11 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
 
     // Fill tiling data
     ROIAlignTilingData* tiling = context->GetTilingData<ROIAlignTilingData>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
-    OP_CHECK_IF(memset_s(tiling, sizeof(ROIAlignTilingData), 0, sizeof(ROIAlignTilingData)) != EOK,
-                OP_LOGE(context, "memset_s tiling data error"), return ge::GRAPH_FAILED);
+    ROI_ALIGN_CHECK_NULL(context, tiling);
+    if (memset_s(tiling, sizeof(ROIAlignTilingData), 0, sizeof(ROIAlignTilingData)) != EOK) {
+        ReportTilingFailure("memset_s tiling data failed");
+        return ge::GRAPH_FAILED;
+    }
 
     tiling->totalElements = totalElements;
     tiling->needCoreNum = static_cast<int32_t>(needCoreNum);
@@ -293,14 +323,20 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
 
     // Workspace (mandatory GetWorkspaceSizes(1) for system workspace)
     size_t* ws = context->GetWorkspaceSizes(SYS_WORKSPACE_COUNT);
-    OP_CHECK_NULL_WITH_CONTEXT(context, ws);
+    ROI_ALIGN_CHECK_NULL(context, ws);
     ws[0] = 0;
 
     // Set local memory size
-    OP_CHECK_IF((ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE),
-                OP_LOGE(context, "ubSize %lu <= DCACHE_SIZE + STATIC_UB_ESTIMATE", ubSize), return ge::GRAPH_FAILED);
+    if (ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE) {
+        ReportTilingFailure("ubSize " + std::to_string(ubSize) +
+                            " is not greater than DCACHE_SIZE + STATIC_UB_ESTIMATE");
+        return ge::GRAPH_FAILED;
+    }
     auto res = context->SetLocalMemorySize(static_cast<uint32_t>(ubSize - DCACHE_SIZE - STATIC_UB_ESTIMATE));
-    OP_CHECK_IF((res != ge::GRAPH_SUCCESS), OP_LOGE(context, "SetLocalMemorySize failed"), return ge::GRAPH_FAILED);
+    if (res != ge::GRAPH_SUCCESS) {
+        ReportTilingFailure("SetLocalMemorySize failed, rc=" + std::to_string(static_cast<int32_t>(res)));
+        return ge::GRAPH_FAILED;
+    }
 
     return ge::GRAPH_SUCCESS;
 }

@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -162,6 +162,8 @@ set(OPAPI_INCLUDE
   ${OPS_CV_DIR}/common/stub/op_api
   ${TOP_DIR}/output/${PRODUCT}/aclnnop_resource
   ${ASCEND_DIR}/${SYSTEM_PREFIX}/pkg_inc/profiling  # include profiling/prof_common.h
+  ${ASCEND_DIR}/${SYSTEM_PREFIX}/include
+  ${TOP_DIR}/runtime/include/dfx
 )
 
 set(OP_TILING_INCLUDE

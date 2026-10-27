@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 #include "log/log.h"
 #include "util/shape_util.h"
 #include "platform/platform_info.h"
+#include <string>
+#include <vector>
 
 using namespace ge;
 using namespace std;
@@ -68,9 +70,16 @@ static ge::graphStatus InferShape(gert::InferShapeContext* context)
     // ascend950（arch35）regbase 芯片分发到 NCHW 推导；
     fe::PlatformInfo platformInfo;
     fe::OptionalInfo optionalInfo;
-    OP_CHECK_IF((fe::PlatformInfoManager::Instance().GetPlatformInfoWithOutSocVersion(platformInfo, optionalInfo) !=
-                 ge::GRAPH_SUCCESS),
-                OP_LOGE(context, "Cannot get platform info!"), return ge::GRAPH_FAILED);
+    if (fe::PlatformInfoManager::Instance().GetPlatformInfoWithOutSocVersion(platformInfo, optionalInfo) !=
+        ge::GRAPH_SUCCESS) {
+        const char* opName = context->GetNodeName() == nullptr ? "RoiAlignRotated" : context->GetNodeName();
+        const char* reason = "Cannot get platform info";
+        OP_LOGE_WITHOUT_REPORT(opName, "%s", reason);
+        const std::vector<const char*> keys = {"opName", "reason"};
+        const std::vector<const char*> values = {opName, reason};
+        REPORT_PREDEFINED_ERR_MSG("EZ1014", keys, values);
+        return ge::GRAPH_FAILED;
+    }
     if (platformInfo.str_info.short_soc_version == "Ascend950") {
         return InferShapeRoiAlignRotatedRegbase(context);
     }

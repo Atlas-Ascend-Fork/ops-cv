@@ -52,7 +52,7 @@ static Status OpRoiAlignUpdateInfo(const ge::Operator& op_src, ge::Operator& op_
                         } else {
                             std::string spatial_scale_str = attr["f"];
                             if (StrToFloat(spatial_scale_str, spatial_scale_value) != SUCCESS) {
-                                OP_LOGE(GetOpName(op_dest).c_str(), "parse spatial_scale failed.");
+                                OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "parse spatial_scale failed.");
                                 return FAILED;
                             }
                         }
@@ -61,10 +61,10 @@ static Status OpRoiAlignUpdateInfo(const ge::Operator& op_src, ge::Operator& op_
             }
         }
     } catch (const nlohmann::json::exception& e) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
         return FAILED;
     } catch (...) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
         return FAILED;
     }
 
@@ -113,10 +113,10 @@ static Status ParseParamsRoiAlignV16(const ge::Operator& op_src, ge::Operator& o
             }
         }
     } catch (const nlohmann::json::exception& e) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
         return FAILED;
     } catch (...) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
         return FAILED;
     }
 
@@ -129,7 +129,7 @@ static Status ParseOpToGraphRoiAlign(const ge::Operator& op, Graph& graph)
 {
     std::string ori_name;
     if (op.GetAttr("name", ori_name) != SUCCESS) {
-        OP_LOGE(GetOpName(op).c_str(), "get name from op failed.");
+        OP_LOGE_WITHOUT_REPORT(GetOpName(op).c_str(), "get name from op failed.");
         return FAILED;
     }
 

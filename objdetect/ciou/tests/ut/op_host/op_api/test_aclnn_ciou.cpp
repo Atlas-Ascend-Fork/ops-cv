@@ -311,6 +311,19 @@ TEST_F(l2_ciou_test, ascend910_95_case_shape_invalid_6)
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
 
+TEST_F(l2_ciou_test, ascend910b_case_soc_not_supported)
+{
+    auto bBoxes = TensorDesc({4, 1024}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto gtBoxes = TensorDesc({4, 1024}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto overlap = TensorDesc({1, 1024}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto atanSub = TensorDesc({1, 1024}, ACL_FLOAT, ACL_FORMAT_ND);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
+    auto ut = OP_API_UT(aclnnCIoU, INPUT(bBoxes, gtBoxes, false, false, "iou"), OUTPUT(overlap, atanSub));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_RUNTIME_ERROR);
+}
+
 // 非法attr场景0
 TEST_F(l2_ciou_test, ascend910_95_case_attr_invalid_0)
 {

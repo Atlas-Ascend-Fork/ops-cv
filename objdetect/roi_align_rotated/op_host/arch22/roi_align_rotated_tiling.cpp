@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -24,6 +24,25 @@ using namespace ge;
 using namespace std;
 
 namespace optiling {
+template <typename Context>
+static const char* OpNameOf(Context* context)
+{
+    if (context == nullptr || context->GetNodeName() == nullptr) {
+        return "RoiAlignRotated";
+    }
+    return context->GetNodeName();
+}
+
+template <typename Context>
+static bool RequireNotNull(Context* context, const void* ptr, const char* what)
+{
+    if (ptr != nullptr) {
+        return true;
+    }
+    OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "%s is nullptr", what);
+    return false;
+}
+
 const uint32_t INPUT_INDEX = 0; // 算子输入2个，输入Tensor序号分别为0和1
 const uint32_t ROIS_INDEX = 1;
 const uint32_t OUTPUT_INDEX = 0; // 算子输出1个，输出Tensor序号为0
@@ -61,7 +80,9 @@ static ge::graphStatus TilingPrepare4RoiAlignRotated(gert::TilingParseContext* c
     }
 
     auto compileInfo = context->GetCompiledInfo<RoiAlignRotatedCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    if (!RequireNotNull(context, compileInfo, "compileInfo")) {
+        return ge::GRAPH_FAILED;
+    }
     compileInfo->totalCoreNum = BLOCK_DIM;
     compileInfo->ubSizePlatForm = static_cast<int64_t>(ub_total_size);
 

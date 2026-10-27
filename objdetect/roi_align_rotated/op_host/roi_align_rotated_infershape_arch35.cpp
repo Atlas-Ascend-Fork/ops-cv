@@ -24,6 +24,25 @@
 #include "util/shape_util.h"
 
 namespace ops {
+template <typename Context>
+static const char* OpNameOf(Context* context)
+{
+    if (context == nullptr || context->GetNodeName() == nullptr) {
+        return "RoiAlignRotated";
+    }
+    return context->GetNodeName();
+}
+
+template <typename Context>
+static bool RequireNotNull(Context* context, const void* ptr, const char* what)
+{
+    if (ptr != nullptr) {
+        return true;
+    }
+    OP_LOGE_WITHOUT_REPORT(OpNameOf(context), "%s is nullptr", what);
+    return false;
+}
+
 namespace {
 // ========== input/output/attr index constants（REG_OP 原型顺序，与 infershape.cpp 一致）==========
 constexpr uint32_t INPUT_INDEX = 0;
@@ -48,13 +67,17 @@ ge::graphStatus InferShapeRoiAlignRotatedRegbase(gert::InferShapeContext* contex
 {
     // x/rois dtype 均为 float32
     const auto* xDesc = context->GetInputDesc(INPUT_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xDesc);
+    if (!RequireNotNull(context, xDesc, "xDesc")) {
+        return ge::GRAPH_FAILED;
+    }
     OP_CHECK_IF(xDesc->GetDataType() != ge::DT_FLOAT,
                 OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "x",
                                           Ops::Base::ToString(xDesc->GetDataType()).c_str(), "float32"),
                 return ge::GRAPH_FAILED);
     const auto* roisDesc = context->GetInputDesc(ROIS_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, roisDesc);
+    if (!RequireNotNull(context, roisDesc, "roisDesc")) {
+        return ge::GRAPH_FAILED;
+    }
     OP_CHECK_IF(roisDesc->GetDataType() != ge::DT_FLOAT,
                 OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "rois",
                                           Ops::Base::ToString(roisDesc->GetDataType()).c_str(), "float32"),
@@ -62,43 +85,58 @@ ge::graphStatus InferShapeRoiAlignRotatedRegbase(gert::InferShapeContext* contex
 
     // x rank == 4（N,C,H,W）；rois rank == 2 且 dim(1) == 6（(R,6) 行主序）
     const gert::Shape* xShape = context->GetInputShape(INPUT_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xShape);
-    OP_CHECK_IF(
-        xShape->GetDimNum() != INPUT_RANK,
-        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "x", std::to_string(xShape->GetDimNum()).c_str(), "4"),
-        return ge::GRAPH_FAILED);
+    if (!RequireNotNull(context, xShape, "xShape")) {
+        return ge::GRAPH_FAILED;
+    }
+    const std::string xDim = std::to_string(xShape->GetDimNum()) + "D";
+    OP_CHECK_IF(xShape->GetDimNum() != INPUT_RANK,
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "x", xDim.c_str(), "4D"), return ge::GRAPH_FAILED);
     const gert::Shape* roisShape = context->GetInputShape(ROIS_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, roisShape);
+    if (!RequireNotNull(context, roisShape, "roisShape")) {
+        return ge::GRAPH_FAILED;
+    }
+    const std::string roisDim = std::to_string(roisShape->GetDimNum()) + "D";
     OP_CHECK_IF(roisShape->GetDimNum() != ROIS_RANK,
-                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "rois",
-                                             std::to_string(roisShape->GetDimNum()).c_str(), "2"),
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "rois", roisDim.c_str(), "2D"),
                 return ge::GRAPH_FAILED);
     // rois dim(1) == 6（旋转 ROI 固定 6 字段行主序）；动态 shape（ge::UNKNOWN_DIM）时该维未知，
     // 跳过等值校验并将 -1 透传到输出 y.dim(0)（运行期真实 shape 由 tiling ValidateShape 复核契约），
     // 守卫模式与 sorted_nms/anchor_response_flags 的动态 shape 支持一致。
+    const std::string roisLast = "[" + std::to_string(roisShape->GetDim(1)) + "]";
     OP_CHECK_IF(roisShape->GetDim(1) != ROIS_LAST_DIM && roisShape->GetDim(1) != ge::UNKNOWN_DIM,
-                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "rois",
-                                                      std::to_string(roisShape->GetDim(1)).c_str(),
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "rois", roisLast.c_str(),
                                                       "rois dim[1] must be 6 (rotated ROI, row-major)"),
                 return ge::GRAPH_FAILED);
 
     // pooled_h > 0 且 pooled_w > 0
     auto attrsPtr = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrsPtr);
+    if (!RequireNotNull(context, attrsPtr, "attrsPtr")) {
+        return ge::GRAPH_FAILED;
+    }
     const int64_t* pooled_height = attrsPtr->GetAttrPointer<int64_t>(PH_INDEX);
     const int64_t* pooled_width = attrsPtr->GetAttrPointer<int64_t>(PW_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, pooled_height);
-    OP_CHECK_NULL_WITH_CONTEXT(context, pooled_width);
-    if (*pooled_height <= 0 || *pooled_width <= 0) {
-        std::string pooledSizeValue = std::to_string(*pooled_height) + ", " + std::to_string(*pooled_width);
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "pooled_h/pooled_w", pooledSizeValue.c_str(),
-                                              "both must be > 0");
+    if (!RequireNotNull(context, pooled_height, "pooled_height")) {
+        return ge::GRAPH_FAILED;
+    }
+    if (!RequireNotNull(context, pooled_width, "pooled_width")) {
+        return ge::GRAPH_FAILED;
+    }
+    if (*pooled_height <= 0) {
+        const std::string actual = std::to_string(*pooled_height);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "pooled_h", actual.c_str(), "must be > 0");
+        return ge::GRAPH_FAILED;
+    }
+    if (*pooled_width <= 0) {
+        const std::string actual = std::to_string(*pooled_width);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "pooled_w", actual.c_str(), "must be > 0");
         return ge::GRAPH_FAILED;
     }
 
     // y = (R, C, pooled_h, pooled_w)：R = rois.dim(0)、C = x.dim(1)
     gert::Shape* output_shape = context->GetOutputShape(OUTPUT_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, output_shape);
+    if (!RequireNotNull(context, output_shape, "output_shape")) {
+        return ge::GRAPH_FAILED;
+    }
     output_shape->SetDimNum(INPUT_RANK);
     output_shape->SetDim(DIM_NUM_ZERO, roisShape->GetDim(0));
     output_shape->SetDim(DIM_NUM_ONE, xShape->GetDim(X_DIM_C));
