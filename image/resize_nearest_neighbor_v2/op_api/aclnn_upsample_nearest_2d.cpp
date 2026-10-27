@@ -94,19 +94,13 @@ static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize)
         return false;
     }
 
-    if (selfShape.GetDim(TWO) == ZERO || selfShape.GetDim(THREE) == ZERO || outputSize->GetData()[ZERO] == ZERO ||
-        outputSize->GetData()[ONE] == ZERO) {
+    if (selfShape.GetDim(ZERO) == ZERO || selfShape.GetDim(ONE) == ZERO || selfShape.GetDim(TWO) == ZERO ||
+        selfShape.GetDim(THREE) == ZERO || outputSize->GetData()[ZERO] == ZERO || outputSize->GetData()[ONE] == ZERO) {
         OP_LOGE(ACLNN_ERR_PARAM_INVALID,
                 "Input and output sizes should be greater than %ld, "
-                "but got input (H: %ld, W: %ld) output (H: %ld, W: %ld).",
-                ZERO, selfShape.GetDim(TWO), selfShape.GetDim(THREE), outputSize->GetData()[ZERO],
-                outputSize->GetData()[ONE]);
-        return false;
-    }
-
-    if (selfShape.GetDim(ONE) == ZERO) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 4D data tensor expected but got a tensor with size %s.",
-                op::ToString(selfShape).GetString());
+                "but got input (N: %ld, C: %ld, H: %ld, W: %ld) output (H: %ld, W: %ld).",
+                ZERO, selfShape.GetDim(ZERO), selfShape.GetDim(ONE), selfShape.GetDim(TWO), selfShape.GetDim(THREE),
+                outputSize->GetData()[ZERO], outputSize->GetData()[ONE]);
         return false;
     }
 

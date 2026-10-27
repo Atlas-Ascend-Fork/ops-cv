@@ -140,7 +140,7 @@ aclnnStatus aclnnUpsampleNearest2d(
 <!-- npu="910,310p" id7 -->
 - <term>Atlas推理系列产品</term>、<term>Atlas训练系列产品</term>：
 
-  入参`self`和出参`out`的数据类型不支持FLOAT32、BFLOAT16。
+  入参`self`和出参`out`的数据类型不支持BFLOAT16。
 <!-- end id7 -->
 
 - **返回值**
