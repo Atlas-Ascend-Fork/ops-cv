@@ -276,6 +276,7 @@ aclnnStatus aclnnUpsampleBicubic2dGetWorkspaceSizeRegBase(const aclTensor* self,
     // 固定写法，参数检查
     auto checkBicubic2dRet = CheckParams(self, outputSize, out);
     CHECK_RET(checkBicubic2dRet == ACLNN_SUCCESS, checkBicubic2dRet);
+    CHECK_RET(CheckScales(self, outputSize, scalesH, scalesW), ACLNN_ERR_PARAM_INVALID);
 
     // 空tensor在kernel中支持
     if (self->IsEmpty()) {
