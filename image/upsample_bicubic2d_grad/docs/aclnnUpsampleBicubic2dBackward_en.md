@@ -1,17 +1,15 @@
 # aclnnUpsampleBicubic2dBackward
 
-[📄 View Source Code](https://gitcode.com/cann/ops-cv/tree/master/image/upsample_bicubic2d_grad)
-
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- <term>Ascend 950PR/Ascend 950DT</term>: Supported
+- <term>Ascend 950PR&950DT products</term>: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- <term>Atlas A3 training products/Atlas A3 inference products</term>: Supported
+- <term>Atlas A3 products</term>: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>: Supported
+- <term>Atlas A2 products</term>: Supported
 <!-- end id3 -->
 <!-- npu="310b" id4 -->
 - <term>Atlas 200I/500 A2 inference products</term>: Not supported
@@ -217,7 +215,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
     - The parameters `gradOut` and `gradInput` do not support the NHWC data format.
   <!-- end id7 -->
   <!-- npu="A3,910b" id8 -->
-  - <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas A3 training products/Atlas A3 inference products</term>:
+  - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>:
 
     The data format of parameters `gradOut` and `gradInput` does not support NHWC.
   <!-- end id8 -->
@@ -329,7 +327,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
 ## Constraints
 
 <!-- npu="A3,910b" id9 -->
-- <term>Atlas A3 training products/Atlas A3 inference products</term>, <term>Atlas A2 training products/Atlas A2 inference products</term>:
+- <term>Atlas A3 products</term>, <term>Atlas A2 products</term>:
 
   - All dimension values of gradOut and gradInput are less than or equal to (2^31-1).
   - $N * C * outputSize\_H$ <= 2^31-1
@@ -350,7 +348,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
 
 - Deterministic computation:
 
-  aclnnUpsampleBicubic2dBackward defaults to a non-deterministic implementation. Deterministic computation can be enabled through aclrtCtxSetSysParamOpt. Deterministic computation is not supported when the following conditions are met:
+  aclnnUpsampleBicubic2dBackward defaults to a non-deterministic implementation. Deterministic computation can be enabled through aclrtSetSysParamOpt. Deterministic computation is not supported when the following conditions are met:
   - $inputSize\_W$ > 130000
   - $inputSize\_H$/$outputSize\_H$ >=50
   - $inputSize\_W$/$outputSize\_W$ >=50 && $inputSize\_N$ * $inputSize\_C$ * $inputSize\_H$ > $inputSize\_W$ * 0.5

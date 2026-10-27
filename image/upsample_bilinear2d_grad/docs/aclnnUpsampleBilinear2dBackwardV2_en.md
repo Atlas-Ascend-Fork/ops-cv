@@ -1,17 +1,15 @@
 # aclnnUpsampleBilinear2dBackwardV2
 
-[📄 View Source Code](https://gitcode.com/cann/ops-cv/tree/master/image/upsample_bilinear2d_grad)
-
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- <term>Ascend 950PR/Ascend 950DT</term>: Supported
+- <term>Ascend 950PR&950DT products</term>: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- <term>Atlas A3 training products/Atlas A3 inference products</term>: Supported
+- <term>Atlas A3 products</term>: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>: Supported
+- <term>Atlas A2 products</term>: Supported
 <!-- end id3 -->
 <!-- npu="310b" id4 -->
 - <term>Atlas 200I/500 A2 inference products</term>: Not supported
@@ -28,7 +26,7 @@
 - Description: Backward propagation of [aclnnUpsampleBilinear2d](../../upsample_bilinear2d/docs/aclnnUpsampleBilinear2d.md).
 
   <!-- npu="950,A3,910b" id7 -->
-  - <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas A3 training products/Atlas A3 inference products</term>, <term>Ascend 950PR/Ascend 950DT</term>: Compared with [aclnnUpsampleBilinear2dBackward](../../resize_bilinear_v2_grad/docs/aclnnUpsampleBilinear2dBackward.md), this API supports scale-based computation and adds constraints on outputSize and scale. Select the appropriate API based on your actual requirements.
+  - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>, <term>Ascend 950PR&950DT products</term>: Compared with [aclnnUpsampleBilinear2dBackward](../../resize_bilinear_v2_grad/docs/aclnnUpsampleBilinear2dBackward.md), this API supports scale-based computation and adds constraints on outputSize and scale. Select the appropriate API based on your actual requirements.
   <!-- end id7 -->
   <!-- npu="910,310p" id8 -->
   - <term>Atlas training products</term>, <term>Atlas inference products</term>: Compared with [aclnnUpsampleBilinear2dBackward](../../resize_bilinear_v2_grad/docs/aclnnUpsampleBilinear2dBackward.md), there are no changes.
@@ -376,10 +374,10 @@ aclnnStatus aclnnUpsampleBilinear2dBackwardV2(
 - Deterministic computation:
 
   <!-- npu="A3,910b,910,310p" id10 -->
-  - <term>Atlas A3 training products/Atlas A3 inference products</term>, <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas inference products</term>, <term>Atlas training products</term>: aclnnUpsampleBilinear2dBackwardV2 defaults to a deterministic implementation.
+  - <term>Atlas A3 products</term>, <term>Atlas A2 products</term>, <term>Atlas inference products</term>, <term>Atlas training products</term>: aclnnUpsampleBilinear2dBackwardV2 defaults to a deterministic implementation.
   <!-- end id10 -->
   <!-- npu="950" id11 -->
-  - <term>Ascend 950PR/Ascend 950DT</term>: aclnnUpsampleBilinear2dBackwardV2 defaults to a non-deterministic implementation. Deterministic computation can be enabled through aclrtCtxSetSysParamOpt.
+  - <term>Ascend 950PR&950DT products</term>: aclnnUpsampleBilinear2dBackwardV2 defaults to a non-deterministic implementation. Deterministic computation can be enabled through aclrtSetSysParamOpt.
   <!-- end id11 -->
 
 ## Example

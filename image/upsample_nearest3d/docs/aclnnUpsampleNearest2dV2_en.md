@@ -1,17 +1,15 @@
 # aclnnUpsampleNearest2dV2
 
-[📄 View Source Code](https://gitcode.com/cann/ops-cv/tree/master/image/upsample_nearest3d)
-
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- <term>Ascend 950PR/Ascend 950DT</term>: Supported
+- <term>Ascend 950PR&950DT products</term>: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- <term>Atlas A3 training products/Atlas A3 inference products</term>: Supported
+- <term>Atlas A3 products</term>: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>: Supported
+- <term>Atlas A2 products</term>: Supported
 <!-- end id3 -->
 <!-- npu="310b" id4 -->
 - <term>Atlas 200I/500 A2 inference products</term>: Not supported

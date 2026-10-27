@@ -1,17 +1,15 @@
 # aclnnUpsampleLinear1dBackward
 
-[📄 View Source Code](https://gitcode.com/cann/ops-cv/tree/master/image/upsample_bilinear2d_grad)
-
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- <term>Ascend 950PR/Ascend 950DT</term>: Supported
+- <term>Ascend 950PR&950DT products</term>: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- <term>Atlas A3 training products/Atlas A3 inference products</term>: Supported
+- <term>Atlas A3 products</term>: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>: Supported
+- <term>Atlas A2 products</term>: Supported
 <!-- end id3 -->
 <!-- npu="310b" id4 -->
 - <term>Atlas 200I/500 A2 inference products</term>: Not supported
@@ -210,7 +208,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
   <!-- end id7 -->
 
   <!-- npu="A3,910b" id8 -->
-  - <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas A3 training products/Atlas A3 inference products</term>:
+  - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>:
 
     Input parameter `gradOut`: When the value of the corresponding axis of gradOut's shape is different from that of inputSize's corresponding axis, the data type only supports FLOAT32 and FLOAT16.
   <!-- end id8 -->
@@ -330,7 +328,7 @@ The first segment of the API performs input parameter validation and reports an 
 - When the data format of input parameter `gradOut` and output parameter `out` is neither NCL nor ND, other input data formats are processed as NCL by default.
 
 <!-- npu="A3,910b" id9 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas A3 training products/Atlas A3 inference products</term>: For the backward API, the downscaling factor of the input data must be less than or equal to 500, that is:
+- <term>Atlas A2 products</term>, <term>Atlas A3 products</term>: For the backward API, the downscaling factor of the input data must be less than or equal to 500, that is:
 
   $$
   outputSize[0] / Output shape length L <= 500
@@ -346,10 +344,10 @@ The first segment of the API performs input parameter validation and reports an 
 - Deterministic computation:
 
   <!-- npu="A3,910b,910" id10 -->
-  - <term>Atlas A3 training products/Atlas A3 inference products</term>, <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas training products</term>: aclnnUpsampleLinear1dBackward defaults to a deterministic implementation.
+  - <term>Atlas A3 products</term>, <term>Atlas A2 products</term>, <term>Atlas training products</term>: aclnnUpsampleLinear1dBackward defaults to a deterministic implementation.
   <!-- end id10 -->
   <!-- npu="950" id11 -->
-  - <term>Ascend 950PR/Ascend 950DT</term>: aclnnUpsampleLinear1dBackward defaults to a non-deterministic implementation. Deterministic computation can be enabled through aclrtCtxSetSysParamOpt.
+  - <term>Ascend 950PR&950DT products</term>: aclnnUpsampleLinear1dBackward defaults to a non-deterministic implementation. Deterministic computation can be enabled through aclrtSetSysParamOpt.
   <!-- end id11 -->
 
 ## Example

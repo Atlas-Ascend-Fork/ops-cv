@@ -3,13 +3,13 @@
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- <term>Ascend 950PR/Ascend 950DT</term>: Supported
+- <term>Ascend 950PR&950DT products</term>: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- <term>Atlas A3 training products/Atlas A3 inference products</term>: Supported
+- <term>Atlas A3 products</term>: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>: Supported
+- <term>Atlas A2 products</term>: Supported
 <!-- end id3 -->
 <!-- npu="310b" id4 -->
 - <term>Atlas 200I/500 A2 inference products</term>: Not supported
@@ -235,16 +235,16 @@ aclnnStatus aclnnThreeInterpolateBackward(
 - The value in idx should be less than m.
 - Deterministic computation:
   <!-- npu="A3,910b" id7 -->
-  - <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas A3 training products/Atlas A3 inference products</term>: aclnnThreeInterpolateBackward defaults to a non-deterministic implementation and does not support enabling via configuration.
+  - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>: aclnnThreeInterpolateBackward defaults to a non-deterministic implementation and does not support enabling via configuration.
   <!-- end id7 -->
   <!-- npu="950" id8 -->
-  - <term>Ascend 950PR/Ascend 950DT</term>: aclnnThreeInterpolateBackward defaults to a deterministic implementation.
+  - <term>Ascend 950PR&950DT products</term>: aclnnThreeInterpolateBackward defaults to a deterministic implementation.
   <!-- end id8 -->
 <!-- npu="A3,910b" id9 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas A3 training products/Atlas A3 inference products</term>: grad_x and grad_y are passed in NCHW format with 4D shape, namely (b, c, n, 1) and (b, c, m, 1) respectively.
+- <term>Atlas A2 products</term>, <term>Atlas A3 products</term>: grad_x and grad_y are passed in NCHW format with 4D shape, namely (b, c, n, 1) and (b, c, m, 1) respectively.
 <!-- end id9 -->
 <!-- npu="950" id10 -->
-- <term>Ascend 950PR/Ascend 950DT</term>: grad_x and grad_y are passed in ND format with 3D shape, namely (b, c, n) and (b, c, m) respectively.
+- <term>Ascend 950PR&950DT products</term>: grad_x and grad_y are passed in ND format with 3D shape, namely (b, c, n) and (b, c, m) respectively.
 <!-- end id10 -->
 
 ## Example
@@ -252,7 +252,7 @@ aclnnStatus aclnnThreeInterpolateBackward(
 The sample code is for reference only. For the specific compilation and execution process, see [Compile and Run Samples](../../../docs/en/context/compile_and_run_sample.md).
 
 <!-- npu="A3,910b" id11 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas A3 training products/Atlas A3 inference products</term>:
+- <term>Atlas A2 products</term>, <term>Atlas A3 products</term>:
 
   > Note:
   >
@@ -447,7 +447,7 @@ int main() {
 <!-- end id11 -->
 
 <!-- npu="950" id12 -->
-- <term>Ascend 950PR/Ascend 950DT</term>：
+- <term>Ascend 950PR&950DT products</term>：
 
   > Note:
   >

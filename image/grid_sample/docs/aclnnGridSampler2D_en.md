@@ -1,17 +1,15 @@
 # aclnnGridSampler2D
 
-[📄 View Source Code](https://gitcode.com/cann/ops-cv/tree/master/image/grid_sample)
-
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- <term>Ascend 950PR/Ascend 950DT</term>: Supported
+- <term>Ascend 950PR&950DT products</term>: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- <term>Atlas A3 training products/Atlas A3 inference products</term>: Supported
+- <term>Atlas A3 products</term>: Supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>: Supported
+- <term>Atlas A2 products</term>: Supported
 <!-- end id3 -->
 <!-- npu="310b" id4 -->
 - <term>Atlas 200I/500 A2 inference products</term>: Supported
@@ -274,7 +272,7 @@ aclnnStatus aclnnGridSampler2D(
     - The parameters `input`, `grid`, and `out` do not support the BFLOAT16 data type.
   <!-- end id7 -->
   <!-- npu="A3,910b" id8 -->
-  - <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas A3 training products/Atlas A3 inference products</term>:
+  - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>:
 
     For input parameter `interpolationMode`, the 2: bicubic mode is supported only when the input data type is FLOAT32, FLOAT16, or BFLOAT16.
   <!-- end id8 -->
@@ -391,7 +389,7 @@ aclnnStatus aclnnGridSampler2D(
 - If grid contains a large amount of data exceeding the [-1, 1] range, using the zeros or border padding strategy will cause many duplicate values in the result.
 
 <!-- npu="A3,910b" id11 -->
-- <term>Atlas A2 training products/Atlas A2 inference products</term>, <term>Atlas A3 training products/Atlas A3 inference products</term>:
+- <term>Atlas A2 products</term>, <term>Atlas A3 products</term>:
   - If grid contains values outside the range [-1, 1], using bicubic interpolation may introduce errors in small-value computations and cause precision deviations.
   - When bilinear or bicubic interpolation is used, the FLOAT16 data type requires workspace memory.
 <!-- end id11 -->
