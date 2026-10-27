@@ -76,7 +76,7 @@ x维度同理。fp16输入时中间`exp`及乘加计算在fp32域进行后回cas
 <tr>
 <td>y</td>
 <td>输出</td>
-<td>解码后的绝对框(ymin,xmin,ymax,xmax)。shape与dtype均与boxes相同, 同为(N,4)或(4,N)。</td>
+<td>解码后的绝对框(ymin,xmin,ymax,xmax)。shape与dtype均与boxes相同，同为(N,4)或(4,N)。</td>
 <td>FLOAT16、FLOAT</td>
 <td>ND</td>
 </tr>

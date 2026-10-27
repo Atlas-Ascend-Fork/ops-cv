@@ -146,7 +146,7 @@ aclnnStatus aclnnNonMaxSuppression(
       <td class="tg-0lax">centerPointBox（int）</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">用于决定边界框格式。</td>
-      <td class="tg-0lax"><ul><li>取值范围[0, 1]。</li><li>当等于0时，主要用于TensorFlow模型, 数据以(y1, x1, y2, x2)形式提供，其中(y1, x1)、(y2, x2)是对角线框角坐标，需要用户自行保证x1 < x2、y1 < y2。</li><li>当等于1时，主要用于PyTorch模型，数据以(x_center, y_center, width, height)形式提供。</li></ul></td>
+      <td class="tg-0lax"><ul><li>取值范围[0, 1]。</li><li>当等于0时，主要用于TensorFlow模型，数据以(y1, x1, y2, x2)形式提供，其中(y1, x1)、(y2, x2)是对角线框角坐标，需要用户自行保证x1 < x2、y1 < y2。</li><li>当等于1时，主要用于PyTorch模型，数据以(x_center, y_center, width, height)形式提供。</li></ul></td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">-</td>
