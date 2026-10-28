@@ -99,3 +99,32 @@ TEST_F(BlendImagesCustom, BlendImagesCustom_shape_contract_rejects_frame_channel
                                                       });
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
 }
+
+TEST_F(BlendImagesCustom, BlendImagesCustom_shape_contract_rejects_rank2_doc_sample)
+{
+    // Old ACLNN doc sample used 2D shapes ({4,3}/{4,1}); infershape requires HWC rank-3.
+    gert::InfershapeContextPara infershapeContextPara("BlendImagesCustom",
+                                                      {{{{4, 3}, {4, 3}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                                       {{{4, 1}, {4, 1}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                                       {{{4, 3}, {4, 3}}, ge::DT_UINT8, ge::FORMAT_ND}},
+                                                      {
+                                                          {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                                      });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(BlendImagesCustom, BlendImagesCustom_infershape_doc_sample_hwc)
+{
+    // Aligned with docs/examples sample: {2,2,3}/{2,2,1}.
+    gert::InfershapeContextPara infershapeContextPara("BlendImagesCustom",
+                                                      {{{{2, 2, 3}, {2, 2, 3}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                                       {{{2, 2, 1}, {2, 2, 1}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                                       {{{2, 2, 3}, {2, 2, 3}}, ge::DT_UINT8, ge::FORMAT_ND}},
+                                                      {
+                                                          {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                                      });
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {2, 2, 3},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}

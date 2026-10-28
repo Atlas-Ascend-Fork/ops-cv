@@ -307,10 +307,10 @@ int main() {
   CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("Init acl failed. ERROR: %d\n", ret); return ret);
 
   // 2. 构造输入与输出，需要根据API的接口自定义构造
-  std::vector<int64_t> rgbShape = {4, 3};
-  std::vector<int64_t> alphaShape = {4, 1};
-  std::vector<int64_t> frameShape = {4, 3};
-  std::vector<int64_t> outShape = {4, 3};
+  std::vector<int64_t> rgbShape = {2, 2, 3};
+  std::vector<int64_t> alphaShape = {2, 2, 1};
+  std::vector<int64_t> frameShape = {2, 2, 3};
+  std::vector<int64_t> outShape = {2, 2, 3};
 
   void* rgbDeviceAddr = nullptr;
   void* alphaDeviceAddr = nullptr;

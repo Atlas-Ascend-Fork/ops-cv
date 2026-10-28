@@ -307,10 +307,10 @@ int main() {
   CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("Init acl failed. ERROR: %d\n", ret); return ret);
 
   // 2. Construct the inputs and outputs, which need to be custom-constructed according to the API definition.
-  std::vector<int64_t> rgbShape = {4, 3};
-  std::vector<int64_t> alphaShape = {4, 1};
-  std::vector<int64_t> frameShape = {4, 3};
-  std::vector<int64_t> outShape = {4, 3};
+  std::vector<int64_t> rgbShape = {2, 2, 3};
+  std::vector<int64_t> alphaShape = {2, 2, 1};
+  std::vector<int64_t> frameShape = {2, 2, 3};
+  std::vector<int64_t> outShape = {2, 2, 3};
 
   void* rgbDeviceAddr = nullptr;
   void* alphaDeviceAddr = nullptr;
