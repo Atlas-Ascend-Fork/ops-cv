@@ -9,6 +9,7 @@
  */
 
 #include "aclnn/aclnn_base.h"
+#include <cmath>
 #include "opdev/common_types.h"
 #include "opdev/data_type_utils.h"
 #include "opdev/format_utils.h"
@@ -107,18 +108,29 @@ static bool CheckDtypeValid(const aclTensor* self, const aclTensor* out)
     return true;
 }
 
-static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize)
+static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out)
 {
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK_WRONG_DIMENSION(self, DIM_LIMIT, return false);
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
              OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 1, but got %zu", outputSizeNum),
              return false);
+    OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
+
+    // out 的 shape 应等于 (N, C, outputSize[0])
+    op::Shape inputShape = self->GetViewShape();
+    op::Shape expectShape;
+    expectShape.AppendDim(inputShape.GetDim(DIM_ZERO));
+    expectShape.AppendDim(inputShape.GetDim(DIM_ONE));
+    expectShape.AppendDim((*outputSize)[DIM_ZERO]);
+    OP_CHECK_SHAPE_NOT_EQUAL_WITH_EXPECTED_SIZE(out, expectShape, return false);
 
     return true;
 }
 
-static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSize)
+static constexpr double EPSILON = 1e-6;
+
+static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSize, double scales)
 {
     auto selfShape = self->GetViewShape();
     int64_t outN = selfShape.GetDim(DIM_ZERO);
@@ -132,10 +144,21 @@ static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSi
                      " C: %lld, L: %lld) output (N: %lld, C: %lld, L: %lld)",
                      outN, outC, inputL, outN, outC, outL),
              return false);
+    if (scales > 0) {
+        // 资料约束：outputSize = floor(inputSize_L * scales)，非整数乘积时合法值是 floor 而非 ceil；
+        // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合
+        double expectDimL = static_cast<double>(inputL) * scales;
+        OP_CHECK(static_cast<double>(outL) == std::floor(expectDimL) ||
+                     fabs(static_cast<double>(outL) - expectDimL) <= EPSILON,
+                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                         "Scale conflicts with outputSize. scale_L * input_L should be equal to outputSize_L"),
+                 return false);
+    }
     return true;
 }
 
-static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out)
+static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputSize, double scales,
+                               const aclTensor* out)
 {
     // 1. 检查参数是否为空指针
     CHECK_RET(CheckNotNull(self, outputSize, out), ACLNN_ERR_PARAM_NULLPTR);
@@ -143,11 +166,11 @@ static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputS
     // 2. 检查输入的数据类型是否在API支持的数据类型范围之内
     CHECK_RET(CheckDtypeValid(self, out), ACLNN_ERR_PARAM_INVALID);
 
-    // 3. 检查输入元素是否合法
-    CHECK_RET(CheckInputElement(self, outputSize), ACLNN_ERR_PARAM_INVALID);
+    // 3. 检查输入元素是否合法（含 scales 与 outputSize 的一致性）
+    CHECK_RET(CheckInputElement(self, outputSize, scales), ACLNN_ERR_PARAM_INVALID);
 
-    // 4. 检查shape是否支持
-    CHECK_RET(CheckShape(self, outputSize), ACLNN_ERR_PARAM_INVALID);
+    // 4. 检查shape是否支持（含 out 期望形状）
+    CHECK_RET(CheckShape(self, outputSize, out), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;
 }
@@ -218,7 +241,7 @@ aclnnStatus aclnnUpsampleNearestExact1dGetWorkspaceSize(const aclTensor* self, c
     CHECK_RET(uniqueExecutor.get() != nullptr, ACLNN_ERR_INNER_CREATE_EXECUTOR);
 
     // 固定写法，参数检查
-    auto ret = CheckParams(self, outputSize, out);
+    auto ret = CheckParams(self, outputSize, scales, out);
     CHECK_RET(ret == ACLNN_SUCCESS, ret);
     // 空tensor支持
     if (self->IsEmpty()) {

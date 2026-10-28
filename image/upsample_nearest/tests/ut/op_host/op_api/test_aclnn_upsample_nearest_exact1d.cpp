@@ -207,3 +207,98 @@ TEST_F(l2_upsample_nearest_exact1d_test, case_uint8_output_size_invalid)
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
+// scales 与 outputSize 不一致应返回 161002（floor(4*1.0)=4 != 7）
+TEST_F(l2_upsample_nearest_exact1d_test, case_scale_conflict_with_outputsize_fail)
+{
+    auto self_desc = TensorDesc({1, 1, 4}, ACL_FLOAT, ACL_FORMAT_NCL);
+    vector<int64_t> output_size = {7};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales = 1.0;
+    auto out_desc = TensorDesc({1, 1, 7}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact1d, INPUT(self_desc, output_size_desc, scales), OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// out 的 L 维与 outputSize 不一致应返回 161002（不再落到设备侧 561103）
+TEST_F(l2_upsample_nearest_exact1d_test, case_out_last_dim_not_match_fail)
+{
+    auto self_desc = TensorDesc({1, 1, 4}, ACL_FLOAT, ACL_FORMAT_NCL);
+    vector<int64_t> output_size = {8};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales = 0.0;
+    auto out_desc = TensorDesc({1, 1, 6}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact1d, INPUT(self_desc, output_size_desc, scales), OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// scales>0 且与 outputSize 自洽时应返回 SUCCESS（容差放行侧回归：floor(4*2.0)=8）
+TEST_F(l2_upsample_nearest_exact1d_test, case_scale_positive_consistent_success)
+{
+    auto self_desc = TensorDesc({1, 2, 4}, ACL_FLOAT, ACL_FORMAT_NCL);
+    vector<int64_t> output_size = {8};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales = 2.0;
+    auto out_desc = TensorDesc({1, 2, 8}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact1d, INPUT(self_desc, output_size_desc, scales), OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
+
+// outputSize 与 floor(inputL*scales) 恰差 1 应返回 161002（off-by-one 不被容差窗口放过）
+TEST_F(l2_upsample_nearest_exact1d_test, case_scale_off_by_one_fail)
+{
+    auto self_desc = TensorDesc({1, 1, 4}, ACL_FLOAT, ACL_FORMAT_NCL);
+    vector<int64_t> output_size = {7};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales = 2.0;
+    auto out_desc = TensorDesc({1, 1, 7}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact1d, INPUT(self_desc, output_size_desc, scales), OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// 非整数乘积时 outputSize 应取 floor 而非 ceil：floor(4*1.5)=6 合法应返回 SUCCESS
+TEST_F(l2_upsample_nearest_exact1d_test, case_scale_noninteger_floor_success)
+{
+    auto self_desc = TensorDesc({1, 2, 4}, ACL_FLOAT, ACL_FORMAT_NCL);
+    vector<int64_t> output_size = {6};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales = 1.5;
+    auto out_desc = TensorDesc({1, 2, 6}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact1d, INPUT(self_desc, output_size_desc, scales), OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
+
+// 非整数乘积时误传 ceil 值（floor(4*1.5)=6 而非 7）应返回 161002
+TEST_F(l2_upsample_nearest_exact1d_test, case_scale_noninteger_ceil_fail)
+{
+    auto self_desc = TensorDesc({1, 1, 4}, ACL_FLOAT, ACL_FORMAT_NCL);
+    vector<int64_t> output_size = {7};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales = 1.5;
+    auto out_desc = TensorDesc({1, 1, 7}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact1d, INPUT(self_desc, output_size_desc, scales), OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}

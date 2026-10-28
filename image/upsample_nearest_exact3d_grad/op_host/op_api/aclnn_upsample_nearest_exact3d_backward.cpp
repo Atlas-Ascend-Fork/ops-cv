@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 #include "aclnn/aclnn_base.h"
+#include <cmath>
 #include "opdev/common_types.h"
 #include "opdev/data_type_utils.h"
 #include "opdev/format_utils.h"
@@ -133,6 +134,34 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclTensor* gradInp
                      "scalesD, scalesH and scalesW are too large, scalesD [%f], scalesH [%f], scalesW [%f].",
                      realScalesD, realScalesH, realScalesW),
              return false);
+
+    static constexpr double EPSILON = 1e-6;
+    // 资料约束：outputSize = floor(inputSize * scales)，非整数乘积时合法值是 floor 而非 ceil；
+    // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合
+    if (scalesD > 0) {
+        double expectDimD = static_cast<double>(inputD) * scalesD;
+        OP_CHECK(static_cast<double>(outD) == std::floor(expectDimD) ||
+                     fabs(static_cast<double>(outD) - expectDimD) <= EPSILON,
+                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                         "Scale conflicts with outputSize. outputSize_D should be equal to inputSize_D * scalesD"),
+                 return false);
+    }
+    if (scalesH > 0) {
+        double expectDimH = static_cast<double>(inputH) * scalesH;
+        OP_CHECK(static_cast<double>(outH) == std::floor(expectDimH) ||
+                     fabs(static_cast<double>(outH) - expectDimH) <= EPSILON,
+                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                         "Scale conflicts with outputSize. outputSize_H should be equal to inputSize_H * scalesH"),
+                 return false);
+    }
+    if (scalesW > 0) {
+        double expectDimW = static_cast<double>(inputW) * scalesW;
+        OP_CHECK(static_cast<double>(outW) == std::floor(expectDimW) ||
+                     fabs(static_cast<double>(outW) - expectDimW) <= EPSILON,
+                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                         "Scale conflicts with outputSize. outputSize_W should be equal to inputSize_W * scalesW"),
+                 return false);
+    }
     return true;
 }
 

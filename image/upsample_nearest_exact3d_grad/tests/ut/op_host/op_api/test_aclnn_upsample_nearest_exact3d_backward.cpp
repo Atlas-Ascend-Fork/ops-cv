@@ -579,3 +579,69 @@ TEST_F(l2_upsample_nearest_exact3d_backward_test, case_input_size_over_int32_ndh
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
+
+// scalesD 与 outputSize 不一致应返回 161002（inputD=6, scalesD=1.0 期望 outputD=6 而非 3）
+TEST_F(l2_upsample_nearest_exact3d_backward_test, scaleD_conflict_with_inputsize_fail)
+{
+    auto grad_out_desc = TensorDesc({2, 2, 3, 4, 5}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    vector<int64_t> output_size = {3, 4, 5};
+    vector<int64_t> input_size = {2, 2, 6, 8, 10};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    const double_t scales_d = 1.0;
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    auto grad_input_desc = TensorDesc({2, 2, 6, 8, 10}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact3dBackward,
+                        INPUT(grad_out_desc, output_size_desc, input_size_desc, scales_d, scales_h, scales_w),
+                        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// 非整数乘积时 outputSize 应取 floor 而非 ceil：floor(5*1.5)=7 合法应返回 SUCCESS
+TEST_F(l2_upsample_nearest_exact3d_backward_test, scale_noninteger_floor_success)
+{
+    auto grad_out_desc = TensorDesc({2, 2, 7, 4, 5}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    vector<int64_t> output_size = {7, 4, 5};
+    vector<int64_t> input_size = {2, 2, 5, 4, 5};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    const double_t scales_d = 1.5;
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    auto grad_input_desc = TensorDesc({2, 2, 5, 4, 5}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact3dBackward,
+                        INPUT(grad_out_desc, output_size_desc, input_size_desc, scales_d, scales_h, scales_w),
+                        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
+
+// 非整数乘积时误传 ceil 值（floor(5*1.5)=7 而非 8）应返回 161002
+TEST_F(l2_upsample_nearest_exact3d_backward_test, scale_noninteger_ceil_fail)
+{
+    auto grad_out_desc = TensorDesc({2, 2, 8, 4, 5}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    vector<int64_t> output_size = {8, 4, 5};
+    vector<int64_t> input_size = {2, 2, 5, 4, 5};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    const double_t scales_d = 1.5;
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    auto grad_input_desc = TensorDesc({2, 2, 5, 4, 5}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact3dBackward,
+                        INPUT(grad_out_desc, output_size_desc, input_size_desc, scales_d, scales_h, scales_w),
+                        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}

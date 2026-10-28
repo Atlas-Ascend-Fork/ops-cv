@@ -9,6 +9,7 @@
  */
 
 #include "aclnn/aclnn_base.h"
+#include <cmath>
 #include "opdev/common_types.h"
 #include "opdev/data_type_utils.h"
 #include "opdev/format_utils.h"
@@ -118,18 +119,38 @@ static bool CheckNotNull(const aclTensor* self, const aclIntArray* outputSize, c
     return true;
 }
 
-static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize)
+static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out)
 {
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK_WRONG_DIMENSION(self, DIM_LIMIT, return false);
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
              OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 2, but got %zu", outputSizeNum),
              return false);
+    OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
+
+    // out 的 shape 应等于 (N, C, outputSize[0], outputSize[1])（NHWC 时 C 在末维）
+    op::Shape inputShape = self->GetViewShape();
+    op::Shape expectShape;
+    if (self->GetStorageFormat() == op::Format::FORMAT_NHWC) {
+        expectShape.AppendDim(inputShape.GetDim(DIM_ZERO));
+        expectShape.AppendDim((*outputSize)[DIM_ZERO]);
+        expectShape.AppendDim((*outputSize)[DIM_ONE]);
+        expectShape.AppendDim(inputShape.GetDim(DIM_THREE));
+    } else {
+        expectShape.AppendDim(inputShape.GetDim(DIM_ZERO));
+        expectShape.AppendDim(inputShape.GetDim(DIM_ONE));
+        expectShape.AppendDim((*outputSize)[DIM_ZERO]);
+        expectShape.AppendDim((*outputSize)[DIM_ONE]);
+    }
+    OP_CHECK_SHAPE_NOT_EQUAL_WITH_EXPECTED_SIZE(out, expectShape, return false);
 
     return true;
 }
 
-static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out)
+static constexpr double EPSILON = 1e-6;
+
+static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out,
+                              double scalesH, double scalesW)
 {
     auto selfShape = self->GetViewShape();
     auto outShape = out->GetViewShape();
@@ -159,6 +180,30 @@ static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSi
                 outputN, inputC, outputC);
         return false;
     }
+
+    // 输入输出一致性校验锁定与输入同值，此处只需校验输入侧
+    OP_CHECK(inputN >= 0 && inputC >= 0,
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Input N/C sizes should be non-negative, but got N: %ld, C: %ld.", inputN,
+                     inputC),
+             return false);
+    // 资料约束：outputSize = floor(inputSize * scales)，非整数乘积时合法值是 floor 而非 ceil；
+    // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合
+    if (scalesH > 0) {
+        double expectDimH = static_cast<double>(inputH) * scalesH;
+        OP_CHECK(static_cast<double>(outputH) == std::floor(expectDimH) ||
+                     fabs(static_cast<double>(outputH) - expectDimH) <= EPSILON,
+                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                         "Scale conflicts with outputSize. scale_H * input_H should be equal to outputSize_H"),
+                 return false);
+    }
+    if (scalesW > 0) {
+        double expectDimW = static_cast<double>(inputW) * scalesW;
+        OP_CHECK(static_cast<double>(outputW) == std::floor(expectDimW) ||
+                     fabs(static_cast<double>(outputW) - expectDimW) <= EPSILON,
+                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                         "Scale conflicts with outputSize. scale_W * input_W should be equal to outputSize_W"),
+                 return false);
+    }
     return true;
 }
 
@@ -181,13 +226,14 @@ static bool CheckFormat(const aclTensor* self, const aclTensor* out)
     return true;
 }
 
-static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out)
+static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputSize, double scalesH, double scalesW,
+                               const aclTensor* out)
 {
     CHECK_RET(CheckDtypeValid(self, out), ACLNN_ERR_PARAM_INVALID);
 
-    CHECK_RET(CheckShape(self, outputSize), ACLNN_ERR_PARAM_INVALID);
+    CHECK_RET(CheckShape(self, outputSize, out), ACLNN_ERR_PARAM_INVALID);
 
-    CHECK_RET(CheckInputElement(self, outputSize, out), ACLNN_ERR_PARAM_INVALID);
+    CHECK_RET(CheckInputElement(self, outputSize, out, scalesH, scalesW), ACLNN_ERR_PARAM_INVALID);
     // 检查输入输出的Format
     CHECK_RET(CheckFormat(self, out), ACLNN_ERR_PARAM_INVALID);
 
@@ -294,6 +340,10 @@ aclnnStatus aclnnUpsampleNearestExact2dGetWorkspaceSize(const aclTensor* self, c
     // 检查参数是否为空指针
     CHECK_RET(CheckNotNull(self, outputSize, out), ACLNN_ERR_PARAM_NULLPTR);
 
+    // 固定写法，参数检查
+    auto ret = CheckParams(self, outputSize, scalesH, scalesW, out);
+    CHECK_RET(ret == ACLNN_SUCCESS, ret);
+
     // 空tensor支持
     if (self->IsEmpty() || out->IsEmpty()) {
         // 根据实际支持情况补充
@@ -301,10 +351,6 @@ aclnnStatus aclnnUpsampleNearestExact2dGetWorkspaceSize(const aclTensor* self, c
         uniqueExecutor.ReleaseTo(executor);
         return ACLNN_SUCCESS;
     }
-
-    // 固定写法，参数检查
-    auto ret = CheckParams(self, outputSize, out);
-    CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
     // 固定写法，将输入self、输出out转换成连续的tensor
     auto selfContiguous = l0op::Contiguous(self, uniqueExecutor.get());

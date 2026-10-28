@@ -14,6 +14,7 @@
 #include "aclnn_kernels/cast.h"
 #include "aclnn/aclnn_base.h"
 
+#include <cmath>
 #include "opdev/common_types.h"
 #include "opdev/data_type_utils.h"
 #include "opdev/format_utils.h"
@@ -100,7 +101,10 @@ static double ComputeNearestExact1dBackwardScales(int64_t input_size, int64_t ou
     }
 }
 
-static bool CheckInputElement(const aclTensor* gradOutput, const aclIntArray* inputSize, double scales)
+static constexpr double EPSILON = 1e-6;
+
+static bool CheckInputElement(const aclTensor* gradOutput, const aclTensor* out, const aclIntArray* outputSize,
+                              const aclIntArray* inputSize, double scales)
 {
     auto gradOutputShape = gradOutput->GetViewShape();
     int64_t outN = 0;
@@ -118,10 +122,30 @@ static bool CheckInputElement(const aclTensor* gradOutput, const aclIntArray* in
 
     OP_CHECK(outN > 0 && inputL > 0 && outC > 0 && outL > 0,
              OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (N: %ld, C: %ld,"
+                     "Input and output sizes should be greater than 0 but got input (N: %ld, C: %ld,"
                      " L: %ld) output (L: %ld)",
                      outN, outC, inputL, outL),
              return false);
+
+    // gradOutput 的 shape 应等于 (inputSize[0], inputSize[1], outputSize[0])，out 的 shape 应等于
+    // (inputSize[0], inputSize[1], inputSize[2])，N/C 取自 inputSize（对齐 3d 反向），
+    // 防止 kernel 按 outputSize/inputSize 读写与实际形状不符的内存
+    op::Shape expectGradOutputShape = op::Shape{(*inputSize)[DIM_ZERO], (*inputSize)[DIM_ONE], (*outputSize)[DIM_ZERO]};
+    OP_CHECK_SHAPE_NOT_EQUAL_WITH_EXPECTED_SIZE(gradOutput, expectGradOutputShape, return false);
+    op::Shape expectOutShape = op::Shape{(*inputSize)[DIM_ZERO], (*inputSize)[DIM_ONE], inputL};
+    OP_CHECK_SHAPE_NOT_EQUAL_WITH_EXPECTED_SIZE(out, expectOutShape, return false);
+
+    if (scales > 0) {
+        // 资料约束：outputSize = floor(inputSize_L * scales)，非整数乘积时合法值是 floor 而非 ceil；
+        // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合
+        int64_t outSizeL = (*outputSize)[DIM_ZERO];
+        double expectDimL = static_cast<double>(inputL) * scales;
+        OP_CHECK(static_cast<double>(outSizeL) == std::floor(expectDimL) ||
+                     fabs(static_cast<double>(outSizeL) - expectDimL) <= EPSILON,
+                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                         "Scale conflicts with outputSize. outputSize_L should be equal to inputSize_L * scales"),
+                 return false);
+    }
     return true;
 }
 
@@ -157,8 +181,8 @@ static aclnnStatus CheckParams(const aclTensor* gradOutput, const aclIntArray* o
     // 5.检验scales_w/scales_h，与资料保持一致
     CHECK_RET(CheckScalesValid(scales), ACLNN_ERR_PARAM_INVALID);
 
-    // 6. 检查输入元素是否合法
-    CHECK_RET(CheckInputElement(gradOutput, inputSize, scales), ACLNN_ERR_PARAM_INVALID);
+    // 6. 检查输入元素是否合法（含 gradOutput/out 形状与 outputSize/inputSize 的交叉校验）
+    CHECK_RET(CheckInputElement(gradOutput, out, outputSize, inputSize, scales), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;
 }

@@ -14,6 +14,7 @@
 #include "aclnn_kernels/transpose.h"
 #include "aclnn_kernels/common/op_error_check.h"
 #include "aclnn_kernels/cast.h"
+#include <cmath>
 #include "opdev/common_types.h"
 #include "opdev/data_type_utils.h"
 #include "opdev/format_utils.h"
@@ -89,7 +90,8 @@ static bool CheckScalesValid(const double weight, const double high)
     return true;
 }
 
-static bool CheckInputElement(const aclTensor* gradOutput, const aclIntArray* inputSize, double scalesH, double scalesW)
+static bool CheckInputElement(const aclTensor* gradOutput, const aclTensor* out, const aclIntArray* outputSize,
+                              const aclIntArray* inputSize, double scalesH, double scalesW)
 {
     auto gradOutputShape = gradOutput->GetViewShape();
     int64_t inputH = (*inputSize)[DIM_TWO];
@@ -112,12 +114,48 @@ static bool CheckInputElement(const aclTensor* gradOutput, const aclIntArray* in
                      realScalesH, realScalesW),
              return false);
 
-    OP_CHECK(outN > 0 && inputH > 0 && inputW > 0 && outC > 0 && outH > 0 && outW > 0,
+    OP_CHECK(inputH > 0 && inputW > 0 && outH > 0 && outW > 0,
              OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (N: %ld, C: %ld,"
+                     "Input and output sizes should be greater than 0 but got input (N: %ld, C: %ld,"
                      " H: %ld, W: %ld) output (H: %ld, W: %ld)",
                      outN, outC, inputH, inputW, outH, outW),
              return false);
+
+    // gradOutput 的 shape 应等于 (inputSize[0], inputSize[1], outputSize[0], outputSize[1])，out 的 shape
+    // 应等于 (inputSize[0], inputSize[1], inputSize[2], inputSize[3])，N/C 取自 inputSize，
+    // 防止 kernel 按 outputSize/inputSize 读写与实际形状不符的内存
+    op::Shape expectGradOutputShape = op::Shape{(*inputSize)[DIM_ZERO], (*inputSize)[DIM_ONE], (*outputSize)[DIM_ZERO],
+                                                (*outputSize)[DIM_ONE]};
+    OP_CHECK_SHAPE_NOT_EQUAL_WITH_EXPECTED_SIZE(gradOutput, expectGradOutputShape, return false);
+    op::Shape expectOutShape = op::Shape{(*inputSize)[DIM_ZERO], (*inputSize)[DIM_ONE], inputH, inputW};
+    OP_CHECK_SHAPE_NOT_EQUAL_WITH_EXPECTED_SIZE(out, expectOutShape, return false);
+
+    OP_CHECK((*inputSize)[DIM_ZERO] >= 0 && (*inputSize)[DIM_ONE] >= 0,
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Input N/C sizes should be non-negative, but got N: %ld, C: %ld.",
+                     (*inputSize)[DIM_ZERO], (*inputSize)[DIM_ONE]),
+             return false);
+
+    static constexpr double EPSILON = 1e-6;
+    // 资料约束：outputSize = floor(inputSize * scales)，非整数乘积时合法值是 floor 而非 ceil；
+    // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合
+    if (scalesH > 0) {
+        int64_t outSizeH = (*outputSize)[DIM_ZERO];
+        double expectDimH = static_cast<double>(inputH) * scalesH;
+        OP_CHECK(static_cast<double>(outSizeH) == std::floor(expectDimH) ||
+                     fabs(static_cast<double>(outSizeH) - expectDimH) <= EPSILON,
+                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                         "Scale conflicts with outputSize. outputSize_H should be equal to inputSize_H * scalesH"),
+                 return false);
+    }
+    if (scalesW > 0) {
+        int64_t outSizeW = (*outputSize)[DIM_ONE];
+        double expectDimW = static_cast<double>(inputW) * scalesW;
+        OP_CHECK(static_cast<double>(outSizeW) == std::floor(expectDimW) ||
+                     fabs(static_cast<double>(outSizeW) - expectDimW) <= EPSILON,
+                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                         "Scale conflicts with outputSize. outputSize_W should be equal to inputSize_W * scalesW"),
+                 return false);
+    }
     return true;
 }
 
@@ -166,8 +204,8 @@ static aclnnStatus CheckParams(const aclTensor* gradOutput, const aclIntArray* o
     // 5.检验scales_w/scales_h，与资料保持一致
     CHECK_RET(CheckScalesValid(scalesW, scalesH), ACLNN_ERR_PARAM_INVALID);
 
-    // 6. 检查输入元素是否合法
-    CHECK_RET(CheckInputElement(gradOutput, inputSize, scalesH, scalesW), ACLNN_ERR_PARAM_INVALID);
+    // 6. 检查输入元素是否合法（含 gradOutput/out 形状与 outputSize/inputSize 的交叉校验）
+    CHECK_RET(CheckInputElement(gradOutput, out, outputSize, inputSize, scalesH, scalesW), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;
 }
@@ -186,18 +224,15 @@ aclnnStatus aclnnUpsampleNearestExact2dBackwardGetWorkspaceSize(const aclTensor*
     auto uniqueExecutor = CREATE_EXECUTOR();
     CHECK_RET(uniqueExecutor.get() != nullptr, ACLNN_ERR_INNER_CREATE_EXECUTOR);
 
-    // 检查参数是否为空指针
-    CHECK_RET(CheckNotNull(gradOutput, inputSize, out), ACLNN_ERR_PARAM_NULLPTR);
+    // 固定写法，参数检查
+    auto ret = CheckParams(gradOutput, outputSize, inputSize, scalesH, scalesW, out);
+    CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
     if (gradOutput->IsEmpty() || out->IsEmpty()) {
         *workspaceSize = 0;
         uniqueExecutor.ReleaseTo(executor);
         return ACLNN_SUCCESS;
     }
-
-    // 固定写法，参数检查
-    auto ret = CheckParams(gradOutput, outputSize, inputSize, scalesH, scalesW, out);
-    CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
     // 固定写法，将输入selfRef转换成连续的tensor
     auto selfContiguous = l0op::Contiguous(gradOutput, uniqueExecutor.get());
