@@ -1,0 +1,167 @@
+{
+    "op_type": "UpsampleBilinear2dAABackward",
+    "op_list": [
+      {
+        "bin_filename": "UpsampleBilinear2dAABackward_9a3f35753d1102a4c4f2f13d56be6f6b",
+        "inputs": [
+            {
+                "name": "grad_output",
+                "index": 0,
+                "dtype": "float32",
+                "format": "ND",
+                "paramType": "required",
+                "shape": [
+                    -2
+                ]
+            }
+        ],
+        "outputs": [
+            {
+                "name": "grad_input",
+                "index": 0,
+                "dtype": "float32",
+                "format": "ND",
+                "paramType": "required",
+                "shape": [
+                    -2
+                ]
+            }
+        ],
+        "attrs": [
+            {
+                "name": "output_size",
+                "dtype": "list_int",
+                "value": []
+            },
+            {
+                "name": "input_size",
+                "dtype": "list_int",
+                "value": []
+            },
+            {
+                "name": "align_corners",
+                "dtype": "bool",
+                "value": false
+            },
+            {
+                "name": "scales_h",
+                "dtype": "float",
+                "value": 0.0
+            },
+            {
+                "name": "scales_w",
+                "dtype": "float",
+                "value": 0.0
+            }
+        ]
+      },
+      {
+        "bin_filename": "UpsampleBilinear2dAABackward_cdf88669da94cc0e005580169935a011",
+        "inputs": [
+            {
+                "name": "grad_output",
+                "index": 0,
+                "dtype": "bfloat16",
+                "format": "ND",
+                "paramType": "required",
+                "shape": [
+                    -2
+                ]
+            }
+        ],
+        "outputs": [
+            {
+                "name": "grad_input",
+                "index": 0,
+                "dtype": "bfloat16",
+                "format": "ND",
+                "paramType": "required",
+                "shape": [
+                    -2
+                ]
+            }
+        ],
+        "attrs": [
+            {
+                "name": "output_size",
+                "dtype": "list_int",
+                "value": []
+            },
+            {
+                "name": "input_size",
+                "dtype": "list_int",
+                "value": []
+            },
+            {
+                "name": "align_corners",
+                "dtype": "bool",
+                "value": false
+            },
+            {
+                "name": "scales_h",
+                "dtype": "float",
+                "value": 0.0
+            },
+            {
+                "name": "scales_w",
+                "dtype": "float",
+                "value": 0.0
+            }
+        ]
+      },
+      {
+        "bin_filename": "UpsampleBilinear2dAABackward_fa0f782433783416f0989089841efaad",
+        "inputs": [
+            {
+                "name": "grad_output",
+                "index": 0,
+                "dtype": "float16",
+                "format": "ND",
+                "paramType": "required",
+                "shape": [
+                    -2
+                ]
+            }
+        ],
+        "outputs": [
+            {
+                "name": "grad_input",
+                "index": 0,
+                "dtype": "float16",
+                "format": "ND",
+                "paramType": "required",
+                "shape": [
+                    -2
+                ]
+            }
+        ],
+        "attrs": [
+            {
+                "name": "output_size",
+                "dtype": "list_int",
+                "value": []
+            },
+            {
+                "name": "input_size",
+                "dtype": "list_int",
+                "value": []
+            },
+            {
+                "name": "align_corners",
+                "dtype": "bool",
+                "value": false
+            },
+            {
+                "name": "scales_h",
+                "dtype": "float",
+                "value": 0.0
+            },
+            {
+                "name": "scales_w",
+                "dtype": "float",
+                "value": 0.0
+            }
+        ]
+      }
+    ]
+  }

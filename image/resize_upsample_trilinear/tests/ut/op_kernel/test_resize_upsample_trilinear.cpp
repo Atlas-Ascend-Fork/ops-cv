@@ -41,7 +41,8 @@ TEST_F(ResizeUpsampleTrilinearTest, test_case_float32)
     AscendC::SetKernelMode(KernelMode::MIX_MODE);
 
     struct ResizeUpsampleTrilinearCompileInfo {
-        uint32_t totalCoreNum = 48;
+        uint16_t totalCoreNum = 48;
+        uint16_t socVersionType = 220;
     } compileInfo;
     gert::TilingContextPara tilingContextPara(
         "ResizeUpsampleTrilinear", {{{{1, 2, 2, 4, 4}, {1, 2, 2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}},
@@ -95,7 +96,8 @@ TEST_F(ResizeUpsampleTrilinearTest, test_case_float16)
     AscendC::SetKernelMode(KernelMode::MIX_MODE);
 
     struct ResizeUpsampleTrilinearCompileInfo {
-        uint32_t totalCoreNum = 48;
+        uint16_t totalCoreNum = 48;
+        uint16_t socVersionType = 220;
     } compileInfo;
     gert::TilingContextPara tilingContextPara(
         "ResizeUpsampleTrilinear", {{{{1, 2, 2, 4, 4}, {1, 2, 2, 4, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND}},
@@ -151,6 +153,7 @@ TEST_F(ResizeUpsampleTrilinearTest, test_case_bfloat16)
 
     struct ResizeUpsampleTrilinearCompileInfo {
         uint16_t totalCoreNum = 20;
+        uint16_t socVersionType = 220;
     } compileInfo;
     gert::TilingContextPara tilingContextPara(
         "ResizeUpsampleTrilinear", {{{{1, 2, 2, 4, 4}, {1, 2, 2, 4, 4}}, ge::DT_BF16, ge::FORMAT_ND}},

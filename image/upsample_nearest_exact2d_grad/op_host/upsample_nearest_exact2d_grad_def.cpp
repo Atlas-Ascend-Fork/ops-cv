@@ -57,6 +57,9 @@ public:
             .DynamicShapeSupportFlag(true)
             .ExtendCfgInfo("opFile.value", "upsample_nearest_exact2d_grad_apt");
         this->AICore().AddConfig("ascend950", regbaseConfig);
+        this->AICore().AddConfig("ascend350", regbaseConfig);
+        this->AICore().AddConfig("ascend960dt", regbaseConfig);
+        this->AICore().AddConfig("ascend960pr", regbaseConfig);
     }
 };
 
