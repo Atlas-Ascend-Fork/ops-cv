@@ -57,6 +57,7 @@ public:
             .PrecisionReduceFlag(true)
             .ExtendCfgInfo("opFile.value", "roi_align_rotated_apt");
         this->AICore().AddConfig("ascend950", aicore95Config);
+        this->AICore().AddConfig("ascend350", aicore95Config);
         this->AICore().AddConfig("ascend910b");
         this->AICore().AddConfig("ascend910_93");
         this->AICore().AddConfig("ascend310p");

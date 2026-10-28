@@ -67,7 +67,7 @@ static ge::graphStatus InferShape(gert::InferShapeContext* context)
         Ops::Base::SetUnknownRank(*output_shape);
         return ge::GRAPH_SUCCESS;
     }
-    // ascend950（arch35）regbase 芯片分发到 NCHW 推导；
+    // ascend950/ascend350（arch35）regbase 芯片分发到 NCHW 推导；
     fe::PlatformInfo platformInfo;
     fe::OptionalInfo optionalInfo;
     if (fe::PlatformInfoManager::Instance().GetPlatformInfoWithOutSocVersion(platformInfo, optionalInfo) !=
@@ -80,7 +80,8 @@ static ge::graphStatus InferShape(gert::InferShapeContext* context)
         REPORT_PREDEFINED_ERR_MSG("EZ1014", keys, values);
         return ge::GRAPH_FAILED;
     }
-    if (platformInfo.str_info.short_soc_version == "Ascend950") {
+    if (platformInfo.str_info.short_soc_version == "Ascend950" ||
+        platformInfo.str_info.short_soc_version == "Ascend350") {
         return InferShapeRoiAlignRotatedRegbase(context);
     }
     if (input_shape->GetDimNum() != INPUT_RANK || rois_shape->GetDimNum() != ROIS_RANK) {

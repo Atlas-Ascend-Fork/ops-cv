@@ -62,6 +62,7 @@ public:
             .PrecisionReduceFlag(false) // 精度敏感算子，禁止框架降精度
             .ExtendCfgInfo("opFile.value", "roi_align_rotated_grad_apt");
         this->AICore().AddConfig("ascend950", aicoreConfig);
+        this->AICore().AddConfig("ascend350", aicoreConfig);
     }
 };
 

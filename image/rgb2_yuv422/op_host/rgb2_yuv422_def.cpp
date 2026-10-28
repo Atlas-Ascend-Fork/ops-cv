@@ -46,6 +46,7 @@ public:
             .ExtendCfgInfo("opFile.value", "rgb2_yuv422_apt")
             .ExtendCfgInfo("opInterface.value", "rgb2_yuv422");
         this->AICore().AddConfig("ascend950", aicoreConfig);
+        this->AICore().AddConfig("ascend350", aicoreConfig);
     }
 };
 OP_ADD(RGB2YUV422);

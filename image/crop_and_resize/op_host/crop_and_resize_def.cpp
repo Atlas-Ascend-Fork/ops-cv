@@ -271,6 +271,7 @@ public:
             .PrecisionReduceFlag(true)
             .ExtendCfgInfo("opFile.value", "crop_and_resize_apt");
         this->AICore().AddConfig("ascend950", aicoreConfig);
+        this->AICore().AddConfig("ascend350", aicoreConfig);
         this->AICore().SetCheckSupport(CheckIfAICoreSupported);
     }
 };

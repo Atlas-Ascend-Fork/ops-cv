@@ -21,8 +21,8 @@ endforeach()
 # Keep the existing Host tiling implementation for 910B/910_93 and select the
 # dedicated arch35 implementation only for Ascend 950. Keeping both sources in
 # architecture directories prevents duplicate IMPL_OP_OPTILING registration.
-set(SUPPORT_COMPUTE_UNIT "ascend910b" "ascend910_93" "ascend950")
-set(SUPPORT_TILING_DIR "arch22" "arch22" "arch35")
+set(SUPPORT_COMPUTE_UNIT "ascend910b" "ascend910_93" "ascend950" "ascend350")
+set(SUPPORT_TILING_DIR "arch22" "arch22" "arch35" "arch35")
 add_all_modules_sources(
     OPTYPE rasterizer
     ACLNNTYPE aclnn

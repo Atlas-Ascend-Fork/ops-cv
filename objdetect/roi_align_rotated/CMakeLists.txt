@@ -21,7 +21,7 @@ endforeach()
 
 # ascend310p/910/910_93/910b/kirin 共用 arch22 通用 tiling；ascend950 使用 arch35 专属 tiling。
 # COMPUTE_UNIT 与 TILING_DIR 按位置一一配对，构建时按 ASCEND_COMPUTE_UNIT 选编对应目录，包内互斥、无运行时分发。
-set(SUPPORT_COMPUTE_UNIT "ascend310p" "ascend910" "ascend910_93" "ascend910b" "kirin9030" "kirinx90" "ascend950")
-set(SUPPORT_TILING_DIR "arch22" "arch22" "arch22" "arch22" "arch22" "arch22" "arch35")
+set(SUPPORT_COMPUTE_UNIT "ascend310p" "ascend910" "ascend910_93" "ascend910b" "kirin9030" "kirinx90" "ascend950" "ascend350")
+set(SUPPORT_TILING_DIR "arch22" "arch22" "arch22" "arch22" "arch22" "arch22" "arch35" "arch35")
 add_all_modules_sources(OPTYPE roi_align_rotated ACLNNTYPE aclnn_exclude
                         COMPUTE_UNIT ${SUPPORT_COMPUTE_UNIT} TILING_DIR ${SUPPORT_TILING_DIR})
