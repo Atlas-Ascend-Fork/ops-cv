@@ -1,0 +1,87 @@
+{
+  "op_type": "Clahe",
+  "op_list": [
+    {
+      "bin_filename": "Clahe_ae05299024c132f4b2f2175e91a01726",
+      "inputs": [
+        {
+          "name": "x",
+          "index": 0,
+          "dtype": "uint8",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "y",
+          "index": 0,
+          "dtype": "uint8",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ],
+      "attrs": [
+        {
+          "name": "clip_limit",
+          "dtype": "float",
+          "value": 0.0
+        },
+        {
+          "name": "tile_grid_size",
+          "dtype": "list_int",
+          "value": []
+        }
+      ]
+    },
+    {
+      "bin_filename": "Clahe_69571f64b312e249811fa09eb92d4f74",
+      "inputs": [
+        {
+          "name": "x",
+          "index": 0,
+          "dtype": "uint16",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "y",
+          "index": 0,
+          "dtype": "uint16",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ],
+      "attrs": [
+        {
+          "name": "clip_limit",
+          "dtype": "float",
+          "value": 0.0
+        },
+        {
+          "name": "tile_grid_size",
+          "dtype": "list_int",
+          "value": []
+        }
+      ]
+    }
+  ]
+}
