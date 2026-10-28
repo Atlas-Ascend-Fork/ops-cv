@@ -12,6 +12,7 @@
  * \file three_interpolate_backward_tiling.cc
  * \brief
  */
+#include <cstdint>
 #include <sstream>
 #include "register/op_impl_registry.h"
 #include "register/tilingdata_base.h"
@@ -156,7 +157,12 @@ ge::graphStatus TilingGetDimSizeByIndex(gert::TilingContext* context, uint32_t i
     OP_CHECK_IF(static_cast<size_t>(dim) > shape_val.GetDimNum(), OP_LOGE(context, "shape_val limit error."),
                 return ge::GRAPH_FAILED);
 
-    dim_size = shape_val.GetDim(static_cast<size_t>(dim));
+    int64_t dim_val = shape_val.GetDim(static_cast<size_t>(dim));
+    // 维度超过 int32 承载范围时，写入 uint32 tiling 字段会隐式截断，将回绕后的错误维度下发
+    // kernel 导致寻址错位且静默产出错误结果，必须在此显式拒绝（issue #1436）
+    OP_CHECK_IF(dim_val < 0 || dim_val > INT32_MAX, OP_LOGE(context, "dim size %ld is invalid.", dim_val),
+                return ge::GRAPH_FAILED);
+    dim_size = static_cast<uint32_t>(dim_val);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -174,6 +180,43 @@ ge::graphStatus TilingBasicShapeInfo(gert::TilingContext* context, ThreeInterpol
 
     ret = TilingGetDimSizeByIndex(context, INDEX_INPUT_GRAD_X, DIM::DIM_2, DIR::DIR_INPUT, shape_info.ns);
     OP_CHECK_IF(ret != ge::GRAPH_SUCCESS, OP_LOGE(context, "TilingGetDimSizeByIndex failed."), return ret);
+
+    return ge::GRAPH_SUCCESS;
+}
+
+// 校验 idx/weight (bs, ns, 3) 与 grad_x (bs, c1, ns)、grad_y (bs, c1, ms) 的形状一致性（issue #1407）。
+// 形状不一致时 kernel 会按 tiling 下发的维度静默截断计算并产出错误梯度，必须在 tiling 侧拦截。
+// grad_y 的 rank 与 m 维合法性已由 TilingCheckOutputMs 保证，此处只比对前三维维度值。
+ge::graphStatus TilingCheckShapeConsistency(gert::TilingContext* context, const ThreeInterpolateShapeInfo& shape_info)
+{
+    auto idx_shape_ptr = context->GetInputShape(INDEX_INPUT_IDX);
+    OP_CHECK_NULL_WITH_CONTEXT(context, idx_shape_ptr);
+    auto weight_shape_ptr = context->GetInputShape(INDEX_INPUT_WEIGHT);
+    OP_CHECK_NULL_WITH_CONTEXT(context, weight_shape_ptr);
+    auto grad_y_shape_ptr = context->GetOutputShape(OUTPUT_GRAD_Y);
+    OP_CHECK_NULL_WITH_CONTEXT(context, grad_y_shape_ptr);
+
+    const auto& idx_shape = idx_shape_ptr->GetStorageShape();
+    const auto& weight_shape = weight_shape_ptr->GetStorageShape();
+    const auto& grad_y_shape = grad_y_shape_ptr->GetStorageShape();
+
+    OP_CHECK_IF(idx_shape.GetDimNum() != CONST_3 || weight_shape.GetDimNum() != CONST_3,
+                OP_LOGE(context, "idx and weight must be 3-dim tensor."), return ge::GRAPH_FAILED);
+
+    OP_CHECK_IF(idx_shape.GetDim(0) != weight_shape.GetDim(0) || idx_shape.GetDim(1) != weight_shape.GetDim(1) ||
+                    idx_shape.GetDim(2) != weight_shape.GetDim(2),
+                OP_LOGE(context, "idx and weight must have same shape."), return ge::GRAPH_FAILED);
+
+    OP_CHECK_IF(idx_shape.GetDim(0) != static_cast<int64_t>(shape_info.bs) ||
+                    idx_shape.GetDim(1) != static_cast<int64_t>(shape_info.ns) ||
+                    idx_shape.GetDim(2) != static_cast<int64_t>(CONST_3),
+                OP_LOGE(context, "idx/weight shape must be (bs, ns, 3) to match grad_x."), return ge::GRAPH_FAILED);
+
+    OP_CHECK_IF(grad_y_shape.GetDim(0) != static_cast<int64_t>(shape_info.bs) ||
+                    grad_y_shape.GetDim(1) != static_cast<int64_t>(shape_info.c1) ||
+                    grad_y_shape.GetDim(2) != static_cast<int64_t>(shape_info.ms),
+                OP_LOGE(context, "grad_y shape must be (bs, c1, ms) to match grad_x and attr m."),
+                return ge::GRAPH_FAILED);
 
     return ge::GRAPH_SUCCESS;
 }
@@ -262,6 +305,9 @@ static ge::graphStatus Tiling4ThreeInterpolateBackward(gert::TilingContext* cont
     ThreeInterpolateShapeInfo shape_info;
     OP_CHECK_IF(TilingBasicShapeInfo(context, shape_info) != ge::GRAPH_SUCCESS,
                 OP_LOGE(context, "TilingBasicShapeInfo failed."), return ge::GRAPH_FAILED);
+
+    OP_CHECK_IF(TilingCheckShapeConsistency(context, shape_info) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context, "TilingCheckShapeConsistency failed."), return ge::GRAPH_FAILED);
 
     ThreeInterpolateBackwardTilingData tiling_host;
     tiling_host.set_bs(shape_info.bs);

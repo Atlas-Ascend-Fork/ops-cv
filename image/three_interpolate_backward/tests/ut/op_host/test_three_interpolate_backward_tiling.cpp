@@ -76,17 +76,17 @@ void run_parse_test(optiling::ThreeInterpolateBackwardCompileInfo& compile_info)
 {
     std::string compile_info_string = R"({
         "hardware_info": {
-            "BT_SIZE": 0, 
+            "BT_SIZE": 0,
             "load3d_constraints": "1",
-            "Intrinsic_fix_pipe_l0c2out": false, 
-            "Intrinsic_data_move_l12ub": true, 
-            "Intrinsic_data_move_l0c2ub": true, 
+            "Intrinsic_fix_pipe_l0c2out": false,
+            "Intrinsic_data_move_l12ub": true,
+            "Intrinsic_data_move_l0c2ub": true,
             "Intrinsic_data_move_out2l1_nd2nz": false,
-            "UB_SIZE": 262144, 
-            "L2_SIZE": 33554432, 
+            "UB_SIZE": 262144,
+            "L2_SIZE": 33554432,
             "L1_SIZE": 524288,
-            "L0A_SIZE": 65536, 
-            "L0B_SIZE": 65536, 
+            "L0A_SIZE": 65536,
+            "L0B_SIZE": 65536,
             "L0C_SIZE": 131072,
             "CORE_NUM": 48}})";
 
@@ -188,6 +188,14 @@ TEST_F(TestThreeInterpolateBackwardTiling, test_case_40_200_30_30_fp32)
     run_case({40, 200, 30, 30}, {"float", "int32", "float"}, expect_tiling);
 }
 
+// issue #1436：ns ≈ 2.74e8 时各核基址偏移 core_offset * C0 已超出 uint32 承载
+// （47 * 5711418 * 16 ≈ 4.3e9 > 2^32），tiling 各字段须完整下发不回绕（kernel 侧偏移已 uint64 化）
+TEST_F(TestThreeInterpolateBackwardTiling, test_case_1_1_2_274148085_fp32)
+{
+    std::string expect_tiling = "48 1 1 2 274148085 5711418 356964 16 10 5711439 356965 16 15 6 6 32 96 1 1 1 0 0 0 0 ";
+    run_case({1, 1, 2, 274148085}, {"float", "int32", "float"}, expect_tiling);
+}
+
 TEST_F(TestThreeInterpolateBackwardTiling, test_case_4_20_30_30_fp32)
 {
     std::string expect_tiling = "30 4 2 30 30 1 1 16 1 1 1 16 1 6 6 64 192 2 2 1 0 0 0 0 ";
@@ -228,4 +236,66 @@ TEST_F(TestThreeInterpolateBackwardTiling, test_case_1000_100_100_10_fp16)
 {
     std::string expect_tiling = "48 1000 7 100 10 10 1 16 10 10 1 16 10 3 6 112 336 7 7 1 1 20 40 0 ";
     run_case({1000, 100, 100, 10}, {"float16", "int32", "float16"}, expect_tiling);
+}
+
+namespace {
+// issue #1407 / #1436 负例辅助：独立指定各张量形状，期望 tiling 校验失败
+void run_case_expect_fail(std::vector<int64_t> grad_x_shape, std::vector<int64_t> idx_shape,
+                          std::vector<int64_t> weight_shape, std::vector<int64_t> grad_y_shape,
+                          std::vector<std::string> data_dtypes)
+{
+    auto test_op = op::ThreeInterpolateBackward("ThreeInterpolateBackward");
+    add_input_desc_by_idx(test_op, INDEX_INPUT_GRAD_X, grad_x_shape, data_dtypes, FORMAT_NC1HWC0);
+    add_input_desc_by_idx(test_op, INDEX_INPUT_IDX, idx_shape, data_dtypes, FORMAT_ND);
+    add_input_desc_by_idx(test_op, INDEX_INPUT_WEIGHT, weight_shape, data_dtypes, FORMAT_ND);
+    add_output_desc_by_idx(test_op, INDEX_OUTPUT_GRAD_Y, grad_y_shape, data_dtypes, FORMAT_NC1HWC0);
+
+    optiling::ThreeInterpolateBackwardCompileInfo compile_info;
+    run_parse_test(compile_info);
+    std::unique_ptr<uint8_t[]> tilingdata;
+    EXPECT_NE(TilingTest(test_op, &compile_info, tilingdata), ge::GRAPH_SUCCESS);
+}
+} // namespace
+
+// issue #1407：idx/weight 的 n 维与 grad_x 的 ns 维不一致，须拒绝
+TEST_F(TestThreeInterpolateBackwardTiling, shape_check_idx_n_mismatch_rejected)
+{
+    run_case_expect_fail({2, 1, 4, 1, C0}, {2, 5, 3}, {2, 5, 3}, {2, 1, 6, 1, C0}, {"float", "int32", "float"});
+}
+
+// issue #1407：idx/weight 的 batch 维与 grad_x 的 bs 维不一致，须拒绝
+TEST_F(TestThreeInterpolateBackwardTiling, shape_check_idx_batch_mismatch_rejected)
+{
+    run_case_expect_fail({2, 1, 4, 1, C0}, {3, 4, 3}, {3, 4, 3}, {2, 1, 6, 1, C0}, {"float", "int32", "float"});
+}
+
+// issue #1407：idx/weight 末维不为 3，须拒绝
+TEST_F(TestThreeInterpolateBackwardTiling, shape_check_idx_last_dim_not_3_rejected)
+{
+    run_case_expect_fail({2, 1, 4, 1, C0}, {2, 4, 2}, {2, 4, 2}, {2, 1, 6, 1, C0}, {"float", "int32", "float"});
+}
+
+// issue #1407：weight 与 idx 形状不一致，须拒绝
+TEST_F(TestThreeInterpolateBackwardTiling, shape_check_weight_diff_idx_rejected)
+{
+    run_case_expect_fail({2, 1, 4, 1, C0}, {2, 4, 3}, {2, 5, 3}, {2, 1, 6, 1, C0}, {"float", "int32", "float"});
+}
+
+// issue #1407：idx/weight rank 不为 3，须拒绝
+TEST_F(TestThreeInterpolateBackwardTiling, shape_check_idx_rank_2_rejected)
+{
+    run_case_expect_fail({2, 1, 4, 1, C0}, {2, 4}, {2, 4}, {2, 1, 6, 1, C0}, {"float", "int32", "float"});
+}
+
+// issue #1407：grad_y 的 bs 维与 grad_x 不一致，须拒绝
+TEST_F(TestThreeInterpolateBackwardTiling, shape_check_grad_y_bs_mismatch_rejected)
+{
+    run_case_expect_fail({2, 1, 4, 1, C0}, {2, 4, 3}, {2, 4, 3}, {1, 1, 6, 1, C0}, {"float", "int32", "float"});
+}
+
+// issue #1436：维度值超出 int32 承载范围（ns = 2^31），写入 uint32 tiling 字段会隐式截断，须拒绝
+TEST_F(TestThreeInterpolateBackwardTiling, shape_check_ns_over_int32_max_rejected)
+{
+    run_case_expect_fail({1, 1, 2147483648, 1, C0}, {1, 2147483648, 3}, {1, 2147483648, 3}, {1, 1, 2, 1, C0},
+                         {"float", "int32", "float"});
 }

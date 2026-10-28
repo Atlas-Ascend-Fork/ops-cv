@@ -66,6 +66,61 @@ static bool CheckDtypeValid(const aclTensor* grad_x, const aclTensor* idx, const
     return true;
 }
 
+// 检查 grad_x/idx/weight/grad_y 之间的形状一致性（issue #1407）。
+// 契约：grad_x 与 grad_y 同为 4D NCHW (b,c,n,1)/(b,c,m,1) 或同为 3D ND (b,c,n)/(b,c,m)；
+// idx/weight 均为 (b,n,3)，其中 b 与 grad_x 的 b 维一致、n 与 grad_x 的 n 维一致；
+// grad_y 的 b、c 维与 grad_x 一致且 m 维等于属性 m。
+// 形状不一致时 kernel 会按自身读取到的维度静默截断计算并返回错误梯度，必须在 host 侧拦截。
+static bool CheckShapeConsistent(const aclTensor* grad_x, const aclTensor* idx, const aclTensor* weight,
+                                 const aclTensor* grad_y, int m)
+{
+    const auto& gradXShape = grad_x->GetViewShape();
+    const auto& idxShape = idx->GetViewShape();
+    const auto& weightShape = weight->GetViewShape();
+    const auto& gradYShape = grad_y->GetViewShape();
+
+    auto gradXDimNum = gradXShape.GetDimNum();
+    auto gradYDimNum = gradYShape.GetDimNum();
+    // grad_x 仅支持 4D NCHW (b,c,n,1) 或 3D ND (b,c,n)，且 grad_y rank 与之相同、4D 时末维为 1
+    if (gradXDimNum == NEW_SHAPE_DIMS) {
+        if (gradYDimNum != NEW_SHAPE_DIMS || gradXShape.GetDim(NEW_SHAPE_DIMS - CONST_1) != CONST_1 ||
+            gradYShape.GetDim(NEW_SHAPE_DIMS - CONST_1) != CONST_1) {
+            return false;
+        }
+    } else if (gradXDimNum == CONST_3) {
+        if (gradYDimNum != CONST_3) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    auto dimB = gradXShape.GetDim(DIM_INDEX_B);
+    auto dimC = gradXShape.GetDim(DIM_INDEX_C);
+    auto dimN = gradXShape.GetDim(DIM_INDEX_N);
+
+    // idx/weight 必须均为 (b, n, 3) 且互相一致
+    if (idxShape.GetDimNum() != CONST_3 || weightShape.GetDimNum() != CONST_3) {
+        return false;
+    }
+    if (idxShape.GetDim(DIM_INDEX_B) != weightShape.GetDim(DIM_INDEX_B) ||
+        idxShape.GetDim(DIM_INDEX_C) != weightShape.GetDim(DIM_INDEX_C) ||
+        idxShape.GetDim(DIM_INDEX_M) != weightShape.GetDim(DIM_INDEX_M)) {
+        return false;
+    }
+    // idx 的 b 维与 grad_x 的 b 维一致，n 维与 grad_x 的 n 维一致，末维为 3
+    if (idxShape.GetDim(DIM_INDEX_B) != dimB || idxShape.GetDim(DIM_INDEX_C) != dimN ||
+        idxShape.GetDim(DIM_INDEX_M) != CONST_3) {
+        return false;
+    }
+    // grad_y 的 b、c 维与 grad_x 一致，m 维等于属性 m
+    if (gradYShape.GetDim(DIM_INDEX_B) != dimB || gradYShape.GetDim(DIM_INDEX_C) != dimC ||
+        gradYShape.GetDim(DIM_INDEX_M) != static_cast<int64_t>(m)) {
+        return false;
+    }
+    return true;
+}
+
 static aclnnStatus CheckParams(const aclTensor* grad_x, const aclTensor* idx, const aclTensor* weight,
                                const aclTensor* grad_y, int m)
 {
@@ -78,6 +133,15 @@ static aclnnStatus CheckParams(const aclTensor* grad_x, const aclTensor* idx, co
     // 3. 属性 m 必须大于 0。910B/910_93 不在此处拦截时，m=0 会进入 TransData 并以内部错误返回。
     if (m <= 0) {
         OP_LOGE(ACLNN_ERR_PARAM_INVALID, "attr m must be > 0.");
+        return ACLNN_ERR_PARAM_INVALID;
+    }
+
+    // 4. 检查 grad_x/idx/weight/grad_y 之间的形状一致性（b/c/n/m 维）
+    if (!CheckShapeConsistent(grad_x, idx, weight, grad_y, m)) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                "shapes of grad_x/idx/weight/grad_y must be consistent: grad_x and grad_y should both be "
+                "(b,c,n,1)/(b,c,m,1) NCHW or (b,c,n)/(b,c,m) ND, idx and weight should be (b,n,3) with "
+                "b/n matching grad_x, and grad_y's m dim must equal attr m.");
         return ACLNN_ERR_PARAM_INVALID;
     }
 

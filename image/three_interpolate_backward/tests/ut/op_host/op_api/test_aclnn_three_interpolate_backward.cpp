@@ -238,3 +238,165 @@ TEST_F(three_interpolate_backward_test, hostapi_test_1_2_6_5_fp32)
     // EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
     // ut.TestPrecision();
 }
+
+// ===== issue #1407：grad_x/idx/weight/grad_y 形状一致性负例，均期望 ACLNN_ERR_PARAM_INVALID =====
+
+// idx/weight 的 n 维与 grad_x 的 n 维不一致：kernel 会按 grad_x 的 n 静默截断并产出错误梯度，须拒绝
+TEST_F(three_interpolate_backward_test, shape_check_idx_n_mismatch_test)
+{
+    auto bs = 1;
+    auto cs = 2;
+    auto ms = 6;
+    auto ns = 5;
+
+    auto grad_x = TensorDesc({bs, cs, ns, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto idx = TensorDesc({bs, ns + 1, THREE_POINT}, ACL_INT32, ACL_FORMAT_ND);
+    auto weight = TensorDesc({bs, ns + 1, THREE_POINT}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_y = TensorDesc({bs, cs, ms, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnThreeInterpolateBackward, INPUT(grad_x, idx, weight, (int)ms), OUTPUT(grad_y));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// idx/weight 的 batch 维与 grad_x 的 batch 维不一致，须拒绝
+TEST_F(three_interpolate_backward_test, shape_check_idx_batch_mismatch_test)
+{
+    auto bs = 1;
+    auto cs = 2;
+    auto ms = 6;
+    auto ns = 5;
+
+    auto grad_x = TensorDesc({bs, cs, ns, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto idx = TensorDesc({bs + 1, ns, THREE_POINT}, ACL_INT32, ACL_FORMAT_ND);
+    auto weight = TensorDesc({bs + 1, ns, THREE_POINT}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_y = TensorDesc({bs, cs, ms, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnThreeInterpolateBackward, INPUT(grad_x, idx, weight, (int)ms), OUTPUT(grad_y));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// idx/weight 末维不为 3（三点插值契约），须拒绝
+TEST_F(three_interpolate_backward_test, shape_check_idx_last_dim_not_3_test)
+{
+    auto bs = 1;
+    auto cs = 2;
+    auto ms = 6;
+    auto ns = 5;
+
+    auto grad_x = TensorDesc({bs, cs, ns, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto idx = TensorDesc({bs, ns, 2}, ACL_INT32, ACL_FORMAT_ND);
+    auto weight = TensorDesc({bs, ns, 2}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_y = TensorDesc({bs, cs, ms, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnThreeInterpolateBackward, INPUT(grad_x, idx, weight, (int)ms), OUTPUT(grad_y));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// idx 与 weight 形状不一致（n 维不同），须拒绝
+TEST_F(three_interpolate_backward_test, shape_check_weight_diff_idx_test)
+{
+    auto bs = 1;
+    auto cs = 2;
+    auto ms = 6;
+    auto ns = 5;
+
+    auto grad_x = TensorDesc({bs, cs, ns, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto idx = TensorDesc({bs, ns, THREE_POINT}, ACL_INT32, ACL_FORMAT_ND);
+    auto weight = TensorDesc({bs, ns - 1, THREE_POINT}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_y = TensorDesc({bs, cs, ms, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnThreeInterpolateBackward, INPUT(grad_x, idx, weight, (int)ms), OUTPUT(grad_y));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// idx/weight rank 不为 3，须拒绝
+TEST_F(three_interpolate_backward_test, shape_check_idx_rank_2_test)
+{
+    auto bs = 1;
+    auto cs = 2;
+    auto ms = 6;
+    auto ns = 5;
+
+    auto grad_x = TensorDesc({bs, cs, ns, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto idx = TensorDesc({bs, ns * THREE_POINT}, ACL_INT32, ACL_FORMAT_ND);
+    auto weight = TensorDesc({bs, ns * THREE_POINT}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_y = TensorDesc({bs, cs, ms, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnThreeInterpolateBackward, INPUT(grad_x, idx, weight, (int)ms), OUTPUT(grad_y));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// grad_x 4D 但末维不为 1，须拒绝
+TEST_F(three_interpolate_backward_test, shape_check_grad_x_last_dim_not_1_test)
+{
+    auto bs = 1;
+    auto cs = 2;
+    auto ms = 6;
+    auto ns = 5;
+
+    auto grad_x = TensorDesc({bs, cs, ns, 2}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto idx = TensorDesc({bs, ns, THREE_POINT}, ACL_INT32, ACL_FORMAT_ND);
+    auto weight = TensorDesc({bs, ns, THREE_POINT}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_y = TensorDesc({bs, cs, ms, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnThreeInterpolateBackward, INPUT(grad_x, idx, weight, (int)ms), OUTPUT(grad_y));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// grad_x rank 与 grad_y rank 不一致（3D 输入配 4D 输出），须拒绝
+TEST_F(three_interpolate_backward_test, shape_check_grad_x_rank3_grad_y_rank4_test)
+{
+    auto bs = 1;
+    auto cs = 2;
+    auto ms = 6;
+    auto ns = 5;
+
+    auto grad_x = TensorDesc({bs, cs, ns}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto idx = TensorDesc({bs, ns, THREE_POINT}, ACL_INT32, ACL_FORMAT_ND);
+    auto weight = TensorDesc({bs, ns, THREE_POINT}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_y = TensorDesc({bs, cs, ms, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnThreeInterpolateBackward, INPUT(grad_x, idx, weight, (int)ms), OUTPUT(grad_y));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// grad_y 的 m 维与属性 m 不一致，须拒绝
+TEST_F(three_interpolate_backward_test, shape_check_grad_y_m_dim_mismatch_test)
+{
+    auto bs = 1;
+    auto cs = 2;
+    auto ms = 6;
+    auto ns = 5;
+
+    auto grad_x = TensorDesc({bs, cs, ns, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto idx = TensorDesc({bs, ns, THREE_POINT}, ACL_INT32, ACL_FORMAT_ND);
+    auto weight = TensorDesc({bs, ns, THREE_POINT}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_y = TensorDesc({bs, cs, ms + 1, 1}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnThreeInterpolateBackward, INPUT(grad_x, idx, weight, (int)ms), OUTPUT(grad_y));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}

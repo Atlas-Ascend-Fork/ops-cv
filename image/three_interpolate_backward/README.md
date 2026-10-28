@@ -78,8 +78,8 @@
 
 ## 约束说明
 
-- `idx`中的取值应该小于`m`。
-- `grad_x` shape为(B, C, N)，`idx`/`weight` shape为(B, N, 3)，`grad_y` shape为(B, C, M)。
+- `idx`中的取值范围为[0, m)（非负且小于`m`），越界取值（负数或大于等于`m`）不保证计算结果的正确性。
+- `grad_x` shape为(B, C, N)，`idx`/`weight` shape为(B, N, 3)，`grad_y` shape为(B, C, M)；且`idx`/`weight`的B/N维与`grad_x`一致，`grad_y`的B/C维与`grad_x`一致、M等于属性`m`，shape不一致时接口校验失败。
 - 属性`m`必须大于0。
 - `grad_x`/`weight`/`grad_y`为FLOAT32或FLOAT16，`idx`为INT32或INT64。
 - <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：`grad_x`、`grad_y`的数据格式为5HD（即NC1HWC0，与算子IR定义`FORMAT_NC1HWC0`一致）。

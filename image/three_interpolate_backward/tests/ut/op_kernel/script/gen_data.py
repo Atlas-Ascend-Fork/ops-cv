@@ -11,6 +11,7 @@
 import numpy as np
 import sys
 
+
 def FourDToFiveD(data):
     b, c, n = data.shape
     dtype = data.dtype
@@ -37,21 +38,33 @@ def FiveDToFourD(data, cs):
     return data[:, 0:cs, :]
 
 
-def three_interpolate_backward_golden(bs, cs, ms, ns, dtype):
+def three_interpolate_backward_golden(bs, cs, ms, ns, dtype, invalid_idx=0):
     grad_x = np.ones((bs, cs, ns)).astype(dtype)
     idx = np.random.randint(0, ms, size=(bs, ns, 3), dtype=np.int32)
+    if invalid_idx:
+        # issue #1405 回归：混入越界取值（等于 ms、负数、大于 ms），golden 同步丢弃其贡献
+        idx[0][0][0] = ms
+        idx[0][1][1] = -1
+        idx[0][2][2] = ms + 1
     weight = np.random.uniform(-10, 10, (bs, ns, 3)).astype(dtype)
     grad_y = np.zeros((bs, cs, ms), dtype=dtype)
 
     for b in range(bs):
         for c in range(cs):
             for n in range(ns):
-                grad_y[b][c][idx[b][n][0]] = grad_y[b][c][
-                    idx[b][n][0]] + grad_x[b][c][n] * weight[b][n][0]
-                grad_y[b][c][idx[b][n][1]] = grad_y[b][c][
-                    idx[b][n][1]] + grad_x[b][c][n] * weight[b][n][1]
-                grad_y[b][c][idx[b][n][2]] = grad_y[b][c][
-                    idx[b][n][2]] + grad_x[b][c][n] * weight[b][n][2]
+                # 与 kernel 拦截语义一致：越界取值（负数或 >= ms）的贡献不参与 grad_y 累加（issue #1405）
+                if 0 <= idx[b][n][0] < ms:
+                    grad_y[b][c][idx[b][n][0]] = (
+                        grad_y[b][c][idx[b][n][0]] + grad_x[b][c][n] * weight[b][n][0]
+                    )
+                if 0 <= idx[b][n][1] < ms:
+                    grad_y[b][c][idx[b][n][1]] = (
+                        grad_y[b][c][idx[b][n][1]] + grad_x[b][c][n] * weight[b][n][1]
+                    )
+                if 0 <= idx[b][n][2] < ms:
+                    grad_y[b][c][idx[b][n][2]] = (
+                        grad_y[b][c][idx[b][n][2]] + grad_x[b][c][n] * weight[b][n][2]
+                    )
 
     grad_x = FourDToFiveD(grad_x)
 
@@ -67,8 +80,9 @@ if __name__ == "__main__":
     ms = int(sys.argv[3])
     ns = int(sys.argv[4])
     dtype = int(sys.argv[5])
-    
+    invalid_idx = int(sys.argv[6]) if len(sys.argv) > 6 else 0
+
     data_type = np.float32
     if dtype == 1:
         data_type = np.float16
-    three_interpolate_backward_golden(bs, cs, ms, ns, data_type)
+    three_interpolate_backward_golden(bs, cs, ms, ns, data_type, invalid_idx)

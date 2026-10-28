@@ -232,7 +232,8 @@ aclnnStatus aclnnThreeInterpolateBackward(
 
 ## 约束说明
 
-- idx中的取值应该小于m。
+- idx中的取值范围为[0, m)（非负且小于m），越界取值（负数或大于等于m）不保证计算结果的正确性。
+- grad_x、idx、weight、grad_y之间需满足维度对应关系：idx与weight的shape一致且为（b, n, 3），其b、n维分别与grad_x的b、n维一致；grad_y的b、c维与grad_x一致且m维等于属性m。shape不一致时接口返回ACLNN_ERR_PARAM_INVALID。
 - 确定性计算：
   <!-- npu="A3,910b" id7 -->
   - <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：aclnnThreeInterpolateBackward默认非确定性实现，不支持配置开启。

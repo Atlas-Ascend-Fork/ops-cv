@@ -182,10 +182,12 @@ __aicore__ inline void KernelThreeInterpolateBackward<dataType, idxType>::InitMu
         this->core_last_loop_n_cnt = tiling_device->last_core_last_loop_n_cnt;
     }
 
-    uint32_t core_offset = core_id * tiling_device->each_core_proc_num;
-    this->grad_x_gm.SetGlobalBuffer((__gm__ dataType*)grad_x + core_offset * C0);
-    this->idx_gm.SetGlobalBuffer((__gm__ idxType*)idx + core_offset * 3);
-    this->weight_gm.SetGlobalBuffer((__gm__ dataType*)weight + core_offset * 3);
+    // 分核基址偏移必须在 uint64 域计算：ns 较大时 core_offset * C0 可超出 uint32 范围，
+    // uint32 域乘法回绕会导致尾核从错误位置读 grad_x/idx/weight（issue #1436）
+    uint64_t core_offset = static_cast<uint64_t>(core_id) * tiling_device->each_core_proc_num;
+    this->grad_x_gm.SetGlobalBuffer((__gm__ dataType*)grad_x + core_offset * static_cast<uint64_t>(C0));
+    this->idx_gm.SetGlobalBuffer((__gm__ idxType*)idx + core_offset * static_cast<uint64_t>(3));
+    this->weight_gm.SetGlobalBuffer((__gm__ dataType*)weight + core_offset * static_cast<uint64_t>(3));
     this->grad_y_gm.SetGlobalBuffer((__gm__ dataType*)grad_y);
 }
 
@@ -258,8 +260,24 @@ __aicore__ inline void KernelThreeInterpolateBackward<dataType, idxType>::CopyIn
                                                                         this->copy_in_last_loop_block_size;
     data_copy_params.dstStride = C0 * N0 * sizeof(dataType) / 32 - data_copy_params.blockLen;
     DataCopy(grad_x_local, grad_x_gm[gard_x_addr_offset], data_copy_params);
-    DataCopy(idx_local, idx_gm[idx_addr_offset], N0 * 3);
-    DataCopy(weight_local, weight_gm[weight_addr_offset], N0 * 3);
+    // idx/weight 非末次循环按 N0 * 3 全量搬运（fp32/int32 192B、fp16 96B、int64 384B，恒 32B 整块，
+    // 与原实现指令一致，无性能损失）；仅末次循环按剩余元素夹紧为 last_n_cnt * 3 个（issue #1406）。
+    // MTE 最小搬运粒度为 32B，末次长度（如 5 * 3 * 4B = 60B）非 32B 对齐：普通 DataCopy 会向下取整
+    // 丢数据或凑整越界读，标量读慢一个量级，故末次用唯一支持字节粒度的 DataCopyPad（每核仅 1 次，
+    // 性能影响可忽略）
+    if (n0_idx != this->core_loop_times - 1) {
+        DataCopy(idx_local, idx_gm[idx_addr_offset], N0 * 3);
+        DataCopy(weight_local, weight_gm[weight_addr_offset], N0 * 3);
+    } else {
+        DataCopyExtParams idx_copy_params{1, static_cast<uint32_t>(this->core_last_loop_n_cnt * 3 * sizeof(idxType)), 0,
+                                          0, 0};
+        DataCopyPadExtParams<idxType> idx_pad_params{false, 0, 0, 0};
+        DataCopyPad(idx_local, idx_gm[idx_addr_offset], idx_copy_params, idx_pad_params);
+        DataCopyExtParams weight_copy_params{
+            1, static_cast<uint32_t>(this->core_last_loop_n_cnt * 3 * sizeof(dataType)), 0, 0, 0};
+        DataCopyPadExtParams<dataType> weight_pad_params{false, 0, 0, 0};
+        DataCopyPad(weight_local, weight_gm[weight_addr_offset], weight_copy_params, weight_pad_params);
+    }
 
     grad_x_input_queue.EnQue<dataType>(grad_x_local);
     idx_input_queue.EnQue<idxType>(idx_local);
@@ -333,25 +351,32 @@ __aicore__ inline void KernelThreeInterpolateBackward<dataType, idxType>::CopyOu
     SetAtomicAdd<dataType>();
     for (auto n_idx = 0u; n_idx < move_n_cnt; n_idx++) {
         auto idx = static_cast<decltype(n_idx)>(3) * n_idx;
-        uint64_t grad_y_addr_offset_0 = grad_y_start_addr_offset +
-                                        static_cast<uint64_t>(idx_local.GetValue(idx + 0)) * C0;
-        uint64_t grad_y_addr_offset_1 = grad_y_start_addr_offset +
-                                        static_cast<uint64_t>(idx_local.GetValue(idx + 1)) * C0;
-        uint64_t grad_y_addr_offset_2 = grad_y_start_addr_offset +
-                                        static_cast<uint64_t>(idx_local.GetValue(idx + 2)) * C0;
+        // idx 取值契约 [0, ms)：越界取值（负数或 >= m）的梯度贡献不写出，
+        // 防止越界偏移直接参与 grad_y 寻址造成行外写（issue #1405）
+        auto idx_val_0 = idx_local.GetValue(idx + 0);
+        auto idx_val_1 = idx_local.GetValue(idx + 1);
+        auto idx_val_2 = idx_local.GetValue(idx + 2);
+        auto idx_upper = static_cast<decltype(idx_val_0)>(tiling_device->ms);
+
+        uint64_t grad_y_addr_offset_0 = grad_y_start_addr_offset + static_cast<uint64_t>(idx_val_0) * C0;
+        uint64_t grad_y_addr_offset_1 = grad_y_start_addr_offset + static_cast<uint64_t>(idx_val_1) * C0;
+        uint64_t grad_y_addr_offset_2 = grad_y_start_addr_offset + static_cast<uint64_t>(idx_val_2) * C0;
 
         SetFlag<HardEvent::S_V>(EVENT_ID2);
         WaitFlag<HardEvent::S_V>(EVENT_ID2);
 
-        DataCopy(grad_y_gm[grad_y_addr_offset_0], grad_y_local[C0 * (idx + 0)], data_copy_params);
-        PipeBarrier<PIPE_MTE3>();
-        ;
-        DataCopy(grad_y_gm[grad_y_addr_offset_1], grad_y_local[C0 * (idx + 1)], data_copy_params);
-        PipeBarrier<PIPE_MTE3>();
-        ;
-        DataCopy(grad_y_gm[grad_y_addr_offset_2], grad_y_local[C0 * (idx + 2)], data_copy_params);
-        PipeBarrier<PIPE_MTE3>();
-        ;
+        if ((idx_val_0 >= 0) && (idx_val_0 < idx_upper)) {
+            DataCopy(grad_y_gm[grad_y_addr_offset_0], grad_y_local[C0 * (idx + 0)], data_copy_params);
+            PipeBarrier<PIPE_MTE3>();
+        }
+        if ((idx_val_1 >= 0) && (idx_val_1 < idx_upper)) {
+            DataCopy(grad_y_gm[grad_y_addr_offset_1], grad_y_local[C0 * (idx + 1)], data_copy_params);
+            PipeBarrier<PIPE_MTE3>();
+        }
+        if ((idx_val_2 >= 0) && (idx_val_2 < idx_upper)) {
+            DataCopy(grad_y_gm[grad_y_addr_offset_2], grad_y_local[C0 * (idx + 2)], data_copy_params);
+            PipeBarrier<PIPE_MTE3>();
+        }
     }
     SetAtomicNone();
 
