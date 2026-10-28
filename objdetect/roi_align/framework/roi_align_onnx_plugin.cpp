@@ -68,7 +68,7 @@ static Status OpRoiAlignUpdateInfo(const ge::Operator& op_src, ge::Operator& op_
         return FAILED;
     }
 
-    int input_size = static_cast<int>(op_src.GetInputsSize());
+    int input_size = static_cast<int>(ResolveOnnxInputNum(op_src));
     op_dest.SetAttr("name", GetOpName(op_src));
     op_dest.SetAttr("pooled_height", output_height_value);
     op_dest.SetAttr("pooled_width", output_width_value);

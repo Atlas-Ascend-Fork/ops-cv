@@ -68,7 +68,7 @@ static void ResolveResizeInputs(const ge::Operator& op_src, int& input_size, std
         return;
     }
 
-    input_size = static_cast<int>(op_src.GetInputsSize());
+    input_size = static_cast<int>(ResolveOnnxInputNum(op_src));
     if (input_size >= INPUT_SIZES_IS_TWO) {
         input_roi = "roi";
     }

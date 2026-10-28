@@ -38,6 +38,29 @@ inline Status StrToFloat(const std::string& value, float& result)
     return SUCCESS;
 }
 
+// ONNX parser fills Operator attr "input"/"output" with the NodeProto I/O name lists
+// before ParseParamsByOperatorFn runs. Prefer those lengths over GetInputsSize() /
+// GetOutputsSize(): the latter only count already-registered GE ports and are
+// typically 0 during ParseParams. Same role as node->input_size()/output_size()
+// under the old ParseParamsFn path.
+inline uint32_t ResolveOnnxInputNum(const ge::Operator& op_src)
+{
+    std::vector<ge::AscendString> onnx_inputs;
+    if (op_src.GetAttr("input", onnx_inputs) == ge::GRAPH_SUCCESS && !onnx_inputs.empty()) {
+        return static_cast<uint32_t>(onnx_inputs.size());
+    }
+    return static_cast<uint32_t>(op_src.GetInputsSize());
+}
+
+inline uint32_t ResolveOnnxOutputNum(const ge::Operator& op_src)
+{
+    std::vector<ge::AscendString> onnx_outputs;
+    if (op_src.GetAttr("output", onnx_outputs) == ge::GRAPH_SUCCESS && !onnx_outputs.empty()) {
+        return static_cast<uint32_t>(onnx_outputs.size());
+    }
+    return static_cast<uint32_t>(op_src.GetOutputsSize());
+}
+
 template <typename T>
 inline std::string GetOpName(const T& op)
 {

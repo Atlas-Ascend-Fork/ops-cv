@@ -125,8 +125,8 @@ static Status ParseParamsRoiAlignRotated(const ge::Operator& op_src, ge::Operato
         return FAILED;
     }
 
-    int input_size = static_cast<int>(op_src.GetInputsSize());
-    int output_size = static_cast<int>(op_src.GetOutputsSize());
+    int input_size = static_cast<int>(ResolveOnnxInputNum(op_src));
+    int output_size = static_cast<int>(ResolveOnnxOutputNum(op_src));
     Status ret = SetRoiAlignRotatedByNode(op_dest, input_size, output_size);
     if (ret != SUCCESS) {
         return FAILED;

@@ -64,7 +64,7 @@ static Status ParseParamsNonMaxSuppression(const ge::Operator& op_src, ge::Opera
 
     op_dest.SetAttr("center_point_box", center_point_box);
 
-    int input_size = static_cast<int>(op_src.GetInputsSize());
+    int input_size = static_cast<int>(ResolveOnnxInputNum(op_src));
     op_dest.SetAttr("input_size", input_size);
     op_dest.SetAttr("name", GetOpName(op_src));
     op_dest.SetAttr("original_type", "ai.onnx::11::NonMaxSuppression");

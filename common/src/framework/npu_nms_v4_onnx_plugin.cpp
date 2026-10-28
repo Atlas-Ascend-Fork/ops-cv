@@ -25,8 +25,8 @@ using json = nlohmann::json;
 
 static Status ParseParamsNmsV4(const ge::Operator& op_src, ge::Operator& op_dest)
 {
-    int op_input_size = static_cast<int>(op_src.GetInputsSize());
-    int op_output_size = static_cast<int>(op_src.GetOutputsSize());
+    int op_input_size = static_cast<int>(ResolveOnnxInputNum(op_src));
+    int op_output_size = static_cast<int>(ResolveOnnxOutputNum(op_src));
     op_dest.DynamicInputRegister("x", op_input_size);
     op_dest.DynamicOutputRegister("y", op_output_size);
 

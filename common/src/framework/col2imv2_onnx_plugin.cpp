@@ -1,13 +1,11 @@
 /**
  * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under
- * the terms and conditions of CANN Open Software License Agreement Version 2.0
- * (the "License"). Please refer to the License for details. You may not use
- * this file except in compliance with the License. THIS SOFTWARE IS PROVIDED ON
- * AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS
- * FOR A PARTICULAR PURPOSE. See LICENSE in the root of the software repository
- * for the full text of the License.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 /*!
@@ -52,8 +50,8 @@ static void SetCol2ImV2ByOp(ge::Operator& op_dest, const ge::Operator& op_src)
     op_dest.SetAttr("name", GetOpName(op_src));
     op_dest.SetAttr("original_type", "ai.onnx::18::Col2Im");
 
-    int input_size = static_cast<int>(op_src.GetInputsSize());
-    int output_size = static_cast<int>(op_src.GetOutputsSize());
+    int input_size = static_cast<int>(ResolveOnnxInputNum(op_src));
+    int output_size = static_cast<int>(ResolveOnnxOutputNum(op_src));
 
     op_dest.DynamicInputRegister("x", input_size);
     op_dest.DynamicOutputRegister("y", output_size);

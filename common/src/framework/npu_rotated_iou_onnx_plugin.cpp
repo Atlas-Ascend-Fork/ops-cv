@@ -25,8 +25,8 @@ using json = nlohmann::json;
 
 static Status ParseParamsNpuRotatedIou(const ge::Operator& op_src, ge::Operator& op_dest)
 {
-    int input_size = static_cast<int>(op_src.GetInputsSize());
-    int output_size = static_cast<int>(op_src.GetOutputsSize());
+    int input_size = static_cast<int>(ResolveOnnxInputNum(op_src));
+    int output_size = static_cast<int>(ResolveOnnxOutputNum(op_src));
     op_dest.DynamicInputRegister("x", input_size);
     op_dest.DynamicOutputRegister("y", output_size);
 
