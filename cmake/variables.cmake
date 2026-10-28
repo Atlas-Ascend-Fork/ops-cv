@@ -246,5 +246,5 @@ set(OPS_CATEGORY_LIST
 )
 
 # mapping of soc full name and short name
-set(SHORT_NAME_LIST "ascend910_93" "ascend950" "ascend350" "ascend910b" "ascend910" "ascend310p")
-set(FULL_NAME_LIST "ascend910_9391" "ascend950PR_9599" "ascend350_355e" "ascend910B1" "ascend910A" "ascend310P1")
+set(SHORT_NAME_LIST "ascend910_93" "ascend950" "ascend350" "ascend910b" "ascend910" "ascend310p" "ascend310n")
+set(FULL_NAME_LIST "ascend910_9391" "ascend950PR_9599" "ascend350_355e" "ascend910B1" "ascend910A" "ascend310P1" "ascend310n")

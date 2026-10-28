@@ -64,6 +64,7 @@ enum class SocVersion {
     ASCEND310,
     ASCEND310P,
     ASCEND310B,
+    ASCEND310N,
     ASCEND310C,
     ASCEND610LITE,
     KIRINX90,

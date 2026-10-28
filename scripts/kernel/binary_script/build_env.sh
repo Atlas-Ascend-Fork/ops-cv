@@ -13,6 +13,7 @@
 declare -A SOC_MAP
 SOC_MAP=([Ascend310P]="Ascend310P3"
           [Ascend310B]="Ascend310B1"
+          [Ascend310n]="Ascend310n"
           [Ascend910]="Ascend910A"
           [Ascend910B]="Ascend910B1"
           [Ascend910_93]="Ascend910_9391"

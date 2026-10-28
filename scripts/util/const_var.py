@@ -31,6 +31,7 @@ WMODES = stat.S_IWUSR | stat.S_IRUSR
 SOC_MAP_EXT = {
     "ascend310p": "Ascend310P3",
     "ascend310b": "Ascend310B1",
+    "ascend310n": "Ascend310n",
     "ascend910": "Ascend910A",
     "ascend910b": "Ascend910B1",
     "ascend910_93": "Ascend910_9391",

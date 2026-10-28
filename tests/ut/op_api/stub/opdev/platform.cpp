@@ -56,7 +56,7 @@ NpuArch PlatformInfo::GetCurNpuArch() const
         {SocVersion::ASCEND910, NpuArch::DAV_1001},    {SocVersion::ASCEND910B, NpuArch::DAV_2201},
         {SocVersion::ASCEND910_93, NpuArch::DAV_2201}, {SocVersion::ASCEND950, NpuArch::DAV_3510},
         {SocVersion::ASCEND310P, NpuArch::DAV_2002},   {SocVersion::ASCEND310B, NpuArch::DAV_3002},
-        {SocVersion::ASCEND610LITE, NpuArch::DAV_3102}};
+        {SocVersion::ASCEND310N, NpuArch::DAV_9202},   {SocVersion::ASCEND610LITE, NpuArch::DAV_3102}};
     const auto it = soc2ArchMap.find(g_socVersion);
     if (it != soc2ArchMap.end()) {
         return it->second;
@@ -67,13 +67,21 @@ NpuArch PlatformInfo::GetCurNpuArch() const
 ge::AscendString ToString(SocVersion socVersion)
 {
     static const std::map<SocVersion, std::string> kSocVersionMap = {
-        {SocVersion::ASCEND910, "Ascend910"},       {SocVersion::ASCEND910B, "Ascend910B"},
-        {SocVersion::ASCEND910_93, "Ascend910_93"}, {SocVersion::ASCEND950, "Ascend950"},
-        {SocVersion::ASCEND910E, "Ascend910E"},     {SocVersion::ASCEND310, "Ascend310"},
-        {SocVersion::ASCEND310P, "Ascend310P"},     {SocVersion::ASCEND310B, "Ascend310B"},
-        {SocVersion::ASCEND310C, "Ascend310C"},     {SocVersion::ASCEND610LITE, "Ascend610LITE"},
-        {SocVersion::KIRINX90, "KirinX90"},         {SocVersion::KIRIN9030, "Kirin9030"},
-        {SocVersion::ASCEND5162A, "Ascend5162A"},   {SocVersion::RESERVED_VERSION, "UnknowSocVersion"},
+        {SocVersion::ASCEND910, "Ascend910"},
+        {SocVersion::ASCEND910B, "Ascend910B"},
+        {SocVersion::ASCEND910_93, "Ascend910_93"},
+        {SocVersion::ASCEND950, "Ascend950"},
+        {SocVersion::ASCEND910E, "Ascend910E"},
+        {SocVersion::ASCEND310, "Ascend310"},
+        {SocVersion::ASCEND310P, "Ascend310P"},
+        {SocVersion::ASCEND310B, "Ascend310B"},
+        {SocVersion::ASCEND310N, "Ascend310n"},
+        {SocVersion::ASCEND310C, "Ascend310C"},
+        {SocVersion::ASCEND610LITE, "Ascend610LITE"},
+        {SocVersion::KIRINX90, "KirinX90"},
+        {SocVersion::KIRIN9030, "Kirin9030"},
+        {SocVersion::ASCEND5162A, "Ascend5162A"},
+        {SocVersion::RESERVED_VERSION, "UnknowSocVersion"},
     };
     static const std::string reserved("UnknowSocVersion");
     const auto it = kSocVersionMap.find(socVersion);

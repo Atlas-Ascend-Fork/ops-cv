@@ -44,7 +44,7 @@ build_example_eager() {
     file=$(find ../experimental -path "*/${EXAMPLE_NAME}/examples/*" -name test_aclnn_*.cpp)
   else
     file=$(find ../ -path "*/${EXAMPLE_NAME}/examples/test_aclnn_*.cpp" -not -path "*/experimental/*")
-    if [[ "$COMPUTE_UNIT" == "ascend950" || "$COMPUTE_UNIT" == "ascend350" || "$COMPUTE_UNIT" == "mc62" ]]; then
+    if [[ "$COMPUTE_UNIT" == "ascend950" || "$COMPUTE_UNIT" == "ascend350" || "$COMPUTE_UNIT" == "ascend310n" || "$COMPUTE_UNIT" == "mc62" ]]; then
       local arch35_file
       arch35_file=$(find ../ -path "*/${EXAMPLE_NAME}/examples/arch35/test_aclnn_*.cpp" -not -path "*/experimental/*")
       [[ -n "$arch35_file" ]] && file="$arch35_file"
@@ -225,7 +225,7 @@ build_example_graph() {
     file=$(find ../experimental -path "*/${EXAMPLE_NAME}/examples/*" -name test_geir_*.cpp)
   else
     file=$(find ../ -path "*/${EXAMPLE_NAME}/examples/test_geir_*.cpp" -not -path "*/experimental/*")
-    if [[ "$COMPUTE_UNIT" == "ascend950" || "$COMPUTE_UNIT" == "ascend350" || "$COMPUTE_UNIT" == "mc62" ]]; then
+    if [[ "$COMPUTE_UNIT" == "ascend950" || "$COMPUTE_UNIT" == "ascend350" || "$COMPUTE_UNIT" == "ascend310n" || "$COMPUTE_UNIT" == "mc62" ]]; then
       local arch35_file
       arch35_file=$(find ../ -path "*/${EXAMPLE_NAME}/examples/arch35/test_geir_*.cpp" -not -path "*/experimental/*")
       [[ -n "$arch35_file" ]] && file="$arch35_file"
