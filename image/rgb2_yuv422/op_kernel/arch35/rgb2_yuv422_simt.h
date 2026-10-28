@@ -16,6 +16,7 @@
  *
  * 模板参数:
  *   IDX_T  — 索引类型: uint32_t (小数据) / uint64_t (大数据)
+ *   schMode — 场景模式: MODE_DEFAULT (维度均 <= INT32_MAX) / MODE_LARGE (存在超 INT32_MAX 维度, 强制 64 位索引)
  *
  * 优化要点:
  *   - Simt::UintDiv 快除替代 pairIdx/pairsPerRow 和 b_h/H
@@ -120,36 +121,38 @@ __simt_vf__ __aicore__ __launch_bounds__(THREADS) inline void Rgb2yuv422SimtKern
 
 // ====================================================================
 // Process: 解码 TilingData, 预计算快除参数, 按索引位宽选择路径
+// schMode = Rgb2yuv422_TPL_SCH_MODE_0: 维度均不超过 INT32_MAX, 运行时按数据量选择 32/64 位索引
+// schMode = Rgb2yuv422_TPL_SCH_MODE_1: 存在超过 INT32_MAX 的维度, 强制 64 位索引解码
 // ====================================================================
 
+template <uint32_t schMode>
 __aicore__ inline void Process(GM_ADDR input, GM_ADDR output, const Rgb2yuv422TilingData* tilingData)
 {
     int32_t needCoreNum = tilingData->needCoreNum;
     int64_t totalRows = tilingData->totalRows;
-    int32_t perCoreRows = tilingData->perCoreRows;
-    int32_t W = tilingData->W;
-    int32_t outerDims = tilingData->outerDims;
-    int32_t pairsPerRow = tilingData->pairsPerRow;
-
-    int32_t H = static_cast<int32_t>(totalRows / outerDims);
+    int64_t perCoreRows = tilingData->perCoreRows;
+    int64_t W = tilingData->W;
+    int64_t outerDims = tilingData->outerDims;
+    int64_t pairsPerRow = tilingData->pairsPerRow;
 
     if (totalRows <= 0 || W <= 0) {
         return;
     }
 
+    int64_t H = totalRows / outerDims;
+
     __gm__ uint8_t* inputGm = reinterpret_cast<__gm__ uint8_t*>(input);
     __gm__ uint8_t* outputGm = reinterpret_cast<__gm__ uint8_t*>(output);
 
-    int64_t totalPairs = totalRows * static_cast<int64_t>(pairsPerRow);
+    int64_t totalPairs = totalRows * pairsPerRow;
 
-    bool use32Bit = (totalPairs <= static_cast<int64_t>(UINT32_MAX)) &&
+    bool use32Bit = (schMode == Rgb2yuv422_TPL_SCH_MODE_0) && (totalPairs <= static_cast<int64_t>(UINT32_MAX)) &&
                     (totalRows <= static_cast<int64_t>(UINT32_MAX)) &&
-                    (static_cast<int64_t>(pairsPerRow) <= static_cast<int64_t>(UINT32_MAX)) &&
-                    (static_cast<int64_t>(W) <= static_cast<int64_t>(UINT32_MAX)) &&
-                    (static_cast<int64_t>(H) <= static_cast<int64_t>(UINT32_MAX)) &&
-                    (static_cast<int64_t>(outerDims) <= static_cast<int64_t>(UINT32_MAX)) &&
-                    (static_cast<int64_t>(outerDims) * static_cast<int64_t>(H) * static_cast<int64_t>(W) <=
-                     static_cast<int64_t>(UINT32_MAX));
+                    (pairsPerRow <= static_cast<int64_t>(UINT32_MAX)) && (W <= static_cast<int64_t>(UINT32_MAX)) &&
+                    (H <= static_cast<int64_t>(UINT32_MAX)) && (outerDims <= static_cast<int64_t>(UINT32_MAX)) &&
+                    // 32 位偏移上界按字节寻址推导: 输入 L*3 最大 3*totalPixels-1, 输出 L*2 最大 2*totalPixels-1,
+                    // 故要求 totalPixels = totalRows*W <= UINT32_MAX/3 (1431655765), 而非仅 <= UINT32_MAX
+                    (totalRows * W <= static_cast<int64_t>(UINT32_MAX) / 3);
 
     if (use32Bit) {
         uint32_t magicRow = 0, shiftRow = 0;

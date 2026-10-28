@@ -21,10 +21,14 @@
 struct Rgb2yuv422TilingData {
     int32_t needCoreNum; // 实际启动核数
     int64_t totalRows;   // 展平后的总行数（outerDims × H），int64 防溢出
-    int32_t perCoreRows; // 每核处理的行数
-    int32_t W;           // 图像宽度
-    int32_t outerDims;   // 非空间维展平大小
-    int32_t pairsPerRow; // 每行像素对数 = ceil(W / 2)
+    int64_t perCoreRows; // 每核处理的行数
+    int64_t W;           // 图像宽度
+    int64_t outerDims;   // 非空间维展平大小
+    int64_t pairsPerRow; // 每行像素对数 = ceil(W / 2)
 };
+
+// 编译期校验：确保 host 和 device 侧结构体大小一致（48 bytes = 1 int32 + 5 int64 + 尾部对齐）
+static_assert(sizeof(Rgb2yuv422TilingData) == 48,
+              "Rgb2yuv422TilingData size must be 48 bytes (1 int32 + 5 int64 with alignment)");
 
 #endif // Rgb2yuv422_TILING_DATA_H

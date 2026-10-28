@@ -16,6 +16,10 @@
  *
  * 仅支持 uint8 ND (channel last)，无 data_format 分支
  * 索引位宽（32/64-bit）在 Process 中按数据量运行时选择，不编码进 TilingKey
+ * schMode 场景模式：
+ *   - MODE_DEFAULT = 0：H/W/outerDims/perCoreRows 均不超过 INT32_MAX（常规路径）
+ *   - MODE_LARGE   = 1：任一维度超过 INT32_MAX，tiling 字段全程 int64，
+ *     kernel 强制 64 位索引解码（正确性优先，仅极端场景命中）
  */
 
 #ifndef Rgb2yuv422_TILING_KEY_H
@@ -23,12 +27,16 @@
 
 #include "ascendc/host_api/tiling/template_argument.h"
 
-// 本算子仅有一种 dtype 组合（uint8 -> uint8），TilingKey 固定为 0
+// 本算子仅有一种 dtype 组合（uint8 -> uint8），TilingKey 仅枚举 schMode
 // 禁止枚举 dtype，应使用 DTYPE_ 宏自动实例化
 #define Rgb2yuv422_TPL_SCH_MODE_0 0
+#define Rgb2yuv422_TPL_SCH_MODE_1 1
 
-ASCENDC_TPL_ARGS_DECL(Rgb2yuv422, ASCENDC_TPL_UINT_DECL(schMode, 1, ASCENDC_TPL_UI_LIST, Rgb2yuv422_TPL_SCH_MODE_0));
+ASCENDC_TPL_ARGS_DECL(Rgb2yuv422, ASCENDC_TPL_UINT_DECL(schMode, 1, ASCENDC_TPL_UI_LIST, Rgb2yuv422_TPL_SCH_MODE_0,
+                                                        Rgb2yuv422_TPL_SCH_MODE_1));
 
-ASCENDC_TPL_SEL(ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_UINT_SEL(schMode, ASCENDC_TPL_UI_LIST, Rgb2yuv422_TPL_SCH_MODE_0)));
+ASCENDC_TPL_SEL(ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_UINT_SEL(schMode, ASCENDC_TPL_UI_LIST, Rgb2yuv422_TPL_SCH_MODE_0,
+                                                          Rgb2yuv422_TPL_SCH_MODE_1),
+                                     ASCENDC_TPL_TILING_STRUCT_SEL(Rgb2yuv422TilingData)));
 
 #endif // Rgb2yuv422_TILING_KEY_H

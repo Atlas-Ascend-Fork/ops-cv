@@ -22,6 +22,8 @@ using namespace ge;
 
 namespace ops {
 static constexpr int64_t IDX_0 = 0;
+static constexpr size_t MIN_RANK_NUM = 3;
+static constexpr size_t MAX_RANK_NUM = 8; // FORMAT_ND 平台维数上限
 
 static ge::graphStatus InferShapeRgb2yuv422(gert::InferShapeContext* context)
 {
@@ -41,9 +43,14 @@ static ge::graphStatus InferShapeRgb2yuv422(gert::InferShapeContext* context)
     }
 
     size_t rank = xShape->GetDimNum();
-    if (rank < 3) {
+    if (rank < MIN_RANK_NUM) {
         OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "rgb", std::to_string(rank).c_str(),
                                                  "input must have at least 3 dimensions");
+        return GRAPH_FAILED;
+    }
+    if (rank > MAX_RANK_NUM) {
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "rgb", std::to_string(rank).c_str(),
+                                                 "input must have at most 8 dimensions (FORMAT_ND limit)");
         return GRAPH_FAILED;
     }
 

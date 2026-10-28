@@ -45,7 +45,7 @@ TEST_F(Rgb2yuv422Tiling, rgb2_yuv422_uint8_nhwc)
                                               },
                                               &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 0;
-    string expectTilingData = "1 4 34359738372 17179869185 ";
+    string expectTilingData = "1 4 4 8 1 4 ";
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -66,6 +66,118 @@ TEST_F(Rgb2yuv422Tiling, rgb2_yuv422_abnormal_dtype_fp16)
                                                   /* attrs */
                                               },
                                               &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+// H exceeds INT32_MAX: tiling must succeed with MODE_LARGE (schMode=1), no narrowing
+TEST_F(Rgb2yuv422Tiling, rgb2_yuv422_large_h_mode_large)
+{
+    struct Rgb2yuv422CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RGB2YUV422",
+        {
+            {{{2147483648LL, 1, 3}, {2147483648LL, 1, 3}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            {{{2147483648LL, 1, 2}, {2147483648LL, 1, 2}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            /* attrs */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    uint64_t expectTilingKey = 1;
+    string expectTilingData = "64 2147483648 33554432 1 1 1 ";
+    std::vector<size_t> expectWorkspaces = {16777216};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// W exceeds INT32_MAX: tiling must succeed with MODE_LARGE (schMode=1), no narrowing
+TEST_F(Rgb2yuv422Tiling, rgb2_yuv422_large_w_mode_large)
+{
+    struct Rgb2yuv422CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RGB2YUV422",
+        {
+            {{{1, 2147483648LL, 3}, {1, 2147483648LL, 3}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 2147483648LL, 2}, {1, 2147483648LL, 2}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            /* attrs */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    uint64_t expectTilingKey = 1;
+    string expectTilingData = "1 1 1 2147483648 1 1073741824 ";
+    std::vector<size_t> expectWorkspaces = {16777216};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// outerDims exceeds INT32_MAX: tiling must succeed with MODE_LARGE (schMode=1), no narrowing
+TEST_F(Rgb2yuv422Tiling, rgb2_yuv422_large_outer_dims_mode_large)
+{
+    struct Rgb2yuv422CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RGB2YUV422",
+        {
+            {{{2147483648LL, 1, 1, 3}, {2147483648LL, 1, 1, 3}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            {{{2147483648LL, 1, 1, 2}, {2147483648LL, 1, 1, 2}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            /* attrs */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    uint64_t expectTilingKey = 1;
+    string expectTilingData = "64 2147483648 33554432 1 2147483648 1 ";
+    std::vector<size_t> expectWorkspaces = {16777216};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// Rank 8 (FORMAT_ND upper limit) is supported, tiling must succeed
+TEST_F(Rgb2yuv422Tiling, rgb2_yuv422_rank8_boundary)
+{
+    struct Rgb2yuv422CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RGB2YUV422",
+        {
+            {{{1, 1, 1, 1, 1, 4, 8, 3}, {1, 1, 1, 1, 1, 4, 8, 3}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 1, 1, 1, 4, 8, 2}, {1, 1, 1, 1, 1, 4, 8, 2}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            /* attrs */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    uint64_t expectTilingKey = 0;
+    string expectTilingData = "1 4 4 8 1 4 ";
+    std::vector<size_t> expectWorkspaces = {16777216};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// Rank 9 exceeds the FORMAT_ND limit (8), tiling must fail
+TEST_F(Rgb2yuv422Tiling, rgb2_yuv422_abnormal_rank9)
+{
+    struct Rgb2yuv422CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RGB2YUV422",
+        {
+            {{{1, 1, 1, 1, 1, 1, 4, 8, 3}, {1, 1, 1, 1, 1, 1, 4, 8, 3}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 1, 1, 1, 1, 4, 8, 2}, {1, 1, 1, 1, 1, 1, 4, 8, 2}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            /* attrs */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
 }
 

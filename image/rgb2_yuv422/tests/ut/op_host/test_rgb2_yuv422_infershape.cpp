@@ -77,6 +77,37 @@ TEST_F(Rgb2yuv422Infershape, rgb2_yuv422_infershape_abnormal_shape_channel4)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
 }
 
+// Rank 8 (FORMAT_ND upper limit) is supported, output keeps rank 8
+TEST_F(Rgb2yuv422Infershape, rgb2_yuv422_infershape_rank8_boundary)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "RGB2YUV422",
+        {
+            {{{1, 1, 1, 1, 1, 4, 8, 3}, {1, 1, 1, 1, 1, 4, 8, 3}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {1, 1, 1, 1, 1, 4, 8, 2},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+// Rank 9 exceeds the FORMAT_ND limit (8), infershape must fail
+TEST_F(Rgb2yuv422Infershape, rgb2_yuv422_infershape_abnormal_rank9)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "RGB2YUV422",
+        {
+            {{{1, 1, 1, 1, 1, 1, 4, 8, 3}, {1, 1, 1, 1, 1, 1, 4, 8, 3}}, ge::DT_UINT8, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND},
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
 // Unknown shape: all dims unknown (-1), channel check is skipped, output last dim is 2
 TEST_F(Rgb2yuv422Infershape, rgb2_yuv422_infershape_unknown_shape_test)
 {

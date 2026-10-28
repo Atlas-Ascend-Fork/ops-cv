@@ -25,5 +25,5 @@ __global__ __aicore__ void rgb2_yuv422(GM_ADDR x, GM_ADDR y, GM_ADDR workspace, 
     REGISTER_TILING_DEFAULT(Rgb2yuv422TilingData);
     GET_TILING_DATA_WITH_STRUCT(Rgb2yuv422TilingData, tilingData, tiling);
 
-    NsRgb2yuv422::Process(x, y, &tilingData);
+    NsRgb2yuv422::Process<schMode>(x, y, &tilingData);
 }

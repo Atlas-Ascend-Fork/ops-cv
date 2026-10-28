@@ -39,7 +39,8 @@ using std::string;
 using std::vector;
 #define ADD_INPUT(intputIndex, intputName, intputDtype, inputShape)                                                 \
     vector<int64_t> placeholder##intputIndex##_shape = inputShape;                                                  \
-    auto placeholder##intputIndex = op::Data("placeholder" + intputIndex).set_attr_index(0);                        \
+    auto placeholder##intputIndex = op::Data((string("placeholder") + std::to_string(intputIndex)).c_str())         \
+                                        .set_attr_index(0);                                                         \
     TensorDesc placeholder##intputIndex##_desc = TensorDesc(ge::Shape(placeholder##intputIndex##_shape), FORMAT_ND, \
                                                             intputDtype);                                           \
     placeholder##intputIndex##_desc.SetPlacement(ge::kPlacementHost);                                               \
@@ -112,6 +113,10 @@ int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& in
     }
     uint32_t data_len = size * GetDataTypeSize(data_type);
     int32_t* pData = new (std::nothrow) int32_t[data_len];
+    if (pData == nullptr) {
+        printf("%s - ERROR - [XIR]: Allocate input data buffer failed\n", GetTime().c_str());
+        return FAILED;
+    }
     for (uint32_t i = 0; i < size; ++i) {
         *(pData + i) = value;
     }
@@ -123,7 +128,16 @@ int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& in
 int32_t WriteDataToFile(string bin_file, uint64_t data_size, uint8_t* inputData)
 {
     FILE* fp = fopen(bin_file.c_str(), "w");
-    fwrite(inputData, sizeof(uint8_t), data_size, fp);
+    if (fp == nullptr) {
+        printf("%s - ERROR - [XIR]: Open file %s failed\n", GetTime().c_str(), bin_file.c_str());
+        return FAILED;
+    }
+    size_t written = fwrite(inputData, sizeof(uint8_t), data_size, fp);
+    if (written != data_size) {
+        printf("%s - ERROR - [XIR]: Write file %s failed\n", GetTime().c_str(), bin_file.c_str());
+        fclose(fp);
+        return FAILED;
+    }
     fclose(fp);
     return SUCCESS;
 }
@@ -174,6 +188,7 @@ int main(int argc, char* argv[])
     ret = CreateOppInGraph(inDtype, input, inputs, outputs, graph);
     if (ret != SUCCESS) {
         printf("%s - ERROR - [XIR]: Create ir session using build options failed\n", GetTime().c_str());
+        GEFinalize();
         return FAILED;
     }
 
@@ -189,6 +204,7 @@ int main(int argc, char* argv[])
 
     if (session == nullptr) {
         printf("%s - ERROR - [XIR]: Create ir session using build options failed\n", GetTime().c_str());
+        GEFinalize();
         return FAILED;
     }
     printf("%s - INFO - [XIR]: Create ir session using build options success\n", GetTime().c_str());
@@ -199,7 +215,12 @@ int main(int argc, char* argv[])
     };
     uint32_t graph_id = 0;
     ret = session->AddGraph(graph_id, graph, graph_options);
-
+    if (ret != SUCCESS) {
+        printf("%s - ERROR - [XIR]: Session add ir compute graph to ir session failed\n", GetTime().c_str());
+        delete session;
+        GEFinalize();
+        return FAILED;
+    }
     printf("%s - INFO - [XIR]: Session add ir compute graph to ir session success\n", GetTime().c_str());
     printf("%s - INFO - [XIR]: dump graph to txt\n", GetTime().c_str());
     std::string file_path = "./dump";
@@ -223,7 +244,12 @@ int main(int argc, char* argv[])
         int64_t input_shape = input[i].GetTensorDesc().GetShape().GetShapeSize();
         std::cout << "this is " << i << "th input, input shape size =" << input_shape << std::endl;
         uint32_t data_size = input_shape * GetDataTypeSize(input[i].GetTensorDesc().GetDataType());
-        WriteDataToFile((const char*)input_file.c_str(), data_size, input_data_i);
+        ret = WriteDataToFile((const char*)input_file.c_str(), data_size, input_data_i);
+        if (ret != SUCCESS) {
+            delete session;
+            GEFinalize();
+            return FAILED;
+        }
     }
 
     int output_num = output.size();
@@ -234,7 +260,12 @@ int main(int argc, char* argv[])
         int64_t output_shape = output[i].GetTensorDesc().GetShape().GetShapeSize();
         std::cout << "this is " << i << "th output, output shape size =" << output_shape << std::endl;
         uint32_t data_size = output_shape * GetDataTypeSize(output[i].GetTensorDesc().GetDataType());
-        WriteDataToFile((const char*)output_file.c_str(), data_size, output_data_i);
+        ret = WriteDataToFile((const char*)output_file.c_str(), data_size, output_data_i);
+        if (ret != SUCCESS) {
+            delete session;
+            GEFinalize();
+            return FAILED;
+        }
     }
 
     ge::AscendString error_msg = ge::GEGetErrorMsgV2();
@@ -243,8 +274,9 @@ int main(int argc, char* argv[])
     ge::AscendString warning_msg = ge::GEGetWarningMsgV2();
     std::string warning_str(warning_msg.GetString());
     std::cout << "Warning message: " << warning_str << std::endl;
-    printf("%s - INFO - [XIR]: Precision is ok\n", GetTime().c_str());
+    printf("%s - INFO - [XIR]: Graph execution and data dump finished\n", GetTime().c_str());
     printf("%s - INFO - [XIR]: Start to finalize ir graph session\n", GetTime().c_str());
+    delete session;
     ret = ge::GEFinalize();
     if (ret != SUCCESS) {
         printf("%s - INFO - [XIR]: Finalize ir graph session failed\n", GetTime().c_str());

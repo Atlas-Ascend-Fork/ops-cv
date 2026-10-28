@@ -9,66 +9,62 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------
 
-import numpy as np
+"""rgb2_yuv422 在 kernel/geir 测试路径下的 golden 编写。
 
-__golden__ = {
-    "kernel": {"rgb2_yuv422": "rgb2_yuv422_golden"}
-}
+Kernel/GEIR 的 golden 收到 numpy.ndarray，转 torch tensor 后用小算子拼接计算，结果转回 numpy；
+third_party 的 torch vendor 收到 torch.Tensor，直接调 torch 小算子，无需转换。
+无现成框架接口，CSC 系数 + YUYV packing 用 torch 小算子拼接实现。
+"""
 
+__spec__ = {"rgb2_yuv422": "Rgb2Yuv422KernelSpec"}
 
-def _rgb2_yuv422_impl(x, compute_dtype=np.float32):
-    """
-    RGB → YUV422 (YUYV packed) conversion, aligned with canndev AIPP /256 coefficients.
-
-    Args:
-        x: numpy ndarray, RGB input, shape [..., H, W, 3] (NHWC), uint8
-        compute_dtype: numpy dtype for computation
-
-    Returns:
-        y: numpy ndarray, YUV422 output, shape [..., H, W, 2], uint8
-    """
-    x = np.asarray(x, dtype=compute_dtype)
-
-    if x.shape[-1] != 3:
-        raise ValueError(f"Input channel dimension must be 3, got {x.shape[-1]}")
-
-    orig_shape = x.shape
-    h, w = orig_shape[-3], orig_shape[-2]
-
-    r = x[..., 0]
-    g = x[..., 1]
-    b = x[..., 2]
-
-    # canndev AIPP CSC 系数 (/256 定点)：
-    #   Y_R=77, Y_G=150, Y_B=29
-    #   U_R=-43, U_G=-85, U_B=128, U_offset=+128
-    #   V_R=128, V_G=-107, V_B=-21, V_offset=+128
-    c00, c01, c02 = np.asarray([77.0/256.0, 150.0/256.0, 29.0/256.0], dtype=compute_dtype)
-    c10, c11, c12 = np.asarray([-43.0/256.0, -85.0/256.0, 128.0/256.0], dtype=compute_dtype)
-    c20, c21, c22 = np.asarray([128.0/256.0, -107.0/256.0, -21.0/256.0], dtype=compute_dtype)
-
-    y_full = c00 * r + c01 * g + c02 * b
-    u_full = c10 * r + c11 * g + c12 * b + np.asarray(128.0, dtype=compute_dtype)
-    v_full = c20 * r + c21 * g + c22 * b + np.asarray(128.0, dtype=compute_dtype)
-
-    # YUV422 YUYV packing (aligned with canndev):
-    #   Even column: [Y_even, U_even]
-    #   Odd column:  [Y_odd, V_odd]
-    yuv422 = np.zeros(list(orig_shape[:-1]) + [2], dtype=compute_dtype)
-
-    for j in range(0, w, 2):
-        yuv422[..., j, 0] = y_full[..., j]
-        yuv422[..., j, 1] = u_full[..., j]
-        if j + 1 < w:
-            yuv422[..., j + 1, 0] = y_full[..., j + 1]
-            yuv422[..., j + 1, 1] = v_full[..., j + 1]
-
-    return yuv422
+import torch
 
 
-def rgb2_yuv422_golden(x, **kwargs):
-    orig_dtype = x.dtype
-    x_input = x.astype(np.float32)
-    result = _rgb2_yuv422_impl(x_input, compute_dtype=np.float32)
-    result = np.clip(np.round(result), 0, 255).astype(np.uint8)
-    return result
+class Rgb2Yuv422KernelSpec:
+    """Kernel / GEIR 流程 — golden 收到 numpy.ndarray"""
+
+    def golden(rgb, **kwargs):
+        x_t = torch.from_numpy(rgb).to(torch.float32)
+        r, g, b = x_t[..., 0], x_t[..., 1], x_t[..., 2]
+        y_full = (77.0 / 256.0) * r + (150.0 / 256.0) * g + (29.0 / 256.0) * b
+        u_full = (-43.0 / 256.0) * r + (-85.0 / 256.0) * g + (128.0 / 256.0) * b + 128.0
+        v_full = (
+            (128.0 / 256.0) * r + (-107.0 / 256.0) * g + (-21.0 / 256.0) * b + 128.0
+        )
+        yuv422 = torch.zeros(*x_t.shape[:-1], 2, dtype=torch.float32)
+        yuv422[..., 0::2, 0] = y_full[..., 0::2]
+        yuv422[..., 0::2, 1] = u_full[..., 0::2]
+        yuv422[..., 1::2, 0] = y_full[..., 1::2]
+        yuv422[..., 1::2, 1] = v_full[..., 1::2]
+        result = torch.clamp(torch.round(yuv422), 0, 255).to(torch.uint8)
+        return [result.numpy()]
+
+    class ThirdPartyImpl:
+        def __init__(self, rgb, **kwargs):
+            dev = rgb.device
+            self.x_t = rgb.to(torch.float32)
+            csc = torch.tensor(
+                [
+                    [77.0 / 256.0, 150.0 / 256.0, 29.0 / 256.0],
+                    [-43.0 / 256.0, -85.0 / 256.0, 128.0 / 256.0],
+                    [128.0 / 256.0, -107.0 / 256.0, -21.0 / 256.0],
+                ],
+                dtype=torch.float32,
+                device=dev,
+            )
+            self.csc_t = csc.t()
+            self.offset = torch.tensor(
+                [0.0, 128.0, 128.0], dtype=torch.float32, device=dev
+            )
+            w = self.x_t.shape[-2]
+            self.is_even = torch.arange(w, device=dev) % 2 == 0
+
+        def __call__(self, rgb, **kwargs):
+            yuv = self.x_t @ self.csc_t + self.offset
+            chroma = torch.where(self.is_even, yuv[..., 1], yuv[..., 2])
+            yuv422 = torch.stack([yuv[..., 0], chroma], dim=-1)
+            return [torch.clamp(torch.round(yuv422), 0, 255).to(torch.uint8)]
+
+    third_party = {"torch": ThirdPartyImpl}
+    tolerance = {"uint8": {"standard": "binary_equal"}}

@@ -15,6 +15,7 @@
  * \brief Tiling implementation for rgb2_yuv422 operator
  */
 
+#include <cstdint>
 #include "log/log.h"
 #include "platform/platform_ascendc.h"
 #include "util/math_util.h"
@@ -31,6 +32,8 @@ using namespace Ops::Cv::OpTiling;
 constexpr uint32_t DCACHE_SIZE = 128 * 1024;
 constexpr uint32_t STATIC_UB_ESTIMATE = 0;
 constexpr int64_t PER_CORE_MIN = 1024;
+constexpr size_t MIN_RANK_NUM = 3;
+constexpr size_t MAX_RANK_NUM = 8; // FORMAT_ND 平台维数上限
 
 struct Rgb2yuv422CompileInfo {};
 
@@ -62,9 +65,14 @@ static ge::graphStatus GetShapeInfo(gert::TilingContext* context, int64_t& H, in
     auto storageShape = inputShape->GetStorageShape();
     size_t rank = storageShape.GetDimNum();
 
-    if (rank < 3) {
+    if (rank < MIN_RANK_NUM) {
         OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "rgb", std::to_string(rank).c_str(),
                                                  "input must have at least 3 dimensions");
+        return ge::GRAPH_FAILED;
+    }
+    if (rank > MAX_RANK_NUM) {
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "rgb", std::to_string(rank).c_str(),
+                                                 "input must have at most 8 dimensions (FORMAT_ND limit)");
         return ge::GRAPH_FAILED;
     }
 
@@ -83,8 +91,8 @@ static ge::graphStatus GetShapeInfo(gert::TilingContext* context, int64_t& H, in
         OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "rgb", Ops::Base::ToString(inputDtype).c_str(), "UINT8");
         return ge::GRAPH_FAILED;
     }
-    H = static_cast<int32_t>(storageShape.GetDim(rank - 3));
-    W = static_cast<int32_t>(storageShape.GetDim(rank - 2));
+    H = storageShape.GetDim(rank - 3);
+    W = storageShape.GetDim(rank - 2);
     outerDims = Product(storageShape, 0, rank - 3);
     return ge::GRAPH_SUCCESS;
 }
@@ -113,8 +121,8 @@ static ge::graphStatus SetLocalMemory(gert::TilingContext* context, uint64_t ubS
 }
 
 static ge::graphStatus FillTilingData(gert::TilingContext* context, int32_t needCoreNum, int64_t totalRows,
-                                      int32_t perCoreRows, int32_t W, int32_t outerDims, int32_t pairsPerRow,
-                                      uint64_t ubSize)
+                                      int64_t perCoreRows, int64_t W, int64_t outerDims, int64_t pairsPerRow,
+                                      uint64_t ubSize, uint64_t schMode)
 {
     Rgb2yuv422TilingData* tiling = context->GetTilingData<Rgb2yuv422TilingData>();
     OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
@@ -129,7 +137,7 @@ static ge::graphStatus FillTilingData(gert::TilingContext* context, int32_t need
     tiling->pairsPerRow = pairsPerRow;
 
     context->SetBlockDim(needCoreNum);
-    context->SetTilingKey(GET_TPL_TILING_KEY(Rgb2yuv422_TPL_SCH_MODE_0));
+    context->SetTilingKey(GET_TPL_TILING_KEY(schMode));
 
     return SetLocalMemory(context, ubSize);
 }
@@ -150,25 +158,27 @@ static ge::graphStatus Rgb2yuv422TilingFunc(gert::TilingContext* context)
                 return ge::GRAPH_FAILED);
 
     int64_t totalRows = outerDims * H;
-    int32_t pairsPerRow = (static_cast<int32_t>(W) + 1) / 2;
+    int64_t pairsPerRow = (W + 1) / 2;
 
     if (totalRows <= 0 || W <= 0) {
-        return FillTilingData(context, 1, 0, 0, static_cast<int32_t>(W), static_cast<int32_t>(outerDims), pairsPerRow,
-                              ubSize);
+        return FillTilingData(context, 1, 0, 0, W, outerDims, pairsPerRow, ubSize, Rgb2yuv422_TPL_SCH_MODE_0);
     }
 
-    int64_t perCoreRows64 = Ops::Base::CeilDiv(totalRows, maxCoreNum);
-    int32_t perCoreRows = static_cast<int32_t>(perCoreRows64);
-    int64_t perCoreElements = static_cast<int64_t>(perCoreRows) * W;
-    if (perCoreElements < PER_CORE_MIN) {
+    int64_t perCoreRows = Ops::Base::CeilDiv(totalRows, maxCoreNum);
+    if (perCoreRows * W < PER_CORE_MIN) {
         int64_t minRows = (PER_CORE_MIN + W - 1) / W;
-        perCoreRows = static_cast<int32_t>(minRows < totalRows ? minRows : totalRows);
+        perCoreRows = (minRows < totalRows) ? minRows : totalRows;
     }
-    int64_t needCoreNum64 = Ops::Base::CeilDiv(totalRows, static_cast<int64_t>(perCoreRows));
+    int64_t needCoreNum64 = Ops::Base::CeilDiv(totalRows, perCoreRows);
     int32_t needCoreNum = static_cast<int32_t>(needCoreNum64 > maxCoreNum ? maxCoreNum : needCoreNum64);
 
-    return FillTilingData(context, needCoreNum, totalRows, perCoreRows, static_cast<int32_t>(W),
-                          static_cast<int32_t>(outerDims), pairsPerRow, ubSize);
+    // 任一需要写入 tiling 的维度超出 int32 值域时，切到全 int64 字段 + 64 位索引的 MODE_LARGE kernel，
+    // 不再收窄拒绝；MODE_DEFAULT 行为与既有实现完全一致
+    uint64_t schMode = (H <= INT32_MAX && W <= INT32_MAX && outerDims <= INT32_MAX && perCoreRows <= INT32_MAX) ?
+                           Rgb2yuv422_TPL_SCH_MODE_0 :
+                           Rgb2yuv422_TPL_SCH_MODE_1;
+
+    return FillTilingData(context, needCoreNum, totalRows, perCoreRows, W, outerDims, pairsPerRow, ubSize, schMode);
 }
 
 static ge::graphStatus TilingParseForRgb2yuv422([[maybe_unused]] gert::TilingParseContext* context)
