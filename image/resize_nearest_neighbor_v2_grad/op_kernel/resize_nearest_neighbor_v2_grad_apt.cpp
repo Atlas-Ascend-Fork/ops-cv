@@ -27,16 +27,6 @@ template <uint64_t schId, uint64_t format, uint64_t alignCorners, uint64_t halfP
 __global__ __aicore__ void resize_nearest_neighbor_v2_grad(GM_ADDR grads, GM_ADDR size, GM_ADDR y, GM_ADDR workspace,
                                                            GM_ADDR tiling)
 {
-    if (workspace == nullptr) {
-        return;
-    }
-
-    SetSysWorkspace(workspace);
-    GM_ADDR userWS = GetUserWorkspace(workspace);
-    if (userWS == nullptr) {
-        return;
-    }
-
     GET_TILING_DATA(tilingData, tiling);
     KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIV_1_0);
     TPipe pipe;

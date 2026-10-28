@@ -43,7 +43,7 @@ TEST_F(ResizeLinearGradTilingTest, resize_linear_grad_tiling_01)
         &compileInfo);
     uint64_t expectTilingKey = 1;
     string expectTilingData = "1 0 96 1 1 25088 96 96 100352 32 4575657222473777152 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
 
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -65,7 +65,7 @@ TEST_F(ResizeLinearGradTilingTest, resize_linear_grad_tiling_02)
         &compileInfo);
     uint64_t expectTilingKey = 16843008;
     string expectTilingData = "48 0 1 0 1 0 0 0 16 32 4612886978239118831 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
 
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -87,7 +87,7 @@ TEST_F(ResizeLinearGradTilingTest, resize_linear_grad_tiling_03)
         &compileInfo);
     uint64_t expectTilingKey = 260;
     string expectTilingData = "3 48 1 0 1 1 0 1 16 1 4575657222473777152 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
 
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -109,7 +109,7 @@ TEST_F(ResizeLinearGradTilingTest, resize_linear_grad_tiling_04)
         &compileInfo);
     uint64_t expectTilingKey = 259;
     string expectTilingData = "3 48 1 0 1 1 0 1 16 1 1098907648 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
 
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }

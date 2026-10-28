@@ -30,7 +30,6 @@ __global__ __aicore__ void upsample_nearest3d(GM_ADDR x, GM_ADDR y, GM_ADDR work
     REGISTER_TILING_DEFAULT(UpsampleNearest3dRegBaseTilingData);
     GET_TILING_DATA_WITH_STRUCT(UpsampleNearest3dRegBaseTilingData, tilingData, tiling);
 
-    GM_ADDR usrWorkspace = AscendC::GetUserWorkspace(workspace);
     TPipe pipe;
     if constexpr (schId == SCH_MODE_0) {
         // 纯copy模板，输出完全等于输入

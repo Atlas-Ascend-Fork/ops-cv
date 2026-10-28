@@ -30,7 +30,6 @@ __global__ __aicore__ void upsample_bicubic2d_aa(GM_ADDR x, GM_ADDR y, GM_ADDR w
     REGISTER_TILING_DEFAULT(UpsampleBicubic2dAARegBaseTilingData);
     GET_TILING_DATA_WITH_STRUCT(UpsampleBicubic2dAARegBaseTilingData, tilingData, tiling);
 
-    GM_ADDR usrWorkspace = AscendC::GetUserWorkspace(workspace);
     TPipe pipe;
     if constexpr (schId == 0) {
         // 纯copy模板，输出完全等于输入

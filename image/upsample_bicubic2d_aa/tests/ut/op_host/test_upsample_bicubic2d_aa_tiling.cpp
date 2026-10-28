@@ -147,7 +147,7 @@ TEST_F(UpsampleBicubic2dAATiling, upsample_bicubic2d_aa_tiling_005)
         &compileInfo, socVersion);
     uint64_t expectTilingKey = 0;
     string expectTilingData = "40 2 2 4 5 4 5 0 32760 4575657222473777152 4575657222473777152 4611686019501129728 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
@@ -165,7 +165,7 @@ TEST_F(UpsampleBicubic2dAATiling, upsample_bicubic2d_aa_tiling_006)
         &compileInfo, socVersion);
     uint64_t expectTilingKey = 257;
     string expectTilingData = "4 2 2 4 4 8 8 0 0 4539628425446424576 4575657222473777152 4611686019501129728 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 

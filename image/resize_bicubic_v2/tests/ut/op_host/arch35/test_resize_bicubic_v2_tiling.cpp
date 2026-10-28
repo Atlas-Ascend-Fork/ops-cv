@@ -45,7 +45,7 @@ TEST_F(ResizeBicubicV2TilingTest, resize_bicubic_v2_tiling_01)
         &compileInfo);
     uint64_t expectTilingKey = 65541;
     string expectTilingData = "64 48 0 32 32 32 32 3 1 4575657222473777152 1 32 32 3 1 32 32 25056 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
 
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -68,7 +68,7 @@ TEST_F(ResizeBicubicV2TilingTest, resize_bicubic_v2_tiling_02)
         &compileInfo);
     uint64_t expectTilingKey = 6;
     string expectTilingData = "57 25538 0 225 225 113 113 128 1 4611686019501129728 1 2 113 128 1 1 113 128 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
 
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }

@@ -33,7 +33,6 @@ constexpr int32_t CONST_4 = 4;
 constexpr int64_t INPUT_DIMS = 5;
 constexpr int64_t THREAD_NUM = 2048; // simt开的线程数
 constexpr int32_t CACHE_LINE = 128;
-constexpr size_t WORKSPACE_SIZE = static_cast<size_t>(16 * 1024 * 1024);
 constexpr const float EPSILON = 1e-8f;
 const std::string EXACT_1D_TYPE = "UpsampleNearestExact1d";
 const std::string EXACT_2D_TYPE = "UpsampleNearestExact2d";
@@ -693,7 +692,7 @@ ge::graphStatus UpsampleNearest3dRegbaseTiling::DoTiling()
 
     size_t* workspaces = context_->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context_, workspaces);
-    workspaces[0] = WORKSPACE_SIZE;
+    workspaces[0] = 0;
     return ge::GRAPH_SUCCESS;
 }
 

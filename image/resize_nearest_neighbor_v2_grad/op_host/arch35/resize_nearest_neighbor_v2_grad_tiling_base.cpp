@@ -50,7 +50,6 @@ constexpr int64_t TRUE_NUM = 1;
 constexpr int64_t DIM_1 = 1;
 constexpr int64_t DIM_4 = 4;
 constexpr int64_t LEN_INPUT_SIZE = 2;
-constexpr int64_t WORK_SPACE_SIZE = static_cast<int64_t>(16) * 1024 * 1024;
 constexpr int64_t RSV_BLOCK_NUM = 8;
 constexpr int64_t DB_BUFF_NUM = 2;
 constexpr int32_t SIMT_RESERVED_SIZE = 32 * 1024;
@@ -644,7 +643,7 @@ ge::graphStatus ResizeNearestNeighborV2GradTiling::RunResizeNearestNeighborV2Gra
 
     size_t* workspaces = context_->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context_, workspaces);
-    workspaces[0] = static_cast<size_t>(WORK_SPACE_SIZE);
+    workspaces[0] = 0;
     // 32K for simt dcache and 8k for ascendc
     context_->SetLocalMemorySize(ubSize_ - SIMT_RESERVED_SIZE - SIMD_RESERVED_SIZE);
     OP_LOGD(context_->GetNodeName(), "ResizeNearestNeighborV2GradTiling success.");

@@ -17,7 +17,6 @@
 #include "image/resize_linear/op_kernel/arch35/resize_linear_tiling_key.h"
 
 namespace optiling {
-constexpr size_t WORK_SPACE_SIZE = static_cast<size_t>(16 * 1024 * 1024);
 static const uint64_t DIM_0 = 0;
 static const uint64_t DIM_1 = 1;
 static const uint64_t DIM_3 = 3;
@@ -260,7 +259,7 @@ ge::graphStatus ResizeLinearTiling::SetTilingData()
 
     size_t* workspaces = context_->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context_, workspaces);
-    workspaces[0] = WORK_SPACE_SIZE;
+    workspaces[0] = 0;
     PrintTilingData();
     return ge::GRAPH_SUCCESS;
 }

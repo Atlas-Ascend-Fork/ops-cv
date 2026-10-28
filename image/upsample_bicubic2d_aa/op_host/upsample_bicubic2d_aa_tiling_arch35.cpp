@@ -32,7 +32,6 @@ constexpr int32_t CONST_3 = 3;
 constexpr int64_t INPUT_DIMS = 4;
 constexpr int64_t THREAD_NUM = 512; // simt开的线程数
 constexpr int32_t CACHE_LINE = 128;
-constexpr size_t WORKSPACE_SIZE = static_cast<size_t>(16 * 1024 * 1024);
 
 struct BaseTilingData {
     int64_t dimN = 0;
@@ -335,7 +334,7 @@ ge::graphStatus UpsampleBicubic2dAARegbaseTiling::DoTiling()
 
     size_t* workspaces = context_->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context_, workspaces);
-    workspaces[0] = WORKSPACE_SIZE;
+    workspaces[0] = 0;
     return ge::GRAPH_SUCCESS;
 }
 
