@@ -19,8 +19,8 @@ using json = nlohmann::json;
 static Status ParseParamsGridSample(const ge::Operator& op_src, ge::Operator& op_dest)
 {
     bool align_corners = false;
-    std::string mode_value;
-    std::string padding_mode_value;
+    std::string mode_value = "bilinear";
+    std::string padding_mode_value = "zeros";
 
     ge::AscendString attrs_string;
     try {
@@ -75,8 +75,8 @@ static Status ParseParamsGridSample(const ge::Operator& op_src, ge::Operator& op
 static Status ParseParamsGridSampleV2(const ge::Operator& op_src, ge::Operator& op_dest)
 {
     bool align_corners = false;
-    std::string mode_value;
-    std::string padding_mode_value;
+    std::string mode_value = "bilinear";
+    std::string padding_mode_value = "zeros";
     bool channel_last = false;
     int scheduler_mode = 0;
 

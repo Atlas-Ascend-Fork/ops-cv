@@ -50,12 +50,15 @@ TEST(OnnxGridSamplePluginTest, ParseParamsGridSampleUseDefaults)
     ge::Operator op_dest = CreateOperator("grid_sample");
     bool align_corners = true;
     ge::AscendString mode;
+    ge::AscendString padding_mode;
 
     EXPECT_EQ(domi::ParseParamsGridSample(op_src, op_dest), domi::SUCCESS);
     EXPECT_EQ(op_dest.GetAttr("align_corners", align_corners), ge::GRAPH_SUCCESS);
     EXPECT_FALSE(align_corners);
     EXPECT_EQ(op_dest.GetAttr("interpolation_mode", mode), ge::GRAPH_SUCCESS);
-    EXPECT_STREQ(mode.GetString(), "");
+    EXPECT_STREQ(mode.GetString(), "bilinear");
+    EXPECT_EQ(op_dest.GetAttr("padding_mode", padding_mode), ge::GRAPH_SUCCESS);
+    EXPECT_STREQ(padding_mode.GetString(), "zeros");
 }
 
 TEST(OnnxGridSamplePluginTest, ParseParamsGridSampleZeroWhenScalarFieldOmitted)
@@ -109,6 +112,8 @@ TEST(OnnxGridSamplePluginTest, ParseParamsGridSampleV2UseDefaults)
     bool align_corners = true;
     bool channel_last = true;
     int scheduler_mode = 9;
+    ge::AscendString mode;
+    ge::AscendString padding_mode;
 
     EXPECT_EQ(domi::ParseParamsGridSampleV2(op_src, op_dest), domi::SUCCESS);
     EXPECT_EQ(op_dest.GetAttr("align_corners", align_corners), ge::GRAPH_SUCCESS);
@@ -117,6 +122,59 @@ TEST(OnnxGridSamplePluginTest, ParseParamsGridSampleV2UseDefaults)
     EXPECT_FALSE(channel_last);
     EXPECT_EQ(op_dest.GetAttr("scheduler_mode", scheduler_mode), ge::GRAPH_SUCCESS);
     EXPECT_EQ(scheduler_mode, 0);
+    EXPECT_EQ(op_dest.GetAttr("interpolation_mode", mode), ge::GRAPH_SUCCESS);
+    EXPECT_STREQ(mode.GetString(), "bilinear");
+    EXPECT_EQ(op_dest.GetAttr("padding_mode", padding_mode), ge::GRAPH_SUCCESS);
+    EXPECT_STREQ(padding_mode.GetString(), "zeros");
+}
+
+TEST(OnnxGridSamplePluginTest, MissingAttributeMetadataUsesDefaults)
+{
+    for (auto parser : {domi::ParseParamsGridSample, domi::ParseParamsGridSampleV2}) {
+        ge::Operator op_src = CreateOperator("src");
+        ge::Operator op_dest = CreateOperator("grid_sample");
+        ge::AscendString mode;
+        ge::AscendString padding_mode;
+
+        EXPECT_EQ(parser(op_src, op_dest), domi::SUCCESS);
+        EXPECT_EQ(op_dest.GetAttr("interpolation_mode", mode), ge::GRAPH_SUCCESS);
+        EXPECT_STREQ(mode.GetString(), "bilinear");
+        EXPECT_EQ(op_dest.GetAttr("padding_mode", padding_mode), ge::GRAPH_SUCCESS);
+        EXPECT_STREQ(padding_mode.GetString(), "zeros");
+    }
+}
+
+TEST(OnnxGridSamplePluginTest, ExplicitModePreservesDefaultPadding)
+{
+    for (auto parser : {domi::ParseParamsGridSample, domi::ParseParamsGridSampleV2}) {
+        ge::Operator op_src = CreateSourceOperator(R"({"attribute":[{"name":"mode","type":3,"s":"nearest"}]})");
+        ge::Operator op_dest = CreateOperator("grid_sample");
+        ge::AscendString mode;
+        ge::AscendString padding_mode;
+
+        EXPECT_EQ(parser(op_src, op_dest), domi::SUCCESS);
+        EXPECT_EQ(op_dest.GetAttr("interpolation_mode", mode), ge::GRAPH_SUCCESS);
+        EXPECT_STREQ(mode.GetString(), "nearest");
+        EXPECT_EQ(op_dest.GetAttr("padding_mode", padding_mode), ge::GRAPH_SUCCESS);
+        EXPECT_STREQ(padding_mode.GetString(), "zeros");
+    }
+}
+
+TEST(OnnxGridSamplePluginTest, ExplicitPaddingPreservesDefaultMode)
+{
+    for (auto parser : {domi::ParseParamsGridSample, domi::ParseParamsGridSampleV2}) {
+        ge::Operator op_src = CreateSourceOperator(
+            R"({"attribute":[{"name":"padding_mode","type":3,"s":"reflection"}]})");
+        ge::Operator op_dest = CreateOperator("grid_sample");
+        ge::AscendString mode;
+        ge::AscendString padding_mode;
+
+        EXPECT_EQ(parser(op_src, op_dest), domi::SUCCESS);
+        EXPECT_EQ(op_dest.GetAttr("interpolation_mode", mode), ge::GRAPH_SUCCESS);
+        EXPECT_STREQ(mode.GetString(), "bilinear");
+        EXPECT_EQ(op_dest.GetAttr("padding_mode", padding_mode), ge::GRAPH_SUCCESS);
+        EXPECT_STREQ(padding_mode.GetString(), "reflection");
+    }
 }
 
 TEST(OnnxGridSamplePluginTest, ParseParamsGridSampleV2ZeroWhenScalarFieldOmitted)
