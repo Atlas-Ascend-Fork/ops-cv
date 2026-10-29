@@ -131,11 +131,12 @@ static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputS
     // 2. 检查输入的数据类型是否在API支持的数据类型范围之内
     CHECK_RET(CheckDtypeValid(self, out), ACLNN_ERR_PARAM_INVALID);
 
-    // 3. 检查输入元素是否合法
-    CHECK_RET(CheckInputElement(self, outputSize), ACLNN_ERR_PARAM_INVALID);
-
-    // 4. 检查shape是否支持
+    // 3. 检查shape是否支持（含outputSize数量校验，须先于CheckInputElement执行，
+    //    避免空outputSize在CheckInputElement中按索引访问时越界）
     CHECK_RET(CheckShape(self, outputSize, out), ACLNN_ERR_PARAM_INVALID);
+
+    // 4. 检查输入元素是否合法
+    CHECK_RET(CheckInputElement(self, outputSize), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;
 }
