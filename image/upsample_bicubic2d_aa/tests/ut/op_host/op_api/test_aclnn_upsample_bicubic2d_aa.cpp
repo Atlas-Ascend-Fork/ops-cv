@@ -220,3 +220,54 @@ TEST_F(l2_upsample_bicubic2d_aa_test, l2_upsample_bicubic2d_aa_test_dtype_differ
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
+
+// self and out N different
+TEST_F(l2_upsample_bicubic2d_aa_test, l2_upsample_bicubic2d_aa_test_out_n_different)
+{
+    auto self_desc = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_desc = TensorDesc({2, 1, 5, 5}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(vector<int64_t>{5, 5});
+    bool align_corners = false;
+    const double_t scales_h = 0.0;
+    const double_t scales_w = 0.0;
+
+    auto ut = OP_API_UT(aclnnUpsampleBicubic2dAA, INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// self and out C different
+TEST_F(l2_upsample_bicubic2d_aa_test, l2_upsample_bicubic2d_aa_test_out_c_different)
+{
+    auto self_desc = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_desc = TensorDesc({1, 2, 5, 5}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(vector<int64_t>{5, 5});
+    bool align_corners = false;
+    const double_t scales_h = 0.0;
+    const double_t scales_w = 0.0;
+
+    auto ut = OP_API_UT(aclnnUpsampleBicubic2dAA, INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// out shape 3d
+TEST_F(l2_upsample_bicubic2d_aa_test, l2_upsample_bicubic2d_aa_test_out_shape_3d)
+{
+    auto self_desc = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_desc = TensorDesc({1, 5, 5}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(vector<int64_t>{5, 5});
+    bool align_corners = false;
+    const double_t scales_h = 0.0;
+    const double_t scales_w = 0.0;
+
+    auto ut = OP_API_UT(aclnnUpsampleBicubic2dAA, INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}

@@ -60,6 +60,8 @@ static bool CheckDtypeValid(const aclTensor* x, const aclTensor* out)
 static bool CheckShape(const aclTensor* x, const aclIntArray* outputSize, const aclTensor* out)
 {
     OP_CHECK_WRONG_DIMENSION(x, DIM_LIMIT, return false);
+    // Validate out rank before reading its dimensions so a malformed output shape cannot be indexed out of bounds.
+    OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
              OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 2, but got %zu", outputSizeNum),
@@ -70,8 +72,8 @@ static bool CheckShape(const aclTensor* x, const aclIntArray* outputSize, const 
     int64_t inputC = inputShape.GetDim(DIM_ONE);
     int64_t inputH = inputShape.GetDim(DIM_TWO);
     int64_t inputW = inputShape.GetDim(DIM_THREE);
-    int64_t outputN = inputShape.GetDim(DIM_ZERO);
-    int64_t outputC = inputShape.GetDim(DIM_ONE);
+    int64_t outputN = outputShape.GetDim(DIM_ZERO);
+    int64_t outputC = outputShape.GetDim(DIM_ONE);
     int64_t outputH = outputShape.GetDim(DIM_TWO);
     int64_t outputW = outputShape.GetDim(DIM_THREE);
     int64_t outH = (*outputSize)[DIM_ZERO];
