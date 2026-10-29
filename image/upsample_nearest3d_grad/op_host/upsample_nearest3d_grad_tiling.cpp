@@ -20,6 +20,7 @@
 #include <string>
 #include "tiling/platform/platform_ascendc.h"
 #include "op_host/tiling_util.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr int64_t BEST_PERFORMANCE_SIZE_1 = 16;
@@ -174,20 +175,33 @@ ge::graphStatus UpsampleNearest3dGradTiling::RunBigKernelTiling()
 
     size_t idx = 0;
     inputSizeAttr = tilingAttrs->GetAttrPointer<gert::ContinuousVector>(idx++);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, inputSizeAttr);
-    size_t inputSizeNum = inputSizeAttr->GetSize();
-    OP_CHECK_IF(inputSizeNum != RESERVED_LENGTH_INPUT_SIZE,
-                OP_LOGE(tilingContext->GetNodeName(), "input_size length must be %zu, but got %zu.",
-                        RESERVED_LENGTH_INPUT_SIZE, inputSizeNum),
+    OP_CHECK_IF(inputSizeAttr == nullptr,
+                error_report::ReportTilingStageError(tilingContext->GetNodeName(),
+                                                     "the attr inputSizeAttr is missing in the tiling context; check "
+                                                     "the operator registration and the TilingContext construction"),
                 return ge::GRAPH_FAILED);
+    size_t inputSizeNum = inputSizeAttr->GetSize();
+    OP_CHECK_IF(
+        inputSizeNum != RESERVED_LENGTH_INPUT_SIZE,
+        OP_LOGE_FOR_INVALID_SHAPESIZE(tilingContext->GetNodeName(), "input_size", std::to_string(inputSizeNum).c_str(),
+                                      std::to_string(RESERVED_LENGTH_INPUT_SIZE).c_str()),
+        return ge::GRAPH_FAILED);
     outputSizeAttr = tilingAttrs->GetAttrPointer<gert::ContinuousVector>(idx++);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, outputSizeAttr);
+    OP_CHECK_IF(outputSizeAttr == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "outputSizeAttr is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     scalesAttr = tilingAttrs->GetAttrPointer<gert::ContinuousVector>(idx++);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, scalesAttr);
+    OP_CHECK_IF(scalesAttr == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "scalesAttr is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     size_t scalesNum = scalesAttr->GetSize();
     OP_CHECK_IF(scalesNum != RESERVED_LENGTH_SCALES,
-                OP_LOGE(tilingContext->GetNodeName(), "scales length must be %zu, but got %zu.", RESERVED_LENGTH_SCALES,
-                        scalesNum),
+                OP_LOGE_FOR_INVALID_VALUE(tilingContext->GetNodeName(), "scales", std::to_string(scalesNum).c_str(),
+                                          std::to_string(RESERVED_LENGTH_SCALES).c_str()),
                 return ge::GRAPH_FAILED);
     const float* scalesArray = reinterpret_cast<const float*>(scalesAttr->GetData());
     scaleD = scalesArray[D_INDEX];
@@ -232,16 +246,18 @@ ge::graphStatus UpsampleNearest3dGradTiling::GetShapes()
     const int64_t* inputSizeArray = reinterpret_cast<const int64_t*>(inputSizeAttr->GetData());
 
     // grad_output 的 N/C 维须与 input_size 一致
-    OP_CHECK_IF(
-        inputSizeArray[0] != gradOutputShape.GetDim(0),
-        OP_LOGE(tilingContext->GetNodeName(), "attr::input_size[0](get %ld) != input::grad_output N dim(get %ld).",
-                inputSizeArray[0], gradOutputShape.GetDim(0)),
-        return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        inputSizeArray[1] != gradOutputShape.GetDim(1),
-        OP_LOGE(tilingContext->GetNodeName(), "attr::input_size[1](get %ld) != input::grad_output C dim(get %ld).",
-                inputSizeArray[1], gradOutputShape.GetDim(1)),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(inputSizeArray[0] != gradOutputShape.GetDim(0),
+                OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON(
+                    tilingContext->GetNodeName(), "attr",
+                    (std::to_string(inputSizeArray[0]) + ", " + std::to_string(gradOutputShape.GetDim(0))).c_str(),
+                    "attr::input_size[0](get ) != input::grad_output N dim(get )"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(inputSizeArray[1] != gradOutputShape.GetDim(1),
+                OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON(
+                    tilingContext->GetNodeName(), "attr",
+                    (std::to_string(inputSizeArray[1]) + ", " + std::to_string(gradOutputShape.GetDim(1))).c_str(),
+                    "attr::input_size[1](get ) != input::grad_output C dim(get )"),
+                return ge::GRAPH_FAILED);
 
     batches = inputSizeArray[0] * inputSizeArray[1];
     for (int8_t i = 0; i < DIM; i++) {
@@ -259,11 +275,15 @@ bool UpsampleNearest3dGradTiling::CheckScales() const
     float checkScalesD = ComputeScaleValue(gradInputShapes[D_INDEX], gradOutputShapes[D_INDEX], scaleD);
     float checkScalesH = ComputeScaleValue(gradInputShapes[H_INDEX], gradOutputShapes[H_INDEX], scaleH);
     float checkScalesW = ComputeScaleValue(gradInputShapes[W_INDEX], gradOutputShapes[W_INDEX], scaleW);
-    OP_CHECK_IF(checkScalesD > BEST_PERFORMANCE_SCALE_1 || checkScalesH > BEST_PERFORMANCE_SCALE_1 ||
-                    checkScalesW > BEST_PERFORMANCE_SCALE_1,
-                OP_LOGE(tilingContext->GetNodeName(), "scales are too large, scalesD [%f], scalesH [%f], scalesW [%f].",
-                        checkScalesD, checkScalesH, checkScalesW),
-                return false);
+    OP_CHECK_IF(
+        checkScalesD > BEST_PERFORMANCE_SCALE_1 || checkScalesH > BEST_PERFORMANCE_SCALE_1 ||
+            checkScalesW > BEST_PERFORMANCE_SCALE_1,
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            tilingContext->GetNodeName(), "scales",
+            (std::to_string(checkScalesD) + ", " + std::to_string(checkScalesH) + ", " + std::to_string(checkScalesW))
+                .c_str(),
+            "scales are too large, scalesD [], scalesH [], scalesW []"),
+        return false);
     return true;
 }
 
@@ -629,14 +649,23 @@ static ge::graphStatus Tiling4UpsampleNearest3dGradTiling(gert::TilingContext* c
 static ge::graphStatus TilingPrepareTiling(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<UpsampleNearest3dGradCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfo);
+    OP_CHECK_IF(
+        platformInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "platformInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAic();
 
     OP_CHECK_IF(compileInfo->coreNum <= 0,
-                OP_LOGE(context->GetNodeName(), "UpsampleNearest3dGrad GetHardwareInfo Failed"),
+                error_report::ReportTilingStageError(context->GetNodeName(),
+                                                     "failed to get the hardware info from the platform info"),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }

@@ -49,7 +49,7 @@ bool CheckScales(float scaleW, float scaleH, float scaleD)
 static const aclTensor* CastToFp32(const aclTensor* self, aclOpExecutor* executor)
 {
     self = l0op::Cast(self, op::DataType::DT_FLOAT, executor);
-    OP_CHECK(self != nullptr, OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "ResizeUpsampleTrilinearAiCore cast self failed."),
+    OP_CHECK(self != nullptr, OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "ResizeUpsampleTrilinearAiCore cast self failed"),
              return nullptr);
     return self;
 }
@@ -75,7 +75,8 @@ static const aclTensor* UpsampleTrilinear3dA950AiCore(const aclTensor* self, con
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(ResizeUpsampleTrilinear, OP_INPUT(self), OP_OUTPUT(out),
                                            OP_ATTR(outputSize, alignCorners, scalesD, scalesH, scalesW));
     OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "ResizeUpsampleTrilinearA950AiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
+             OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "ResizeUpsampleTrilinearA950AiCore ADD_TO_LAUNCHER_LIST_AICORE "
+                                                     "failed; propagate the first error reported by the failing stage"),
              return nullptr);
     return out;
 }
@@ -94,7 +95,8 @@ static const aclTensor* UpsampleTrilinear3dA2AiCore(const aclTensor* self, const
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(ResizeUpsampleTrilinear, OP_INPUT(self), OP_OUTPUT(out),
                                            OP_ATTR(outputSize, alignCorners, scalesD, scalesH, scalesW));
     OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "ResizeUpsampleTrilinearAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
+             OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "ResizeUpsampleTrilinearAiCore ADD_TO_LAUNCHER_LIST_AICORE "
+                                                     "failed; propagate the first error reported by the failing stage"),
              return nullptr);
     return CastBackFromFp32(out, dataType, executor);
 }
@@ -113,7 +115,8 @@ static const aclTensor* UpsampleTrilinear3d310PAiCore(const aclTensor* self, con
     auto aicoreRet = ADD_TO_LAUNCHER_LIST_AICORE(ResizeUpsampleTrilinear, OP_INPUT(self), OP_OUTPUT(out),
                                                  OP_ATTR(outputSize, alignCorners, scalesD, scalesH, scalesW));
     OP_CHECK(aicoreRet == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "ResizeUpsampleTrilinear310PAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
+             OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "ResizeUpsampleTrilinear310PAiCore ADD_TO_LAUNCHER_LIST_AICORE "
+                                                     "failed; propagate the first error reported by the failing stage"),
              return nullptr);
     if (dataType == op::DataType::DT_FLOAT16) {
         out = l0op::Cast(out, op::DataType::DT_FLOAT16, executor);

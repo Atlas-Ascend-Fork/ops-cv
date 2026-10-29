@@ -16,6 +16,7 @@
 #include <cmath>
 #include "resize_upsample_trilinear_tiling.h"
 #include "op_host/tiling_util.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 
@@ -157,28 +158,36 @@ static float AreaPixelComputeScale(bool alignCorner, int64_t inputSize, int64_t 
 static bool CheckShapes(gert::TilingContext* context, int64_t w, int64_t h, int64_t d)
 {
     OP_CHECK_IF(!(w > 0 && h > 0 && d > 0),
-                OP_LOGE(context->GetNodeName(), "shape should be bigger than 0, but got shape (D: %ld, H: %ld, W: %ld)",
-                        d, h, w),
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    context->GetNodeName(), "shape",
+                    (std::to_string(d) + ", " + std::to_string(h) + ", " + std::to_string(w)).c_str(),
+                    "shape should be bigger than 0"),
                 return false);
     return true;
 }
 
 static bool CheckShapeMaxLimit(gert::TilingContext* context, UpsampleTrilinearTilingData& tiling)
 {
-    OP_CHECK_IF(tiling.get_input_w() > INT32_MAX,
-                OP_LOGE(context->GetNodeName(), "The shape exceeds the limit. Input_w must be less than 2147483647."),
-                return false);
-    OP_CHECK_IF(tiling.get_output_d() > INT32_MAX,
-                OP_LOGE(context->GetNodeName(), "The shape exceeds the limit. Output_d must be less than 2147483647."),
-                return false);
+    OP_CHECK_IF(
+        tiling.get_input_w() > INT32_MAX,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "shape",
+                                            "the shape exceeds the limit. Input_w must be less than 2147483647"),
+        return false);
+    OP_CHECK_IF(
+        tiling.get_output_d() > INT32_MAX,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "shape",
+                                            "the shape exceeds the limit. Output_d must be less than 2147483647"),
+        return false);
     OP_CHECK_IF(tiling.get_output_w() * tiling.get_output_h() > INT32_MAX,
-                OP_LOGE(context->GetNodeName(),
-                        "The shape exceeds the limit. Output_h * output_w must be less than 2147483647."),
+                error_report::ReportInvalidArgument(
+                    context->GetNodeName(), "shape",
+                    "the shape exceeds the limit. Output_h * output_w must be less than 2147483647"),
                 return false);
     OP_CHECK_IF(
         tiling.get_batches() * tiling.get_input_d() * tiling.get_input_h() > INT32_MAX,
-        OP_LOGE(context->GetNodeName(),
-                "The shape exceeds the limit. Output_n * output_c * output_d * output_h must be less than 2147483647."),
+        error_report::ReportInvalidArgument(
+            context->GetNodeName(), "shape",
+            "the shape exceeds the limit. Output_n * output_c * output_d * output_h must be less than 2147483647"),
         return false);
     return true;
 }
@@ -186,9 +195,10 @@ static bool CheckShapeMaxLimit(gert::TilingContext* context, UpsampleTrilinearTi
 static bool CheckScales(gert::TilingContext* context, float scalesW, float scalesH, float scalesD)
 {
     OP_CHECK_IF((scalesW > MAX_SUPPORT_SCALE || scalesH > MAX_SUPPORT_SCALE || scalesD > MAX_SUPPORT_SCALE),
-                OP_LOGE(context->GetNodeName(),
-                        "Scales should be less than 50, but got scale (scalesW: %f, scalesH: %f, scalesD: %f) ",
-                        scalesW, scalesH, scalesD),
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    context->GetNodeName(), "input",
+                    (std::to_string(scalesW) + ", " + std::to_string(scalesH) + ", " + std::to_string(scalesD)).c_str(),
+                    "scales should be less than 50"),
                 return false);
     return true;
 }
@@ -206,8 +216,11 @@ static bool SetTCubeTilingD(gert::TilingContext* context, uint32_t batches, Upsa
                         CEIL(SLIDE_SIZE * tiling.get_scale_d()) + REDUNDANCE);
     mmTiling_d.SetOrgShape(tiling.get_output_d(), tiling.get_output_w() * tiling.get_output_h(),
                            batches * tiling.get_input_d());
-    OP_CHECK_IF((mmTiling_d.GetTiling(tiling.matmul_tiling_d) == -1),
-                OP_LOGE(context->GetNodeName(), "MatmulApiTiling_d set failed"), return false);
+    OP_CHECK_IF(
+        (mmTiling_d.GetTiling(tiling.matmul_tiling_d) == -1),
+        OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                               "MatmulApiTiling_d set failed; propagate the first error reported by the failing stage"),
+        return false);
     return true;
 }
 
@@ -223,8 +236,11 @@ static bool SetTCubeTilingH(gert::TilingContext* context, uint32_t batches, Upsa
                         CEIL(SLIDE_SIZE * tiling.get_scale_h()) + REDUNDANCE);
     mmTiling_h.SetOrgShape(tiling.get_output_h(), tiling.get_output_w(),
                            batches * tiling.get_input_d() * tiling.get_input_h());
-    OP_CHECK_IF((mmTiling_h.GetTiling(tiling.matmul_tiling_h) == -1),
-                OP_LOGE(context->GetNodeName(), "MatmulApiTiling_h set failed"), return false);
+    OP_CHECK_IF(
+        (mmTiling_h.GetTiling(tiling.matmul_tiling_h) == -1),
+        OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                               "MatmulApiTiling_h set failed; propagate the first error reported by the failing stage"),
+        return false);
     return true;
 }
 
@@ -240,8 +256,11 @@ static bool SetTCubeTilingW(gert::TilingContext* context, uint32_t batches, Upsa
                         CEIL(SLIDE_SIZE * tiling.get_scale_w()) + REDUNDANCE);
     mmTiling_w.SetOrgShape(batches * tiling.get_input_d() * tiling.get_input_h(), tiling.get_output_w(),
                            tiling.get_input_w());
-    OP_CHECK_IF((mmTiling_w.GetTiling(tiling.matmul_tiling_w) == -1),
-                OP_LOGE(context->GetNodeName(), "MatmulApiTiling_w set failed"), return false);
+    OP_CHECK_IF(
+        (mmTiling_w.GetTiling(tiling.matmul_tiling_w) == -1),
+        OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                               "MatmulApiTiling_w set failed; propagate the first error reported by the failing stage"),
+        return false);
     return true;
 }
 
@@ -542,7 +561,8 @@ static uint64_t GetWorkSpaceSize(UpsampleTrilinearTilingData& tiling, uint32_t b
 static ge::graphStatus Tiling4ResizeUpsampleTrilinearRegbaseIfAvailable(gert::TilingContext* context)
 {
     if (Tiling4ResizeUpsampleTrilinearRegbase == nullptr) {
-        OP_LOGE(context->GetNodeName(), "ResizeUpsampleTrilinear regbase tiling function is not linked.");
+        error_report::ReportInvalidArgument(context->GetNodeName(), "regbase",
+                                            "resizeUpsampleTrilinear regbase tiling function is not linked");
         return ge::GRAPH_FAILED;
     }
     return Tiling4ResizeUpsampleTrilinearRegbase(context);
@@ -678,7 +698,8 @@ static ge::graphStatus TilingPrepare4UpsampleTrilinear(gert::TilingParseContext*
 {
     auto compileInfo = context->GetCompiledInfo<UpsampleTrilinearCompileInfo>();
     if (compileInfo == nullptr) {
-        OP_LOGE(context->GetNodeName(), "compileInfo is null!");
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction");
         return ge::GRAPH_FAILED;
     }
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());

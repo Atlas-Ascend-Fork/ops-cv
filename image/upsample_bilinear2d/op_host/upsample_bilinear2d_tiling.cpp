@@ -19,6 +19,7 @@
 #include "log/log.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "upsample_bilinear2d_tiling.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr uint32_t BEST_PERFORMANCE_SIZE_128 = 128;
@@ -146,10 +147,11 @@ ge::graphStatus UpsampleBilinear2dTiling::get_scale_from_out()
         return ge::GRAPH_SUCCESS;
     }
     const size_t scalesSize = scalesAttr->GetSize();
-    OP_CHECK_IF(
-        scalesSize != 0 && scalesSize != NUM_TWO,
-        OP_LOGE(tilingContext->GetNodeName(), "scales must be empty or contain 2 elements, but got %zu", scalesSize),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(scalesSize != 0 && scalesSize != NUM_TWO,
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(tilingContext->GetNodeName(), "scales",
+                                                          std::to_string(scalesSize).c_str(),
+                                                          "scales must be empty or contain 2 elements"),
+                return ge::GRAPH_FAILED);
     if (scalesSize == 0) {
         return ge::GRAPH_SUCCESS;
     }
@@ -184,8 +186,8 @@ inline bool UpsampleBilinear2dTiling::CheckScales(const gert::TilingContext* con
 {
     // 2D限制50倍
     OP_CHECK_IF((scales_h > MAX_SUPPORT_SHRINK_SCALE || scales_w > MAX_SUPPORT_SHRINK_SCALE),
-                OP_LOGE(context->GetNodeName(),
-                        "Scales should not exceed 50, but got scale (scales_w: %f, scales_h: %f) ", scales_w, scales_h),
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "scales_h", std::to_string(scales_h).c_str(),
+                                          std::to_string(scales_w).c_str()),
                 return false);
     return true;
 }
@@ -579,14 +581,19 @@ static ge::graphStatus tiling4UpsampleBilinear2dTiling(gert::TilingContext* cont
 static ge::graphStatus tilingPrepareTiling(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<UpsampleBilinear2dCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAic();
 
     OP_CHECK_IF(compileInfo->coreNum <= 0,
-                OP_LOGE(context->GetNodeName(), "UpsampleBilinear2d GetHardwareInfo Failed, vectorCoreNum:%u",
-                        compileInfo->coreNum),
+                error_report::ReportTilingStageError(context->GetNodeName(),
+                                                     std::string("failed to get the hardware info; vectorCoreNum: ") +
+                                                         std::to_string(compileInfo->coreNum)),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }

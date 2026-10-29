@@ -29,6 +29,10 @@
 #include "image/resize_bilinear_v2_grad/op_api/resize_bilinear_v2_grad.h"
 #include "upsample_bilinear2d_grad.h"
 #include "aclnn_upsample_bilinear_2d_backward_v2.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -98,18 +102,16 @@ bool CheckInputsElement(const aclTensor* gradOut, const aclIntArray* outputSize,
     }
 
     OP_CHECK(inputH > 0 && inputW > 0 && outH > 0 && outW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (H: %ld,"
-                     " W: %ld) output (H: %ld, W: %ld)",
-                     inputH, inputW, outH, outW),
+             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dBackwardV2", "input_h",
+                                                      std::to_string(inputH).c_str(),
+                                                      "all input and output dims must be greater than 0"),
              return false);
 
     for (size_t i = 0; i < dimCount; ++i) {
         if (gradOutShape.GetDim(i) != fullOutputSize[i]) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected gradOutput to have the same shape as output;"
-                    " output.size(%zu) = %ld but got gradOutput.size(%zu) = %ld",
-                    i, fullOutputSize[i], i, gradOutShape.GetDim(i));
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dBackwardV2", "gradoutput_dim",
+                                                     std::to_string(gradOutShape.GetDim(i)).c_str(),
+                                                     "each dim of gradOutput must match the expected output size");
             return false;
         }
     }
@@ -127,7 +129,14 @@ static bool CheckDtypeValid(const aclTensor* gradOut, const aclTensor* out, cons
         } else if (bf16NoSupport) {
             OP_CHECK_DTYPE_NOT_SUPPORT(gradOut, DTYPE_SUPPORT_LIST_310P, return false);
         } else {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "support for %u is not implemented", static_cast<uint32_t>(curArch));
+            OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_PARAM_INVALID, "the current SoC is not supported");
+            {
+                const std::vector<const char*> ez3002Key = {"optype", "opskernel", "reason"};
+                const std::vector<const char*> ez3002Value = {
+                    "aclnnUpsampleBilinear2dBackwardV2", "AiCore",
+                    "the current SoC is not supported by this implementation"};
+                REPORT_PREDEFINED_ERR_MSG("EZ3002", ez3002Key, ez3002Value);
+            }
             return false;
         }
     }
@@ -139,7 +148,8 @@ static bool CheckFormat(const aclTensor* out)
 {
     auto format_out = out->GetStorageFormat();
     if (format_out != op::Format::FORMAT_NCHW && format_out != op::Format::FORMAT_NHWC) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "do not support this format of input and output.");
+        OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleBilinear2dBackwardV2", "out", op::ToString(format_out).GetString(),
+                                   "NCHW or NHWC");
         return false;
     }
     return true;
@@ -151,9 +161,12 @@ static bool CheckShape(const aclTensor* gradOut, const aclIntArray* outputSize, 
     size_t inputSizeNum = inputSize->Size();
     OP_CHECK_WRONG_DIMENSION(gradOut, DIM_LIMIT, return false);
     OP_CHECK(inputSizeNum == DIM_LIMIT,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected input_size to be 4, but got %zu", inputSizeNum), return false);
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBilinear2dBackwardV2", "input_size",
+                                          std::to_string(inputSizeNum).c_str(), "4"),
+             return false);
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 2, but got %zu", outputSizeNum),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBilinear2dBackwardV2", "output_size",
+                                          std::to_string(outputSizeNum).c_str(), "2"),
              return false);
     return true;
 }
@@ -173,14 +186,14 @@ static bool CheckUplimit(const aclTensor* gradOut)
     int64_t gradOutW = gradOut->GetViewShape().GetDim(DIM_THREE);
 
     OP_CHECK(gradOutN <= INT32_MAX && gradOutC <= INT32_MAX && gradOutH <= INT32_MAX && gradOutW <= INT32_MAX,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "GradOut sizes should not be greater than %d, but got gradOut(%ld, %ld, %ld, %ld)", INT32_MAX,
-                     gradOutN, gradOutC, gradOutH, gradOutW),
+             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dBackwardV2", "gradOutN",
+                                                      std::to_string(gradOutN).c_str(),
+                                                      "all dims must not exceed INT32_MAX"),
              return false);
     OP_CHECK(
         outN <= INT32_MAX && outC <= INT32_MAX && outH <= INT32_MAX && outW <= INT32_MAX,
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Out sizes should not be greater than %d, but got out(%ld, %ld, %ld, %ld)",
-                INT32_MAX, outN, outC, outH, outW),
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dBackwardV2", "outN",
+                                                 std::to_string(outN).c_str(), "all dims must not exceed INT32_MAX"),
         return false);
     return true;
 }

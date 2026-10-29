@@ -89,10 +89,11 @@ const aclTensor* UpsampleTrilinear3dGradNcdhw(const aclTensor* gradOut, const ac
         auto ret = ADD_TO_LAUNCHER_LIST_AICORE(
             UpsampleTrilinear3dBackward, OP_INPUT(gradOut), OP_OUTPUT(out),
             OP_ATTR(outputSize, inputSize, alignCorners, scales_d, scales_h, scales_w));
-        OP_CHECK(
-            ret == ACLNN_SUCCESS,
-            OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "UpsampleTrilinear3dBackwardAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
-            return nullptr);
+        OP_CHECK(ret == ACLNN_SUCCESS,
+                 OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                                        "UpsampleTrilinear3dBackwardAiCore ADD_TO_LAUNCHER_LIST_AICORE failed; "
+                                        "propagate the first error reported by the failing stage."),
+                 return nullptr);
         if (op::DataType::DT_FLOAT16 == dataType) {
             out = l0op::Cast(out, op::DataType::DT_FLOAT16, executor);
             CHECK_RET(out != nullptr, nullptr);

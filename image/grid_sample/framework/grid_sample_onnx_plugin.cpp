@@ -34,8 +34,9 @@ static Status ParseParamsGridSample(const ge::Operator& op_src, ge::Operator& op
                         int64_t align_corners_i = attr.contains("i") ? attr["i"].get<int64_t>() : 0;
                         if (align_corners_i != 0) {
                             if (align_corners_i > 1 || align_corners_i < -1) {
-                                OP_LOGE(GetOpName(op_dest).c_str(),
-                                        "the value of align_corners [%ld] is out of range [-1, 1]", align_corners_i);
+                                OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(),
+                                                       "the value of align_corners [%ld] is out of range [-1, 1]",
+                                                       align_corners_i);
                             }
                             align_corners = true;
                         }
@@ -48,10 +49,10 @@ static Status ParseParamsGridSample(const ge::Operator& op_src, ge::Operator& op
             }
         }
     } catch (const nlohmann::json::exception& e) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
         return FAILED;
     } catch (...) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
         return FAILED;
     }
 
@@ -93,8 +94,9 @@ static Status ParseParamsGridSampleV2(const ge::Operator& op_src, ge::Operator& 
                         int64_t align_corners_i = attrv2.contains("i") ? attrv2["i"].get<int64_t>() : 0;
                         if (align_corners_i != 0) {
                             if (align_corners_i > 1 || align_corners_i < -1) {
-                                OP_LOGE(GetOpName(op_dest).c_str(),
-                                        "the value of align_corners [%ld] is out of range [-1, 1]", align_corners_i);
+                                OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(),
+                                                       "the value of align_corners [%ld] is out of range [-1, 1]",
+                                                       align_corners_i);
                             }
                             align_corners = true;
                         }
@@ -106,8 +108,9 @@ static Status ParseParamsGridSampleV2(const ge::Operator& op_src, ge::Operator& 
                         int64_t channel_last_i = attrv2.contains("i") ? attrv2["i"].get<int64_t>() : 0;
                         if (channel_last_i != 0) {
                             if (channel_last_i > 1 || channel_last_i < 0) {
-                                OP_LOGE(GetOpName(op_dest).c_str(),
-                                        "the value of channel_last [%ld] is out of range [0, 1]", channel_last_i);
+                                OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(),
+                                                       "the value of channel_last [%ld] is out of range [0, 1]",
+                                                       channel_last_i);
                             }
                             channel_last = true;
                         }
@@ -118,10 +121,10 @@ static Status ParseParamsGridSampleV2(const ge::Operator& op_src, ge::Operator& 
             }
         }
     } catch (const nlohmann::json::exception& e) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
         return FAILED;
     } catch (...) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        OP_LOGE_WITHOUT_REPORT(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
         return FAILED;
     }
 

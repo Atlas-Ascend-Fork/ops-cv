@@ -21,6 +21,10 @@
 #include "opdev/op_dfx.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 #include "opdev/tensor_view_utils.h"
 #include "opdev/make_op_executor.h"
 #include "aclnn_kernels/reshape.h"
@@ -80,13 +84,15 @@ static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize)
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK_WRONG_DIMENSION(self, UPSAMPLE_DIM_LIMIT, return false);
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 3, but got %zu", outputSizeNum),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleTrilinear3d", "output_size",
+                                          std::to_string(outputSizeNum).c_str(), "3"),
              return false);
     const op::Format inputFormat = self->GetStorageFormat();
     OP_CHECK(inputFormat == op::Format::FORMAT_ND || inputFormat == op::Format::FORMAT_NCDHW ||
                  inputFormat == op::Format::FORMAT_NDHWC,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Input storage format support NCDHW or NDHWC, but got %s.",
-                     op::ToString(inputFormat).GetString()),
+             OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleTrilinear3d", "input",
+                                                     op::ToString(inputFormat).GetString(),
+                                                     "input storage format support NCDHW or NDHWC"),
              return false);
     return true;
 }
@@ -95,8 +101,11 @@ static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSi
 {
     OP_CHECK(
         self->GetStorageFormat() == out->GetStorageFormat(),
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Input storage format %s should be equal to output storage format %s.",
-                op::ToString(self->GetStorageFormat()).GetString(), op::ToString(out->GetStorageFormat()).GetString()),
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleTrilinear3d", "input",
+                                                (std::string(op::ToString(self->GetStorageFormat()).GetString()) +
+                                                 ", " + std::string(op::ToString(out->GetStorageFormat()).GetString()))
+                                                    .c_str(),
+                                                "input storage format should be equal to output storage format"),
         return false);
     auto selfShape = self->GetViewShape();
     int64_t inputN = selfShape.GetDim(DIM_ZERO);
@@ -119,15 +128,15 @@ static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSi
         inputW = selfShape.GetDim(DIM_FOUR);
     }
 
-    OP_CHECK(inputD > 0 && inputH > 0 && inputW > 0 && outD > 0 && outH > 0 && outW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (D: %ld,"
-                     " H: %ld, W: %ld) output (D: %ld, H: %ld, W: %ld)",
-                     inputD, inputH, inputW, outD, outH, outW),
-             return false);
+    OP_CHECK(
+        inputD > 0 && inputH > 0 && inputW > 0 && outD > 0 && outH > 0 && outW > 0,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleTrilinear3d", "input", std::to_string(inputD).c_str(),
+                                                 "all input and output dims must be greater than 0"),
+        return false);
     OP_CHECK(outC > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 5D data tensor expected but got a tensor with sizes %s.",
-                     op::ToString(self->GetViewShape()).GetString()),
+             OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON("aclnnUpsampleTrilinear3d", "sizes",
+                                                       op::ToString(self->GetViewShape()).GetString(),
+                                                       "non-empty 5D data tensor expected"),
              return false);
     op::Shape expectShape = op::Shape{inputN, outC, outD, outH, outW};
     if (out->GetStorageFormat() == op::Format::FORMAT_NDHWC) {
@@ -183,16 +192,16 @@ static bool CheckUplimit(const aclTensor* self, const aclTensor* out)
     int64_t outH = out->GetViewShape().GetDim(DIM_THREE);
     int64_t outW = out->GetViewShape().GetDim(DIM_FOUR);
 
-    OP_CHECK(inN <= INT32_MAX && inC <= INT32_MAX && inD <= INT32_MAX && inH <= INT32_MAX && inW <= INT32_MAX,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Self sizes should not be greater than %d, but got self(%ld, %ld, %ld, %ld, %ld)", INT32_MAX, inN,
-                     inC, inD, inH, inW),
-             return false);
-    OP_CHECK(outN <= INT32_MAX && outC <= INT32_MAX && outD <= INT32_MAX && outH <= INT32_MAX && outW <= INT32_MAX,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Out sizes should not be greater than %d, but got out(%ld, %ld, %ld, %ld, %ld)", INT32_MAX, outN,
-                     outC, outD, outH, outW),
-             return false);
+    OP_CHECK(
+        inN <= INT32_MAX && inC <= INT32_MAX && inD <= INT32_MAX && inH <= INT32_MAX && inW <= INT32_MAX,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleTrilinear3d", "self", std::to_string(INT32_MAX).c_str(),
+                                                 "all input and output dims must be greater than 0"),
+        return false);
+    OP_CHECK(
+        outN <= INT32_MAX && outC <= INT32_MAX && outD <= INT32_MAX && outH <= INT32_MAX && outW <= INT32_MAX,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleTrilinear3d", "out", std::to_string(INT32_MAX).c_str(),
+                                                 "all input and output dims must be greater than 0"),
+        return false);
     return true;
 }
 

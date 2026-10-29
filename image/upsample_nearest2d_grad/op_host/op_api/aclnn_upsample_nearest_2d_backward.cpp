@@ -21,6 +21,10 @@
 #include "opdev/format_utils.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 #include "opdev/tensor_view_utils.h"
 #include "opdev/make_op_executor.h"
 #include "opdev/platform.h"
@@ -90,18 +94,19 @@ bool CheckInputElements(const aclTensor* gradOut, const aclIntArray* outputSize,
     }
 
     OP_CHECK(inputH > 0 && inputW > 0 && outH > 0 && outW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (H: %ld,"
-                     " W: %ld) output (H: %ld, W: %ld)",
-                     inputH, inputW, outH, outW),
+             OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON("aclnnUpsampleNearest2dBackward", "input",
+                                                        (std::to_string(inputH) + ", " + std::to_string(inputW) + ", " +
+                                                         std::to_string(outH) + ", " + std::to_string(outW))
+                                                            .c_str(),
+                                                        "input and output sizes should be greater than 0"),
              return false);
 
     for (size_t i = 0; i < shapeDim; ++i) {
         if (gradOutShape.GetDim(i) != fullOutSize[i]) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected grad_output to have the same shape as output;"
-                    " output.size(%zu) = %ld but got grad_output.size(%zu) = %ld",
-                    i, fullOutSize[i], i, gradOutShape.GetDim(i));
+            OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                "aclnnUpsampleNearest2dBackward", "grad_output",
+                (std::to_string(i) + ", " + std::to_string(fullOutSize[i]) + ", " + std::to_string(i)).c_str(),
+                "expected grad_output to have the same shape as output; output.size() =");
             return false;
         }
     }
@@ -134,11 +139,14 @@ static bool CheckShape(const aclTensor* gradOut, const aclIntArray* outputSize, 
     size_t inputSizeNum = inputSize->Size();
     OP_CHECK_WRONG_DIMENSION(gradOut, DIM_LIMIT, return false);
     OP_CHECK(outputSizeCount == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 2, but got %zu", outputSizeCount),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearest2dBackward", "output_size",
+                                          std::to_string(outputSizeCount).c_str(), "2"),
              return false);
 
     OP_CHECK(inputSizeNum == DIM_LIMIT,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected input_size to be 4, but got %zu", inputSizeNum), return false);
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearest2dBackward", "input_size",
+                                          std::to_string(inputSizeNum).c_str(), "4"),
+             return false);
     return true;
 }
 

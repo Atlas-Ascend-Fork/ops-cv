@@ -71,9 +71,11 @@ const aclTensor* UpsampleBilinear2dNcdhw(const aclTensor* x, const aclTensor* si
     // AICORE
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(UpsampleBilinear2d, OP_INPUT(x, size), OP_OUTPUT(y),
                                            OP_ATTR(alignCorners, realScales));
-    OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "UpsampleBilinear2dAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
-             return nullptr);
+    OP_CHECK(
+        ret == ACLNN_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "UpsampleBilinear2dAiCore ADD_TO_LAUNCHER_LIST_AICORE failed; "
+                                                        "propagate the first error reported by the failing stage."),
+        return nullptr);
     return y;
 }
 } // namespace l0op

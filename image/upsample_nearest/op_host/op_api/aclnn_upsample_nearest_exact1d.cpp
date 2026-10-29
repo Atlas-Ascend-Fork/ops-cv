@@ -16,6 +16,10 @@
 #include "opdev/op_dfx.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 #include "opdev/tensor_view_utils.h"
 #include "opdev/make_op_executor.h"
 #include "aclnn_kernels/contiguous.h"
@@ -113,7 +117,8 @@ static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize, con
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK_WRONG_DIMENSION(self, DIM_LIMIT, return false);
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 1, but got %zu", outputSizeNum),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearestExact1d", "output_size",
+                                          std::to_string(outputSizeNum).c_str(), "1"),
              return false);
     OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
 
@@ -138,20 +143,21 @@ static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSi
     int64_t inputL = selfShape.GetDim(DIM_TWO);
     int64_t outL = (*outputSize)[DIM_ZERO];
 
-    OP_CHECK(outN > 0 && outC > 0 && inputL > 0 && outL > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (N: %lld,"
-                     " C: %lld, L: %lld) output (N: %lld, C: %lld, L: %lld)",
-                     outN, outC, inputL, outN, outC, outL),
-             return false);
+    OP_CHECK(
+        outN > 0 && outC > 0 && inputL > 0 && outL > 0,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearestExact1d", "input", std::to_string(outN).c_str(),
+                                                 "all input and output dims must be greater than 0"),
+        return false);
     if (scales > 0) {
         // 资料约束：outputSize = floor(inputSize_L * scales)，非整数乘积时合法值是 floor 而非 ceil；
         // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合
         double expectDimL = static_cast<double>(inputL) * scales;
         OP_CHECK(static_cast<double>(outL) == std::floor(expectDimL) ||
                      fabs(static_cast<double>(outL) - expectDimL) <= EPSILON,
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "Scale conflicts with outputSize. scale_L * input_L should be equal to outputSize_L"),
+                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearestExact1d", "scales",
+                                                       std::to_string(scales).c_str(),
+                                                       "scale conflicts with outputSize; scale_L * input_L should be "
+                                                       "equal to outputSize_L"),
                  return false);
     }
     return true;

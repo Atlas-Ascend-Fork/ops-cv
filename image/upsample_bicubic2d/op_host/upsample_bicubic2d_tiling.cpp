@@ -20,6 +20,7 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "upsample_bicubic2d_tiling.h"
 #include "op_host/tiling_base.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr uint32_t BEST_PERFORMANCE_SIZE_1 = 16;
@@ -178,28 +179,49 @@ inline bool FloatEqual(float x, float y)
 ge::graphStatus UpsampleBicubic2dTiling::RunBigKernelTiling()
 {
     const gert::RuntimeAttrs* attrs = tilingContext->GetAttrs();
-    OP_CHECK_IF(attrs == nullptr, OP_LOGE(tilingContext->GetNodeName(), "attrs == nullptr"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        attrs == nullptr,
+        error_report::ReportTilingStageError(
+            tilingContext->GetNodeName(), "attrs is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     output_size = attrs->GetAttrPointer<gert::ContinuousVector>(OUTPUT_SIZE_ATTR);
-    OP_CHECK_IF(output_size == nullptr, OP_LOGE(tilingContext->GetNodeName(), "output_size == nullptr"),
+    OP_CHECK_IF(output_size == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "output_size is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(output_size->GetSize() != DIM_SIZE,
-                OP_LOGE(tilingContext->GetNodeName(), "output_size must contain %d elements, but got %zu", DIM_SIZE,
-                        output_size->GetSize()),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        output_size->GetSize() != DIM_SIZE,
+        OP_LOGE_FOR_INVALID_SHAPESIZE(tilingContext->GetNodeName(), "output_size",
+                                      std::to_string(output_size->GetSize()).c_str(), std::to_string(DIM_SIZE).c_str()),
+        return ge::GRAPH_FAILED);
     align_corners = attrs->GetAttrPointer<bool>(ALIGN_CORNERS_ATTR);
-    OP_CHECK_IF(align_corners == nullptr, OP_LOGE(tilingContext->GetNodeName(), "align_corners == nullptr"),
+    OP_CHECK_IF(align_corners == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "align_corners is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     scale_h = attrs->GetAttrPointer<float>(SCALE_H_ATTR);
-    OP_CHECK_IF(scale_h == nullptr, OP_LOGE(tilingContext->GetNodeName(), "scale_h == nullptr"),
+    OP_CHECK_IF(scale_h == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "scale_h is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     scale_w = attrs->GetAttrPointer<float>(SCALE_W_ATTR);
-    OP_CHECK_IF(scale_w == nullptr, OP_LOGE(tilingContext->GetNodeName(), "scale_w == nullptr"),
+    OP_CHECK_IF(scale_w == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "scale_w is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
 
     auto tempInputDesc = tilingContext->GetInputDesc(0);
-    OP_CHECK_IF(tempInputDesc == nullptr, OP_LOGE(tilingContext->GetNodeName(), "InputDesc == nullptr"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        tempInputDesc == nullptr,
+        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "InputDesc",
+                                            "the input desc of required input InputDesc is missing in the tiling "
+                                            "context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
 
     ge::DataType srcDtype = ge::DT_UNDEFINED;
     srcDtype = tempInputDesc->GetDataType();
@@ -210,25 +232,36 @@ ge::graphStatus UpsampleBicubic2dTiling::RunBigKernelTiling()
         dataTypeSize = GetDataTypeSize();
     }
     OP_CHECK_IF(srcDtype != dataType,
-                OP_LOGE(tilingContext->GetNodeName(),
-                        "srcDtype and dataType must be the same, but got srcDtype[%d] and dataType[%d]",
-                        static_cast<int32_t>(srcDtype), static_cast<int32_t>(dataType)),
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(tilingContext->GetNodeName(), "input",
+                                                       (std::to_string(static_cast<int32_t>(srcDtype)) + ", " +
+                                                        std::to_string(static_cast<int32_t>(dataType)))
+                                                           .c_str(),
+                                                       "srcDtype and dataType must be the same"),
                 return ge::GRAPH_FAILED);
 
     auto src_shape = tilingContext->GetInputShape(0);
-    OP_CHECK_IF(src_shape == nullptr, OP_LOGE(tilingContext->GetNodeName(), "src_shape == nullptr"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        src_shape == nullptr,
+        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "src_shape",
+                                            "the input shape of required input src_shape is missing in the tiling "
+                                            "context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
     dim = src_shape->GetStorageShape().GetDimNum() - 2; // 其实固定是2
 
     input_shape = src_shape->GetOriginShape();
 
-    OP_CHECK_IF(CheckShapes() == false, OP_LOGE(tilingContext->GetNodeName(), "CheckShapes failed"),
+    OP_CHECK_IF(CheckShapes() == false,
+                OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(),
+                                       "CheckShapes failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
 
     tilingContext->SetTilingKey(1);
 
     auto compileInfo = reinterpret_cast<const UpsampleBicubic2dCompileInfo*>(tilingContext->GetCompileInfo());
-    OP_CHECK_IF(compileInfo == nullptr, OP_LOGE(tilingContext->GetNodeName(), "compileInfo == nullptr"),
+    OP_CHECK_IF(compileInfo == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "compileInfo is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     socVersionType = compileInfo->socVersionType;
     if (socVersionType == SOC_VERSION_310P) {
@@ -306,8 +339,9 @@ uint32_t UpsampleBicubic2dTiling::GetNeedCoreNum()
 bool UpsampleBicubic2dTiling::CheckShapes() const
 {
     if (input_shape.GetDimNum() != SHAPE_SIZE) {
-        OP_LOGE(tilingContext->GetNodeName(), "input shape dim num must be %zu, but got %zu",
-                static_cast<size_t>(SHAPE_SIZE), input_shape.GetDimNum());
+        OP_LOGE_FOR_INVALID_SHAPEDIM(tilingContext->GetNodeName(), "input",
+                                     std::to_string(input_shape.GetDimNum()).c_str(),
+                                     std::to_string(static_cast<size_t>(SHAPE_SIZE)).c_str());
         return false;
     }
 
@@ -318,10 +352,11 @@ bool UpsampleBicubic2dTiling::CheckShapes() const
     int64_t outW = outputSizeArray[W_INDEX - H_INDEX];
 
     if (!(inputH > 0 && inputW > 0 && outH > 0 && outW > 0)) {
-        OP_LOGE(tilingContext->GetNodeName(),
-                "Input and output sizes should be greater than 0, but got input (H: %ld, W: %ld) output (H: %ld, "
-                "W: %ld)",
-                inputH, inputW, outH, outW);
+        OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON(tilingContext->GetNodeName(), "input",
+                                                   (std::to_string(inputH) + ", " + std::to_string(inputW) + ", " +
+                                                    std::to_string(outH) + ", " + std::to_string(outW))
+                                                       .c_str(),
+                                                   "input and output sizes should be greater than 0");
         return false;
     }
 
@@ -341,7 +376,8 @@ void UpsampleBicubic2dTiling::getTCubeTiling_w()
                         singleCoreK_w);
 
     if (mmTiling_w.GetTiling(tilingData.matmulTiling_w) == -1) {
-        OP_LOGE(tilingContext->GetNodeName(), "getTCubeTiling_w Error, please Check inputShapes.");
+        OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(), "getTCubeTiling_w Error, please Check inputShapes; "
+                                                             "propagate the first error reported by the failing stage");
         return;
     }
 }
@@ -357,7 +393,8 @@ void UpsampleBicubic2dTiling::getTCubeTiling_h()
     mmTiling_h.SetShape(slide_size, output_shapes[W_INDEX], singleCoreK_h);
 
     if (mmTiling_h.GetTiling(tilingData.matmulTiling_h) == -1) {
-        OP_LOGE(tilingContext->GetNodeName(), "getTCubeTiling_h Error, please Check inputShapes.");
+        OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(), "getTCubeTiling_h Error, please Check inputShapes; "
+                                                             "propagate the first error reported by the failing stage");
         return;
     }
 }

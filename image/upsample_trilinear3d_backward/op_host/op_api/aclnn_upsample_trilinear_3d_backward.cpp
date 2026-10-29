@@ -25,6 +25,10 @@
 #include "op_api/level2_base_cv.h"
 #include "aclnn_upsample_trilinear_3d_backward.h"
 #include "op_api/aclnn_check.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -37,8 +41,8 @@ static bool CheckFormat(const aclTensor* gradOut)
     const op::Format gradOutFormat = gradOut->GetStorageFormat();
     OP_CHECK(gradOutFormat == op::Format::FORMAT_ND || gradOutFormat == op::Format::FORMAT_NCDHW ||
                  gradOutFormat == op::Format::FORMAT_NDHWC,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Input storage format support NCDHW or NDHWC, but got %s.",
-                     op::ToString(gradOutFormat).GetString()),
+             OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleTrilinear3dBackward", "gradOut",
+                                        op::ToString(gradOutFormat).GetString(), "NCDHW or NDHWC"),
              return false);
     return true;
 }
@@ -67,27 +71,24 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclIntArray* outpu
     size_t dimNum = gradOutShape.GetDimNum();
 
     OP_CHECK(inputD > 0 && inputH > 0 && inputW > 0 && outD > 0 && outH > 0 && outW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (H: %ld,"
-                     " W: %ld) output (H: %ld, W: %ld)",
-                     inputH, inputW, outH, outW),
+             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleTrilinear3dBackward", "input_h",
+                                                      std::to_string(inputH).c_str(),
+                                                      "all input and output dims must be greater than 0"),
              return false);
 
     for (size_t i = 0; i < dimNum; ++i) {
         if (gradOutShape.GetDim(i) != fullOutputSize[i]) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected gradOutput to have the same shape as output;"
-                    " output.size(%zu) = %ld but got gradOutput.size(%zu) = %ld",
-                    i, fullOutputSize[i], i, gradOutShape.GetDim(i));
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleTrilinear3dBackward", "gradoutput_dim",
+                                                     std::to_string(gradOutShape.GetDim(i)).c_str(),
+                                                     "each dim of gradOutput must match the expected output size");
             return false;
         }
     }
     for (size_t i = 0; i < dimNum; ++i) {
         if (gradInShape.GetDim(i) != fullInputSize[i]) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected gradInput to have the same shape as Input;"
-                    " input.size(%zu) = %ld but got gradInput.size(%zu) = %ld",
-                    i, fullInputSize[i], i, gradInShape.GetDim(i));
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleTrilinear3dBackward", "gradinput_dim",
+                                                     std::to_string(gradInShape.GetDim(i)).c_str(),
+                                                     "each dim of gradInput must match the expected input size");
             return false;
         }
     }
@@ -112,15 +113,14 @@ static bool CheckUplimit(const aclTensor* gradOut)
 
     OP_CHECK(
         gradOutN <= INT32_MAX && gradOutC <= INT32_MAX && outD <= INT32_MAX && outH <= INT32_MAX && outW <= INT32_MAX,
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "GradOut sizes should not be greater than %d, but got gradOut(%ld, %ld, %ld, %ld, %ld)", INT32_MAX,
-                gradOutN, gradOutC, outD, outH, outW),
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleTrilinear3dBackward", "gradOutN",
+                                                 std::to_string(gradOutN).c_str(),
+                                                 "all dims must not exceed INT32_MAX"),
         return false);
     OP_CHECK(
         inputN <= INT32_MAX && inputC <= INT32_MAX && inputD <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "GradInput sizes should not be greater than %d, but got gradInput(%ld, %ld, %ld, %ld, %ld)", INT32_MAX,
-                inputN, inputC, inputD, inputH, inputW),
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleTrilinear3dBackward", "inputN",
+                                                 std::to_string(inputN).c_str(), "all dims must not exceed INT32_MAX"),
         return false);
     return true;
 }

@@ -66,7 +66,7 @@ const std::tuple<aclTensor*, aclTensor*> GridSampler3DGrad(const aclTensor* grad
     auto inputGrad = executor->AllocTensor(input->GetViewShape(), input->GetDataType(), input->GetStorageFormat());
     auto gridGrad = executor->AllocTensor(grid->GetViewShape(), grid->GetDataType(), grid->GetStorageFormat());
     if (inputGrad == nullptr || gridGrad == nullptr) {
-        OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "alloc gridGrad or inputGrad tensor failed.");
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "alloc gridGrad or inputGrad tensor failed");
         return std::tie(inputGrad, gridGrad);
     }
     const auto& inputShape = input->GetViewShape();
@@ -85,7 +85,8 @@ const std::tuple<aclTensor*, aclTensor*> GridSampler3DGrad(const aclTensor* grad
             OP_INPUT(gradOutput, input, grid), OP_OUTPUT(inputGrad, gridGrad),
             OP_ATTR(GetInterpolationModeStr(interpolationMode), GetPaddingModeStr(paddingMode), alignCorners));
         if (ret != ACLNN_SUCCESS) {
-            OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "GridSampler3DGrad AiCore ADD_TO_LAUNCHER_LIST_AICORE failed.");
+            OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "GridSampler3DGrad AiCore ADD_TO_LAUNCHER_LIST_AICORE failed; "
+                                                    "propagate the first error reported by the failing stage");
             return std::tuple<aclTensor*, aclTensor*>(nullptr, nullptr);
         }
         return std::tie(inputGrad, gridGrad);
@@ -98,7 +99,8 @@ const std::tuple<aclTensor*, aclTensor*> GridSampler3DGrad(const aclTensor* grad
             OP_INPUT(gradOutput, input, grid), OP_OUTPUT(inputGrad, gridGrad),
             OP_ATTR(GetInterpolationModeStr(interpolationMode), GetPaddingModeStr(paddingMode), alignCorners));
         if (ret != ACLNN_SUCCESS) {
-            OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "GridSampler3DGrad AiCpu ADD_TO_LAUNCHER_LIST_AICPU failed.");
+            OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "GridSampler3DGrad AiCpu ADD_TO_LAUNCHER_LIST_AICPU failed; "
+                                                    "propagate the first error reported by the failing stage");
             return std::tuple<aclTensor*, aclTensor*>(nullptr, nullptr);
         }
         return std::tie(inputGrad, gridGrad);

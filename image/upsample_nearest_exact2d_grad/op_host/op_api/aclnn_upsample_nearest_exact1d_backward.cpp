@@ -29,6 +29,10 @@
 #include "level0/unsqueeze.h"
 #include "upsample_nearest_exact2d_grad.h"
 #include "aclnn_upsample_nearest_exact1d_backward.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -67,8 +71,11 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
 {
     const op::Format gradOutputFormat1D = gradOutput->GetStorageFormat();
     if (gradOutputFormat1D != out->GetStorageFormat()) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Format of input and output should be equal, gradOutput [%s], out [%s].",
-                op::ToString(gradOutputFormat1D).GetString(), op::ToString(out->GetStorageFormat()).GetString());
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleNearestExact1dBackward", "gradoutput,out",
+                                                (std::string(op::ToString(gradOutputFormat1D).GetString()) + ", " +
+                                                 op::ToString(out->GetStorageFormat()).GetString())
+                                                    .c_str(),
+                                                "format of gradoutput and out must be the same");
         return false;
     }
     size_t inputSizeNum = inputSize->Size();
@@ -76,9 +83,12 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
     OP_CHECK_WRONG_DIMENSION(gradOutput, DIM_LIMIT, return false);
     OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
     OP_CHECK(inputSizeNum == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected input_size to be 3, but got %zu", inputSizeNum), return false);
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearestExact1dBackward", "input_size",
+                                          std::to_string(inputSizeNum).c_str(), "3"),
+             return false);
     OP_CHECK(outputSizeNum == EXPECT_OUTPUTSIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 1, but got %zu", outputSizeNum),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearestExact1dBackward", "output_size",
+                                          std::to_string(outputSizeNum).c_str(), "1"),
              return false);
     return true;
 }
@@ -86,7 +96,8 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
 static bool CheckScalesValid(const double weight)
 {
     if (weight < 0) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "scales cannot be negative, scales [%f].", weight);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearestExact1dBackward", "scales",
+                                              std::to_string(weight).c_str(), "scales cannot be negative");
         return false;
     }
     return true;
@@ -118,13 +129,15 @@ static bool CheckInputElement(const aclTensor* gradOutput, const aclTensor* out,
 
     double realScales = ComputeNearestExact1dBackwardScales(inputL, outL, scales);
     OP_CHECK(realScales >= MIN_SUPPORT_SCALE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "scales is too large, scales [%f].", realScales), return false);
+             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearestExact1dBackward", "scales",
+                                                   std::to_string(realScales).c_str(),
+                                                   "scales is too large; the supported scale range is exceeded"),
+             return false);
 
     OP_CHECK(outN > 0 && inputL > 0 && outC > 0 && outL > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0 but got input (N: %ld, C: %ld,"
-                     " L: %ld) output (L: %ld)",
-                     outN, outC, inputL, outL),
+             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearestExact1dBackward", "input_l",
+                                                      std::to_string(inputL).c_str(),
+                                                      "all input and output dims must be greater than 0"),
              return false);
 
     // gradOutput 的 shape 应等于 (inputSize[0], inputSize[1], outputSize[0])，out 的 shape 应等于
@@ -142,8 +155,9 @@ static bool CheckInputElement(const aclTensor* gradOutput, const aclTensor* out,
         double expectDimL = static_cast<double>(inputL) * scales;
         OP_CHECK(static_cast<double>(outSizeL) == std::floor(expectDimL) ||
                      fabs(static_cast<double>(outSizeL) - expectDimL) <= EPSILON,
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "Scale conflicts with outputSize. outputSize_L should be equal to inputSize_L * scales"),
+                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                     "aclnnUpsampleNearestExact1dBackward", "scales", std::to_string(scales).c_str(),
+                     "scale conflicts with outputSize; outputSize_L should be equal to inputSize_L * scales"),
                  return false);
     }
     return true;
@@ -156,8 +170,9 @@ static bool CheckNCDimEqual(const aclTensor* self, const aclTensor* out)
     int64_t outDimN = out->GetViewShape().GetDim(DIM_ZERO);
     int64_t outDimC = out->GetViewShape().GetDim(DIM_ONE);
     if ((selfDimC != outDimC) || (selfDimN != outDimN)) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "selfDimC[%ld]/outDimC[%ld] or selfDimN[%ld]/outDimN[%ld] are not equal.",
-                selfDimC, outDimC, selfDimN, outDimN);
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearestExact1dBackward", "self_dim_c",
+                                                 std::to_string(selfDimC).c_str(),
+                                                 "dim C of self must match dim C of out (same for dim N)");
         return false;
     }
     return true;

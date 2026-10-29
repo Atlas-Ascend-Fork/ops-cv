@@ -14,6 +14,7 @@
  */
 #include "log/log.h"
 #include "register/op_impl_registry.h"
+#include "error_report_util.h"
 
 using namespace ge;
 namespace ops {
@@ -29,9 +30,18 @@ static ge::graphStatus InferShape4UpsampleNearest3d(gert::InferShapeContext* con
 {
     OP_LOGI(context->GetNodeName(), "begin to do InferShape4UpsampleNearest3d");
     const gert::Shape* input_shape = context->GetInputShape(IN_X);
-    OP_CHECK_NULL_WITH_CONTEXT(context, input_shape);
+    OP_CHECK_IF(input_shape == nullptr,
+                error_report::ReportInvalidArgument(
+                    context->GetNodeName(), "input_shape",
+                    "the input shape of required input input_shape is missing in the infershape context; check that "
+                    "the graph node provides all required inputs"),
+                return ge::GRAPH_FAILED);
     gert::Shape* output_shape = context->GetOutputShape(OUT_Y);
-    OP_CHECK_NULL_WITH_CONTEXT(context, output_shape);
+    OP_CHECK_IF(output_shape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "output_shape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     const size_t input_dim = input_shape->GetDimNum();
     OP_CHECK_IF(input_dim != SUPPORTED_DIM_NUM,
@@ -39,7 +49,11 @@ static ge::graphStatus InferShape4UpsampleNearest3d(gert::InferShapeContext* con
                 return ge::GRAPH_FAILED);
 
     auto attrs = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+    OP_CHECK_IF(attrs == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "attrs is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
     auto output_size = attrs->GetAttrPointer<gert::TypedContinuousVector<int64_t>>(INDEX_OUTPUT_SIZE);
     auto scales = attrs->GetAttrPointer<gert::TypedContinuousVector<float>>(INDEX_SCALES);
 
@@ -69,8 +83,9 @@ static ge::graphStatus InferShape4UpsampleNearest3d(gert::InferShapeContext* con
             output_shape->SetDim(i + NOT_CHANGE_DIM, output_dim_value);
         }
     } else {
-        OP_LOGE(context->GetNodeName(),
-                "only one of attr::output_size or attr::scales should be defined as a non-empty value.");
+        error_report::ReportInvalidArgument(
+            context->GetNodeName(), "input",
+            "only one of attr::output_size or attr::scales should be defined as a non-empty value");
         return ge::GRAPH_FAILED;
     }
 

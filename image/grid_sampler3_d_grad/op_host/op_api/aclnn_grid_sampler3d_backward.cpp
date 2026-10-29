@@ -13,6 +13,10 @@
 #include "opdev/op_dfx.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 #include "opdev/shape_utils.h"
 #include "opdev/tensor_view_utils.h"
 #include "opdev/make_op_executor.h"
@@ -75,14 +79,22 @@ static bool CheckAttrValid(int64_t interpolationModeVal, int64_t paddingModeVal)
 {
     // 检查interpolationMode 、paddingMode是否在支持范围内
     if (paddingModeVal < PADDING_MODE_MIN_VALUE || paddingModeVal > PADDING_MODE_MAX_VALUE) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "paddingMode %ld should be in range [%ld, %ld].", paddingModeVal,
-                PADDING_MODE_MIN_VALUE, PADDING_MODE_MAX_VALUE);
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            "aclnnGridSampler3DBackward", "padding_mode",
+            (std::to_string(paddingModeVal) + ", " + std::to_string(PADDING_MODE_MIN_VALUE) + ", " +
+             std::to_string(PADDING_MODE_MAX_VALUE))
+                .c_str(),
+            "paddingMode should be within the supported range");
         return false;
     }
 
     if (interpolationModeVal < INTERPOLATION_MODE_MIN_VALUE || interpolationModeVal > INTERPOLATION_MODE_MAX_VALUE) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "interpolationMode %ld should be in range [%ld, %ld].", interpolationModeVal,
-                INTERPOLATION_MODE_MIN_VALUE, INTERPOLATION_MODE_MAX_VALUE);
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            "aclnnGridSampler3DBackward", "interpolation_mode",
+            (std::to_string(interpolationModeVal) + ", " + std::to_string(INTERPOLATION_MODE_MIN_VALUE) + ", " +
+             std::to_string(INTERPOLATION_MODE_MAX_VALUE))
+                .c_str(),
+            "interpolationMode should be within the supported range");
         return false;
     }
     return true;
@@ -92,8 +104,10 @@ static bool CheckAttrValid(int64_t interpolationModeVal, int64_t paddingModeVal)
 static bool CheckTupleNullptr(std::tuple<aclTensor*, aclTensor*> tensorTuple)
 {
     if (std::tuple_size<decltype(tensorTuple)>::value != GRAD_RESULT_SIZE) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "the length of tuple returned by GridSampler3DGrad is not %ld.",
-                GRAD_RESULT_SIZE);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+            "aclnnGridSampler3DBackward", "grad_result_size", std::to_string(GRAD_RESULT_SIZE).c_str(),
+            "the length of the tuple returned by GridSampler3DGrad does not match the "
+            "expected internal contract size");
         return false;
     }
     return (std::get<0>(tensorTuple) != nullptr) && (std::get<1>(tensorTuple) != nullptr);
@@ -102,8 +116,9 @@ static bool CheckTupleNullptr(std::tuple<aclTensor*, aclTensor*> tensorTuple)
 static bool CheckOutputMask(const aclBoolArray* outputMask)
 {
     if (outputMask->Size() != OUTPUTMASK_MAX_SIZE) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected aclnnGridSampler3DBackward outputMask len to be %ld, but got %zu.",
-                OUTPUTMASK_MAX_SIZE, outputMask->Size());
+        OP_LOGE_FOR_INVALID_SHAPESIZE("aclnnGridSampler3DBackward", "aclnn_grid_sampler3_d_backward",
+                                      std::to_string(outputMask->Size()).c_str(),
+                                      std::to_string(OUTPUTMASK_MAX_SIZE).c_str());
         return false;
     }
     return true;
@@ -129,31 +144,37 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* input, cons
 
     if (inputShape.GetDim(FIRST_DIM) != gridShape.GetDim(FIRST_DIM) ||
         inputShape.GetDim(FIRST_DIM) != gradOutputShape.GetDim(FIRST_DIM)) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "expect input grid and gradOutput to have same batch size, but got input with shape [%s], grid with "
-                "shape [%s] and gradOutput with shape [%s]",
-                op::ToString(inputShape).GetString(), op::ToString(gridShape).GetString(),
-                op::ToString(gradOutputShape).GetString());
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnGridSampler3DBackward", "input",
+                                               (std::string(op::ToString(inputShape).GetString()) + ", " +
+                                                std::string(op::ToString(gridShape).GetString()) + ", " +
+                                                std::string(op::ToString(gradOutputShape).GetString()))
+                                                   .c_str(),
+                                               "expect input grid and gradOutput to have same batch size");
         return false;
     }
     if (inputC != gradOutputC) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "expect input and gradOutput to have same channel size, but got input with shape [%s] "
-                "and gradOutput with shape [%s]",
-                op::ToString(inputShape).GetString(), op::ToString(gradOutputShape).GetString());
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnGridSampler3DBackward", "input",
+                                               (std::string(op::ToString(inputShape).GetString()) + ", " +
+                                                std::string(op::ToString(gradOutputShape).GetString()))
+                                                   .c_str(),
+                                               "expect input and gradOutput to have same channel size");
         return false;
     }
     if (gridShape.GetDim(SECOND_DIM) != gradOutputD || gridShape.GetDim(THIRD_DIM) != gradOutputH ||
         gridShape.GetDim(FOURTH_DIM) != gradOutputW) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "expect grid and gradOutput to have same D, H and W size, but got grid with shape [%s] "
-                "and gradOutput with shape [%s]",
-                op::ToString(gridShape).GetString(), op::ToString(gradOutputShape).GetString());
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnGridSampler3DBackward", "grid",
+                                               (std::string(op::ToString(gridShape).GetString()) + ", " +
+                                                std::string(op::ToString(gradOutputShape).GetString()))
+                                                   .c_str(),
+                                               "expect grid and gradOutput to have same D, H and W size");
         return false;
     }
     if (gridShape.GetDim(FIFTH_DIM) != VOLUMETRIC_GRID_LAST_DIM_SIZE) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "expect grid to have size %ld in last dimension, but got grid with shape [%s]",
-                VOLUMETRIC_GRID_LAST_DIM_SIZE, op::ToString(gridShape).GetString());
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+            "aclnnGridSampler3DBackward", "grid",
+            (std::to_string(VOLUMETRIC_GRID_LAST_DIM_SIZE) + ", " + std::string(op::ToString(gridShape).GetString()))
+                .c_str(),
+            "expect grid to have size in last dimension");
         return false;
     }
     OP_CHECK_SHAPE_NOT_EQUAL(inputGrad, input, return false);

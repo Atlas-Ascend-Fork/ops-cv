@@ -15,6 +15,11 @@
 #include "opdev/op_dfx.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
+#include "error_report_util.h"
 #include "opdev/tensor_view_utils.h"
 #include "opdev/make_op_executor.h"
 #include "aclnn_kernels/common/op_error_check.h"
@@ -80,7 +85,8 @@ static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize, con
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK_WRONG_DIMENSION(self, DIM_LIMIT, return false);
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 3, but got %zu", outputSizeNum),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearestExact3d", "output_size",
+                                          std::to_string(outputSizeNum).c_str(), "3"),
              return false);
 
     // out的shape应该等于推导后的shape
@@ -121,16 +127,16 @@ static bool CheckInputElement(const aclTensor* self, const Scales& scale, const 
         inputW = selfShape.GetDim(DIM_THREE);
     }
 
-    OP_CHECK(inputD > 0 && inputH > 0 && inputW > 0 && outD > 0 && outH > 0 && outW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (D: %ld,"
-                     " H: %ld, W: %ld) output (D: %ld, H: %ld, W: %ld)",
-                     inputD, inputH, inputW, outD, outH, outW),
-             return false);
+    OP_CHECK(
+        inputD > 0 && inputH > 0 && inputW > 0 && outD > 0 && outH > 0 && outW > 0,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearestExact3d", "input", std::to_string(inputD).c_str(),
+                                                 "all input and output dims must be greater than 0"),
+        return false);
 
     OP_CHECK(inputN > 0 && outC > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 5D data tensor expected but got a tensor with sizes %s.",
-                     op::ToString(self->GetViewShape()).GetString()),
+             OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON("aclnnUpsampleNearestExact3d", "sizes",
+                                                       op::ToString(self->GetViewShape()).GetString(),
+                                                       "non-empty 5D data tensor expected"),
              return false);
 
     if (scale.scalesD > 0 && scale.scalesH > 0 && scale.scalesW > 0) {
@@ -138,22 +144,25 @@ static bool CheckInputElement(const aclTensor* self, const Scales& scale, const 
         int64_t dstDimD_Max = static_cast<int64_t>(static_cast<double>(inputD) * (scale.scalesD + EPSILON));
         int64_t dstDimD_Min = static_cast<int64_t>(static_cast<double>(inputD) * (scale.scalesD - EPSILON));
         OP_CHECK((outD == dstDimD) || (outD >= dstDimD_Min && outD <= dstDimD_Max),
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "Scale conflicts with outputSize. scale_D * input_D should be equal to outputSize_D"),
+                 error_report::ReportInvalidArgument(
+                     "aclnnUpsampleNearestExact3d", "scale",
+                     "scale conflicts with outputSize. scale_D * input_D should be equal to outputSize_D"),
                  return false);
         int64_t dstDimH = static_cast<int64_t>(static_cast<double>(inputH) * scale.scalesH);
         int64_t dstDimH_Max = static_cast<int64_t>(static_cast<double>(inputH) * (scale.scalesH + EPSILON));
         int64_t dstDimH_Min = static_cast<int64_t>(static_cast<double>(inputH) * (scale.scalesH - EPSILON));
         OP_CHECK((outH == dstDimH) || (outH >= dstDimH_Min && outH <= dstDimH_Max),
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "Scale conflicts with outputSize. scale_H * input_H should be equal to outputSize_H"),
+                 error_report::ReportInvalidArgument(
+                     "aclnnUpsampleNearestExact3d", "scale",
+                     "scale conflicts with outputSize. scale_H * input_H should be equal to outputSize_H"),
                  return false);
         int64_t dstDimW = static_cast<int64_t>(static_cast<double>(inputW) * scale.scalesW);
         int64_t dstDimW_Max = static_cast<int64_t>(static_cast<double>(inputW) * (scale.scalesW + EPSILON));
         int64_t dstDimW_Min = static_cast<int64_t>(static_cast<double>(inputW) * (scale.scalesW - EPSILON));
         OP_CHECK((outW == dstDimW) || (outW >= dstDimW_Min && outW <= dstDimW_Max),
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "Scale conflicts with outputSize. scale_W * input_W should be equal to outputSize_W"),
+                 error_report::ReportInvalidArgument(
+                     "aclnnUpsampleNearestExact3d", "scale",
+                     "scale conflicts with outputSize. scale_W * input_W should be equal to outputSize_W"),
                  return false);
     }
     return true;

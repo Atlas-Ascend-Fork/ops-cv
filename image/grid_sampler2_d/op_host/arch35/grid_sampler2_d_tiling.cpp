@@ -24,6 +24,7 @@
 #include "platform/platform_ascendc.h"
 #include "util/math_util.h"
 #include "util/platform_util.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 
@@ -61,21 +62,39 @@ struct GridSampler2DCompileInfo {
 static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& ubSize, int64_t& coreNum)
 {
     fe::PlatFormInfos* platformInfoPtr = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfoPtr);
+    OP_CHECK_IF(platformInfoPtr == nullptr,
+                error_report::ReportTilingStageError(
+                    context->GetNodeName(),
+                    "platformInfoPtr is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfoPtr);
     coreNum = ascendcPlatform.GetCoreNumAiv();
-    OP_CHECK_IF(coreNum == 0, OP_LOGE(context, "coreNum is 0"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(coreNum <= 0,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "input", std::to_string(coreNum).c_str(),
+                                                      "coreNum is 0"),
+                return ge::GRAPH_FAILED);
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSize);
-    OP_CHECK_IF(ubSize == 0, OP_LOGE(context, "ubSize is 0"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ubSize == 0,
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "input",
+                                                          std::to_string(ubSize).c_str(), "ubSize is 0"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
 static ge::graphStatus CheckInputDtypes(gert::TilingContext* context)
 {
     const auto* xDesc = context->GetInputDesc(X_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xDesc);
+    OP_CHECK_IF(
+        xDesc == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "xDesc is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     const auto* gridDesc = context->GetInputDesc(GRID_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, gridDesc);
+    OP_CHECK_IF(
+        gridDesc == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "gridDesc is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     const ge::DataType xDtype = xDesc->GetDataType();
     const ge::DataType gridDtype = gridDesc->GetDataType();
@@ -94,9 +113,17 @@ static ge::graphStatus CheckInputDtypes(gert::TilingContext* context)
 static ge::graphStatus CheckOutputDtype(gert::TilingContext* context)
 {
     const auto* xDesc = context->GetInputDesc(X_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xDesc);
+    OP_CHECK_IF(
+        xDesc == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "xDesc is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     const auto* yDesc = context->GetOutputDesc(OUTPUT_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, yDesc);
+    OP_CHECK_IF(
+        yDesc == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "yDesc is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     const ge::DataType xDtype = xDesc->GetDataType();
     const ge::DataType yDtype = yDesc->GetDataType();
@@ -116,10 +143,18 @@ static ge::graphStatus CheckAndExtractShapes(gert::TilingContext* context, int64
                                              int64_t& WIn, int64_t& HOut, int64_t& WOut)
 {
     const auto* xInput = context->GetInputShape(X_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xInput);
+    OP_CHECK_IF(
+        xInput == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "xInput is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     const auto xShape = xInput->GetStorageShape();
     const auto* gridInput = context->GetInputShape(GRID_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, gridInput);
+    OP_CHECK_IF(
+        gridInput == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "gridInput is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     const auto gridShape = gridInput->GetStorageShape();
 
     const std::string xDimNum = std::to_string(xShape.GetDimNum()) + "D";
@@ -193,7 +228,11 @@ static ge::graphStatus CheckAndParseAttrs(gert::TilingContext* context, int32_t&
                                           int32_t& paddingMode, int32_t& alignCorners)
 {
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+    OP_CHECK_IF(
+        attrs == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "attrs is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     const char* interpStr = attrs->GetStr(0);
     const std::string interpVal = (interpStr == nullptr) ? "bilinear" : std::string(interpStr);
@@ -234,7 +273,11 @@ static ge::graphStatus GetWorkspaceSize(gert::TilingContext* context)
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
     uint64_t sysWorkspaceSize = ascendcPlatform.GetLibApiWorkSpaceSize();
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
+    OP_CHECK_IF(currentWorkspace == nullptr,
+                error_report::ReportTilingStageError(
+                    context->GetNodeName(),
+                    "currentWorkspace is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     currentWorkspace[0] = static_cast<size_t>(userWorkspaceSize + static_cast<int64_t>(sysWorkspaceSize));
     return ge::GRAPH_SUCCESS;
 }
@@ -245,29 +288,47 @@ static ge::graphStatus GridSampler2dTilingFunc(gert::TilingContext* context)
     uint64_t ubSize = 0;
     int64_t coreNum = 0;
     OP_CHECK_IF(GetPlatformInfo(context, ubSize, coreNum) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "GetPlatformInfo error"), return ge::GRAPH_FAILED);
-
-    OP_CHECK_IF(CheckInputDtypes(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "CheckInputDtypes error"),
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "GetPlatformInfo error; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
 
-    OP_CHECK_IF(CheckOutputDtype(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "CheckOutputDtype error"),
+    OP_CHECK_IF(CheckInputDtypes(context) != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "CheckInputDtypes error; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
+
+    OP_CHECK_IF(CheckOutputDtype(context) != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "CheckOutputDtype error; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
 
     int64_t N = 0, C = 0, HIn = 0, WIn = 0, HOut = 0, WOut = 0;
     int32_t interpolationMode = 0, paddingMode = 0, alignCorners = 0;
     OP_CHECK_IF(CheckAndExtractShapes(context, N, C, HIn, WIn, HOut, WOut) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "CheckAndExtractShapes error"), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "CheckAndExtractShapes error; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(CheckAndParseAttrs(context, interpolationMode, paddingMode, alignCorners) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "CheckAndParseAttrs error"), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "CheckAndParseAttrs error; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
 
-    OP_CHECK_IF(GetWorkspaceSize(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "GetWorkspaceSize error"),
+    OP_CHECK_IF(GetWorkspaceSize(context) != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "GetWorkspaceSize error; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
 
     GridSampler2DTilingData* tiling = context->GetTilingData<GridSampler2DTilingData>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
+    OP_CHECK_IF(
+        tiling == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "tiling is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(memset_s(tiling, sizeof(GridSampler2DTilingData), 0, sizeof(GridSampler2DTilingData)) != EOK,
-                OP_LOGE(context, "Failed to set tiling data"), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "Failed to set tiling data; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
 
     int64_t totalPixels = N * HOut * WOut;
 
@@ -295,10 +356,16 @@ static ge::graphStatus GridSampler2dTilingFunc(gert::TilingContext* context)
     int64_t needCoreNum = Ops::Base::CeilDiv(totalPixels, perCoreElements);
 
     context->SetBlockDim(static_cast<uint32_t>(needCoreNum));
-    OP_CHECK_IF(ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE,
-                OP_LOGE(context, "ubSize %lu <= DCACHE_SIZE + STATIC_UB_ESTIMATE", ubSize), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE,
+        OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "input", std::to_string(ubSize).c_str(),
+                                                  "ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE"),
+        return ge::GRAPH_FAILED);
     auto res = context->SetLocalMemorySize(static_cast<uint32_t>(ubSize - DCACHE_SIZE - STATIC_UB_ESTIMATE));
-    OP_CHECK_IF(res != ge::GRAPH_SUCCESS, OP_LOGE(context, "SetLocalMemorySize failed"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(res != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "SetLocalMemorySize failed; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
 
     // TilingKey maps interpMode to compile-time template parameter.
     // Values: 0=BILINEAR, 1=NEAREST, 2=BICUBIC.
@@ -311,19 +378,33 @@ static ge::graphStatus GridSampler2dTilingFunc(gert::TilingContext* context)
 static ge::graphStatus TilingParseForGridSampler2D(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<GridSampler2DCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     fe::PlatFormInfos* platformInfoPtr = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfoPtr);
+    OP_CHECK_IF(platformInfoPtr == nullptr,
+                error_report::ReportTilingStageError(
+                    context->GetNodeName(),
+                    "platformInfoPtr is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfoPtr);
 
     int64_t coreNum = ascendcPlatform.GetCoreNumAiv();
-    OP_CHECK_IF(coreNum <= 0, OP_LOGE(context, "coreNum is invalid: %ld", coreNum), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(coreNum <= 0,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "invalid",
+                                                      std::to_string(coreNum).c_str(), "coreNum is invalid:"),
+                return ge::GRAPH_FAILED);
     compileInfo->coreNum = coreNum;
 
     uint64_t ubSize = 0;
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSize);
-    OP_CHECK_IF(ubSize == 0, OP_LOGE(context, "ubSize is 0"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ubSize == 0,
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "input",
+                                                          std::to_string(ubSize).c_str(), "ubSize is 0"),
+                return ge::GRAPH_FAILED);
     compileInfo->ubSize = ubSize;
 
     // ascend950 supports vgather

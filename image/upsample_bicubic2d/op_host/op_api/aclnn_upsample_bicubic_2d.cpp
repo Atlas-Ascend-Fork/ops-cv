@@ -34,6 +34,10 @@
 #include "aclnn_kernels/reshape.h"
 #include "op_api/level2_base_cv.h"
 #include "op_api/aclnn_check.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -90,11 +94,18 @@ static bool CheckDtypeValid(const aclTensor* self, const aclTensor* out)
 static bool CheckFormatValid(const aclTensor* self, const aclTensor* out)
 {
     OP_CHECK(self->GetStorageFormat() == out->GetStorageFormat(),
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "The self and out must have same format"), return false);
+             OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBicubic2d", "self,out",
+                                                     (std::string(op::ToString(self->GetStorageFormat()).GetString()) +
+                                                      ", " + op::ToString(out->GetStorageFormat()).GetString())
+                                                         .c_str(),
+                                                     "format of self and out must be the same"),
+             return false);
 
     OP_CHECK((out->GetStorageFormat() == op::Format::FORMAT_NCHW ||
               out->GetStorageFormat() == op::Format::FORMAT_NHWC || out->GetStorageFormat() == op::Format::FORMAT_ND),
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "The format must be NCHW, NHWC or ND"), return false);
+             OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleBicubic2d", "out",
+                                        op::ToString(out->GetStorageFormat()).GetString(), "NCHW, NHWC or ND"),
+             return false);
     return true;
 }
 
@@ -104,7 +115,8 @@ static bool CheckShapeValid(const aclTensor* self, const aclIntArray* outputSize
     OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "It is expected outputSize's size is 2, but got size %zu", outputSizeNum),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBicubic2d", "outputSize", std::to_string(outputSizeNum).c_str(),
+                                          "2"),
              return false);
     auto selfShape = self->GetViewShape();
     int64_t n = selfShape.GetDim(NCHW_DIM_ZERO);
@@ -120,34 +132,35 @@ static bool CheckShapeValid(const aclTensor* self, const aclIntArray* outputSize
         c = selfShape.GetDim(NCHW_DIM_THREE);
         fullOutputSize = {n, outputH, outputW, c};
     }
-    OP_CHECK(c > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 4D data tensor expected but got a tensor with sizes %s.",
-                     op::ToString(selfShape).GetString()),
-             return false);
-    OP_CHECK(inputH > 0 && inputW > 0 && outputH > 0 && outputW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Size of H and W must be greater than 0, but got input (H: %ld, W: %ld), output (H: %ld, W: %ld)",
-                     inputH, inputW, outputH, outputW),
-             return false);
+    OP_CHECK(
+        c > 0,
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnUpsampleBicubic2d", "self", op::ToString(selfShape).GetString(),
+                                              "a non-empty 4D data tensor is required"),
+        return false);
+    OP_CHECK(
+        inputH > 0 && inputW > 0 && outputH > 0 && outputW > 0,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2d", "inputH", std::to_string(inputH).c_str(),
+                                                 "all input and output dims must be greater than 0"),
+        return false);
     auto outShape = out->GetViewShape();
     for (size_t i = 0; i < DIM_LIMIT; ++i) {
         OP_CHECK(outShape.GetDim(i) == fullOutputSize[i],
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID, "The dim %zu of out should be %ld, but got %ld", i, fullOutputSize[i],
-                         outShape.GetDim(i)),
+                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2d", "out",
+                                                          std::to_string(outShape.GetDim(i)).c_str(),
+                                                          "each dim of out must match the expected size"),
                  return false);
     }
     // 校验上边界
     if (!IsRegBase()) {
         OP_CHECK(n <= INT32_MAX && c <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "Input sizes should not be greater than %d, but got input(%ld, %ld, %ld, %ld)", INT32_MAX, n,
-                         c, inputH, inputW),
+                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2d", "n", std::to_string(n).c_str(),
+                                                          "all dims must not exceed INT32_MAX"),
                  return false);
-        OP_CHECK(
-            outputH <= INT32_MAX && outputW <= INT32_MAX,
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Output sizes should not be greater than %d, but got outputSize[%ld, %ld]",
-                    INT32_MAX, outputH, outputW),
-            return false);
+        OP_CHECK(outputH <= INT32_MAX && outputW <= INT32_MAX,
+                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2d", "outputH",
+                                                          std::to_string(outputH).c_str(),
+                                                          "all dims must not exceed INT32_MAX"),
+                 return false);
     }
     return true;
 }
@@ -199,13 +212,17 @@ static bool CheckScales(const aclTensor* self, const aclIntArray* outputSize, co
     }
 
     OP_CHECK(CheckDstSize(inputH, outputH, scalesH),
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Scale conflicts with outputSize. scale_h * input_h should be equal to outputSize_h"),
+             OP_LOGE_FOR_INVALID_VALUES_WITH_REASON("aclnnUpsampleBicubic2d", "scales_h",
+                                                    (std::to_string(inputH) + ", " + std::to_string(outputH)).c_str(),
+                                                    "scales_h conflicts with outputSize; scales_h * input_h should be "
+                                                    "equal to outputSize_h"),
              return false);
 
     OP_CHECK(CheckDstSize(inputW, outputW, scalesW),
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Scale conflicts with outputSize. scale_w * input_w should be equal to outputSize_w"),
+             OP_LOGE_FOR_INVALID_VALUES_WITH_REASON("aclnnUpsampleBicubic2d", "scales_w",
+                                                    (std::to_string(inputW) + ", " + std::to_string(outputW)).c_str(),
+                                                    "scales_w conflicts with outputSize; scales_w * input_w should be "
+                                                    "equal to outputSize_w"),
              return false);
     return true;
 }

@@ -27,6 +27,10 @@
 #include "opdev/op_log.h"
 #include "opdev/tensor_view_utils.h"
 #include "op_api/aclnn_check.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -81,7 +85,9 @@ static bool CheckDtypeValid(const aclTensor* self, const aclTensor* out)
 
 static bool CheckScale(const double scale)
 {
-    OP_CHECK(std::isfinite(scale), OP_LOGE(ACLNN_ERR_PARAM_INVALID, "scale must be finite, but got %f", scale),
+    OP_CHECK(std::isfinite(scale),
+             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleLinear1d", "scale", std::to_string(scale).c_str(),
+                                                   "scale must be finite"),
              return false);
     return true;
 }
@@ -93,31 +99,31 @@ static bool CheckShape(const aclTensor* self, const aclTensor* out, const aclInt
     OP_CHECK_WRONG_DIMENSION(self, DIM_LIMIT, return false);
     OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
 
-    OP_CHECK(outputSizeNum == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected outputSize to be 1, but got %zu", outputSizeNum), return false);
+    OP_CHECK(
+        outputSizeNum == EXPECT_SIZE,
+        OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleLinear1d", "outputSize", std::to_string(outputSizeNum).c_str(), "1"),
+        return false);
     int64_t outL = (*outputSize)[DIM_ZERO];
     int64_t batch = self->GetViewShape().GetDim(DIM_ZERO);
     int64_t channels = self->GetViewShape().GetDim(DIM_ONE);
     auto outShape = out->GetViewShape();
     FVector<int64_t> fullOutputSize = {batch, channels, outL};
     if (self->GetViewShape().GetDim(1) == 0 || self->GetViewShape().GetDim(DIM_TWO) == 0) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 3D data tensor expected but got a tensor with sizes %s.",
-                op::ToString(self->GetViewShape()).GetString());
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnUpsampleLinear1d", "self",
+                                              op::ToString(self->GetViewShape()).GetString(),
+                                              "a non-empty 3D data tensor is required");
         return false;
     }
     OP_CHECK(outL > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, "
-                     "but got output (L: %ld)",
-                     outL),
+             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleLinear1d", "output_l", std::to_string(outL).c_str(),
+                                                      "the L dim of output must be greater than 0"),
              return false);
 
     for (size_t i = 0; i < outDimNum; ++i) {
         if (outShape.GetDim(i) != fullOutputSize[i]) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected out to have shape "
-                    "size(%zu) = %ld but got out.size(%zu) = %ld",
-                    i, fullOutputSize[i], i, outShape.GetDim(i));
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleLinear1d", "out_dim",
+                                                     std::to_string(outShape.GetDim(i)).c_str(),
+                                                     "each dim of out must match the expected size");
             return false;
         }
     }
@@ -125,8 +131,9 @@ static bool CheckShape(const aclTensor* self, const aclTensor* out, const aclInt
     if (scale >= 0) {
         const double odim = static_cast<double>(self->GetViewShape().GetDim(DIM_TWO)) * scale;
         if (static_cast<int64_t>(odim) != outL) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Scale conflicts with outputSize. "
-                                             "scale * input[2] should be equal to outputSize[0]");
+            OP_LOGE_WITHOUT_REPORT(
+                ACLNN_ERR_PARAM_INVALID,
+                "scale conflicts with outputSize; scale * input[2] should be equal to outputSize[0]");
             return false;
         }
     }

@@ -17,6 +17,7 @@
 #include "log/log.h"
 #include "util/shape_util.h"
 #include "infershape_utils.h"
+#include "error_report_util.h"
 
 using namespace ge;
 namespace ops {
@@ -33,46 +34,77 @@ ge::graphStatus ResizeBicubicV2InferShape(gert::InferShapeContext* context)
     auto nodeName = context->GetNodeName();
 
     auto xShape = context->GetInputShape(IN_X);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xShape);
+    OP_CHECK_IF(xShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "xShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
     auto yShape = context->GetOutputShape(OUT_Y);
-    OP_CHECK_NULL_WITH_CONTEXT(context, yShape);
+    OP_CHECK_IF(yShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "yShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     auto xDesc = context->GetInputDesc(IN_X);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xDesc);
+    OP_CHECK_IF(xDesc == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "xDesc is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
     auto xFormat = xDesc->GetFormat().GetStorageFormat();
     OP_CHECK_IF((xFormat != FORMAT_NCHW) && (xFormat != FORMAT_NHWC) && (xFormat != FORMAT_ND),
-                OP_LOGE(nodeName, "x format only support nchw or nhwc or nd"), return GRAPH_FAILED);
+                error_report::ReportInvalidArgument(nodeName, "format", "x format only support nchw or nhwc or nd"),
+                return GRAPH_FAILED);
     const size_t hIdx = xFormat == FORMAT_NHWC ? 1 : 2;
 
     auto sizeTensor = context->GetInputTensor(IN_SIZE);
-    OP_CHECK_NULL_WITH_CONTEXT(context, sizeTensor);
+    OP_CHECK_IF(sizeTensor == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "sizeTensor is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
     auto sizeShape = context->GetInputShape(IN_SIZE);
-    OP_CHECK_NULL_WITH_CONTEXT(context, sizeShape);
+    OP_CHECK_IF(sizeShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "sizeShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(sizeShape->GetDimNum() != 1,
-                OP_LOGE(nodeName, "size must be 1D, but rank is %zu", sizeShape->GetDimNum()), return GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(
+                    nodeName, "input", std::to_string(sizeShape->GetDimNum()).c_str(), "size must be 1D, but rank is"),
+                return GRAPH_FAILED);
     auto sizeDtype = sizeTensor->GetDataType();
-    OP_CHECK_IF(sizeDtype != ge::DT_INT32, OP_LOGE(nodeName, "size dtype only support int32"), return GRAPH_FAILED);
+    OP_CHECK_IF(sizeDtype != ge::DT_INT32,
+                OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(nodeName, "input", std::to_string(sizeDtype).c_str(),
+                                                      "size dtype only support int32"),
+                return GRAPH_FAILED);
     int32_t outH = ge::UNKNOWN_DIM;
     int32_t outW = ge::UNKNOWN_DIM;
     if (Ops::Cv::IsConstTensor(sizeTensor)) {
         const int32_t* sizeValue = sizeTensor->GetData<int32_t>();
         auto sizeNum = sizeTensor->GetShapeSize();
         OP_CHECK_IF(sizeNum != IN_SIZE_NUM,
-                    OP_LOGE(nodeName, "the element number of size should be 2, but is %ld", sizeNum),
+                    OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(nodeName, "input", std::to_string(sizeNum).c_str(),
+                                                              "the element number of size should be 2, but is"),
                     return GRAPH_FAILED);
         outH = sizeValue[0];
         outW = sizeValue[1];
-        OP_CHECK_IF((outH <= 0) || (outW <= 0), OP_LOGE(nodeName, "output size should be greater than 0"),
+        OP_CHECK_IF((outH <= 0) || (outW <= 0),
+                    error_report::ReportInvalidArgument(nodeName, "output", "output size should be greater than 0"),
                     return GRAPH_FAILED);
     }
 
     if (Ops::Base::IsUnknownRank(*xShape)) {
         Ops::Base::SetUnknownShape(IN_X_DIMS, *yShape);
     } else {
-        OP_CHECK_IF(xShape->GetDimNum() != IN_X_DIMS, OP_LOGE(nodeName, "x shape only support 4D"),
+        OP_CHECK_IF(xShape->GetDimNum() != IN_X_DIMS,
+                    OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                        nodeName, "shape", std::to_string(xShape->GetDimNum()).c_str(), "x shape only support 4D"),
                     return GRAPH_FAILED);
         OP_CHECK_IF((xShape->GetDim(hIdx) == 0) || (xShape->GetDim(hIdx + 1) == 0),
-                    OP_LOGE(nodeName, "input size should be greater than 0"), return GRAPH_FAILED);
+                    error_report::ReportInvalidArgument(nodeName, "input", "input size should be greater than 0"),
+                    return GRAPH_FAILED);
         *yShape = *xShape;
     }
 
@@ -89,7 +121,8 @@ graphStatus ResizeBicubicV2InferDtype(gert::InferDataTypeContext* context)
 
     auto xDtype = context->GetInputDataType(IN_X);
     OP_CHECK_IF((xDtype != ge::DT_FLOAT) && (xDtype != ge::DT_FLOAT16) && (xDtype != ge::DT_BF16),
-                OP_LOGE(context->GetNodeName(), "x dtype only support float, float16 and bfloat16"),
+                error_report::ReportInvalidArgument(context->GetNodeName(), "dtype",
+                                                    "x dtype only support float, float16 and bfloat16"),
                 return GRAPH_FAILED);
 
     context->SetOutputDataType(OUT_Y, xDtype);

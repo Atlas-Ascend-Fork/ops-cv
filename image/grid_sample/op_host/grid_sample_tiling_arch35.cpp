@@ -13,6 +13,7 @@
  */
 #include "grid_sample_tiling_arch35.h"
 #include "grid_sample_tiling.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 static constexpr uint32_t VF_MAX_THREAD_NUM_2D = 1024;
@@ -80,12 +81,18 @@ ge::graphStatus GridSampleArch35Tiling::PostTiling()
     workspaces[0] = workspaceSize_;
 
     gert::TilingData* rawTilingData = context_->GetRawTilingData();
-    OP_CHECK_IF(rawTilingData == nullptr, OP_LOGE(context_->GetNodeType(), "GetRawTilingData failed."),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(tilingData.GetDataSize() > rawTilingData->GetCapacity(),
-                OP_LOGE(context_, "actual tiling data size %zu > context tiling data size %zu",
-                        tilingData.GetDataSize(), rawTilingData->GetCapacity()),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        rawTilingData == nullptr,
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeType(),
+                               "GetRawTilingData failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        tilingData.GetDataSize() > rawTilingData->GetCapacity(),
+        OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON(
+            context_->GetNodeName(), "actual",
+            (std::to_string(tilingData.GetDataSize()) + ", " + std::to_string(rawTilingData->GetCapacity())).c_str(),
+            "actual tiling data size > context tiling data size"),
+        return ge::GRAPH_FAILED);
     tilingData.SaveToBuffer(rawTilingData->GetData(), rawTilingData->GetCapacity());
     rawTilingData->SetDataSize(tilingData.GetDataSize());
 

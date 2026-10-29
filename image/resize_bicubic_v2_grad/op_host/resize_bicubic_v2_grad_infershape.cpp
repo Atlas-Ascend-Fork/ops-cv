@@ -15,6 +15,7 @@
 #include "register/op_impl_registry.h"
 #include "log/log.h"
 #include "util/shape_util.h"
+#include "error_report_util.h"
 
 using namespace ge;
 namespace ops {
@@ -31,16 +32,28 @@ ge::graphStatus ResizeBicubicV2GradInferShape(gert::InferShapeContext* context)
     auto nodeName = context->GetNodeName();
 
     auto yShape = context->GetOutputShape(OUT_Y);
-    OP_CHECK_NULL_WITH_CONTEXT(context, yShape);
+    OP_CHECK_IF(yShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "yShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
     auto imageShape = context->GetInputShape(IN_ORIGINAL_IMAGE);
-    OP_CHECK_NULL_WITH_CONTEXT(context, imageShape);
+    OP_CHECK_IF(imageShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "imageShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     auto gradsDesc = context->GetInputDesc(IN_GRADS);
-    OP_CHECK_NULL_WITH_CONTEXT(context, gradsDesc);
+    OP_CHECK_IF(gradsDesc == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "gradsDesc is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
     auto gradsFormat = gradsDesc->GetFormat().GetStorageFormat();
     OP_CHECK_IF((gradsFormat != FORMAT_NCHW) && (gradsFormat != FORMAT_NHWC),
-                OP_LOGE(nodeName, "grads format only supports NCHW and NHWC, but got %s",
-                        Ops::Base::ToString(gradsFormat).c_str()),
+                OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON(nodeName, "grads", Ops::Base::ToString(gradsFormat).c_str(),
+                                                        "grads format only supports NCHW and NHWC"),
                 return GRAPH_FAILED);
     const size_t hIdx = gradsFormat == FORMAT_NCHW ? 2 : 1;
 
@@ -48,9 +61,14 @@ ge::graphStatus ResizeBicubicV2GradInferShape(gert::InferShapeContext* context)
         Ops::Base::SetUnknownShape(IN_GRADS_DIMS, *yShape);
     } else {
         OP_CHECK_IF(imageShape->GetDimNum() != IN_GRADS_DIMS,
-                    OP_LOGE(nodeName, "original_image shape only supports 4D"), return GRAPH_FAILED);
+                    OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(nodeName, "original_image",
+                                                          std::to_string(imageShape->GetDimNum()).c_str(),
+                                                          "original_image shape only supports 4D"),
+                    return GRAPH_FAILED);
         OP_CHECK_IF((imageShape->GetDim(hIdx) == 0) || (imageShape->GetDim(hIdx + 1) == 0),
-                    OP_LOGE(nodeName, "original_image size should be greater than 0"), return GRAPH_FAILED);
+                    error_report::ReportInvalidArgument(nodeName, "original_image",
+                                                        "original_image size should be greater than 0"),
+                    return GRAPH_FAILED);
         *yShape = *imageShape;
     }
 
@@ -64,7 +82,8 @@ graphStatus ResizeBicubicV2GradInferDtype(gert::InferDataTypeContext* context)
 
     auto gradsDtype = context->GetInputDataType(IN_GRADS);
     OP_CHECK_IF((gradsDtype != ge::DT_FLOAT) && (gradsDtype != ge::DT_FLOAT16) && (gradsDtype != ge::DT_BF16),
-                OP_LOGE(context->GetNodeName(), "grads dtype only supports float, float16 and bfloat16"),
+                error_report::ReportInvalidArgument(context->GetNodeName(), "grads",
+                                                    "grads dtype only supports float, float16 and bfloat16"),
                 return GRAPH_FAILED);
 
     context->SetOutputDataType(OUT_Y, gradsDtype);

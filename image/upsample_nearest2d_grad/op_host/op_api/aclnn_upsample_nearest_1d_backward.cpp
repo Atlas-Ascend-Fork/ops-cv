@@ -23,6 +23,10 @@
 #include "opdev/op_dfx.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 #include "opdev/tensor_view_utils.h"
 #include "opdev/make_op_executor.h"
 #include "op_api/aclnn_check.h"
@@ -75,15 +79,20 @@ static bool CheckShape(const aclTensor* gradOut, const aclIntArray* outputSize, 
     size_t outputSizeCount = outputSize->Size();
     size_t inputSizeNum = inputSize->Size();
     OP_CHECK(gradOutDimNum == DIM_LIMIT,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected gradOut to be 3d Tensor, instead got: %zu", gradOutDimNum),
+             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearest1dBackward", "grad_out",
+                                                   std::to_string(gradOutDimNum).c_str(),
+                                                   "expected gradOut to be 3d Tensor, instead got:"),
              return false);
 
     OP_CHECK(outputSizeCount == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 1, but got %zu", outputSizeCount),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearest1dBackward", "output_size",
+                                          std::to_string(outputSizeCount).c_str(), "1"),
              return false);
 
     OP_CHECK(inputSizeNum == DIM_LIMIT,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected input_size to be 3, but got %zu", inputSizeNum), return false);
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearest1dBackward", "input_size",
+                                          std::to_string(inputSizeNum).c_str(), "3"),
+             return false);
     return true;
 }
 
@@ -98,18 +107,16 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclIntArray* outpu
     FVector<int64_t> outputShape = {batch, channels, outL};
 
     OP_CHECK(inputL > 0 && outL > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, "
-                     "but got input (L: %ld) output (L: %ld)",
-                     inputL, outL),
+             OP_LOGE_FOR_INVALID_SHAPESIZE("aclnnUpsampleNearest1dBackward", "input", std::to_string(outL).c_str(),
+                                           std::to_string(inputL).c_str()),
              return false);
 
     for (size_t i = 0; i < dimNum; ++i) {
         if (gradOutShape.GetDim(i) != outputShape[i]) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected grad_output to have the same shape as output;"
-                    " output.size(%zu) = %ld but got grad_output.size(%zu) = %ld",
-                    i, outputShape[i], i, gradOutShape.GetDim(i));
+            OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                "aclnnUpsampleNearest1dBackward", "grad_output",
+                (std::to_string(i) + ", " + std::to_string(outputShape[i]) + ", " + std::to_string(i)).c_str(),
+                "expected grad_output to have the same shape as output; output.size() =");
             return false;
         }
     }
@@ -123,8 +130,11 @@ static bool CheckNCDimEqual(const aclTensor* self, const aclTensor* out)
     int64_t outDimN = out->GetViewShape().GetDim(DIM_ZERO);
     int64_t outDimC = out->GetViewShape().GetDim(DIM_ONE);
     if ((outDimC != selfDimC) || (outDimN != selfDimN)) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "selfDimC[%ld]/outDimC[%ld] or selfDimN[%ld]/outDimN[%ld] are not equal.",
-                selfDimC, outDimC, selfDimN, outDimN);
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON("aclnnUpsampleNearest1dBackward", "self_dim_c",
+                                                  (std::to_string(selfDimC) + ", " + std::to_string(outDimC) + ", " +
+                                                   std::to_string(selfDimN) + ", " + std::to_string(outDimN))
+                                                      .c_str(),
+                                                  "selfDimC/outDimC or selfDimN/outDimN are not equal");
         return false;
     }
     return true;
@@ -132,7 +142,9 @@ static bool CheckNCDimEqual(const aclTensor* self, const aclTensor* out)
 
 static bool CheckScalesFinite(double scales)
 {
-    OP_CHECK(std::isfinite(scales), OP_LOGE(ACLNN_ERR_PARAM_INVALID, "scales [%lf] must be finite.", scales),
+    OP_CHECK(std::isfinite(scales),
+             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearest1dBackward", "scales",
+                                                   std::to_string(scales).c_str(), "scales  must be finite"),
              return false);
     return true;
 }

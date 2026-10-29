@@ -17,6 +17,10 @@
 #include "opdev/data_type_utils.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 #include "opdev/format_utils.h"
 #include "opdev/op_dfx.h"
 #include "opdev/tensor_view_utils.h"
@@ -49,10 +53,9 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclTensor* gradInp
     size_t dimNum = gradOutShape.GetDimNum();
 
     OP_CHECK(inputD > 0 && inputH > 0 && inputW > 0 && outD > 0 && outH > 0 && outW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (H: %ld,"
-                     " W: %ld) output (H: %ld, W: %ld)",
-                     inputH, inputW, outH, outW),
+             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearest3dBackward", "input_h",
+                                                      std::to_string(inputH).c_str(),
+                                                      "all input and output dims must be greater than 0"),
              return false);
 
     auto res = CheckSizeLoop(dimNum, gradOutShape, fullOutSize);
@@ -67,15 +70,15 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclTensor* gradInp
     if (!IsRegBase()) {
         OP_CHECK(
             batch <= INT32_MAX && channels <= INT32_MAX && outD <= INT32_MAX && outH <= INT32_MAX && outW <= INT32_MAX,
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "GradOut sizes should not be greater than %d, but got gradOut(%ld, %ld, %ld, %ld, %ld)", INT32_MAX,
-                    batch, channels, outD, outH, outW),
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearest3dBackward", "batch",
+                                                     std::to_string(batch).c_str(),
+                                                     "all dims must not exceed INT32_MAX"),
             return false);
         OP_CHECK(batch <= INT32_MAX && channels <= INT32_MAX && inputD <= INT32_MAX && inputH <= INT32_MAX &&
                      inputW <= INT32_MAX,
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "InputSize should not be greater than %d, but got inputSize[%ld, %ld, %ld, %ld, %ld]",
-                         INT32_MAX, batch, channels, inputD, inputH, inputW),
+                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearest3dBackward", "batch",
+                                                          std::to_string(batch).c_str(),
+                                                          "all dims of inputSize must not exceed INT32_MAX"),
                  return false);
     }
     return true;

@@ -31,6 +31,10 @@
 #include "aclnn_kernels/common/op_error_check.h"
 #include "opdev/platform.h"
 #include "op_api/aclnn_check.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -92,30 +96,29 @@ static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize)
 {
     uint64_t size = outputSize->Size();
     if (size != TWO) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "It is expected output size equals to %lu, but got size %lu.", TWO, size);
+        OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearest2dV2", "outputSize", std::to_string(size).c_str(),
+                                     std::to_string(TWO).c_str());
         return false;
     }
 
     auto selfShape = self->GetViewShape();
     if (selfShape.GetDimNum() != FOURDIMS) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected input size to be %ld, but got %lu.", FOURDIMS,
-                selfShape.GetDimNum());
+        OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleNearest2dV2", "self", std::to_string(selfShape.GetDimNum()).c_str(),
+                                     std::to_string(FOURDIMS).c_str());
         return false;
     }
 
     if (selfShape.GetDim(TWO) == ZERO || selfShape.GetDim(THREE) == ZERO || outputSize->GetData()[ZERO] == ZERO ||
         outputSize->GetData()[ONE] == ZERO) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "Input and output sizes should be greater than %ld, "
-                "but got input (H: %ld, W: %ld) output (H: %ld, W: %ld).",
-                ZERO, selfShape.GetDim(TWO), selfShape.GetDim(THREE), outputSize->GetData()[ZERO],
-                outputSize->GetData()[ONE]);
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearest2dV2", "input_h",
+                                                 std::to_string(selfShape.GetDim(TWO)).c_str(),
+                                                 "all input and output dims must be greater than 0");
         return false;
     }
 
     if (selfShape.GetDim(ONE) == ZERO) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 4D data tensor expected but got a tensor with size %s.",
-                op::ToString(selfShape).GetString());
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnUpsampleNearest2dV2", "self", op::ToString(selfShape).GetString(),
+                                              "a non-empty 4D data tensor is required");
         return false;
     }
 
@@ -128,24 +131,23 @@ static bool CheckOutEqual(const aclTensor* out, const aclIntArray* outputSize)
     if (out->GetStorageFormat() == op::Format::FORMAT_NCHW) {
         if (outputSize->GetData()[ZERO] != outShape.GetDim(TWO) ||
             outputSize->GetData()[ONE] != outShape.GetDim(THREE)) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected output size (H: %ld, W: %ld), but got output tensor size (H: %ld, W: %ld).",
-                    outputSize->GetData()[ZERO], outputSize->GetData()[ONE], outShape.GetDim(TWO),
-                    outShape.GetDim(THREE));
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearest2dV2", "out_h",
+                                                     std::to_string(outShape.GetDim(TWO)).c_str(),
+                                                     "output tensor H/W dims must match outputSize");
             return false;
         }
         return true;
     } else if (out->GetStorageFormat() == op::Format::FORMAT_NHWC) {
         if (outputSize->GetData()[ZERO] != outShape.GetDim(ONE) || outputSize->GetData()[ONE] != outShape.GetDim(TWO)) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected output size (H: %ld, W: %ld), but got output tensor size (H: %ld, W: %ld).",
-                    outputSize->GetData()[ZERO], outputSize->GetData()[ONE], outShape.GetDim(TWO),
-                    outShape.GetDim(THREE));
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearest2dV2", "out_h",
+                                                     std::to_string(outShape.GetDim(TWO)).c_str(),
+                                                     "output tensor H/W dims must match outputSize");
             return false;
         }
         return true;
     } else {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Do not support this format of input and output.");
+        OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleNearest2dV2", "out", op::ToString(out->GetStorageFormat()).GetString(),
+                                   "NCHW or NHWC");
         return false;
     }
 }

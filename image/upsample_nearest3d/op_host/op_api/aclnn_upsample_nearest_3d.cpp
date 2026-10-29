@@ -24,6 +24,10 @@
 #include "op_api/level2_base_cv.h"
 #include "op_api/aclnn_check.h"
 #include "aclnn_upsample_nearest_3d.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -67,7 +71,8 @@ static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize, con
     OP_CHECK_WRONG_DIMENSION(self, UPSAMPLE_DIM_LIMIT, return false);
     OP_CHECK_WRONG_DIMENSION(out, UPSAMPLE_DIM_LIMIT, return false);
     OP_CHECK(outputSizeNum == UPSAMPLE_EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 3, but got %zu", outputSizeNum),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearest3d", "output_size",
+                                          std::to_string(outputSizeNum).c_str(), "3"),
              return false);
 
     // out的shape应该等于推导后的shape
@@ -107,16 +112,16 @@ static bool CheckInputElement(const aclTensor* input, const aclIntArray* outputS
         inputW = selfShape.GetDim(DIM_THREE);
     }
 
-    OP_CHECK(inputD > 0 && inputH > 0 && inputW > 0 && outD > 0 && outH > 0 && outW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (D: %ld,"
-                     " H: %ld, W: %ld) output (D: %ld, H: %ld, W: %ld)",
-                     inputD, inputH, inputW, outD, outH, outW),
-             return false);
+    OP_CHECK(
+        inputD > 0 && inputH > 0 && inputW > 0 && outD > 0 && outH > 0 && outW > 0,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearest3d", "input_d", std::to_string(inputD).c_str(),
+                                                 "all input and output dims must be greater than 0"),
+        return false);
 
     OP_CHECK(outC > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 5D data tensor expected but got a tensor with sizes %s.",
-                     op::ToString(input->GetViewShape()).GetString()),
+             OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnUpsampleNearest3d", "self",
+                                                   op::ToString(input->GetViewShape()).GetString(),
+                                                   "a non-empty 5D data tensor is required"),
              return false);
     return true;
 }

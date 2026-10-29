@@ -23,6 +23,7 @@
 #include "resize_upsample_trilinear_tiling.h"
 #include "image/resize_upsample_trilinear/op_kernel/arch35/resize_upsample_trilinear_tiling_data.h"
 #include "image/resize_upsample_trilinear/op_kernel/arch35/resize_upsample_trilinear_tiling_key.h"
+#include "op_api/error_report_util.h"
 
 namespace {
 // FULL_3D_SIMD allocates UB for these maxima. Width alignment keeps every
@@ -156,26 +157,42 @@ static float ComputeScaleValue(bool alignCorners, int64_t inputSize, int64_t out
 ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::Init()
 {
     fe::PlatFormInfos* platformInfoPtr = context_->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context_, platformInfoPtr);
+    OP_CHECK_IF(platformInfoPtr == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "platformInfoPtr is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfoPtr);
     int32_t coreNumAiv = ascendcPlatform.GetCoreNumAiv();
-    OP_CHECK_IF(coreNumAiv <= 0, OP_LOGE(context_, "coreNum must be greater than 0, but got %d", coreNumAiv),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        coreNumAiv <= 0,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "input", std::to_string(coreNumAiv).c_str(),
+                                              "coreNum must be greater than 0"),
+        return ge::GRAPH_FAILED);
     baseTiling_.coreNum = coreNumAiv;
 
     tilingData_ = context_->GetTilingData<ResizeUpsampleTrilinearRegBaseTilingData>();
-    OP_CHECK_IF(tilingData_ == nullptr, OP_LOGE(context_, "get tilingdata ptr failed"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(tilingData_ == nullptr,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "get tilingdata ptr failed; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF((memset_s(tilingData_, sizeof(ResizeUpsampleTrilinearRegBaseTilingData), 0,
                           sizeof(ResizeUpsampleTrilinearRegBaseTilingData)) != EOK),
-                OP_LOGE(context_, "memset tilingdata failed"), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "memset tilingdata failed; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
 ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::CheckInputParams()
 {
-    OP_CHECK_IF(CheckInputDtype() != ge::GRAPH_SUCCESS, OP_LOGE(context_, "CheckInputDtype failed"),
+    OP_CHECK_IF(CheckInputDtype() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "CheckInputDtype failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(CheckInputShape() != ge::GRAPH_SUCCESS, OP_LOGE(context_, "CheckInputShape failed"),
+    OP_CHECK_IF(CheckInputShape() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "CheckInputShape failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
@@ -183,15 +200,30 @@ ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::CheckInputParams()
 ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::CheckInputDtype()
 {
     auto inputDesc = context_->GetInputDesc(CONST_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, inputDesc);
+    OP_CHECK_IF(
+        inputDesc == nullptr,
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "inputDesc",
+                                            "the input desc of required input inputDesc is missing in the tiling "
+                                            "context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
     ge::DataType inputDtype = inputDesc->GetDataType();
-    OP_CHECK_IF(!IsInputDtypeSupported(inputDtype),
-                OP_LOGE(context_, "input dtype is not supported, but got %d", inputDtype), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        !IsInputDtypeSupported(inputDtype),
+        OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(context_->GetNodeName(), "input", std::to_string(inputDtype).c_str(),
+                                              "input dtype is not supported"),
+        return ge::GRAPH_FAILED);
     baseTiling_.inputDtype = inputDtype;
 
     auto outputDesc = context_->GetOutputDesc(CONST_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, outputDesc);
-    OP_CHECK_IF(outputDesc->GetDataType() != inputDtype, OP_LOGE(context_, "input and output dtype must be the same"),
+    OP_CHECK_IF(
+        outputDesc == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "outputDesc is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(outputDesc->GetDataType() != inputDtype,
+                OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(context_->GetNodeName(), "input",
+                                                      std::to_string(outputDesc->GetDataType()).c_str(),
+                                                      "input and output dtype must be the same"),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
@@ -200,17 +232,32 @@ ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::CheckInputShape()
 {
     auto inputX = context_->GetInputShape(CONST_0);
     auto outY = context_->GetOutputShape(CONST_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, inputX);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, outY);
+    OP_CHECK_IF(
+        inputX == nullptr,
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "inputX",
+                                            "the input desc/shape of required input inputX is missing in the tiling "
+                                            "context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        outY == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "outY is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto inputShape = EnsureNotScalar(inputX->GetStorageShape());
     auto outputShape = EnsureNotScalar(outY->GetStorageShape());
     OP_CHECK_IF((inputShape.GetDimNum() != INPUT_DIMS) || (outputShape.GetDimNum() != INPUT_DIMS),
-                OP_LOGE(context_, "The dim of input or output should be equal to five."), return ge::GRAPH_FAILED);
+                error_report::ReportInvalidArgument(context_->GetNodeName(), "dim",
+                                                    "the dim of input or output should be equal to five"),
+                return ge::GRAPH_FAILED);
 
     int64_t inputSize = inputShape.GetShapeSize();
     int64_t outputSize = outputShape.GetShapeSize();
-    OP_CHECK_IF(inputSize <= 0 || outputSize <= 0, OP_LOGE(context_, "empty input or output is not supported"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        inputSize <= 0 || outputSize <= 0,
+        OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON(
+            context_->GetNodeName(), "empty", (std::to_string(inputSize) + ", " + std::to_string(outputSize)).c_str(),
+            "empty input or output is not supported"),
+        return ge::GRAPH_FAILED);
     baseTiling_.lenN = inputShape.GetDim(CONST_0);
     baseTiling_.lenC = inputShape.GetDim(CONST_1);
     baseTiling_.inD = inputShape.GetDim(CONST_2);
@@ -222,14 +269,17 @@ ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::CheckInputShape()
     baseTiling_.outSize = outputSize;
 
     OP_CHECK_IF((baseTiling_.lenN != outputShape.GetDim(CONST_0)) || (baseTiling_.lenC != outputShape.GetDim(CONST_1)),
-                OP_LOGE(context_, "The N and C dimensions of input and output must be the same"),
+                error_report::ReportInvalidArgument(context_->GetNodeName(), "input",
+                                                    "the N and C dimensions of input and output must be the same"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(!(baseTiling_.lenN > 0 && baseTiling_.lenC > 0),
-                OP_LOGE(context_, "N and C dimensions of input and output must be greater than 0"),
+                error_report::ReportInvalidArgument(context_->GetNodeName(), "input",
+                                                    "N and C dimensions of input and output must be greater than 0"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(!(baseTiling_.inD > 0 && baseTiling_.inH > 0 && baseTiling_.inW > 0 && baseTiling_.outD > 0 &&
                   baseTiling_.outH > 0 && baseTiling_.outW > 0),
-                OP_LOGE(context_, "D/H/W dimensions of input and output must be greater than 0"),
+                error_report::ReportInvalidArgument(context_->GetNodeName(), "dimensions",
+                                                    "D/H/W dimensions of input and output must be greater than 0"),
                 return ge::GRAPH_FAILED);
 
     uint64_t uint32Max = static_cast<uint64_t>(std::numeric_limits<uint32_t>::max());
@@ -252,20 +302,27 @@ void ResizeUpsampleTrilinearRegbaseTiling::ComputeScales(float originalScaleD, f
 ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::CheckInputShapeAndAttr()
 {
     auto* attrs = context_->GetAttrs();
-    OP_CHECK_IF(attrs == nullptr, OP_LOGE(context_, "attrs is nullptr"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        attrs == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "attrs is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     auto outputSizeAttr = attrs->GetAttrPointer<gert::TypedContinuousVector<int64_t>>(OUTPUT_SIZE_ATTR);
     int64_t outputSizeNum = outputSizeAttr == nullptr ? 0 : outputSizeAttr->GetSize();
     if (outputSizeAttr != nullptr) {
         OP_CHECK_IF(outputSizeNum > 0 && outputSizeNum != CONST_3,
-                    OP_LOGE(context_, "output_size must be empty or have 3 values, but got %ld", outputSizeNum),
+                    OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context_->GetNodeName(), "output_size",
+                                                              std::to_string(outputSizeNum).c_str(),
+                                                              "output_size must be empty or have 3 values"),
                     return ge::GRAPH_FAILED);
     }
     if (outputSizeAttr != nullptr && outputSizeNum == CONST_3) {
         const int64_t* outputSizeData = outputSizeAttr->GetData();
         OP_CHECK_IF((baseTiling_.outD != outputSizeData[CONST_0]) || (baseTiling_.outH != outputSizeData[CONST_1]) ||
                         (baseTiling_.outW != outputSizeData[CONST_2]),
-                    OP_LOGE(context_, "output D/H/W dimensions must be the same as output_size attr"),
+                    error_report::ReportInvalidArgument(context_->GetNodeName(), "output",
+                                                        "output D/H/W dimensions must be the same as output_size attr"),
                     return ge::GRAPH_FAILED);
     }
 
@@ -281,8 +338,12 @@ ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::CheckInputShapeAndAttr()
     ComputeScales(originalScaleD, originalScaleH, originalScaleW);
     OP_CHECK_IF((baseTiling_.scaleD > MAX_SUPPORT_SCALE) || (baseTiling_.scaleH > MAX_SUPPORT_SCALE) ||
                     (baseTiling_.scaleW > MAX_SUPPORT_SCALE),
-                OP_LOGE(context_, "Scales should not exceed 50, but got D/H/W: %f/%f/%f", baseTiling_.scaleD,
-                        baseTiling_.scaleH, baseTiling_.scaleW),
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    context_->GetNodeName(), "input",
+                    (std::to_string(baseTiling_.scaleD) + ", " + std::to_string(baseTiling_.scaleH) + ", " +
+                     std::to_string(baseTiling_.scaleW))
+                        .c_str(),
+                    "scales should not exceed 50"),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
@@ -405,9 +466,13 @@ void ResizeUpsampleTrilinearRegbaseTiling::FillTilingData()
 
 ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::DoTiling()
 {
-    OP_CHECK_IF(CheckInputParams() != ge::GRAPH_SUCCESS, OP_LOGE(context_, "CheckInputParams failed"),
+    OP_CHECK_IF(CheckInputParams() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "CheckInputParams failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(CheckInputShapeAndAttr() != ge::GRAPH_SUCCESS, OP_LOGE(context_, "CheckInputShapeAndAttr failed"),
+    OP_CHECK_IF(CheckInputShapeAndAttr() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "CheckInputShapeAndAttr failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
     CalTilingData();
     FillTilingData();
@@ -423,7 +488,11 @@ ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::DoTiling()
     context_->SetTilingKey(tilingKey);
     context_->SetBlockDim(baseTiling_.realCoreNum);
     size_t* workspaces = context_->GetWorkspaceSizes(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, workspaces);
+    OP_CHECK_IF(
+        workspaces == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "workspaces is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     workspaces[0] = WORKSPACE_SIZE;
     return ge::GRAPH_SUCCESS;
 }
@@ -431,9 +500,13 @@ ge::graphStatus ResizeUpsampleTrilinearRegbaseTiling::DoTiling()
 ge::graphStatus Tiling4ResizeUpsampleTrilinearRegbase(gert::TilingContext* context)
 {
     ResizeUpsampleTrilinearRegbaseTiling tilingImpl(context);
-    OP_CHECK_IF(tilingImpl.Init() != ge::GRAPH_SUCCESS, OP_LOGE(context, "arch35 tiling init failed"),
+    OP_CHECK_IF(tilingImpl.Init() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "arch35 tiling init failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(tilingImpl.DoTiling() != ge::GRAPH_SUCCESS, OP_LOGE(context, "arch35 tiling do tiling failed"),
+    OP_CHECK_IF(tilingImpl.DoTiling() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context, "arch35 tiling do tiling failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }

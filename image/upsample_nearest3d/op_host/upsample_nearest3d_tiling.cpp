@@ -21,6 +21,7 @@
 #include "register/op_impl_registry.h"
 #include "op_host/tiling_util.h"
 #include "upsample_nearest3d_tiling.h"
+#include "op_api/error_report_util.h"
 
 using namespace ge;
 using namespace UpsampleNearest3d;
@@ -82,11 +83,16 @@ ge::graphStatus UpsampleNearest3dTiling::RunBigKernelTiling(gert::TilingContext*
     scaleD = attrs->GetAttrPointer<float>(idx++);
     scaleH = attrs->GetAttrPointer<float>(idx++);
     scaleW = attrs->GetAttrPointer<float>(idx++);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, outputSize);
+    OP_CHECK_IF(outputSize == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "outputSize is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
 
     size_t outputSizeNum = outputSize->GetSize();
     if (outputSizeNum != DIM) {
-        OP_LOGE(tilingContext->GetNodeName(), "output_size length must be %zu, but got %zu.", DIM, outputSizeNum);
+        OP_LOGE_FOR_INVALID_SHAPESIZE(tilingContext->GetNodeName(), "output_size",
+                                      std::to_string(outputSizeNum).c_str(), std::to_string(DIM).c_str());
         return ge::GRAPH_FAILED;
     }
 
@@ -111,7 +117,11 @@ ge::graphStatus UpsampleNearest3dTiling::RunBigKernelTiling(gert::TilingContext*
 
     float scales[3] = {*scaleD, *scaleH, *scaleW};
     auto compileInfo = reinterpret_cast<const UpsampleNearest3dCompileInfo*>(tilingContext->GetCompileInfo());
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, compileInfo);
+    OP_CHECK_IF(compileInfo == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "compileInfo is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     UpsampleNearest3d::UpsampleNearest3dTilingData*
         tilingData = tilingContext->GetTilingData<UpsampleNearest3d::UpsampleNearest3dTilingData>();
     UpsampleNearest3d::UpsampleNearest3dTiling::UpsampleNearest3dCommonTiling<gert::Shape>(
@@ -213,12 +223,18 @@ static ge::graphStatus Tiling4UpsampleNearest3dTiling(gert::TilingContext* conte
 static ge::graphStatus TilingPrepareTiling(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<UpsampleNearest3dCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAiv();
 
-    OP_CHECK_IF(compileInfo->coreNum <= 0, OP_LOGE(context->GetNodeName(), "UpsampleNearest3d GetHardwareInfo Failed"),
+    OP_CHECK_IF(compileInfo->coreNum <= 0,
+                error_report::ReportTilingStageError(context->GetNodeName(),
+                                                     "failed to get the hardware info from the platform info"),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }

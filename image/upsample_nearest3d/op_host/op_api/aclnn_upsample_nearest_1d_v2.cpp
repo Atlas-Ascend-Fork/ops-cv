@@ -32,6 +32,10 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -89,29 +93,33 @@ static bool CheckDtypeEqual(const aclTensor* self, const aclTensor* out)
 static bool CheckShape(const aclTensor* self, const aclTensor* out, const aclIntArray* outputSize)
 {
     uint64_t size = outputSize->Size();
-    OP_CHECK(size == ONE, OP_LOGE(ACLNN_ERR_PARAM_INVALID, "The size of outputSize should be 1, but got %zu", size),
+    OP_CHECK(size == ONE,
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearest1dV2", "outputSize", std::to_string(size).c_str(), "1"),
              return false);
     auto outShape = out->GetViewShape();
     if (self->GetViewShape().GetDimNum() != THREEDIMS) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected input size to be %zu, but got %zu.", THREEDIMS,
-                self->GetViewShape().GetDimNum());
+        OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleNearest1dV2", "self",
+                                     std::to_string(self->GetViewShape().GetDimNum()).c_str(),
+                                     std::to_string(THREEDIMS).c_str());
         return false;
     }
     if (self->GetViewShape().GetDim(1) == 0 || self->GetViewShape().GetDim(DIM_IDX_2) == 0) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 3D data tensor expected but got a tensor with sizes %s.",
-                op::ToString(self->GetViewShape()).GetString());
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnUpsampleNearest1dV2", "self",
+                                              op::ToString(self->GetViewShape()).GetString(),
+                                              "a non-empty 3D data tensor is required");
         return false;
     }
     if (outputSize->GetData()[ZERO] != outShape.GetDim(DIM_IDX_2)) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output size (L: %ld), but got output tensor size (L: %ld).",
-                outputSize->GetData()[ZERO], outShape.GetDim(DIM_IDX_2));
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+            "aclnnUpsampleNearest1dV2", "expected,actual",
+            (std::to_string(outputSize->GetData()[ZERO]) + ", " + std::to_string(outShape.GetDim(DIM_IDX_2))).c_str(),
+            "the tensor shape must match the expected size");
         return false;
     }
     if (outputSize->GetData()[ZERO] == ZERO) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "Input and output sizes should be greater than %ld, "
-                "but got output (W: %ld).",
-                ZERO, outputSize->GetData()[ZERO]);
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearest1dV2", "output_w",
+                                                 std::to_string(outputSize->GetData()[ZERO]).c_str(),
+                                                 "all input and output dims must be greater than 0");
         return false;
     }
     return true;
@@ -120,13 +128,16 @@ static bool CheckShape(const aclTensor* self, const aclTensor* out, const aclInt
 static bool CheckFormat(const aclTensor* self, const aclTensor* out)
 {
     if (self->GetStorageFormat() != out->GetStorageFormat()) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Format of input and output should be equal, self [%s], out [%s].",
-                op::ToString(self->GetStorageFormat()).GetString(), op::ToString(out->GetStorageFormat()).GetString());
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleNearest1dV2", "self,out",
+                                                (std::string(op::ToString(self->GetStorageFormat()).GetString()) +
+                                                 ", " + op::ToString(out->GetStorageFormat()).GetString())
+                                                    .c_str(),
+                                                "format of self and out must be the same");
         return false;
     }
     if (self->GetStorageFormat() != Format::FORMAT_NCL) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Input format should be NCL. Actual: self [%s].",
-                op::ToString(self->GetStorageFormat()).GetString());
+        OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleNearest1dV2", "self",
+                                   op::ToString(self->GetStorageFormat()).GetString(), "NCL");
         return false;
     }
     return true;

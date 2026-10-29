@@ -13,6 +13,7 @@
  * \brief
  */
 #include "grid_sample_tiling.h"
+#include "op_api/error_report_util.h"
 
 using Ops::Cv::OpTiling::GET_TILINGKEY;
 
@@ -39,90 +40,140 @@ ge::graphStatus GridSampleTiling::GetShapeAttrsInfo()
 {
     OP_LOGD(context_->GetNodeName(), "GetShapeAttrsInfo begin.");
     auto inputX = context_->GetInputShape(0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, inputX);
+    OP_CHECK_IF(
+        inputX == nullptr,
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "inputX",
+                                            "the input desc/shape of required input inputX (index 0) is missing in the "
+                                            "tiling context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
     auto inputXDesc = context_->GetInputDesc(0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, inputXDesc);
+    OP_CHECK_IF(
+        inputXDesc == nullptr,
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "inputXDesc",
+                                            "the input desc of required input inputXDesc (index 0) is missing in the "
+                                            "tiling context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
     xDtype = inputXDesc->GetDataType();
     auto gridXDesc = context_->GetInputDesc(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, gridXDesc);
+    OP_CHECK_IF(
+        gridXDesc == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "gridXDesc is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto gridDtype = gridXDesc->GetDataType();
-    OP_CHECK_IF(xDtype != gridDtype,
-                OP_LOGE(context_->GetNodeName(), "x and grid datatype must be the same, got x=%d, grid=%d",
-                        static_cast<int>(xDtype), static_cast<int>(gridDtype)),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        xDtype != gridDtype,
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+            context_->GetNodeName(), "input",
+            (std::to_string(static_cast<int>(xDtype)) + ", " + std::to_string(static_cast<int>(gridDtype))).c_str(),
+            "x and grid datatype must be the same, got x=, grid="),
+        return ge::GRAPH_FAILED);
     auto xShape = Ops::Cv::OpTiling::EnsureNotScalar(inputX->GetStorageShape());
     auto inputGrid = context_->GetInputShape(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, inputGrid);
+    OP_CHECK_IF(inputGrid == nullptr,
+                error_report::ReportInvalidArgument(
+                    context_->GetNodeName(), "inputGrid",
+                    "the input desc/shape of required input inputGrid (index 1) is missing in the tiling context; "
+                    "check that the graph node provides all required inputs"),
+                return ge::GRAPH_FAILED);
     auto gridShape = Ops::Cv::OpTiling::EnsureNotScalar(inputGrid->GetStorageShape());
     OP_LOGD(context_->GetNodeName(), "x shape:%s,grid shape:%s", Ops::Base::ToString(xShape).c_str(),
             Ops::Base::ToString(gridShape).c_str());
 
-    OP_CHECK_IF((xShape.GetDimNum() != DIM_NUM_4D && xShape.GetDimNum() != DIM_NUM_5D) ||
-                    (gridShape.GetDimNum() != DIM_NUM_4D && gridShape.GetDimNum() != DIM_NUM_5D),
-                OP_LOGE(context_->GetNodeName(), "x / grid shape length should be 4 or 5"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(xShape.GetDimNum() != gridShape.GetDimNum(),
-                OP_LOGE(context_->GetNodeName(), "x / grid shape length should be equal."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (xShape.GetDimNum() != DIM_NUM_4D && xShape.GetDimNum() != DIM_NUM_5D) ||
+            (gridShape.GetDimNum() != DIM_NUM_4D && gridShape.GetDimNum() != DIM_NUM_5D),
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "grid", "x / grid shape length should be 4 or 5"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        xShape.GetDimNum() != gridShape.GetDimNum(),
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "grid", "x / grid shape length should be equal"),
+        return ge::GRAPH_FAILED);
 
-    OP_CHECK_IF(gridShape.GetDim(0) != xShape.GetDim(0),
-                OP_LOGE(context_->GetNodeName(), "x / grid shape[0] should be same"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        gridShape.GetDim(0) != xShape.GetDim(0),
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "grid", "x / grid shape[0] should be same"),
+        return ge::GRAPH_FAILED);
 
     if (xShape.GetDimNum() == DIM_NUM_5D) {
         dimension = 1;
         dimValue = gridShape.GetDim(DIM_4);
         OP_CHECK_IF(
             dimValue != DIM_3,
-            OP_LOGE(context_->GetNodeName(), "grid only supports (N, D, H, W, 3), but the last dim is %ld", dimValue),
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "grid", std::to_string(dimValue).c_str(),
+                                                  "grid only supports (N, D, H, W, 3), but the last dim is"),
             return ge::GRAPH_FAILED);
     } else {
         dimension = 0;
         dimValue = gridShape.GetDim(DIM_3);
         OP_CHECK_IF(
             dimValue != DIM_2,
-            OP_LOGE(context_->GetNodeName(), "grid only supports (N, H, W, 2), but the last dim is %ld", dimValue),
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "grid", std::to_string(dimValue).c_str(),
+                                                  "grid only supports (N, H, W, 2), but the last dim is"),
             return ge::GRAPH_FAILED);
     }
 
     auto compileInfo = reinterpret_cast<const GridSampleCompileInfo*>(context_->GetCompileInfo());
-    OP_CHECK_NULL_WITH_CONTEXT(context_, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     regBase = compileInfo->regBase;
     auto ascendc_platform = platform_ascendc::PlatformAscendC(context_->GetPlatformInfo());
     platform_ascendc::SocVersion gridSampleSocVersion = ascendc_platform.GetSocVersion();
     bool is310P = gridSampleSocVersion == platform_ascendc::SocVersion::ASCEND310P;
 
     OP_CHECK_IF((is310P && dimension == 0 && xDtype != ge::DT_FLOAT && xDtype != ge::DT_FLOAT16),
-                OP_LOGE(context_->GetNodeName(), "x datatype only supports FLOAT32 or FLOAT16"),
+                error_report::ReportInvalidArgument(context_->GetNodeName(), "datatype",
+                                                    "x datatype only supports FLOAT32 or FLOAT16"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF((is310P && dimension == 0 && gridDtype != ge::DT_FLOAT && gridDtype != ge::DT_FLOAT16),
-                OP_LOGE(context_->GetNodeName(), "grid datatype only supports FLOAT32 or FLOAT16"),
+                error_report::ReportInvalidArgument(context_->GetNodeName(), "grid",
+                                                    "grid datatype only supports FLOAT32 or FLOAT16"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(
         (!regBase && dimension == 0 && xDtype != ge::DT_FLOAT && xDtype != ge::DT_FLOAT16 && xDtype != ge::DT_BF16),
-        OP_LOGE(context_->GetNodeName(), "x datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "datatype",
+                                            "x datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
         return ge::GRAPH_FAILED);
     OP_CHECK_IF((!regBase && dimension == 0 && gridDtype != ge::DT_FLOAT && gridDtype != ge::DT_FLOAT16 &&
                  gridDtype != ge::DT_BF16),
-                OP_LOGE(context_->GetNodeName(), "grid datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
+                error_report::ReportInvalidArgument(context_->GetNodeName(), "grid",
+                                                    "grid datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(
         (regBase && dimension == 0 && xDtype != ge::DT_FLOAT && xDtype != ge::DT_FLOAT16 && xDtype != ge::DT_BF16),
-        OP_LOGE(context_->GetNodeName(), "x datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "datatype",
+                                            "x datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
         return ge::GRAPH_FAILED);
     OP_CHECK_IF((regBase && dimension == 0 && gridDtype != ge::DT_FLOAT && gridDtype != ge::DT_FLOAT16 &&
                  gridDtype != ge::DT_BF16),
-                OP_LOGE(context_->GetNodeName(), "grid datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
+                error_report::ReportInvalidArgument(context_->GetNodeName(), "grid",
+                                                    "grid datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF((dimension == 1 && xDtype != ge::DT_FLOAT && xDtype != ge::DT_FLOAT16 && xDtype != ge::DT_BF16),
-                OP_LOGE(context_->GetNodeName(), "x datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
+                error_report::ReportInvalidArgument(context_->GetNodeName(), "datatype",
+                                                    "x datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(
         (dimension == 1 && gridDtype != ge::DT_FLOAT && gridDtype != ge::DT_FLOAT16 && gridDtype != ge::DT_BF16),
-        OP_LOGE(context_->GetNodeName(), "grid datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "grid",
+                                            "grid datatype only supports FLOAT32, FLOAT16, BFLOAT16"),
         return ge::GRAPH_FAILED);
 
     auto* attrs = context_->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context_, attrs);
+    OP_CHECK_IF(
+        attrs == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "attrs is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     const char* pInterpolationMode = attrs->GetAttrPointer<char>(0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, pInterpolationMode);
+    OP_CHECK_IF(pInterpolationMode == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "pInterpolationMode is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     if (strcmp(pInterpolationMode, "bilinear") == 0) {
         interpolationMode = INTERPOLATION_MODE_BILINEAR;
     } else if (strcmp(pInterpolationMode, "bicubic") == 0) {
@@ -130,16 +181,24 @@ ge::graphStatus GridSampleTiling::GetShapeAttrsInfo()
     } else if (strcmp(pInterpolationMode, "nearest") == 0) {
         interpolationMode = INTERPOLATION_MODE_NEAREST;
     } else {
-        OP_LOGE(context_->GetNodeName(), "interpolation_mode only supports bilinear, nearest or bicubic.");
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "interpolation_mode",
+                                            "interpolation_mode only supports bilinear, nearest or bicubic");
         return ge::GRAPH_FAILED;
     }
 
     OP_CHECK_IF(dimension == 1 && interpolationMode == INTERPOLATION_MODE_BICUBIC,
-                OP_LOGE(context_->GetNodeName(), "GridSampler3D interpolation_mode only supports bilinear or nearest"),
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    context_->GetNodeName(), "interpolation_mode",
+                    (std::to_string(dimension) + ", " + std::to_string(interpolationMode)).c_str(),
+                    "gridSampler3D interpolation_mode only supports bilinear or nearest"),
                 return ge::GRAPH_FAILED);
 
     const char* pPaddingMode = attrs->GetAttrPointer<char>(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, pPaddingMode);
+    OP_CHECK_IF(pPaddingMode == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "pPaddingMode is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     if (strcmp(pPaddingMode, "zeros") == 0) {
         paddingMode = PADDING_MODE_ZEROS;
     } else if (strcmp(pPaddingMode, "border") == 0) {
@@ -147,19 +206,28 @@ ge::graphStatus GridSampleTiling::GetShapeAttrsInfo()
     } else if (strcmp(pPaddingMode, "reflection") == 0) {
         paddingMode = PADDING_MODE_REFLECTION;
     } else {
-        OP_LOGE(context_->GetNodeName(), "padding_mode only supports zeros, border or reflection.");
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "padding_mode",
+                                            "padding_mode only supports zeros, border or reflection");
         return ge::GRAPH_FAILED;
     }
 
     const bool* pAlignCorners = attrs->GetAttrPointer<bool>(2);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, pAlignCorners);
+    OP_CHECK_IF(pAlignCorners == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "pAlignCorners is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     alignCorners = ALIGN_CORNERS_FALSE;
     if (*pAlignCorners) {
         alignCorners = ALIGN_CORNERS_TRUE;
     }
 
     const bool* pChannelLast = attrs->GetAttrPointer<bool>(3);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, pChannelLast);
+    OP_CHECK_IF(pChannelLast == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "pChannelLast is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     channelLast = CHANEL_LAST_FALSE;
     if (*pChannelLast) {
         channelLast = CHANEL_LAST_TRUE;
@@ -197,24 +265,35 @@ ge::graphStatus GridSampleTiling::GetShapeAttrsInfo()
         }
 
         OP_CHECK_IF(inN < 1 || inC < 1 || inH < 1 || inW < 1 || outW < 1 || outH < 1,
-                    OP_LOGE(context_->GetNodeName(),
-                            "Invalid shape, every dim must be greater than 0, but got x[N=%ld, C=%ld, H=%ld, W=%ld] "
-                            "and out[H=%ld, W=%ld]",
-                            inN, inC, inH, inW, outH, outW),
+                    OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(context_->GetNodeName(), "shape",
+                                                           (std::to_string(inN) + ", " + std::to_string(inC) + ", " +
+                                                            std::to_string(inH) + ", " + std::to_string(inW))
+                                                               .c_str(),
+                                                           "invalid shape, every dim must be greater than 0"),
                     return ge::GRAPH_FAILED);
-        OP_CHECK_IF(
-            inH * inW > static_cast<int64_t>(std::numeric_limits<int32_t>::max()),
-            OP_LOGE(context_->GetNodeName(), "H*W of x must not be greater than INT32_MAX, but got %ld", inH * inW),
-            return ge::GRAPH_FAILED);
+        OP_CHECK_IF(inH * inW > static_cast<int64_t>(std::numeric_limits<int32_t>::max()),
+                    OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "static_cast",
+                                                          std::to_string(inH * inW).c_str(),
+                                                          "H*W of x must not be greater than INT32_MAX"),
+                    return ge::GRAPH_FAILED);
 
         const int32_t* pSchedulerMode = attrs->GetAttrPointer<int32_t>(4);
-        OP_CHECK_NULL_WITH_CONTEXT(context_, pSchedulerMode);
+        OP_CHECK_IF(pSchedulerMode == nullptr,
+                    error_report::ReportTilingStageError(
+                        context_->GetNodeName(),
+                        "pSchedulerMode is null in the tiling context; check the TilingContext construction"),
+                    return ge::GRAPH_FAILED);
         OP_LOGD(context_->GetNodeName(), "scheduler_mode is: %d", *pSchedulerMode);
         schedulerMode = *pSchedulerMode;
         OP_CHECK_IF(schedulerMode != 0 && schedulerMode != 1,
-                    OP_LOGE(context_->GetNodeName(), "scheduler_mode only supports 0 or 1."), return ge::GRAPH_FAILED);
+                    OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "scheduler_mode",
+                                                          std::to_string(schedulerMode).c_str(),
+                                                          "scheduler_mode only supports 0 or 1"),
+                    return ge::GRAPH_FAILED);
         OP_CHECK_IF(!(*pChannelLast) && schedulerMode == 1,
-                    OP_LOGE(context_->GetNodeName(), "scheduler_mode supports 1 only in the channel last scenario."),
+                    OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                        context_->GetNodeName(), "scheduler_mode", std::to_string(schedulerMode).c_str(),
+                        "scheduler_mode supports 1 only in the channel last scenario"),
                     return ge::GRAPH_FAILED);
     } else {
         if (channelLast == 0) {
@@ -233,14 +312,16 @@ ge::graphStatus GridSampleTiling::GetShapeAttrsInfo()
         outW = gridShape.GetDim(DIM_3);
 
         OP_CHECK_IF(inN < 1 || inC < 1 || inD < 1 || inH < 1 || inW < 1 || outD < 1 || outW < 1 || outH < 1,
-                    OP_LOGE(context_->GetNodeName(),
-                            "Invalid shape, every dim must be greater than 0, but got x[N=%ld, C=%ld, D=%ld, H=%ld, "
-                            "W=%ld] and out[D=%ld, H=%ld, W=%ld]",
-                            inN, inC, inD, inH, inW, outD, outH, outW),
+                    OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(context_->GetNodeName(), "shape",
+                                                           (std::to_string(inN) + ", " + std::to_string(inC) + ", " +
+                                                            std::to_string(inD) + ", " + std::to_string(inH))
+                                                               .c_str(),
+                                                           "invalid shape, every dim must be greater than 0"),
                     return ge::GRAPH_FAILED);
         OP_CHECK_IF(inH * inW * inD > static_cast<int64_t>(std::numeric_limits<int32_t>::max()),
-                    OP_LOGE(context_->GetNodeName(), "D*H*W of x must not be greater than INT32_MAX, but got %ld",
-                            inD * inH * inW),
+                    OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "static_cast",
+                                                          std::to_string(inD * inH * inW).c_str(),
+                                                          "D*H*W of x must not be greater than INT32_MAX"),
                     return ge::GRAPH_FAILED);
 
         // 添加判断是否都为特例场景，若为特例场景schedulerMode为1，否则为默认值0
@@ -257,7 +338,11 @@ ge::graphStatus GridSampleTiling::GetShapeAttrsInfo()
 ge::graphStatus GridSampleTiling::GetPlatformInfo()
 {
     auto compileInfo = reinterpret_cast<const GridSampleCompileInfo*>(context_->GetCompileInfo());
-    OP_CHECK_NULL_WITH_CONTEXT(context_, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     coreNumVar = compileInfo->coreNum;
     regBase = compileInfo->regBase;
     return ge::GRAPH_SUCCESS;
@@ -330,12 +415,17 @@ ge::graphStatus GridSampleTiling::PostTiling()
     workspaces[0] = workspaceSize_;
 
     gert::TilingData* rawTilingData = context_->GetRawTilingData();
-    OP_CHECK_IF(rawTilingData == nullptr, OP_LOGE(context_->GetNodeType(), "GetRawTilingData failed."),
+    OP_CHECK_IF(rawTilingData == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(), "GetRawTilingData returned null; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(tilingData.GetDataSize() > rawTilingData->GetCapacity(),
-                OP_LOGE(context_, "actual tiling data size %zu > context tiling data size %zu",
-                        tilingData.GetDataSize(), rawTilingData->GetCapacity()),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        tilingData.GetDataSize() > rawTilingData->GetCapacity(),
+        OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON(
+            context_->GetNodeName(), "actual",
+            (std::to_string(tilingData.GetDataSize()) + ", " + std::to_string(rawTilingData->GetCapacity())).c_str(),
+            "actual tiling data size > context tiling data size"),
+        return ge::GRAPH_FAILED);
     tilingData.SaveToBuffer(rawTilingData->GetData(), rawTilingData->GetCapacity());
     rawTilingData->SetDataSize(tilingData.GetDataSize());
 
@@ -352,23 +442,33 @@ static ge::graphStatus TilingPrepare4GridSample(gert::TilingParseContext* contex
     OP_LOGD(context->GetNodeName(), "TilingPrepare4GridSample running.");
 
     auto compileInfo = context->GetCompiledInfo<GridSampleCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfo);
+    OP_CHECK_IF(
+        platformInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "platformInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAiv();
     compileInfo->regBase = Ops::Cv::OpTiling::IsRegbaseSocVersion(context);
     OP_CHECK_IF((compileInfo->coreNum <= 0),
-                OP_LOGE(context->GetNodeName(), "Get core num failed, core num: %u",
-                        static_cast<uint32_t>(compileInfo->coreNum)),
+                error_report::ReportTilingStageError(
+                    context->GetNodeName(), std::string("failed to query the core num; got an invalid value: ") +
+                                                std::to_string(compileInfo->coreNum)),
                 return ge::GRAPH_FAILED);
 
     uint64_t ubSizePlatForm;
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSizePlatForm);
     compileInfo->ubSizePlatForm = ubSizePlatForm;
-    OP_CHECK_IF((compileInfo->ubSizePlatForm <= 0),
-                OP_LOGE(context->GetNodeName(), "Get ub size failed, ub size: %u",
-                        static_cast<uint32_t>(compileInfo->ubSizePlatForm)),
+    OP_CHECK_IF((compileInfo->ubSizePlatForm == 0),
+                error_report::ReportTilingStageError(
+                    context->GetNodeName(), std::string("failed to query the ub size; got an invalid value: ") +
+                                                std::to_string(compileInfo->ubSizePlatForm)),
                 return ge::GRAPH_FAILED);
     OP_LOGD(context->GetNodeName(), "TilingPrepare4GridSample end.");
     return ge::GRAPH_SUCCESS;

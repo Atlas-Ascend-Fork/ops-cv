@@ -19,6 +19,7 @@
 #include <string>
 #include "grid_sampler3_d_grad_tiling.h"
 #include "op_host/tiling_util.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr uint32_t RESERVED_UB = static_cast<uint32_t>(8 * 1024);
@@ -293,7 +294,8 @@ static ge::graphStatus CheckShapes(gert::TilingContext* tilingContext, InputPara
                                    const gert::StorageShape* gridShape)
 {
     if (xShape->GetStorageShape().GetDimNum() != CHECK_DIM_NUM) {
-        OP_LOGE(tilingContext->GetNodeName(), "input dim is not 5, please check input");
+        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "input",
+                                            "input dim is not 5, please check input");
         return ge::GRAPH_FAILED;
     }
 
@@ -314,7 +316,8 @@ static ge::graphStatus CheckShapes(gert::TilingContext* tilingContext, InputPara
     }
 
     if (outD != params.gridD || outH != params.gridH || outW != params.gridW) {
-        OP_LOGE(tilingContext->GetNodeName(), "Please check grad's dims and grid's dims");
+        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "check",
+                                            "please check grad's dims and grid's dims");
         return ge::GRAPH_FAILED;
     }
 
@@ -323,8 +326,10 @@ static ge::graphStatus CheckShapes(gert::TilingContext* tilingContext, InputPara
     const uint32_t xN = xShape->GetStorageShape().GetDim(DIM_INDEX0);
     const uint32_t gridN = gridShape->GetStorageShape().GetDim(DIM_INDEX0);
     if (gradN != xN || gradN != gridN) {
-        OP_LOGE(tilingContext->GetNodeName(),
-                "expect grad, x and grid to have same N, but got grad N(%u), x N(%u), grid N(%u)", gradN, xN, gridN);
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            tilingContext->GetNodeName(), "expect",
+            (std::to_string(gradN) + ", " + std::to_string(xN) + ", " + std::to_string(gridN)).c_str(),
+            "expect grad, x and grid to have same N");
         return ge::GRAPH_FAILED;
     }
 
@@ -332,15 +337,17 @@ static ge::graphStatus CheckShapes(gert::TilingContext* tilingContext, InputPara
     const uint32_t gradC = gradShape->GetStorageShape().GetDim(
         params.regBase && format == ge::FORMAT_NCDHW ? DIM_INDEX1 : DIM_INDEX4);
     if (gradC != params.channel) {
-        OP_LOGE(tilingContext->GetNodeName(), "expect grad and x to have same C, but got grad C(%u), x C(%u)", gradC,
-                params.channel);
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(tilingContext->GetNodeName(), "expect",
+                                               (std::to_string(gradC) + ", " + std::to_string(params.channel)).c_str(),
+                                               "expect grad and x to have same C");
         return ge::GRAPH_FAILED;
     }
 
     // grid 最后一维必须为 3，表示输入像素位置信息 (x, y, z)
     const uint32_t gridLastDim = gridShape->GetStorageShape().GetDim(DIM_INDEX4);
     if (gridLastDim != GRID_LAST_NUM) {
-        OP_LOGE(tilingContext->GetNodeName(), "grid last dim must be 3, but got %u", gridLastDim);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(tilingContext->GetNodeName(), "grid", std::to_string(gridLastDim).c_str(),
+                                              "grid last dim must be 3");
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -352,16 +359,32 @@ static ge::graphStatus GetInputInfo(gert::TilingContext* tilingContext, InputPar
     const gert::StorageShape* gradShape = tilingContext->GetInputShape(GRAD_INPUT_INDEX);
     const gert::StorageShape* xShape = tilingContext->GetInputShape(X_INPUT_INDEX);
     const gert::StorageShape* gridShape = tilingContext->GetInputShape(GRID_INPUT_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, gradShape);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, xShape);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, gridShape);
-    OP_CHECK_IF(gradShape->GetStorageShape().GetDimNum() != CHECK_DIM_NUM,
-                OP_LOGE(tilingContext->GetNodeName(), "grad dim is not 5, please check input"),
+    OP_CHECK_IF(gradShape == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "gradShape is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(xShape->GetStorageShape().GetDimNum() != CHECK_DIM_NUM,
-                OP_LOGE(tilingContext->GetNodeName(), "x dim is not 5, please check input"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        xShape == nullptr,
+        error_report::ReportTilingStageError(
+            tilingContext->GetNodeName(), "xShape is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(gridShape == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "gridShape is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(gradShape->GetStorageShape().GetDimNum() != CHECK_DIM_NUM,
+                error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "grad",
+                                                    "grad dim is not 5, please check input"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        xShape->GetStorageShape().GetDimNum() != CHECK_DIM_NUM,
+        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "dim", "x dim is not 5, please check input"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(gridShape->GetStorageShape().GetDimNum() != CHECK_DIM_NUM,
-                OP_LOGE(tilingContext->GetNodeName(), "grid dim is not 5, please check input"),
+                error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "grid",
+                                                    "grid dim is not 5, please check input"),
                 return ge::GRAPH_FAILED);
 
     auto input = tilingContext->GetInputTensor(DIM_INDEX0);
@@ -385,23 +408,35 @@ static ge::graphStatus GetInputInfo(gert::TilingContext* tilingContext, InputPar
     params.gridH = gridShape->GetStorageShape().GetDim(DIM_INDEX2);
     params.gridW = gridShape->GetStorageShape().GetDim(DIM_INDEX3);
 
-    OP_CHECK_IF(CheckShapes(tilingContext, params, gradShape, xShape, gridShape) != ge::GRAPH_SUCCESS,
-                OP_LOGE(tilingContext->GetNodeName(), "Failed to check input shapes."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        CheckShapes(tilingContext, params, gradShape, xShape, gridShape) != ge::GRAPH_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(),
+                               "Failed to check input shapes; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
     const gert::RuntimeAttrs* attrs = tilingContext->GetAttrs();
     const char* pInterpolationMode = attrs->GetAttrPointer<char>(static_cast<std::uint32_t>(INTERPOLATION_MODE_INDEX));
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, pInterpolationMode);
+    OP_CHECK_IF(pInterpolationMode == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "pInterpolationMode is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     if (strcmp(pInterpolationMode, "bilinear") == 0) {
         params.interpolation = INTERPOLATION_MODE_BILINEAR;
     } else if (strcmp(pInterpolationMode, "nearest") == 0) {
         params.interpolation = INTERPOLATION_MODE_NEAREST;
     } else {
-        OP_LOGE(tilingContext->GetNodeName(), "interpolation_mode only supports bilinear or nearest.");
+        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "interpolation_mode",
+                                            "interpolation_mode only supports bilinear or nearest");
         return ge::GRAPH_FAILED;
     }
 
     const char* pPaddingMode = attrs->GetAttrPointer<char>(static_cast<std::uint32_t>(PADDING_MODE_INDEX));
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, pPaddingMode);
+    OP_CHECK_IF(pPaddingMode == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "pPaddingMode is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     if (strcmp(pPaddingMode, "zeros") == 0) {
         params.padding = PADDING_MODE_ZEROS;
     } else if (strcmp(pPaddingMode, "border") == 0) {
@@ -409,12 +444,17 @@ static ge::graphStatus GetInputInfo(gert::TilingContext* tilingContext, InputPar
     } else if (strcmp(pPaddingMode, "reflection") == 0) {
         params.padding = PADDING_MODE_REFLECTION;
     } else {
-        OP_LOGE(tilingContext->GetNodeName(), "padding_mode only supports zeros, border or reflection.");
+        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "padding_mode",
+                                            "padding_mode only supports zeros, border or reflection");
         return ge::GRAPH_FAILED;
     }
 
     const bool* pAlignCorners = attrs->GetAttrPointer<bool>(static_cast<std::uint32_t>(ALIGN_CORNERS_INDEX));
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, pAlignCorners);
+    OP_CHECK_IF(pAlignCorners == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "pAlignCorners is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     params.alignCorners = ALIGN_CORNERS_FALSE;
     if (*pAlignCorners) {
         params.alignCorners = ALIGN_CORNERS_TRUE;
@@ -431,8 +471,11 @@ static ge::graphStatus GetInputInfo(gert::TilingContext* tilingContext, InputPar
             sysWorkspaceSize = 0;
         }
     }
-    OP_CHECK_IF((currentWorkspace == nullptr), OP_LOGE(tilingContext->GetNodeName(), "Get currentWorkspace Failed."),
-                return false);
+    OP_CHECK_IF(
+        (currentWorkspace == nullptr),
+        OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(),
+                               "Get currentWorkspace Failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
     currentWorkspace[0] = sysWorkspaceSize;
 
     return ge::GRAPH_SUCCESS;
@@ -457,7 +500,8 @@ static ge::graphStatus tiling4GridSampler3DGradTiling(gert::TilingContext* tilin
 
     InputParamsInfo params;
     if (GetInputInfo(tilingContext, params) != ge::GRAPH_SUCCESS) {
-        OP_LOGE(tilingContext->GetNodeName(), "Failed to Parse input params, please check inputs.");
+        OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(), "Failed to Parse input params, please check inputs; "
+                                                             "propagate the first error reported by the failing stage");
         return ge::GRAPH_FAILED;
     }
 
@@ -499,18 +543,30 @@ static ge::graphStatus tilingPrepare4GridSampler3DGrad(gert::TilingParseContext*
 {
     OP_LOGI(context->GetNodeName(), "TilingPrepare4GridSampler3DGrad start.");
     auto compileInfo = context->GetCompiledInfo<Tiling4GridSampler3DGradCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfo);
+    OP_CHECK_IF(
+        platformInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "platformInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto ascendCPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendCPlatform.GetCoreNumAiv();
     compileInfo->regBase = Ops::Cv::OpTiling::IsRegbaseSocVersion(context);
-    OP_CHECK_IF((compileInfo->coreNum <= 0), OP_LOGE(context->GetNodeName(), "Failed to get core num."),
+    OP_CHECK_IF((compileInfo->coreNum <= 0),
+                error_report::ReportTilingStageError(context->GetNodeName(),
+                                                     "failed to get the core num from the platform info"),
                 return ge::GRAPH_FAILED);
     uint64_t ubSizePlatForm;
     ascendCPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSizePlatForm);
     compileInfo->ubSizePlatForm = ubSizePlatForm;
-    OP_CHECK_IF((compileInfo->ubSizePlatForm <= 0), OP_LOGE(context->GetNodeName(), "Failed to get ub size."),
+    OP_CHECK_IF((compileInfo->ubSizePlatForm == 0),
+                error_report::ReportTilingStageError(context->GetNodeName(),
+                                                     "failed to get the ub size from the platform info"),
                 return ge::GRAPH_FAILED);
     OP_LOGI(context->GetNodeName(), "TilingPrepare4GridSampler3DGrad end.");
     return ge::GRAPH_SUCCESS;

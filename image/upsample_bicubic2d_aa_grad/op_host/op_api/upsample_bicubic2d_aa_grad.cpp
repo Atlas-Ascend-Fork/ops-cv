@@ -35,7 +35,9 @@ const aclTensor* UpsampleBicubic2dAAGrad(const aclTensor* gradOutput, const aclI
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(UpsampleBicubic2dAAGrad, OP_INPUT(gradOutput), OP_OUTPUT(out),
                                            OP_ATTR(outputSize, inputSize, alignCorners, scales_h, scales_w));
     OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "UpsampleBicubic2dAAGradAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
+             OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                                    "UpsampleBicubic2dAAGradAiCore ADD_TO_LAUNCHER_LIST_AICORE failed; propagate the "
+                                    "first error reported by the failing stage."),
              return nullptr);
 
     return out;

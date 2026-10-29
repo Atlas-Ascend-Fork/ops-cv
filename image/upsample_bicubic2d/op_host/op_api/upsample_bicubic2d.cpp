@@ -45,9 +45,11 @@ const aclTensor* UpsampleBicubic2d(const aclTensor* input, const aclIntArray* ou
 
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(UpsampleBicubic2d, OP_INPUT(input), OP_OUTPUT(out),
                                            OP_ATTR(output_size, align_corners, scales_h, scales_w));
-    OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "UpsampleBicubic2dAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
-             return nullptr);
+    OP_CHECK(
+        ret == ACLNN_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "UpsampleBicubic2dAiCore ADD_TO_LAUNCHER_LIST_AICORE failed; "
+                                                        "propagate the first error reported by the failing stage."),
+        return nullptr);
     return out;
 }
 } // namespace l0op

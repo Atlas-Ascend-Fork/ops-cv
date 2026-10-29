@@ -28,6 +28,11 @@
 #include "opdev/op_executor.h"
 #include "opdev/tensor_view_utils.h"
 #include "op_api/aclnn_check.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
+#include "error_report_util.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -88,14 +93,17 @@ static bool CheckFormat(const aclTensor* self, const aclTensor* out)
     // 需要根据算子实际情况添加校验
     const op::Format selfFormat = self->GetStorageFormat();
     if (selfFormat != out->GetStorageFormat()) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Format of input and output should be equal, self [%s], out [%s].",
-                op::ToString(selfFormat).GetString(), op::ToString(out->GetStorageFormat()).GetString());
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBilinear2d", "self,out",
+                                                (std::string(op::ToString(selfFormat).GetString()) + ", " +
+                                                 op::ToString(out->GetStorageFormat()).GetString())
+                                                    .c_str(),
+                                                "format of self and out must be the same");
         return false;
     }
     // 如果输入格式不支持
     if (selfFormat != op::Format::FORMAT_NCHW && selfFormat != op::Format::FORMAT_NHWC) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Do not support this format(%s) of input and output.",
-                op::ToString(selfFormat).GetString());
+        OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleBilinear2d", "self", op::ToString(selfFormat).GetString(),
+                                   "NCHW or NHWC");
         return false;
     }
     // 如果输入格式是不为4D，记录日志，直接报错
@@ -104,8 +112,9 @@ static bool CheckFormat(const aclTensor* self, const aclTensor* out)
 
     const op::DataType selfType = self->GetDataType();
     if ((selfFormat == op::Format::FORMAT_NCHW) && (selfType == op::DataType::DT_DOUBLE)) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "When dtype is %s, only NHWC format is supported",
-                op::ToString(selfType).GetString());
+        OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleBilinear2d", "self",
+                                   op::ToString(self->GetStorageFormat()).GetString(),
+                                   "NHWC is the only supported format for the double dtype");
         return false;
     }
     return true;
@@ -128,8 +137,10 @@ static bool CheckScalesAndShapeValid(const aclTensor* self, const aclTensor* out
 static bool CheckScalesValid(const double weight, const double high)
 {
     if ((weight < 0) || (high < 0)) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "w scales and h scales cannot be negative, w_scales [%f], h_scales [%f].",
-                weight, high);
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            "aclnnUpsampleBilinear2d", "scales_w,scales_h",
+            (std::to_string(weight).c_str() + std::string(", ") + std::to_string(high).c_str()).c_str(),
+            "scales must be finite and non-negative");
         return false;
     }
     return true;
@@ -138,11 +149,12 @@ static bool CheckScalesValid(const double weight, const double high)
 static bool CheckOutputSize(const aclTensor* out, const aclIntArray* outputSize)
 {
     if (outputSize == nullptr) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "outputSize must not be null.");
+        error_report::ReportInvalidArgument("aclnnUpsampleBilinear2d", "outputSize", "outputSize must not be null");
         return false;
     }
     if (outputSize->Size() != TWO) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "outputSize size must be 2, but got %zu.", outputSize->Size());
+        OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBilinear2d", "outputSize",
+                                     std::to_string(outputSize->Size()).c_str(), "2");
         return false;
     }
     auto outShape = out->GetViewShape();
@@ -150,18 +162,16 @@ static bool CheckOutputSize(const aclTensor* out, const aclIntArray* outputSize)
     if (outFormat == op::Format::FORMAT_NCHW) {
         if (outputSize->GetData()[ZERO] != outShape.GetDim(TWO) ||
             outputSize->GetData()[ONE] != outShape.GetDim(THREE)) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected output size (H: %ld, W: %ld), but got output tensor size (H: %ld, W: %ld).",
-                    outputSize->GetData()[ZERO], outputSize->GetData()[ONE], outShape.GetDim(TWO),
-                    outShape.GetDim(THREE));
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2d", "out_h",
+                                                     std::to_string(outShape.GetDim(TWO)).c_str(),
+                                                     "output tensor H/W dims must match outputSize");
             return false;
         }
     } else if (outFormat == op::Format::FORMAT_NHWC) {
         if (outputSize->GetData()[ZERO] != outShape.GetDim(ONE) || outputSize->GetData()[ONE] != outShape.GetDim(TWO)) {
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                    "Expected output size (H: %ld, W: %ld), but got output tensor size (H: %ld, W: %ld).",
-                    outputSize->GetData()[ZERO], outputSize->GetData()[ONE], outShape.GetDim(ONE),
-                    outShape.GetDim(TWO));
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2d", "out_h",
+                                                     std::to_string(outShape.GetDim(TWO)).c_str(),
+                                                     "output tensor H/W dims must match outputSize");
             return false;
         }
     }

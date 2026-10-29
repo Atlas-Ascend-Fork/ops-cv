@@ -13,6 +13,7 @@
  * \brief resize_bicubic_v2_grad_all_copy_tiling_arch35
  */
 #include "resize_bicubic_v2_grad_tiling_arch35.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 
@@ -71,10 +72,14 @@ ge::graphStatus ResizeBicubicV2GradAllCopyTiling::PostTiling()
 {
     context_->SetBlockDim(calcInfo_.useCoreNum);
 
-    OP_CHECK_IF(tilingData_.GetDataSize() > context_->GetRawTilingData()->GetCapacity(),
-                OP_LOGE(context_->GetNodeName(), "actual all copy tiling data size %zu > context tiling data size %zu",
-                        tilingData_.GetDataSize(), context_->GetRawTilingData()->GetCapacity()),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        tilingData_.GetDataSize() > context_->GetRawTilingData()->GetCapacity(),
+        OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON(context_->GetNodeName(), "actual",
+                                                   (std::to_string(tilingData_.GetDataSize()) + ", " +
+                                                    std::to_string(context_->GetRawTilingData()->GetCapacity()))
+                                                       .c_str(),
+                                                   "actual all copy tiling data size > context tiling data size"),
+        return ge::GRAPH_FAILED);
     tilingData_.SaveToBuffer(context_->GetRawTilingData()->GetData(), context_->GetRawTilingData()->GetCapacity());
     context_->GetRawTilingData()->SetDataSize(tilingData_.GetDataSize());
     return ge::GRAPH_SUCCESS;

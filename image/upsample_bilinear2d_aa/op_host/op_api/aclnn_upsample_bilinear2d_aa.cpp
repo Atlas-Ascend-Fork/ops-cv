@@ -24,6 +24,10 @@
 #include "opdev/tensor_view_utils.h"
 #include "aclnn_upsample_bilinear2d_aa.h"
 #include "op_api/aclnn_check.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -61,28 +65,34 @@ static bool CheckShape(const aclTensor* inputTensor, const aclTensor* out, const
 {
     const op::Format selfFormat = inputTensor->GetStorageFormat();
     if (selfFormat != out->GetStorageFormat()) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Format of input and output should be equal, self [%s], out [%s].",
-                op::ToString(selfFormat).GetString(), op::ToString(out->GetStorageFormat()).GetString());
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBilinear2dAa", "self,out",
+                                                (std::string(op::ToString(selfFormat).GetString()) + ", " +
+                                                 op::ToString(out->GetStorageFormat()).GetString())
+                                                    .c_str(),
+                                                "format of self and out must be the same");
         return false;
     }
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK_WRONG_DIMENSION(inputTensor, DIM_LIMIT, return false);
     OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 2, but got %zu", outputSizeNum),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBilinear2dAa", "output_size",
+                                          std::to_string(outputSizeNum).c_str(), "2"),
              return false);
-    OP_CHECK(selfFormat == op::Format::FORMAT_ND || selfFormat == op::Format::FORMAT_NCHW,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Input storage format only support NCHW, but got %s.",
-                     op::ToString(selfFormat).GetString()),
-             return false);
+    OP_CHECK(
+        selfFormat == op::Format::FORMAT_ND || selfFormat == op::Format::FORMAT_NCHW,
+        OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleBilinear2dAa", "self", op::ToString(selfFormat).GetString(), "NCHW"),
+        return false);
     return true;
 }
 
 static bool CheckScalesValid(const double scaleW, const double scaleH)
 {
     if ((scaleW < 0) || (scaleH < 0)) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "scales_w and scales_h cannot be negative , scales_w [%f], scales_h [%f].",
-                scaleW, scaleH);
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            "aclnnUpsampleBilinear2dAa", "scales_w,scales_h",
+            (std::string(std::to_string(scaleW).c_str()) + ", " + std::to_string(scaleH).c_str()).c_str(),
+            "scales_w and scales_h cannot be negative");
         return false;
     }
     return true;
@@ -103,30 +113,29 @@ static bool CheckInputElement(const aclTensor* inputTensor, const aclIntArray* o
     inputH = selfShape.GetDim(DIM_TWO);
     inputW = selfShape.GetDim(DIM_THREE);
 
-    OP_CHECK(outN > 0 && inputH > 0 && inputW > 0 && outC > 0 && outH > 0 && outW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (N: %ld, C: %ld,"
-                     " H: %ld, W: %ld) output (H: %ld, W: %ld)",
-                     outN, outC, inputH, inputW, outH, outW),
-             return false);
+    OP_CHECK(
+        outN > 0 && inputH > 0 && inputW > 0 && outC > 0 && outH > 0 && outW > 0,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAa", "output_n", std::to_string(outN).c_str(),
+                                                 "all input and output dims must be greater than 0"),
+        return false);
 
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
     if (curArch == NpuArch::DAV_2201) {
-        OP_CHECK(outN <= INT32_MAX && outC <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "input sizes should not be greater than %d, but got input (N: %ld, C: %ld, H: %ld, W: %ld)",
-                         INT32_MAX, outN, outC, inputH, inputW),
-                 return false);
-        OP_CHECK(outH <= INT32_MAX && outW <= INT32_MAX,
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "output sizes should not be greater than %d, but got output (H: %ld, W: %ld)", INT32_MAX, outH,
-                         outW),
-                 return false);
+        OP_CHECK(
+            outN <= INT32_MAX && outC <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAa", "outN", std::to_string(outN).c_str(),
+                                                     "all dims must not exceed INT32_MAX"),
+            return false);
+        OP_CHECK(
+            outH <= INT32_MAX && outW <= INT32_MAX,
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAa", "outH", std::to_string(outH).c_str(),
+                                                     "all dims must not exceed INT32_MAX"),
+            return false);
 
         int64_t M = outN * outC * inputH;
         OP_CHECK(M <= INT32_MAX,
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID, "N * C * input_H should not be greater than %d, but got %ld",
-                         INT32_MAX, M),
+                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAa", "M", std::to_string(M).c_str(),
+                                                          "N * C * outputSize_H must not exceed INT32_MAX"),
                  return false);
     }
 
@@ -144,8 +153,10 @@ static bool CheckMaxScaleSupport(const aclTensor* input, const aclIntArray* outp
     const float realScalesH = scalesH > 0 ? static_cast<float>(1.0 / scalesH) : static_cast<float>(inputH / outputH);
     const float realScalesW = scalesW > 0 ? static_cast<float>(1.0 / scalesW) : static_cast<float>(inputW / outputW);
     if (realScalesH > MAX_SUPPORT_SCALE || realScalesW > MAX_SUPPORT_SCALE) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Scales should not exceed 50, but got scale (scales_w: %f, scales_h: %f).",
-                realScalesW, realScalesH);
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            "aclnnUpsampleBilinear2dAa", "scales_w,scales_h",
+            (std::string(std::to_string(realScalesW).c_str()) + ", " + std::to_string(realScalesH).c_str()).c_str(),
+            "scales must not exceed 50");
         return false;
     }
     return true;

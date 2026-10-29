@@ -18,6 +18,7 @@
 #include "log/log.h"
 #include "op_host/tiling_util.h"
 #include "upsample_bilinear2d_aa_backward_tiling.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr int64_t BEST_PERFORMANCE_SIZE = 16;
@@ -146,18 +147,35 @@ ge::graphStatus UpsampleBilinear2dAABackwardTiling::RunBigKernelTiling()
     }
     size_t idx = 0;
     outputSize = runtimeAttrs->GetAttrPointer<gert::ContinuousVector>(idx++);
-    OP_CHECK_IF(outputSize == nullptr, OP_LOGE(tilingContext->GetNodeName(), "outputSize == nullptr"),
+    OP_CHECK_IF(outputSize == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "outputSize is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     inputSize = runtimeAttrs->GetAttrPointer<gert::ContinuousVector>(idx++);
-    OP_CHECK_IF(inputSize == nullptr, OP_LOGE(tilingContext->GetNodeName(), "inputSize == nullptr"),
+    OP_CHECK_IF(inputSize == nullptr,
+                error_report::ReportTilingStageError(tilingContext->GetNodeName(),
+                                                     "the attr inputSize is missing in the tiling context; check the "
+                                                     "operator registration and the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     alignCorners = runtimeAttrs->GetAttrPointer<bool>(idx++);
-    OP_CHECK_IF(alignCorners == nullptr, OP_LOGE(tilingContext->GetNodeName(), "alignCorners == nullptr"),
+    OP_CHECK_IF(alignCorners == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "alignCorners is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     scaleH = runtimeAttrs->GetAttrPointer<float>(idx++);
-    OP_CHECK_IF(scaleH == nullptr, OP_LOGE(tilingContext->GetNodeName(), "scaleH == nullptr"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        scaleH == nullptr,
+        error_report::ReportTilingStageError(
+            tilingContext->GetNodeName(), "scaleH is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     scaleW = runtimeAttrs->GetAttrPointer<float>(idx++);
-    OP_CHECK_IF(scaleW == nullptr, OP_LOGE(tilingContext->GetNodeName(), "scaleW == nullptr"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        scaleW == nullptr,
+        error_report::ReportTilingStageError(
+            tilingContext->GetNodeName(), "scaleW is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     // 获取数据类型
     auto temp = tilingContext->GetInputDesc(0);
@@ -199,17 +217,21 @@ float UpsampleBilinear2dAABackwardTiling::ComputeScales(int64_t inSize, int64_t 
 
 bool UpsampleBilinear2dAABackwardTiling::CheckScales() const
 {
-    OP_CHECK_IF(!std::isfinite(*scaleH) || !std::isfinite(*scaleW),
-                OP_LOGE(tilingContext->GetNodeName(), "scaleH and scaleW must be finite, scaleH [%f], scaleW [%f].",
-                        *scaleH, *scaleW),
-                return false);
+    OP_CHECK_IF(
+        !std::isfinite(*scaleH) || !std::isfinite(*scaleW),
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(tilingContext->GetNodeName(), "std",
+                                               (std::to_string(*scaleH) + ", " + std::to_string(*scaleW)).c_str(),
+                                               "scaleH and scaleW must be finite, scaleH [], scaleW []"),
+        return false);
     const int64_t* inputSizeArray = static_cast<const int64_t*>(inputSize->GetData());
     float scalesH = ComputeScales(inputSizeArray[H_INDEX], inputShape.GetDim(H_INDEX), scaleH);
     float scalesW = ComputeScales(inputSizeArray[W_INDEX], inputShape.GetDim(W_INDEX), scaleW);
-    OP_CHECK_IF(scalesH < MIN_SUPPORT_SCALE || scalesW < MIN_SUPPORT_SCALE,
-                OP_LOGE(tilingContext->GetNodeName(), "scalesH and scalesW are too small, scalesH [%f], scalesW [%f].",
-                        scalesH, scalesW),
-                return false);
+    OP_CHECK_IF(
+        scalesH < MIN_SUPPORT_SCALE || scalesW < MIN_SUPPORT_SCALE,
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(tilingContext->GetNodeName(), "input",
+                                               (std::to_string(scalesH) + ", " + std::to_string(scalesW)).c_str(),
+                                               "scalesH and scalesW are too small, scalesH [], scalesW []"),
+        return false);
     return true;
 }
 
@@ -449,7 +471,9 @@ void UpsampleBilinear2dAABackwardTiling::GetTCubeTilingW()
                           inputShapes[W_INDEX]);
     mmTilingW.SetShape(inputShapes[N_INDEX] * inputShapes[C_INDEX] * inputShape[H_INDEX], slideSize, singleCoreKW);
     if (mmTilingW.GetTiling(tilingData.matmulTilingW) == -1) {
-        OP_LOGE(tilingContext->GetNodeName(), "GetTCubeTilingW Error, please Check inputShapes.");
+        OP_LOGE_WITHOUT_REPORT(
+            tilingContext->GetNodeName(),
+            "GetTCubeTilingW Error, please Check inputShapes; propagate the first error reported by the failing stage");
         return;
     }
 }
@@ -464,7 +488,9 @@ void UpsampleBilinear2dAABackwardTiling::GetTCubeTilingH()
     mmTilingH.SetOrgShape(outputShapes[H_INDEX], outputShapes[W_INDEX], inputShapes[H_INDEX]);
     mmTilingH.SetShape(slideSize, outputShapes[W_INDEX], singleCoreKH);
     if (mmTilingH.GetTiling(tilingData.matmulTilingH) == -1) {
-        OP_LOGE(tilingContext->GetNodeName(), "GetTCubeTilingH Error, please Check inputShapes.");
+        OP_LOGE_WITHOUT_REPORT(
+            tilingContext->GetNodeName(),
+            "GetTCubeTilingH Error, please Check inputShapes; propagate the first error reported by the failing stage");
         return;
     }
 }
@@ -549,14 +575,19 @@ static ge::graphStatus Tiling4UpsampleBilinear2dAABackwardTiling(gert::TilingCon
 static ge::graphStatus TilingPrepareTiling(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<UpsampleBilinear2dAABackwardCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAic();
 
     OP_CHECK_IF(compileInfo->coreNum <= 0,
-                OP_LOGE(context->GetNodeName(), "UpsampleBilinear2dAABackward GetHardwareInfo Failed, vectorCoreNum:%u",
-                        compileInfo->coreNum),
+                error_report::ReportTilingStageError(context->GetNodeName(),
+                                                     std::string("failed to get the hardware info; vectorCoreNum: ") +
+                                                         std::to_string(compileInfo->coreNum)),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }

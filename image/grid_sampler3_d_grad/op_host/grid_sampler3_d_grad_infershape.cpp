@@ -15,6 +15,7 @@
 #include "log/log.h"
 #include "register/op_impl_registry.h"
 #include "op_common/op_host/util/shape_util.h"
+#include "error_report_util.h"
 
 static constexpr int INPUT_GRAD_INDEX = 0;
 static constexpr int INPUT_X_INDEX = 1;
@@ -29,32 +30,58 @@ namespace ops {
 static ge::graphStatus InferShape4GridSampler3DGrad(gert::InferShapeContext* context)
 {
     // infer shape
-    OP_CHECK_IF(context == nullptr, OP_LOGE("GridSampler3DGrad", "InferShapeContext is nullptr"),
+    OP_CHECK_IF(context == nullptr,
+                error_report::ReportInferShapeStageError(
+                    "GridSampler3DGrad",
+                    "InferShapeContext is null in the infershape context; check the InferShapeContext construction"),
                 return ge::GRAPH_FAILED);
     OP_LOGD(context->GetNodeName(), "Begin to do InferShape4GridSampler3DGrad.");
 
     const gert::Shape* gradShape = context->GetInputShape(INPUT_GRAD_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, gradShape);
+    OP_CHECK_IF(gradShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "gradShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     const gert::Shape* xShape = context->GetInputShape(INPUT_X_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xShape);
+    OP_CHECK_IF(xShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "xShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     const gert::Shape* gridShape = context->GetInputShape(INPUT_GRID_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, gridShape);
+    OP_CHECK_IF(gridShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "gridShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     OP_CHECK_IF((xShape->GetDimNum() != GRID_SAMPLER3D_GRAD_SHAPE_LIMIT ||
                  gridShape->GetDimNum() != GRID_SAMPLER3D_GRAD_SHAPE_LIMIT ||
                  gradShape->GetDimNum() != GRID_SAMPLER3D_GRAD_SHAPE_LIMIT),
-                OP_LOGE(context->GetNodeName(),
-                        "shape is invalid, only rank 5 is supported, but got x rank %zu, grid rank %zu, grad rank %zu",
-                        xShape->GetDimNum(), gridShape->GetDimNum(), gradShape->GetDimNum()),
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    context->GetNodeName(), "shape",
+                    (std::to_string(xShape->GetDimNum()) + ", " + std::to_string(gridShape->GetDimNum()) + ", " +
+                     std::to_string(gradShape->GetDimNum()))
+                        .c_str(),
+                    "shape is invalid, only rank 5 is supported"),
                 return ge::GRAPH_FAILED);
 
     gert::Shape* outDxShape = context->GetOutputShape(OUTPUT_DX_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, outDxShape);
+    OP_CHECK_IF(outDxShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "outDxShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     gert::Shape* outDgridShape = context->GetOutputShape(OUTPUT_DGRID_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, outDgridShape);
+    OP_CHECK_IF(outDgridShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "outDgridShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     if (IsUnknownRank(*gridShape)) {
         SetUnknownRank(*outDgridShape);

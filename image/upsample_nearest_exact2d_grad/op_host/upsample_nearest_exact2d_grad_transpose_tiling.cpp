@@ -19,6 +19,7 @@
 #include "tiling/tiling_api.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "upsample_nearest_exact2d_grad_tiling.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 
@@ -122,13 +123,29 @@ ge::graphStatus UpsampleNearestExact2dGradTransposeTiling::RunBigKernelTiling()
         return ge::GRAPH_FAILED;
     }
     input_size = attrs->GetAttrPointer<gert::ContinuousVector>(0);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, input_size);
+    OP_CHECK_IF(input_size == nullptr,
+                error_report::ReportTilingStageError(tilingContext->GetNodeName(),
+                                                     "the attr input_size is missing in the tiling context; check the "
+                                                     "operator registration and the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     output_size = attrs->GetAttrPointer<gert::ContinuousVector>(1);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, output_size);
+    OP_CHECK_IF(output_size == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "output_size is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     scaleH = attrs->GetAttrPointer<float>(H_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, scaleH);
+    OP_CHECK_IF(
+        scaleH == nullptr,
+        error_report::ReportTilingStageError(
+            tilingContext->GetNodeName(), "scaleH is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     scaleW = attrs->GetAttrPointer<float>(W_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, scaleW);
+    OP_CHECK_IF(
+        scaleW == nullptr,
+        error_report::ReportTilingStageError(
+            tilingContext->GetNodeName(), "scaleW is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     auto src_shape = tilingContext->GetInputShape(0);
     input_shape = src_shape->GetOriginShape();

@@ -18,6 +18,7 @@
 #include "util/math_util.h"
 #include "op_host/tiling_util.h"
 #include "image/resize_bicubic_v2/op_kernel/arch35/resize_bicubic_v2_tiling_key.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr size_t INPUT_X_IDX = 0;
@@ -115,10 +116,16 @@ private:
 ge::graphStatus ResizeBicubicV2Tiling::GetInputSize()
 {
     auto size = context_->GetInputShape(DIM_1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, size);
+    OP_CHECK_IF(
+        size == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "size is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     gert::Shape sizeShape = size->GetStorageShape();
     OP_CHECK_IF(sizeShape.GetDimNum() != 1,
-                OP_LOGE(context_->GetNodeName(), "size must be 1D, but rank is %zu", sizeShape.GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context_->GetNodeName(), "input",
+                                                          std::to_string(sizeShape.GetDimNum()).c_str(),
+                                                          "size must be 1D, but rank is"),
                 return ge::GRAPH_FAILED);
     int32_t sizeElms = sizeShape.GetShapeSize();
     OP_CHECK_IF(sizeElms != DIM_2,
@@ -126,7 +133,11 @@ ge::graphStatus ResizeBicubicV2Tiling::GetInputSize()
                                               std::to_string(DIM_2).c_str()),
                 return ge::GRAPH_FAILED);
     const gert::Tensor* sizeTensor = context_->GetInputTensor(DIM_1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, sizeTensor);
+    OP_CHECK_IF(
+        sizeTensor == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "sizeTensor is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(sizeTensor->GetDataType() != ge::DT_INT32,
                 OP_LOGE_FOR_INVALID_DTYPE(context_->GetNodeName(), "size",
                                           Ops::Base::ToString(sizeTensor->GetDataType()).c_str(), "int32"),
@@ -134,8 +145,11 @@ ge::graphStatus ResizeBicubicV2Tiling::GetInputSize()
     std::vector<int64_t> sizeList;
     sizeList.resize(DIM_2);
     auto* tensorData = sizeTensor->GetData<int32_t>();
-    OP_CHECK_IF(tensorData == nullptr, OP_LOGE(context_->GetNodeName(), "GetData failed, tensorData is nullptr"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        tensorData == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "tensorData is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     for (int32_t i = 0; i < DIM_2; i++) {
         sizeList[i] = static_cast<int64_t>(*(tensorData + i));
@@ -157,9 +171,18 @@ ge::graphStatus ResizeBicubicV2Tiling::GetInputSize()
 ge::graphStatus ResizeBicubicV2Tiling::CheckDtype()
 {
     auto inputDesc = context_->GetInputDesc(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, inputDesc);
+    OP_CHECK_IF(
+        inputDesc == nullptr,
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "inputDesc",
+                                            "the input desc of required input inputDesc is missing in the tiling "
+                                            "context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
     auto outputDesc = context_->GetOutputDesc(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, outputDesc);
+    OP_CHECK_IF(
+        outputDesc == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "outputDesc is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     xDtype_ = inputDesc->GetDataType();
     yDtype_ = outputDesc->GetDataType();
     xDtypeSize_ = GetSizeByDataType(xDtype_);
@@ -176,10 +199,17 @@ ge::graphStatus ResizeBicubicV2Tiling::CheckDtype()
 ge::graphStatus ResizeBicubicV2Tiling::CheckShapeDimValid()
 {
     auto images = context_->GetInputShape(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, images);
+    OP_CHECK_IF(
+        images == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "images is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     gert::Shape imagesShape = images->GetStorageShape();
     auto y = context_->GetOutputShape(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, y);
+    OP_CHECK_IF(y == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(), "y is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     gert::Shape yShape = y->GetStorageShape();
     if (imagesShape.GetDimNum() != DIM_4 || yShape.GetDimNum() != DIM_4) {
         std::string dimMsg = std::to_string(imagesShape.GetDimNum()) + " and " + std::to_string(yShape.GetDimNum());
@@ -195,8 +225,17 @@ ge::graphStatus ResizeBicubicV2Tiling::CheckFormatValid()
 {
     auto inputDesc = context_->GetInputDesc(DIM_0);
     auto outputDesc = context_->GetOutputDesc(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, inputDesc);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, outputDesc);
+    OP_CHECK_IF(
+        inputDesc == nullptr,
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "inputDesc",
+                                            "the input desc of required input inputDesc is missing in the tiling "
+                                            "context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        outputDesc == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "outputDesc is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     dataFormat = static_cast<ge::Format>(ge::GetPrimaryFormat(inputDesc->GetStorageFormat()));
     ge::Format outFormat = static_cast<ge::Format>(ge::GetPrimaryFormat(outputDesc->GetStorageFormat()));
@@ -218,10 +257,17 @@ ge::graphStatus ResizeBicubicV2Tiling::CheckFormatValid()
 ge::graphStatus ResizeBicubicV2Tiling::ExtractDimsFromShape()
 {
     auto images = context_->GetInputShape(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, images);
+    OP_CHECK_IF(
+        images == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "images is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     gert::Shape imagesShape = images->GetStorageShape();
     auto y = context_->GetOutputShape(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, y);
+    OP_CHECK_IF(y == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(), "y is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     gert::Shape yShape = y->GetStorageShape();
 
     int64_t cDim = dataFormat == ge::FORMAT_NHWC ? DIM_3 : DIM_1;
@@ -244,10 +290,17 @@ ge::graphStatus ResizeBicubicV2Tiling::ExtractDimsFromShape()
 ge::graphStatus ResizeBicubicV2Tiling::CheckDimsValid()
 {
     auto images = context_->GetInputShape(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, images);
+    OP_CHECK_IF(
+        images == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "images is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     gert::Shape imagesShape = images->GetStorageShape();
     auto y = context_->GetOutputShape(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, y);
+    OP_CHECK_IF(y == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(), "y is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     gert::Shape yShape = y->GetStorageShape();
     int64_t cDim = dataFormat == ge::FORMAT_NHWC ? DIM_3 : DIM_1;
 
@@ -283,27 +336,44 @@ ge::graphStatus ResizeBicubicV2Tiling::CheckDimsValid()
 
 ge::graphStatus ResizeBicubicV2Tiling::CheckParams()
 {
-    OP_CHECK_IF((CheckShapeDimValid() != ge::GRAPH_SUCCESS),
-                OP_LOGE(context_->GetNodeName(), "CheckShapeDimValid failed."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (CheckShapeDimValid() != ge::GRAPH_SUCCESS),
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                               "CheckShapeDimValid failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
-    OP_CHECK_IF((CheckFormatValid() != ge::GRAPH_SUCCESS), OP_LOGE(context_->GetNodeName(), "CheckFormatValid failed."),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (CheckFormatValid() != ge::GRAPH_SUCCESS),
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                               "CheckFormatValid failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
-    OP_CHECK_IF((ExtractDimsFromShape() != ge::GRAPH_SUCCESS),
-                OP_LOGE(context_->GetNodeName(), "ExtractDimsFromShape failed."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (ExtractDimsFromShape() != ge::GRAPH_SUCCESS),
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                               "ExtractDimsFromShape failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
-    OP_CHECK_IF((CheckDimsValid() != ge::GRAPH_SUCCESS), OP_LOGE(context_->GetNodeName(), "CheckDimsValid failed."),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (CheckDimsValid() != ge::GRAPH_SUCCESS),
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                               "CheckDimsValid failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
     isNchw_ = DIM_1;
     if ((dataFormat == ge::FORMAT_NHWC) && (lenDesH_ != lenSrcH_ || lenDesW_ != lenSrcW_)) {
         isNchw_ = DIM_0;
     }
 
-    OP_CHECK_IF(GetInputSize() != ge::GRAPH_SUCCESS, OP_LOGE(context_->GetNodeName(), "get input size failed"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        GetInputSize() != ge::GRAPH_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                               "get input size failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
-    OP_CHECK_IF(CheckDtype() != ge::GRAPH_SUCCESS, OP_LOGE(context_->GetNodeName(), "check dtype failed"),
+    OP_CHECK_IF(CheckDtype() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                                       "check dtype failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
 
     SetDimsByFormat();
@@ -329,7 +399,8 @@ int64_t ResizeBicubicV2Tiling::FindBest2DTiling(int64_t lenM, int64_t lenN)
 
         int64_t mFactor = Ops::Base::CeilDiv(lenM, m);
         int64_t nFactor = Ops::Base::CeilDiv(lenN, n);
-        OP_CHECK_IF((nFactor == 0 || mFactor == 0), OP_LOGE("FindBest2DTiling", "nFactor or mFactor is 0"),
+        OP_CHECK_IF((nFactor == 0 || mFactor == 0),
+                    error_report::ReportInvalidArgument(context_->GetNodeName(), "input", "nFactor or mFactor is 0"),
                     return ge::GRAPH_FAILED);
         int64_t delta = mFactor * nFactor;
         if (m * n == coreNum_) {
@@ -427,7 +498,7 @@ void ResizeBicubicV2Tiling::DoTilingPointCopy()
     // N H多核双切分
     int64_t np = FindBest2DTiling(lenN_, lenDesH_);
     nFactor_ = Ops::Base::CeilDiv(lenN_, np);
-    OP_CHECK_IF((np == 0), OP_LOGE("DoTilingPointCopy", "np is 0"), return);
+    OP_CHECK_IF((np == 0), error_report::ReportInvalidArgument(context_->GetNodeName(), "input", "np is 0"), return);
     int64_t hp = coreNum_ / np;
     hFactor_ = Ops::Base::CeilDiv(lenDesH_, hp);
 
@@ -440,7 +511,8 @@ void ResizeBicubicV2Tiling::DoTilingPointCopy()
     }
 
     realCoreNum_ = std::min(realCoreNum_, coreNum_);
-    OP_CHECK_IF((cFactor_ == 0), OP_LOGE("DoTilingPointCopy", "cFactor_ is 0"), return);
+    OP_CHECK_IF((cFactor_ == 0), error_report::ReportInvalidArgument(context_->GetNodeName(), "input", "cFactor_ is 0"),
+                return);
     // UB切分
     int64_t wcLenAlign = Ops::Base::CeilAlign(wFactor_ * cFactor_, ONE_BLOCK_SIZE / xDtypeSize_);
     int64_t vol4AxisC = (ubBlockNum_ / DB_BUFF_NUM) * ONE_BLOCK_SIZE / xDtypeSize_;
@@ -536,29 +608,52 @@ float ResizeBicubicV2Tiling::ComputeScale(float scale, int64_t lenSrc, int64_t l
 
 ge::graphStatus ResizeBicubicV2Tiling::Compute()
 {
-    OP_CHECK_IF(CheckParams() != ge::GRAPH_SUCCESS, OP_LOGE(context_->GetNodeName(), "check input params failed"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        CheckParams() != ge::GRAPH_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                               "check input params failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
     // Get attrs: alignCorners
     auto attrs = context_->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context_, attrs);
+    OP_CHECK_IF(
+        attrs == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "attrs is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     const bool* alignCornersPtr = attrs->GetAttrPointer<bool>(DIM_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, alignCornersPtr);
+    OP_CHECK_IF(alignCornersPtr == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "alignCornersPtr is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
 
     alignCorners_ = *alignCornersPtr ? 1 : 0;
     isHalfPiex_ = *alignCornersPtr ? DIM_0 : DIM_1;
 
     auto xStorage = context_->GetInputShape(INPUT_X_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, xStorage);
+    OP_CHECK_IF(
+        xStorage == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "xStorage is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     xShape_ = Ops::Cv::OpTiling::EnsureNotScalar(xStorage->GetStorageShape());
     auto yStorage = context_->GetOutputShape(OUTPUT_Y_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, yStorage);
+    OP_CHECK_IF(
+        yStorage == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "yStorage is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     yShape_ = Ops::Cv::OpTiling::EnsureNotScalar(yStorage->GetStorageShape());
 
     ubBlockNum_ = Ops::Base::CeilDiv(ubSize_, ONE_BLOCK_SIZE) - RSV_BLOCK_NUM;
 
     auto scales = attrs->GetAttrPointer<gert::ContinuousVector>(DIM_1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, scales);
+    OP_CHECK_IF(
+        scales == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "scales is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     int64_t scalesNum = scales->GetSize();
     const float* scalesData = static_cast<const float*>(scales->GetData());
     OP_CHECK_IF(scalesNum != DIM_2,
@@ -650,7 +745,11 @@ ge::graphStatus ResizeBicubicV2Tiling::SetTilingData()
     context_->SetTilingKey(tilingKey);
 
     size_t* workspaces = context_->GetWorkspaceSizes(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, workspaces);
+    OP_CHECK_IF(
+        workspaces == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "workspaces is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     workspaces[0] = 0;
     PrintTilingData();
     return ge::GRAPH_SUCCESS;
@@ -659,15 +758,21 @@ ge::graphStatus ResizeBicubicV2Tiling::SetTilingData()
 static ge::graphStatus Tiling4ResizeBicubicV2(gert::TilingContext* context)
 {
     auto compileInfo = static_cast<const ResizeBicubicV2CompileInfo*>(context->GetCompileInfo());
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     ResizeBicubicV2Tiling tilingObject(context);
     tilingObject.GetPlatformData(compileInfo);
     if (tilingObject.Compute() != ge::GRAPH_SUCCESS) {
-        OP_LOGE(context->GetNodeName(), "Compute return failed.");
+        OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                               "Compute return failed; propagate the first error reported by the failing stage");
         return ge::GRAPH_FAILED;
     }
     if (tilingObject.SetTilingData() != ge::GRAPH_SUCCESS) {
-        OP_LOGE(context->GetNodeName(), "SetTilingData return failed.");
+        OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                               "SetTilingData return failed; propagate the first error reported by the failing stage");
         return ge::GRAPH_FAILED;
     }
 
@@ -678,20 +783,31 @@ static ge::graphStatus TilingPrepare4ResizeBicubicV2(gert::TilingParseContext* c
 {
     OP_LOGI(context->GetNodeName(), "TilingPrepare4ResizeBicubicV2 running.");
     auto compileInfo = context->GetCompiledInfo<ResizeBicubicV2CompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfo);
+    OP_CHECK_IF(
+        platformInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "platformInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->totalCoreNum = ascendcPlatform.GetCoreNumAiv();
-    OP_CHECK_IF((compileInfo->totalCoreNum <= 0),
-                OP_LOGE(context->GetNodeName(), "coreNum is invalid, value is %ld",
-                        static_cast<int64_t>(compileInfo->totalCoreNum)),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (compileInfo->totalCoreNum <= 0),
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "invalid",
+                                              std::to_string(static_cast<int64_t>(compileInfo->totalCoreNum)).c_str(),
+                                              "coreNum is invalid, value is"),
+        return ge::GRAPH_FAILED);
 
     uint64_t ubSizePlatForm;
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSizePlatForm);
     compileInfo->totalUbSize = static_cast<int32_t>(ubSizePlatForm);
-    OP_CHECK_IF((compileInfo->totalUbSize <= 0), OP_LOGE(context->GetNodeName(), "ubSize is less than 0"),
+    OP_CHECK_IF((compileInfo->totalUbSize <= 0),
+                error_report::ReportInvalidArgument(context->GetNodeName(), "less", "ubSize is less than 0"),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }

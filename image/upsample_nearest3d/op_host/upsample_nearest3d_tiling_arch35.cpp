@@ -23,6 +23,7 @@
 #include "upsample_nearest3d_tiling.h"
 #include "image/upsample_nearest3d/op_kernel/arch35/upsample_nearest3d_tiling_data.h"
 #include "image/upsample_nearest3d/op_kernel/arch35/upsample_nearest3d_tiling_key.h"
+#include "op_api/error_report_util.h"
 
 namespace {
 constexpr int32_t CONST_0 = 0;
@@ -274,7 +275,12 @@ void UpsampleNearest3dRegbaseTiling::CalTilingData()
 ge::graphStatus UpsampleNearest3dRegbaseTiling::CheckDtypeAndFormat()
 {
     auto input = context_->GetInputDesc(CONST_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, input);
+    OP_CHECK_IF(
+        input == nullptr,
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "input",
+                                            "the input desc/shape of required input input is missing in the tiling "
+                                            "context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
     auto inputDtype = input->GetDataType();
     OP_CHECK_IF(inputDtypeList.count(inputDtype) == 0,
                 OP_LOGE_FOR_INVALID_DTYPE(context_->GetNodeName(), "x", Ops::Base::ToString(inputDtype).c_str(),
@@ -284,7 +290,11 @@ ge::graphStatus UpsampleNearest3dRegbaseTiling::CheckDtypeAndFormat()
     int32_t ubBlockSize = static_cast<int32_t>(Ops::Base::GetUbBlockSize(context_));
     baseTiling_.oneBlockNum = ubBlockSize / baseTiling_.dtypeSize;
     auto outDescPtr0 = context_->GetOutputDesc(0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, outDescPtr0);
+    OP_CHECK_IF(outDescPtr0 == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "outDescPtr0 (output index 0) is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     auto outDtype = outDescPtr0->GetDataType();
     if (outDtype != inputDtype) {
         std::string dtypeMsg = Ops::Base::ToString(inputDtype) + " and " + Ops::Base::ToString(outDtype);
@@ -299,8 +309,17 @@ ge::graphStatus UpsampleNearest3dRegbaseTiling::GetAndCheckShapes()
 {
     auto inputX = context_->GetInputShape(0);
     auto outY = context_->GetOutputShape(0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, inputX);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, outY);
+    OP_CHECK_IF(
+        inputX == nullptr,
+        error_report::ReportInvalidArgument(context_->GetNodeName(), "inputX",
+                                            "the input desc/shape of required input inputX (index 0) is missing in the "
+                                            "tiling context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(outY == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "outY (output index 0) is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     inputShape_ = EnsureNotScalar(inputX->GetStorageShape());
     outShape_ = EnsureNotScalar(outY->GetStorageShape());
     if ((inputShape_.GetDimNum() != INPUT_DIMS) || (outShape_.GetDimNum() != INPUT_DIMS)) {
@@ -338,11 +357,17 @@ ge::graphStatus UpsampleNearest3dRegbaseTiling::GetAndCheckShapes()
 
 ge::graphStatus UpsampleNearest3dRegbaseTiling::CheckInputParams()
 {
-    OP_CHECK_IF((CheckDtypeAndFormat() != ge::GRAPH_SUCCESS),
-                OP_LOGE(context_->GetNodeName(), "CheckDtypeAndFormat failed."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (CheckDtypeAndFormat() != ge::GRAPH_SUCCESS),
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                               "CheckDtypeAndFormat failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
-    OP_CHECK_IF((GetAndCheckShapes() != ge::GRAPH_SUCCESS),
-                OP_LOGE(context_->GetNodeName(), "GetAndCheckShapes failed."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (GetAndCheckShapes() != ge::GRAPH_SUCCESS),
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                               "GetAndCheckShapes failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
     return ge::GRAPH_SUCCESS;
 }
@@ -353,21 +378,31 @@ ge::graphStatus UpsampleNearest3dRegbaseTiling::CheckInitTilingData()
     if (isSimd) {
         if (simDTilingData_ == nullptr) {
             simDTilingData_ = context_->GetTilingData<UpsampleNearest3dRegBaseSimdTilingData>();
-            OP_CHECK_IF(simDTilingData_ == nullptr, OP_LOGE(context_, "get tilingdata ptr failed"),
-                        return ge::GRAPH_FAILED);
+            OP_CHECK_IF(
+                simDTilingData_ == nullptr,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "get tilingdata ptr failed; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
         }
         OP_CHECK_IF((memset_s(simDTilingData_, sizeof(UpsampleNearest3dRegBaseSimdTilingData), 0,
                               sizeof(UpsampleNearest3dRegBaseSimdTilingData)) != EOK),
-                    OP_LOGE(context_, "memset tilingdata failed"), return ge::GRAPH_FAILED);
+                    OP_LOGE_WITHOUT_REPORT(
+                        context_, "memset tilingdata failed; propagate the first error reported by the failing stage"),
+                    return ge::GRAPH_FAILED);
     } else {
         if (tilingData_ == nullptr) {
             tilingData_ = context_->GetTilingData<UpsampleNearest3dRegBaseTilingData>();
-            OP_CHECK_IF(tilingData_ == nullptr, OP_LOGE(context_, "get tilingdata ptr failed"),
-                        return ge::GRAPH_FAILED);
+            OP_CHECK_IF(
+                tilingData_ == nullptr,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "get tilingdata ptr failed; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
         }
         OP_CHECK_IF((memset_s(tilingData_, sizeof(UpsampleNearest3dRegBaseTilingData), 0,
                               sizeof(UpsampleNearest3dRegBaseTilingData)) != EOK),
-                    OP_LOGE(context_, "memset tilingdata failed"), return ge::GRAPH_FAILED);
+                    OP_LOGE_WITHOUT_REPORT(
+                        context_, "memset tilingdata failed; propagate the first error reported by the failing stage"),
+                    return ge::GRAPH_FAILED);
     }
     return ge::GRAPH_SUCCESS;
 }
@@ -406,17 +441,37 @@ ge::graphStatus UpsampleNearest3dRegbaseTiling::CheckNCAxesConsistency()
 ge::graphStatus UpsampleNearest3dRegbaseTiling::GetAndCheckAttrs()
 {
     auto attrs = context_->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context_, attrs);
+    OP_CHECK_IF(
+        attrs == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "attrs is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto outputSize = attrs->GetAttrPointer<gert::ContinuousVector>(CONST_0);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, outputSize);
+    OP_CHECK_IF(
+        outputSize == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "outputSize is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     const float* scaleDPtr = attrs->GetAttrPointer<float>(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, scaleDPtr);
+    OP_CHECK_IF(
+        scaleDPtr == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "scaleDPtr is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     float scaleD = *scaleDPtr;
     const float* scaleHPtr = attrs->GetAttrPointer<float>(CONST_2);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, scaleHPtr);
+    OP_CHECK_IF(
+        scaleHPtr == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "scaleHPtr is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     float scaleH = *scaleHPtr;
     const float* scaleWPtr = attrs->GetAttrPointer<float>(CONST_3);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, scaleWPtr);
+    OP_CHECK_IF(
+        scaleWPtr == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "scaleWPtr is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     float scaleW = *scaleWPtr;
     OP_LOGI(context_, "scaleD %f, scaleH %f, scaleW %f", scaleD, scaleH, scaleW);
     int64_t outSizeNum = outputSize->GetSize();
@@ -448,10 +503,16 @@ ge::graphStatus UpsampleNearest3dRegbaseTiling::GetAndCheckAttrs()
 ge::graphStatus UpsampleNearest3dRegbaseTiling::CheckInputShapeAndAttr()
 {
     OP_CHECK_IF((CheckNCAxesConsistency() != ge::GRAPH_SUCCESS),
-                OP_LOGE(context_->GetNodeName(), "CheckNCAxesConsistency failed."), return ge::GRAPH_FAILED);
-
-    OP_CHECK_IF((GetAndCheckAttrs() != ge::GRAPH_SUCCESS), OP_LOGE(context_->GetNodeName(), "GetAndCheckAttrs failed."),
+                OP_LOGE_WITHOUT_REPORT(
+                    context_->GetNodeName(),
+                    "CheckNCAxesConsistency failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
+
+    OP_CHECK_IF(
+        (GetAndCheckAttrs() != ge::GRAPH_SUCCESS),
+        OP_LOGE_WITHOUT_REPORT(context_->GetNodeName(),
+                               "GetAndCheckAttrs failed; propagate the first error reported by the failing stage"),
+        return ge::GRAPH_FAILED);
 
     return ge::GRAPH_SUCCESS;
 }
@@ -487,15 +548,23 @@ void UpsampleNearest3dRegbaseTiling::PrintTilingData()
 ge::graphStatus UpsampleNearest3dRegbaseTiling::Init()
 {
     fe::PlatFormInfos* platformInfoPtr = context_->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context_, platformInfoPtr);
+    OP_CHECK_IF(platformInfoPtr == nullptr,
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "platformInfoPtr is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfoPtr);
     int32_t coreNum = ascendcPlatform.GetCoreNumAiv();
-    OP_CHECK_IF(coreNum <= 0, OP_LOGE(context_, "coreNum must be greater than 0, but got %d", coreNum),
+    OP_CHECK_IF(coreNum <= 0,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "input", std::to_string(coreNum).c_str(),
+                                                      "coreNum must be greater than 0"),
                 return ge::GRAPH_FAILED);
     baseTiling_.coreNum = coreNum;
     uint64_t ubSize = 0;
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSize);
-    OP_CHECK_IF(ubSize <= 0UL, OP_LOGE(context_, "ubSize must be greater than 0, but got %lu", ubSize),
+    OP_CHECK_IF(ubSize == 0UL,
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(
+                    context_->GetNodeName(), "input", std::to_string(ubSize).c_str(), "ubSize must be greater than 0"),
                 return ge::GRAPH_FAILED);
     OP_LOGI(context_, "coreNum is %ld, ubSize is %lu", coreNum, ubSize);
     baseTiling_.ubSize = static_cast<int32_t>(ubSize);
@@ -665,11 +734,17 @@ void UpsampleNearest3dRegbaseTiling::PrintSimdTilingData()
 
 ge::graphStatus UpsampleNearest3dRegbaseTiling::DoTiling()
 {
-    OP_CHECK_IF(CheckInputParams() != ge::GRAPH_SUCCESS, OP_LOGE(context_, "CheckInputParams failed"),
+    OP_CHECK_IF(CheckInputParams() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "CheckInputParams failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(CheckInputShapeAndAttr() != ge::GRAPH_SUCCESS, OP_LOGE(context_, "CheckInputShapes failed"),
+    OP_CHECK_IF(CheckInputShapeAndAttr() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "CheckInputShapes failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(CheckInitTilingData() != ge::GRAPH_SUCCESS, OP_LOGE(context_, "CheckInitTilingData failed"),
+    OP_CHECK_IF(CheckInitTilingData() != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(
+                    context_, "CheckInitTilingData failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
 
     if (isSimd) {
@@ -691,7 +766,11 @@ ge::graphStatus UpsampleNearest3dRegbaseTiling::DoTiling()
     context_->SetBlockDim(baseTiling_.realCoreNum);
 
     size_t* workspaces = context_->GetWorkspaceSizes(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context_, workspaces);
+    OP_CHECK_IF(
+        workspaces == nullptr,
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(), "workspaces is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     workspaces[0] = 0;
     return ge::GRAPH_SUCCESS;
 }
@@ -700,12 +779,15 @@ ge::graphStatus Tiling4UpsampleNearest3dRegbase(gert::TilingContext* context)
 {
     UpsampleNearest3dRegbaseTiling tilingImpl = UpsampleNearest3dRegbaseTiling(context);
     if (tilingImpl.Init() != ge::GRAPH_SUCCESS) {
-        OP_LOGE(context, "Tiling4UpsampleNearest3dRegbase init failed.");
+        OP_LOGE_WITHOUT_REPORT(
+            context,
+            "Tiling4UpsampleNearest3dRegbase init failed; propagate the first error reported by the failing stage");
         return ge::GRAPH_FAILED;
     }
 
     if (tilingImpl.DoTiling() != ge::GRAPH_SUCCESS) {
-        OP_LOGE(context, "Tiling4UpsampleNearest3dRegbase do tiling failed.");
+        OP_LOGE_WITHOUT_REPORT(context, "Tiling4UpsampleNearest3dRegbase do tiling failed; propagate the first error "
+                                        "reported by the failing stage");
         return ge::GRAPH_FAILED;
     }
     OP_LOGI(context, "end Tiling4UpsampleNearest3dRegbase");

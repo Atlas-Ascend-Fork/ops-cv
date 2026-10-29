@@ -24,6 +24,10 @@
 #include "opdev/tensor_view_utils.h"
 #include "opdev/make_op_executor.h"
 #include "op_api/aclnn_check.h"
+#ifndef OP_LOG_LIBOPAPI_ONLY
+#define OP_LOG_LIBOPAPI_ONLY
+#endif
+#include "log/log.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -64,7 +68,8 @@ static bool CheckShape(const aclTensor* x, const aclIntArray* outputSize, const 
     OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected output_size to be 2, but got %zu", outputSizeNum),
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBicubic2dAa", "output_size",
+                                          std::to_string(outputSizeNum).c_str(), "2"),
              return false);
     auto inputShape = x->GetViewShape();
     auto outputShape = out->GetViewShape();
@@ -78,47 +83,51 @@ static bool CheckShape(const aclTensor* x, const aclIntArray* outputSize, const 
     int64_t outputW = outputShape.GetDim(DIM_THREE);
     int64_t outH = (*outputSize)[DIM_ZERO];
     int64_t outW = (*outputSize)[DIM_ONE];
-    OP_CHECK(inputH > 0 && inputW > 0 && outH > 0 && outW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Input and output sizes should be greater than 0, but got input (H: %ld,"
-                     " W: %ld) output (H: %ld, W: %ld)",
-                     inputH, inputW, outH, outW),
-             return false);
-    OP_CHECK(inputC > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Non-empty 4D data tensor expected but got a tensor with sizes %s.",
-                     op::ToString(inputShape).GetString()),
-             return false);
+    OP_CHECK(
+        inputH > 0 && inputW > 0 && outH > 0 && outW > 0,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAa", "input_h", std::to_string(inputH).c_str(),
+                                                 "all input and output dims must be greater than 0"),
+        return false);
+    OP_CHECK(
+        inputC > 0,
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnUpsampleBicubic2dAa", "self", op::ToString(inputShape).GetString(),
+                                              "a non-empty 4D data tensor is required"),
+        return false);
     OP_CHECK(inputN == outputN && inputC == outputC,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "InputN and outputN should be equal, inputC and outputC should be equal, but got input (N: %ld,"
-                     " C: %ld) output (N: %ld, C: %ld)",
-                     inputN, inputC, outputN, outputC),
+             OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnUpsampleBicubic2dAa", "input,output",
+                                                    (std::string(op::ToString(x->GetViewShape()).GetString()) + ", " +
+                                                     op::ToString(out->GetViewShape()).GetString())
+                                                        .c_str(),
+                                                    "N and C of input and output must be equal"),
              return false);
     OP_CHECK(outputH == outH && outputW == outW,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "OutputH and outH should be equal, outputW and outW should be equal, but got output (H: %ld,"
-                     " W: %ld) out (H: %ld, W: %ld)",
-                     outputH, outputW, outH, outW),
+             OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnUpsampleBicubic2dAa", "output,out",
+                                                    (std::string(op::ToString(out->GetViewShape()).GetString()) + ", " +
+                                                     op::ToString(out->GetViewShape()).GetString())
+                                                        .c_str(),
+                                                    "H and W of output tensor must match outputSize"),
              return false);
     OP_CHECK(
         (x->GetStorageFormat() == op::Format::FORMAT_ND || x->GetStorageFormat() == op::Format::FORMAT_NCHW) &&
             (out->GetStorageFormat() == op::Format::FORMAT_ND || out->GetStorageFormat() == op::Format::FORMAT_NCHW),
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "Input and output storage format only support NCHW, but got Input %s and output %s.",
-                op::ToString(x->GetStorageFormat()).GetString(), op::ToString(out->GetStorageFormat()).GetString()),
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBicubic2dAa", "input,output",
+                                                (std::string(op::ToString(x->GetStorageFormat()).GetString()) + ", " +
+                                                 op::ToString(out->GetStorageFormat()).GetString())
+                                                    .c_str(),
+                                                "only NCHW is supported for input and output storage format"),
         return false);
 
     // 检查上边界
     if (!IsRegBase()) {
         OP_CHECK(inputN <= INT32_MAX && inputC <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
-                 OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                         "Input sizes should not be greater than %d, but got input(%ld, %ld, %ld, %ld)", INT32_MAX,
-                         inputN, inputC, inputH, inputW),
+                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAa", "inputN",
+                                                          std::to_string(inputN).c_str(),
+                                                          "all dims must not exceed INT32_MAX"),
                  return false);
         OP_CHECK(
             outH <= INT32_MAX && outW <= INT32_MAX,
-            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Output sizes should not be greater than %d, but got outputSize[%ld, %ld]",
-                    INT32_MAX, outH, outW),
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAa", "outH", std::to_string(outH).c_str(),
+                                                     "all dims must not exceed INT32_MAX"),
             return false);
     }
     return true;
@@ -135,10 +144,13 @@ static bool CheckMaxScaleSupport(const aclTensor* x, const aclIntArray* outputSi
     const float realScalesH = scalesH > 0 ? static_cast<float>(1.0 / scalesH) : static_cast<float>(inputH) / outputH;
     const float realScalesW = scalesW > 0 ? static_cast<float>(1.0 / scalesW) : static_cast<float>(inputW) / outputW;
 
-    OP_CHECK(realScalesH <= MAX_SUPPORT_SCALE && realScalesW <= MAX_SUPPORT_SCALE,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Scales should be less than 50, but got scalesH %f and scalesW %f.",
-                     realScalesH, realScalesW),
-             return false);
+    OP_CHECK(
+        realScalesH <= MAX_SUPPORT_SCALE && realScalesW <= MAX_SUPPORT_SCALE,
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            "aclnnUpsampleBicubic2dAa", "scales_h,scales_w",
+            (std::to_string(realScalesH).c_str() + std::string(", ") + std::to_string(realScalesW).c_str()).c_str(),
+            "scales must be less than 50"),
+        return false);
     return true;
 }
 

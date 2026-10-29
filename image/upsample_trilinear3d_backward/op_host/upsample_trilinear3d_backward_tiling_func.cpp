@@ -18,6 +18,7 @@
 #include "log/log.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "upsample_trilinear3d_backward_tiling.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr int64_t SLIDE_SIZE = 16;
@@ -172,9 +173,10 @@ bool UpsampleTrilinear3dBackwardTiling::CheckScales() const
     float scalesH = ComputeScales(scaleH, inputShapes[H_INDEX], outputShapes[H_INDEX]);
     float scalesW = ComputeScales(scaleW, inputShapes[W_INDEX], outputShapes[W_INDEX]);
     OP_CHECK_IF(scalesD < MIN_SUPPORT_SCALE || scalesH < MIN_SUPPORT_SCALE || scalesW < MIN_SUPPORT_SCALE,
-                OP_LOGE(tilingContext->GetNodeName(),
-                        "scalesD, scalesH and scalesW are too small, scalesD [%f], scalesH [%f], scalesW [%f].",
-                        scalesD, scalesH, scalesW),
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    tilingContext->GetNodeName(), "input",
+                    (std::to_string(scalesD) + ", " + std::to_string(scalesH) + ", " + std::to_string(scalesW)).c_str(),
+                    "scalesD, scalesH and scalesW are too small, scalesD [], scalesH [], scalesW []"),
                 return false);
     return true;
 }

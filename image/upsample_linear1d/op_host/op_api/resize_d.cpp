@@ -66,8 +66,11 @@ const aclTensor* ResizeD(const aclTensor* x, const aclIntArray* size, const bool
         ResizeD, OP_INPUT(x), OP_OUTPUT(y),
         OP_ATTR(size, scales, roiArray, GetCoordinateTransformationModeStr(alignCorners), CUBIC_COEFF_A,
                 EXCLUDE_OUTSIDE, EXTRAPOLATION_VALUE, mode, ROUND_PREFER_FLOOR, DATA_FORMAT));
-    OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "ResizeDAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."), return nullptr);
+    OP_CHECK(
+        ret == ACLNN_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "ResizeDAiCore ADD_TO_LAUNCHER_LIST_AICORE failed; propagate "
+                                                        "the first error reported by the failing stage."),
+        return nullptr);
     return y;
 }
 } // namespace l0op

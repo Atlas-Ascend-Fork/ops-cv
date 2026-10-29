@@ -54,8 +54,11 @@ const aclTensor* ResizeGradD(const aclTensor* grads, const aclIntArray* inputSiz
         ResizeGradD, OP_INPUT(grads), OP_OUTPUT(out),
         OP_ATTR(inputSize, roiArray, scales, GetCoordinateTransformationModeStr(alignCorners), CUBIC_COEFF_A,
                 EXCLUDE_OUTSIDE, EXTRAPOLATION_VALUE, mode, ROUND_PREFER_FLOOR, DATA_FORMAT));
-    OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "ResizeGradDAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."), return nullptr);
+    OP_CHECK(
+        ret == ACLNN_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "ResizeGradDAiCore ADD_TO_LAUNCHER_LIST_AICORE failed; "
+                                                        "propagate the first error reported by the failing stage."),
+        return nullptr);
     return out;
 }
 } // namespace l0op

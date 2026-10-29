@@ -17,6 +17,7 @@
 #include "log/log.h"
 #include "op_host/tiling_util.h"
 #include "upsample_bilinear2d_aa_tiling.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr uint32_t BEST_PERFORMANCE_SIZE_1 = 16;
@@ -165,11 +166,10 @@ inline bool UpsampleBilinearAATiling::CheckScales(const gert::TilingContext* con
     int64_t outputW = outputSizeArray[1];
     float tmpScalesH = scales_h > 0 ? scales_h : static_cast<float>(inputH / outputH);
     float tmpScalesW = scales_w > 0 ? scales_w : static_cast<float>(inputW / outputW);
-    OP_CHECK_IF(
-        (tmpScalesH > MAX_SUPPORT_SCALE || tmpScalesW > MAX_SUPPORT_SCALE),
-        OP_LOGE(context->GetNodeName(), "Scales should not exceed 50, but got scale (scales_w: %f, scales_h: %f) ",
-                tmpScalesW, tmpScalesH),
-        return false);
+    OP_CHECK_IF((tmpScalesH > MAX_SUPPORT_SCALE || tmpScalesW > MAX_SUPPORT_SCALE),
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "input", std::to_string(tmpScalesH).c_str(),
+                                          std::to_string(tmpScalesW).c_str()),
+                return false);
     return true;
 }
 
@@ -191,31 +191,56 @@ ge::graphStatus UpsampleBilinearAATiling::RunBigKernelTiling(gert::TilingContext
         return Tiling4UpsampleBilinear2dAARegbase(tilingContext);
     }
     auto srcTensor = tilingContext->GetInputTensor(0);
-    OP_CHECK_IF(srcTensor == nullptr, OP_LOGE(tilingContext->GetNodeName(), "srcTensor == nullptr"),
+    OP_CHECK_IF(srcTensor == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "srcTensor is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
 
     const gert::RuntimeAttrs* attrs = tilingContext->GetAttrs();
-    OP_CHECK_IF(attrs == nullptr, OP_LOGE(tilingContext->GetNodeName(), "attrs == nullptr"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        attrs == nullptr,
+        error_report::ReportTilingStageError(
+            tilingContext->GetNodeName(), "attrs is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     output_size = attrs->GetAttrPointer<gert::ContinuousVector>(OUTPUT_SIZE_ATTR);
-    OP_CHECK_IF(output_size == nullptr, OP_LOGE(tilingContext->GetNodeName(), "output_size == nullptr"),
+    OP_CHECK_IF(output_size == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "output_size is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     int64_t outputSizeNum = static_cast<int64_t>(output_size->GetSize());
     OP_CHECK_IF(outputSizeNum != OUTPUT_SIZE_NUM,
-                OP_LOGE(tilingContext->GetNodeName(), "the num of output_size is %ld, invalid, must be %u",
-                        outputSizeNum, OUTPUT_SIZE_NUM),
+                OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON(
+                    tilingContext->GetNodeName(), "input",
+                    (std::to_string(outputSizeNum) + ", " + std::to_string(OUTPUT_SIZE_NUM)).c_str(),
+                    "the num of output_size is , invalid, must be"),
                 return ge::GRAPH_FAILED);
     align_corners = attrs->GetAttrPointer<bool>(ALIGN_CORNERS_ATTR);
-    OP_CHECK_IF(align_corners == nullptr, OP_LOGE(tilingContext->GetNodeName(), "align_corners == nullptr"),
+    OP_CHECK_IF(align_corners == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "align_corners is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     scale_h = attrs->GetAttrPointer<float>(SCALE_H_ATTR);
-    OP_CHECK_IF(scale_h == nullptr, OP_LOGE(tilingContext->GetNodeName(), "scale_h == nullptr"),
+    OP_CHECK_IF(scale_h == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "scale_h is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     scale_w = attrs->GetAttrPointer<float>(SCALE_W_ATTR);
-    OP_CHECK_IF(scale_w == nullptr, OP_LOGE(tilingContext->GetNodeName(), "scale_w == nullptr"),
+    OP_CHECK_IF(scale_w == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "scale_w is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
 
     auto temp = tilingContext->GetInputDesc(0);
-    OP_CHECK_IF(temp == nullptr, OP_LOGE(tilingContext->GetNodeName(), "temp == nullptr"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        temp == nullptr,
+        error_report::ReportTilingStageError(
+            tilingContext->GetNodeName(), "temp is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     ge::DataType srcDtype = ge::DT_UNDEFINED;
     srcDtype = temp->GetDataType();
@@ -236,7 +261,10 @@ ge::graphStatus UpsampleBilinearAATiling::RunBigKernelTiling(gert::TilingContext
     }
 
     auto compileInfo = reinterpret_cast<const UpsampleBilinear2dAACompileInfo*>(tilingContext->GetCompileInfo());
-    OP_CHECK_IF(compileInfo == nullptr, OP_LOGE(tilingContext->GetNodeName(), "compileInfo == nullptr"),
+    OP_CHECK_IF(compileInfo == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "compileInfo is null in the tiling context; check the TilingContext construction"),
                 return ge::GRAPH_FAILED);
     uint32_t coreNumPlatForm = compileInfo->coreNum;
 
@@ -295,7 +323,8 @@ void UpsampleBilinearAATiling::getTCubeTiling_w()
     mmTiling_w.SetShape(input_shapes[N_INDEX] * input_shapes[C_INDEX] * input_shape[H_INDEX], slide_size,
                         singleCoreK_w);
     if (mmTiling_w.GetTiling(tilingData.matmulTiling_w) == -1) {
-        OP_LOGE(tilingContext->GetNodeName(), "getTCubeTiling_w Error, please Check inputShapes.");
+        OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(), "getTCubeTiling_w Error, please Check inputShapes; "
+                                                             "propagate the first error reported by the failing stage");
         return;
     }
 }
@@ -311,7 +340,8 @@ void UpsampleBilinearAATiling::getTCubeTiling_h()
     mmTilingH.SetShape(slide_size, output_shapes[W_INDEX], singleCoreK_h);
 
     if (mmTilingH.GetTiling(tilingData.matmulTiling_h) == -1) {
-        OP_LOGE(tilingContext->GetNodeName(), "getTCubeTiling_h Error, please Check inputShapes.");
+        OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(), "getTCubeTiling_h Error, please Check inputShapes; "
+                                                             "propagate the first error reported by the failing stage");
         return;
     }
 }
@@ -527,14 +557,19 @@ static ge::graphStatus tiling4UpsampleBilinearAATiling(gert::TilingContext* cont
 static ge::graphStatus tilingPrepareTiling(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<UpsampleBilinear2dAACompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAic();
 
     OP_CHECK_IF(compileInfo->coreNum <= 0,
-                OP_LOGE(context->GetNodeName(), "UpsampleBilinear2dAA GetHardwareInfo Failed, vectorCoreNum:%u",
-                        compileInfo->coreNum),
+                error_report::ReportTilingStageError(context->GetNodeName(),
+                                                     std::string("failed to get the hardware info; vectorCoreNum: ") +
+                                                         std::to_string(compileInfo->coreNum)),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }

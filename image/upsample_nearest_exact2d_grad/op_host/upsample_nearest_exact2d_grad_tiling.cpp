@@ -21,6 +21,7 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "op_host/tiling_util.h"
 #include "upsample_nearest_exact2d_grad_tiling.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr uint32_t BEST_PERFORMANCE_SIZE = 16;
@@ -145,17 +146,35 @@ ge::graphStatus UpsampleNearestExact2dGradTiling::getAttrs()
     }
 
     output_size = attrs->GetAttrPointer<gert::ContinuousVector>(0);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, output_size);
+    OP_CHECK_IF(output_size == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "output_size is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     input_size = attrs->GetAttrPointer<gert::ContinuousVector>(1);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, input_size);
+    OP_CHECK_IF(input_size == nullptr,
+                error_report::ReportTilingStageError(tilingContext->GetNodeName(),
+                                                     "the attr input_size is missing in the tiling context; check the "
+                                                     "operator registration and the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     int64_t inputSizeNum = input_size->GetSize();
     OP_CHECK_IF(inputSizeNum != SHAPE_SIZE,
-                OP_LOGE(tilingContext, "the num of inputSize is %ld, invalid, must be 4", inputSizeNum),
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(tilingContext->GetNodeName(), "input",
+                                                          std::to_string(inputSizeNum).c_str(),
+                                                          "the num of inputSize is , invalid, must be 4"),
                 return ge::GRAPH_FAILED);
     scale_h = attrs->GetAttrPointer<float>(H_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, scale_h);
+    OP_CHECK_IF(scale_h == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "scale_h is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     scale_w = attrs->GetAttrPointer<float>(W_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, scale_w);
+    OP_CHECK_IF(scale_w == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "scale_w is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -176,7 +195,9 @@ ge::graphStatus UpsampleNearestExact2dGradTiling::RunBigKernelTiling()
         return ge::GRAPH_FAILED;
     }
 
-    OP_CHECK_IF((getAttrs() != ge::GRAPH_SUCCESS), OP_LOGE(tilingContext->GetNodeName(), "getAttrs failed."),
+    OP_CHECK_IF((getAttrs() != ge::GRAPH_SUCCESS),
+                OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(),
+                                       "getAttrs failed; propagate the first error reported by the failing stage"),
                 return ge::GRAPH_FAILED);
 
     auto temp = tilingContext->GetInputDesc(0);
@@ -548,14 +569,19 @@ static ge::graphStatus tiling4UpsampleNearestExact2dGradTiling(gert::TilingConte
 static ge::graphStatus tilingPrepareTiling(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<UpsampleNearestExact2dGradCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAic();
 
     OP_CHECK_IF(compileInfo->coreNum <= 0,
-                OP_LOGE(context->GetNodeName(), "UpsampleNearestExact2dGrad GetHardwareInfo Failed, vectorCoreNum:%u",
-                        compileInfo->coreNum),
+                error_report::ReportTilingStageError(context->GetNodeName(),
+                                                     std::string("failed to get the hardware info; vectorCoreNum: ") +
+                                                         std::to_string(compileInfo->coreNum)),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }

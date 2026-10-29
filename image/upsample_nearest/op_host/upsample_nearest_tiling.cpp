@@ -19,6 +19,7 @@
 #include "tiling/tiling_api.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "upsample_nearest_tiling.h"
+#include "op_api/error_report_util.h"
 
 namespace optiling {
 constexpr int8_t NHWC_N_INDEX = 0;
@@ -134,25 +135,45 @@ ge::graphStatus UpsampleNearestTiling::ParseInputAttrs()
         return ge::GRAPH_FAILED;
     }
     auto srcShape = tilingContext->GetInputShape(0);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, srcShape);
+    OP_CHECK_IF(
+        srcShape == nullptr,
+        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "srcShape",
+                                            "the input shape of required input srcShape (index 0) is missing in the "
+                                            "tiling context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
     dim = srcShape->GetStorageShape().GetDimNum();
 
     auto inputShape = srcShape->GetOriginShape();
 
     const gert::ContinuousVector* outputSizeAttr = attrs->GetAttrPointer<gert::ContinuousVector>(OUTPUT_SIZE_ATTR);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, outputSizeAttr);
+    OP_CHECK_IF(outputSizeAttr == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "outputSizeAttr is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     const size_t outputSizeNum = outputSizeAttr->GetSize();
     const size_t expectOutputSizeNum = dim == NLC_DIM_SIZE ? OUTPUT_SIZE_LEN_1D : OUTPUT_SIZE_LEN_2D;
-    OP_CHECK_IF(
-        outputSizeNum != expectOutputSizeNum,
-        OP_LOGE(tilingContext->GetNodeName(), "output_size length must be %zu when input dim is %u, but got %zu.",
-                expectOutputSizeNum, static_cast<uint32_t>(dim), outputSizeNum),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(outputSizeNum != expectOutputSizeNum,
+                OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON(
+                    tilingContext->GetNodeName(), "output_size",
+                    (std::to_string(expectOutputSizeNum) + ", " + std::to_string(static_cast<uint32_t>(dim)) + ", " +
+                     std::to_string(outputSizeNum))
+                        .c_str(),
+                    "output_size length must be when input dim is"),
+                return ge::GRAPH_FAILED);
     const int64_t* outputSizeArray = reinterpret_cast<const int64_t*>(outputSizeAttr->GetData());
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, outputSizeArray);
+    OP_CHECK_IF(outputSizeArray == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "outputSizeArray is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
 
     const bool* exactModeAttr = attrs->GetAttrPointer<bool>(EXACT_ATTR);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, exactModeAttr);
+    OP_CHECK_IF(exactModeAttr == nullptr,
+                error_report::ReportTilingStageError(
+                    tilingContext->GetNodeName(),
+                    "exactModeAttr is null in the tiling context; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     exactMode = *exactModeAttr;
 
     for (int8_t i = 0; i < dim; i++) {
@@ -163,8 +184,16 @@ ge::graphStatus UpsampleNearestTiling::ParseInputAttrs()
     if (dim == NHWC_DIM_SIZE) {
         const float* scaleHAttr = attrs->GetAttrPointer<float>(SCALE_H_ATTR);
         const float* scaleWAttr = attrs->GetAttrPointer<float>(SCALE_W_ATTR);
-        OP_CHECK_NULL_WITH_CONTEXT(tilingContext, scaleHAttr);
-        OP_CHECK_NULL_WITH_CONTEXT(tilingContext, scaleWAttr);
+        OP_CHECK_IF(scaleHAttr == nullptr,
+                    error_report::ReportTilingStageError(
+                        tilingContext->GetNodeName(),
+                        "scaleHAttr is null in the tiling context; check the TilingContext construction"),
+                    return ge::GRAPH_FAILED);
+        OP_CHECK_IF(scaleWAttr == nullptr,
+                    error_report::ReportTilingStageError(
+                        tilingContext->GetNodeName(),
+                        "scaleWAttr is null in the tiling context; check the TilingContext construction"),
+                    return ge::GRAPH_FAILED);
         const float scaleH = *scaleHAttr;
         const float scaleW = *scaleWAttr;
         if (inputFormat == ge::Format::FORMAT_NCHW) {
@@ -186,7 +215,11 @@ ge::graphStatus UpsampleNearestTiling::ParseInputAttrs()
         outputShapes[NHWC_W_INDEX] = outputSizeArray[OUT_L_INDEX];
         outputShapes[NHWC_C_INDEX] = inputShapes[NLC_C_INDEX];
         const float* scaleLAttr = attrs->GetAttrPointer<float>(SCALE_H_ATTR);
-        OP_CHECK_NULL_WITH_CONTEXT(tilingContext, scaleLAttr);
+        OP_CHECK_IF(scaleLAttr == nullptr,
+                    error_report::ReportTilingStageError(
+                        tilingContext->GetNodeName(),
+                        "scaleLAttr is null in the tiling context; check the TilingContext construction"),
+                    return ge::GRAPH_FAILED);
         const float scaleL = *scaleLAttr;
         realScaleH = 1.0;
         realScaleW = ComputeScaleValue(inputShapes[NHWC_W_INDEX], outputShapes[NHWC_W_INDEX], scaleL);
