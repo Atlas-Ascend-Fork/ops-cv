@@ -1,0 +1,65 @@
+{
+  "op_type": "BilateralFilter3D",
+  "op_list": [
+    {
+      "bin_filename": "BilateralFilter3D_fp16",
+      "inputs": [
+        {
+          "name": "x",
+          "index": 0,
+          "dtype": "float16",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [-2],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ],
+      "attrs": [
+        {"name": "kernel_size", "type": "int", "value": null, "dtype": "int"},
+        {"name": "sigma_space", "type": "float", "value": null, "dtype": "float"},
+        {"name": "sigma_color", "type": "float", "value": null, "dtype": "float"}
+      ],
+      "outputs": [
+        {
+          "name": "y",
+          "index": 0,
+          "dtype": "float16",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [-2],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ]
+    },
+    {
+      "bin_filename": "BilateralFilter3D_fp32",
+      "inputs": [
+        {
+          "name": "x",
+          "index": 0,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [-2],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ],
+      "attrs": [
+        {"name": "kernel_size", "type": "int", "value": null, "dtype": "int"},
+        {"name": "sigma_space", "type": "float", "value": null, "dtype": "float"},
+        {"name": "sigma_color", "type": "float", "value": null, "dtype": "float"}
+      ],
+      "outputs": [
+        {
+          "name": "y",
+          "index": 0,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [-2],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ]
+    }
+  ]
+}
