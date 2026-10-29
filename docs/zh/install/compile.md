@@ -126,7 +126,7 @@
 
     ```bash
     # 卸载命令
-    ./${install_path}/cann/share/info/ops_cv/script/uninstall.sh
+    "${install_path}/cann/share/info/ops_cv/script/uninstall.sh"
     ```
 
 ### ops-cv静态库
