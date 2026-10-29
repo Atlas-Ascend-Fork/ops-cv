@@ -848,6 +848,13 @@ static ge::graphStatus RasterizerTilingFunc(gert::TilingContext* context)
     workspaceSizes[0] = static_cast<size_t>(result.totalWorkspaceBytes);
     return ge::GRAPH_SUCCESS;
 }
-IMPL_OP_OPTILING(Rasterizer).Tiling(RasterizerTilingFunc);
+struct RasterizerCompileInfo {};
+
+static ge::graphStatus TilingParseForRasterizer([[maybe_unused]] gert::TilingParseContext* context)
+{
+    return ge::GRAPH_SUCCESS;
+}
+
+IMPL_OP_OPTILING(Rasterizer).Tiling(RasterizerTilingFunc).TilingParse<RasterizerCompileInfo>(TilingParseForRasterizer);
 
 } // namespace optiling
