@@ -225,9 +225,12 @@ void ComputeRasterizerPublicTiling(const RasterizerPublicTilingInputs& in, Raste
         SetFailure(result, RasterizerPublicTilingStatus::kShapeMismatch);
         return;
     }
+    // README states occlusionTruncation only supports 0.0 currently; reject any
+    // other value (including non-finite) so callers cannot mistake a silently
+    // ignored attribute for an enabled feature.
     if (in.width < 1 || in.width > static_cast<int64_t>(kMaxDimension) || in.height < 1 ||
         in.height > static_cast<int64_t>(kMaxDimension) || !std::isfinite(in.occlusionTruncation) ||
-        in.useDepthPrior != 0) {
+        in.occlusionTruncation != 0.0f || in.useDepthPrior != 0) {
         SetFailure(result, RasterizerPublicTilingStatus::kAttributeValueOutOfRange);
         return;
     }

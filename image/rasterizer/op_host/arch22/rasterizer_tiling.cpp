@@ -49,7 +49,9 @@ static ge::graphStatus CheckParam(gert::TilingContext* context, const gert::Stor
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
     const int64_t* width = attrs->GetAttrPointer<int64_t>(IDX_0);
     const int64_t* height = attrs->GetAttrPointer<int64_t>(IDX_1);
+    const float* occlusionTruncation = attrs->GetAttrPointer<float>(IDX_2);
     const int64_t* useDepthPrior = attrs->GetAttrPointer<int64_t>(IDX_3);
+    OP_CHECK_NULL_WITH_CONTEXT(context, occlusionTruncation);
     OP_CHECK_NULL_WITH_CONTEXT(context, vShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, fShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, findicesShape);
@@ -91,6 +93,10 @@ static ge::graphStatus CheckParam(gert::TilingContext* context, const gert::Stor
         OP_LOGE(context, "dim0 and dim1 of findices/barycentric should be equal to height and width, please check"),
         return ge::GRAPH_FAILED);
     OP_CHECK_IF(*useDepthPrior != 0, OP_LOGE(context, "useDepthPrior should be 0, please check"),
+                return ge::GRAPH_FAILED);
+
+    OP_CHECK_IF(*occlusionTruncation != 0.0f,
+                OP_LOGE(context, "occlusionTruncation only supports 0.0 currently, please check"),
                 return ge::GRAPH_FAILED);
 
     return ge::GRAPH_SUCCESS;

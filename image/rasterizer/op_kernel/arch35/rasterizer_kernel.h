@@ -1184,8 +1184,10 @@ __simd_vf__ inline void EncodeWinnerVF(__ubuf__ int32_t* bestFace, __ubuf__ floa
         active = UpdateMask<float>(remain);
         LoadAlign(face, bestFace + off);
         Compares<int32_t, AscendC::CMPMODE::NE>(foreground, face, INT32_MAX, active);
-        Adds(encoded, face, 1, active);
-        Select<int32_t>(encoded, encoded, zeroI, foreground);
+        // bestFace holds the zero-based face index for covered pixels and
+        // INT32_MAX for uncovered ones; emit the face index as-is and 0 for
+        // uncovered pixels.
+        Select<int32_t>(encoded, face, zeroI, foreground);
         StoreAlign(bestFace + off, encoded, active);
         LoadAlign(b, bestB0 + off);
         Select<float>(b, b, zeroF, foreground);

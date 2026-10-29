@@ -129,3 +129,28 @@ TEST_F(RasterizerTiling, rasterizer_tiling_zero_faces_rejected)
     std::vector<size_t> expectWorkspaces = {0};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, expectTilingKey, expectTilingData, expectWorkspaces);
 }
+
+TEST_F(RasterizerTiling, rasterizer_tiling_nonzero_occlusion_truncation_rejected)
+{
+    gert::StorageShape v_shape = {{3, 4}, {3, 4}};
+    gert::StorageShape f_shape = {{1, 3}, {1, 3}};
+    gert::StorageShape d_shape = {{10, 10}, {10, 10}};
+    gert::StorageShape findices_shape = {{10, 10}, {10, 10}};
+    gert::StorageShape bary_shape = {{10, 10, 3}, {10, 10, 3}};
+    RasterizerCompileInfo compileInfo = {};
+    gert::TilingContextPara tilingContextPara(
+        "Rasterizer",
+        {{v_shape, ge::DT_FLOAT, ge::FORMAT_ND},
+         {f_shape, ge::DT_INT32, ge::FORMAT_ND},
+         {d_shape, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{findices_shape, ge::DT_INT32, ge::FORMAT_ND}, {bary_shape, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("width", Ops::Cv::AnyValue::CreateFrom<int64_t>(10)),
+         gert::TilingContextPara::OpAttr("height", Ops::Cv::AnyValue::CreateFrom<int64_t>(10)),
+         gert::TilingContextPara::OpAttr("occlusion_truncation", Ops::Cv::AnyValue::CreateFrom<float>(0.1)),
+         gert::TilingContextPara::OpAttr("use_depth_prior", Ops::Cv::AnyValue::CreateFrom<int64_t>(0))},
+        &compileInfo);
+    uint64_t expectTilingKey = 0;
+    string expectTilingData;
+    std::vector<size_t> expectWorkspaces = {0};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, expectTilingKey, expectTilingData, expectWorkspaces);
+}

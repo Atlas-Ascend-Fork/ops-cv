@@ -305,12 +305,13 @@ __aicore__ inline void BarycentricFromImgcoordAIV<T>::GenFindicesAndPreVertData(
 
         // default value of findices space is MAXINT
         if (findicesValue != std::numeric_limits<int32_t>::max()) {
-            findicesLocal.SetValue(pixId, findicesValue);
-            // valid index: (idx + 1) -1
+            // zbuffer saves (faceIdx + 1); output the zero-based face index
             int32_t faceIdx = findicesValue - 1;
             if (faceIdx < 0) {
+                findicesLocal.SetValue(pixId, static_cast<int32_t>(0));
                 flagLocal.SetValue(pixId, static_cast<int32_t>(0));
             } else {
+                findicesLocal.SetValue(pixId, faceIdx);
                 flagLocal.SetValue(pixId, static_cast<int32_t>(1));
                 // prepare vertex data in ub when face idx is valid
                 GetVertData(faceIdx, pixId);
@@ -571,6 +572,10 @@ template <typename T>
 __aicore__ inline void BarycentricFromImgcoordAIV<T>::Process()
 {
     GenMaskDataInGM();
+    // maskGM is shared by all vec cores and gathered in full by CopyOutRslt.
+    // Sync here so every core's mask write is globally visible before any
+    // core issues the Gather, otherwise stale workspace data may be read.
+    SyncAll();
 
     if (this->calPixNum == 0) {
         return;
