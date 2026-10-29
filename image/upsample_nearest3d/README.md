@@ -13,6 +13,8 @@
 |  <term>Kirin X90处理器系列产品</term> | √ |
 |  <term>Kirin 9030处理器系列产品</term> | √ |
 
+- <term>Ascend 950PR/Ascend 950DT（A5）</term>上不支持 GEIR。
+
 ## 功能说明
 
 - 算子功能：对由多个输入通道组成的输入信号应用最近邻插值算法进行上采样。
@@ -95,7 +97,7 @@
 
 ## 约束说明
 
-无
+- <term>Ascend 950PR/Ascend 950DT（A5）</term>上不支持 GEIR，不支持通过算子 IR（[op_graph/upsample_nearest3d_proto.h](op_graph/upsample_nearest3d_proto.h)）构图方式调用本算子。
 
 ## 调用说明
 
@@ -104,4 +106,4 @@
 | aclnn接口  | [test_aclnn_upsample_nearest1d_v2](examples/test_aclnn_upsample_nearest1d_v2.cpp) | 通过[aclnnUpsampleNearest1dV2](docs/aclnnUpsampleNearest1dV2.md)接口方式调用UpsampleNearest3d算子。 |
 | aclnn接口  | [test_aclnn_upsample_nearest2d_v2](examples/test_aclnn_upsample_nearest2d_v2.cpp) | 通过[aclnnUpsampleNearest2dV2](docs/aclnnUpsampleNearest2dV2.md)接口方式调用UpsampleNearest3d算子。 |
 | aclnn接口  | [test_aclnn_upsample_nearest3d](examples/test_aclnn_upsample_nearest3d.cpp) | 通过[aclnnUpsampleNearest3d](docs/aclnnUpsampleNearest3d.md)接口方式调用UpsampleNearest3d算子。 |
-| 图模式 | -  | 通过[算子IR](op_graph/upsample_nearest3d_proto.h)构图方式调用UpsampleNearest3d算子。         |
+| 图模式 | -  | 通过[算子IR](op_graph/upsample_nearest3d_proto.h)构图方式调用UpsampleNearest3d算子。<term>Ascend 950PR/Ascend 950DT（A5）</term>上不支持 GEIR，该调用方式不适用。         |

@@ -118,9 +118,11 @@ static bool CheckShapeValid(const aclTensor* gradOut, const aclIntArray* outputS
     FVector<int64_t> fullOutputSize = {N, C, outputL};
     FVector<int64_t> fullInputSize = {N, C, inputL};
 
-    OP_CHECK(inputL > 0 && outputL > 0,
+    OP_CHECK(N > 0 && C > 0 && inputL > 0 && outputL > 0,
              OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "Size of H must be greater than 0, but got input (L: %ld), output (L: %ld)", inputL, outputL),
+                     "Size of N, C and L must be greater than 0, but got inputSize (N: %ld, C: %ld, L: %ld), "
+                     "outputSize (L: %ld)",
+                     N, C, inputL, outputL),
              return false);
 
     auto gradOutShape = gradOut->GetViewShape();

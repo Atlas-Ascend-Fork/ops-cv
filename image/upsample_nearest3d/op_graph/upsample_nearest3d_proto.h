@@ -10,7 +10,7 @@
 
 /*!
  * \file upsample_nearest3d_proto.h
- * \brief
+ * \brief UpsampleNearest3d operator proto. Ascend 950PR/Ascend 950DT (A5) does not support GEIR.
  */
 #ifndef OPS_OP_PROTO_INC_UPSAMPLE_NEAREST3D_H_
 #define OPS_OP_PROTO_INC_UPSAMPLE_NEAREST3D_H_
