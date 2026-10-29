@@ -1,0 +1,187 @@
+{
+  "op_type": "HOGDescriptor",
+  "op_list": [
+    {
+      "bin_filename": "HOGDescriptor_fp16",
+      "inputs": [
+        {
+          "name": "x",
+          "index": 0,
+          "dtype": "float16",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ],
+      "attrs": [
+        {
+          "name": "pixels_per_cell",
+          "type": "list_int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "cells_per_block",
+          "type": "list_int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "block_stride",
+          "type": "list_int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "orientations",
+          "type": "int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "block_norm",
+          "type": "string",
+          "value": null,
+          "dtype": "string"
+        },
+        {
+          "name": "l2_hys_threshold",
+          "type": "float",
+          "value": null,
+          "dtype": "float"
+        },
+        {
+          "name": "gamma_correction",
+          "type": "bool",
+          "value": null,
+          "dtype": "bool"
+        },
+        {
+          "name": "signed_gradient",
+          "type": "bool",
+          "value": null,
+          "dtype": "bool"
+        },
+        {
+          "name": "derivative_aperture",
+          "type": "int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "eps",
+          "type": "float",
+          "value": null,
+          "dtype": "float"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "descriptor",
+          "index": 0,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ]
+    },
+    {
+      "bin_filename": "HOGDescriptor_fp32",
+      "inputs": [
+        {
+          "name": "x",
+          "index": 0,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ],
+      "attrs": [
+        {
+          "name": "pixels_per_cell",
+          "type": "list_int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "cells_per_block",
+          "type": "list_int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "block_stride",
+          "type": "list_int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "orientations",
+          "type": "int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "block_norm",
+          "type": "string",
+          "value": null,
+          "dtype": "string"
+        },
+        {
+          "name": "l2_hys_threshold",
+          "type": "float",
+          "value": null,
+          "dtype": "float"
+        },
+        {
+          "name": "gamma_correction",
+          "type": "bool",
+          "value": null,
+          "dtype": "bool"
+        },
+        {
+          "name": "signed_gradient",
+          "type": "bool",
+          "value": null,
+          "dtype": "bool"
+        },
+        {
+          "name": "derivative_aperture",
+          "type": "int",
+          "value": null,
+          "dtype": "int"
+        },
+        {
+          "name": "eps",
+          "type": "float",
+          "value": null,
+          "dtype": "float"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "descriptor",
+          "index": 0,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ]
+    }
+  ]
+}
