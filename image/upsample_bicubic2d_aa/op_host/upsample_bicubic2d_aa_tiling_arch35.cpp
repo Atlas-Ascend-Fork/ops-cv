@@ -212,7 +212,7 @@ ge::graphStatus UpsampleBicubic2dAARegbaseTiling::CheckInputParams()
     baseTiling_.outH = outShape.GetDim(CONST_2);
     baseTiling_.outW = outShape.GetDim(CONST_3);
     OP_CHECK_IF(inputSize == 0 || outputSize == 0, OP_LOGE(context_, "empty input or output is not supported"),
-                ge::GRAPH_FAILED);
+                return ge::GRAPH_FAILED);
     int64_t int32Max = static_cast<int64_t>(std::numeric_limits<int32_t>::max());
     int32_t isInt32 = static_cast<int32_t>((inputSize <= int32Max) && (outputSize <= int32Max));
     baseTiling_.isInt32 = isInt32;

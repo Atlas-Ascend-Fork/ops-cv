@@ -32,7 +32,7 @@ const aclTensor* UpsampleBicubic2dAA(const aclTensor* x, const aclIntArray* size
                                      const aclTensor* y, const float scalesH, const float scalesW,
                                      aclOpExecutor* executor)
 {
-    L0_DFX(UpsampleBicubic2dAA, x, size, alignCorners, scalesH, scalesH);
+    L0_DFX(UpsampleBicubic2dAA, x, size, alignCorners, scalesH, scalesW);
 
     aclTensor* out = executor->AllocTensor(y->GetViewShape(), x->GetDataType(), y->GetViewFormat());
     CHECK_RET(out != nullptr, nullptr);
