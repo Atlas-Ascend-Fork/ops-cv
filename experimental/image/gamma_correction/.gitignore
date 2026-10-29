@@ -1,0 +1,4 @@
+build/
+build_out/
+*.bin
+__pycache__/
