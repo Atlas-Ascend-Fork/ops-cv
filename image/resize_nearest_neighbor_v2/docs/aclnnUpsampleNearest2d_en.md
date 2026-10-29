@@ -139,7 +139,7 @@ aclnnStatus aclnnUpsampleNearest2d(
 <!-- npu="910,310p" id7 -->
 - <term>Atlas inference products</term>, <term>Atlas training products</term>:
 
-  The data types of input parameter `self` and output parameter `out` do not support FLOAT32 or BFLOAT16.
+  The data types of input parameter `self` and output parameter `out` do not support BFLOAT16.
 <!-- end id7 -->
 
 - **Return Value**
