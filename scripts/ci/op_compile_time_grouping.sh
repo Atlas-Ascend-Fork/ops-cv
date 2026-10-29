@@ -16,13 +16,7 @@ SCRIPT_NAME="op_compile_time_grouping"
 LOG_FILE=""
 CODE_PATH=""
 
-TMP_FILES=(
-  result_cv.csv
-  result_image.csv
-  result_objdetect.csv
-  result0.csv
-  result1.csv
-)
+TMP_DIR=""
 
 # =========================================
 # Help
@@ -86,11 +80,10 @@ parse_args() {
 }
 
 cleanup() {
-    for f in "${TMP_FILES[@]}"; do
-        [[ -f "$f" ]] && rm -f "$f"
-    done
+    if [[ -n "$TMP_DIR" ]]; then
+        rm -rf -- "$TMP_DIR"
+    fi
 }
-trap cleanup EXIT
 
 generate_yaml() {
     yaml_file="op_compile_group.yaml"
@@ -152,11 +145,11 @@ for op in "${!op_time_max[@]}"; do
     base_op="${op%_apt}"
 
     if [[ -d "$cv_path/$base_op" ]]; then
-        echo "$base_op,$val" >> result_cv.csv
+        echo "$base_op,$val" >> "${TMP_DIR}/result_cv.csv"
     elif [[ -d "$image_path/$base_op" ]]; then
-        echo "$base_op,$val" >> result_image.csv
+        echo "$base_op,$val" >> "${TMP_DIR}/result_image.csv"
     elif [[ -d "$objdetect_path/$base_op" ]]; then
-        echo "$base_op,$val" >> result_objdetect.csv
+        echo "$base_op,$val" >> "${TMP_DIR}/result_objdetect.csv"
     else
         echo "ERROR: operator not found in any category: $base_op"
         exit 1
@@ -168,13 +161,13 @@ done
 echo "TOTAL_TIME=$total_time"
 
 {
-  [[ -f result_cv.csv ]] && sort result_cv.csv
-  [[ -f result_image.csv ]] && sort result_image.csv
-  [[ -f result_objdetect.csv ]] && sort result_objdetect.csv
-} > result0.csv
+  [[ -f "${TMP_DIR}/result_cv.csv" ]] && sort "${TMP_DIR}/result_cv.csv"
+  [[ -f "${TMP_DIR}/result_image.csv" ]] && sort "${TMP_DIR}/result_image.csv"
+  [[ -f "${TMP_DIR}/result_objdetect.csv" ]] && sort "${TMP_DIR}/result_objdetect.csv"
+} > "${TMP_DIR}/result0.csv"
 
-echo "op_name,exe_time_sum" > result1.csv
-cat result0.csv >> result1.csv
+echo "op_name,exe_time_sum" > "${TMP_DIR}/result1.csv"
+cat "${TMP_DIR}/result0.csv" >> "${TMP_DIR}/result1.csv"
 
 awk -F',' '
 function assign_group(n,    i,sum,threshold,group) {
@@ -203,7 +196,7 @@ END{
     for(i=2;i<=NR;i++)
         print op[i] "," time[i] "," gid[i]
 }
-' result1.csv > result.csv
+' "${TMP_DIR}/result1.csv" > result.csv
 
 echo "Generate result.csv successfully"
 
@@ -211,4 +204,6 @@ generate_yaml
 }
 
 parse_args "$@"
+TMP_DIR=$(mktemp -d)
+trap cleanup EXIT
 main
