@@ -594,6 +594,8 @@ template <typename T, bool ALIGNED, bool CLOCKWISE, bool SR_FIXED>
 __aicore__ inline void RoiAlignRotatedGradLaunch(const RoiAlignRotatedGradTilingData* tilingData, __gm__ T* xGradGm,
                                                  __gm__ T* roisGm, __gm__ T* yGradGm, __ubuf__ uint64_t* magicPtr)
 {
+    // int32 窄化契约（CODE.18/1）：N/B/H/W/sampling_ratio 上界由 host 侧 ValidateAttr/ValidateShape
+    // 显式校验保证（≤ INT32_MAX），此处窄化安全；totalUnits 为 uint64 传递不受此限
     asc_vf_call<RoiAlignRotatedGradScatter<T, ALIGNED, CLOCKWISE, SR_FIXED>>(
         dim3(THREAD_NUM), (uint64_t)tilingData->totalUnits, (int32_t)tilingData->roiNum, (int32_t)tilingData->batchSize,
         (int32_t)tilingData->height, (int32_t)tilingData->width, (int32_t)tilingData->channelNum,

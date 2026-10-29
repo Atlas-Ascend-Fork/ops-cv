@@ -54,11 +54,12 @@ static constexpr int32_t kAlignedIdx = 5;
 static constexpr int32_t kClockwiseIdx = 6;
 
 // ══ 维度常量（SE §6.3 表1/表2）══════════════════════════════════════════════
-static constexpr size_t X_GRAD_RANK = 4;      // x_grad 4 维 [N, PH, PW, C]
-static constexpr size_t ROIS_RANK = 2;        // rois 2 维 [6, N] 转置布局
-static constexpr int64_t ROI_FIELD_NUM = 6;   // rois 第 0 维固定 6（字段数）
-static constexpr size_t Y_GRAD_SHAPE_LEN = 4; // y_grad_shape 长度 4（[B,H,W,C]）
-static constexpr int64_t DIM_LIMIT = 1024;    // 910B README 约束：C/PH/PW ∈ [0,1024]
+static constexpr size_t X_GRAD_RANK = 4;           // x_grad 4 维 [N, PH, PW, C]
+static constexpr size_t ROIS_RANK = 2;             // rois 2 维 [6, N] 转置布局
+static constexpr int64_t ROI_FIELD_NUM = 6;        // rois 第 0 维固定 6（字段数）
+static constexpr size_t Y_GRAD_SHAPE_LEN = 4;      // y_grad_shape 长度 4（[B,H,W,C]）
+static constexpr int64_t DIM_LIMIT = 1024;         // 910B README 约束：C/PH/PW ∈ [0,1024]
+static constexpr int64_t INT32_LIMIT = 2147483647; // kernel int32 消费上界（VF 参数窄化契约，CODE.18/1）
 static constexpr size_t BATCH_DIM = 0;
 static constexpr size_t HEIGHT_DIM = 1;
 static constexpr size_t WIDTH_DIM = 2;
@@ -169,6 +170,13 @@ static ge::graphStatus ValidateAttr(gert::TilingContext* context)
                                                   "each element must be greater than or equal to 0");
             return ge::GRAPH_FAILED;
         }
+        // 上界为 kernel int32 消费契约：B/H/W 经 VF 参数窄化（CODE.18/1）
+        if (yGradShape->GetData()[i] > INT32_LIMIT) {
+            const std::string actual = std::to_string(yGradShape->GetData()[i]);
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "y_grad_shape", actual.c_str(),
+                                                  "each element must not exceed 2147483647");
+            return ge::GRAPH_FAILED;
+        }
     }
 
     // SE "参数约束"小节单参数约束: pooled_h > 0、pooled_w > 0（C8，REG_OP 注释约束）
@@ -191,7 +199,8 @@ static ge::graphStatus ValidateAttr(gert::TilingContext* context)
         return ge::GRAPH_FAILED;
     }
 
-    // SE "参数约束"小节单参数约束: sampling_ratio ≥ 0（C9，0 = 稠密采样）
+    // SE "参数约束"小节单参数约束: sampling_ratio ≥ 0（C9，0 = 稠密采样）；
+    // 上界为 kernel int32 消费契约：SR_FIXED 分支 gridH = sampling_ratio（CODE.18/1）
     const int64_t* samplingRatio = attrs->GetAttrPointer<int64_t>(kSamplingRatioIdx);
     if (!RequireNotNull(context, samplingRatio, "samplingRatio")) {
         return ge::GRAPH_FAILED;
@@ -200,6 +209,12 @@ static ge::graphStatus ValidateAttr(gert::TilingContext* context)
         const std::string actual = std::to_string(*samplingRatio);
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "sampling_ratio", actual.c_str(),
                                               "must be greater than or equal to 0");
+        return ge::GRAPH_FAILED;
+    }
+    if (*samplingRatio > INT32_LIMIT) {
+        const std::string actual = std::to_string(*samplingRatio);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "sampling_ratio", actual.c_str(),
+                                              "must not exceed 2147483647");
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -250,6 +265,13 @@ static ge::graphStatus ValidateShape(gert::TilingContext* context)
                                    std::to_string(roisShape.GetDim(1)) + "]";
         OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(OpNameOf(context), "x_grad, rois", actual.c_str(),
                                                "the number of x_grad and rois must be the same");
+        return ge::GRAPH_FAILED;
+    }
+    // kernel int32 消费契约：N = x_grad.dim(0) = rois.dim(1) 经 VF 参数窄化（CODE.18/1）
+    if (xGradShape.GetDim(0) > INT32_LIMIT) {
+        const std::string actual = "[" + std::to_string(xGradShape.GetDim(0)) + "]";
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "x_grad", actual.c_str(),
+                                              "dim0(N) must not exceed 2147483647");
         return ge::GRAPH_FAILED;
     }
     // SE "参数约束"小节跨参数约束: x_grad.dim(1) == pooled_h 且 dim(2) == pooled_w（C4）
