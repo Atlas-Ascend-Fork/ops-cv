@@ -101,7 +101,7 @@ def get_file_change_info_from_ci(changed_file_info_from_ci, ops_path):
             rf"({'|'.join(ops_path)})/.*/tests/ut/op_graph/.*\.(cc|cpp|txt)$"
         )
         p["kernel_test"] = re.compile(
-            rf"({'|'.join(ops_path)})/.*/tests/ut/op_kernel/.*\.(cc|cpp|txt)$"
+            rf"({'|'.join(ops_path)})/.*/tests/ut/op_kernel/.*\.(cc|cpp|txt|py)$"
         )
         p["kernel_aicpu_test"] = re.compile(
             rf"({'|'.join(ops_path)})/.*/tests/ut/op_kernel_aicpu/.*\.(cc|cpp|txt)$"
