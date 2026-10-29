@@ -1,0 +1,155 @@
+{
+    "op_type": "ROIAlign",
+    "op_list": [
+        {
+            "bin_filename": "ROIAlign_float32",
+            "inputs": [
+                {
+                    "name": "features",
+                    "index": 0,
+                    "dtype": "float32",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [-2],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "rois",
+                    "index": 1,
+                    "dtype": "float32",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [-2],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "rois_n",
+                    "index": 2,
+                    "dtype": "int32",
+                    "format": "ND",
+                    "paramType": "optional",
+                    "shape": [-2],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "float32",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [-2],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "spatial_scale",
+                    "dtype": "float",
+                    "value": null
+                },
+                {
+                    "name": "pooled_height",
+                    "dtype": "int",
+                    "value": null
+                },
+                {
+                    "name": "pooled_width",
+                    "dtype": "int",
+                    "value": null
+                },
+                {
+                    "name": "sample_num",
+                    "dtype": "int",
+                    "value": 2
+                },
+                {
+                    "name": "roi_end_mode",
+                    "dtype": "int",
+                    "value": 1
+                },
+                {
+                    "name": "pool_mode",
+                    "dtype": "string",
+                    "value": "avg"
+                }
+            ]
+        },
+        {
+            "bin_filename": "ROIAlign_float16",
+            "inputs": [
+                {
+                    "name": "features",
+                    "index": 0,
+                    "dtype": "float16",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [-2],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "rois",
+                    "index": 1,
+                    "dtype": "float16",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [-2],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "rois_n",
+                    "index": 2,
+                    "dtype": "int32",
+                    "format": "ND",
+                    "paramType": "optional",
+                    "shape": [-2],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "float16",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [-2],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "spatial_scale",
+                    "dtype": "float",
+                    "value": null
+                },
+                {
+                    "name": "pooled_height",
+                    "dtype": "int",
+                    "value": null
+                },
+                {
+                    "name": "pooled_width",
+                    "dtype": "int",
+                    "value": null
+                },
+                {
+                    "name": "sample_num",
+                    "dtype": "int",
+                    "value": 2
+                },
+                {
+                    "name": "roi_end_mode",
+                    "dtype": "int",
+                    "value": 1
+                },
+                {
+                    "name": "pool_mode",
+                    "dtype": "string",
+                    "value": "avg"
+                }
+            ]
+        }
+    ]
+}

@@ -50,6 +50,7 @@ public:
             .ExtendCfgInfo("opFile.value", "decode_bbox_v2_apt");
 
         this->AICore().AddConfig("ascend950", aicoreConfig);
+        this->AICore().AddConfig("ascend350", aicoreConfig);
     }
 };
 OP_ADD(DecodeBboxV2);

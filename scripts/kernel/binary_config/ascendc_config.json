@@ -594,8 +594,8 @@
     {"name":"Rasterizer", "compute_units": ["ascend910b", "ascend910_93"], "auto_sync" : false, "impl_mode" : ""},
     {"name":"ExtractGlimpseV2", "compute_units": ["ascend950", "ascend350"], "auto_sync": false},
     {"name":"RoiAlignV2", "compute_units": ["ascend910b"], "auto_sync":false, "impl_mode" : ""},
-    {"name":"ROIAlign", "compute_units": ["ascend950"], "auto_sync":false, "compile_options": {"ascend950": ["--cce-use-fast-math=false"]}, "impl_mode" : ""},
+    {"name":"ROIAlign", "compute_units": ["ascend950", "ascend350"], "auto_sync":false, "compile_options": {"ascend950": ["--cce-use-fast-math=false"], "ascend350": ["--cce-use-fast-math=false"]}, "impl_mode" : ""},
     {"name":"DIoUGrad", "compute_units": ["ascend950", "ascend350"], "auto_sync": false},
     {"name":"GIoUGrad", "compute_units": ["ascend950", "ascend350"], "auto_sync": false},
-    {"name":"ImgRawDecodePostHandle", "compute_units": ["ascend950"], "auto_sync": false, "compile_options": {"ascend950": ["--cce-ftz=false"]}}
+    {"name":"ImgRawDecodePostHandle", "compute_units": ["ascend950", "ascend350"], "auto_sync": false, "compile_options": {"ascend950": ["--cce-ftz=false"], "ascend350": ["--cce-ftz=false"]}}
 ]

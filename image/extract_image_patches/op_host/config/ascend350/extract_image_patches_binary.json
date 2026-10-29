@@ -1,0 +1,115 @@
+{
+  "op_type": "ExtractImagePatches",
+  "op_list": [
+    {
+      "bin_filename": "ExtractImagePatches_fp16_nhwc_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "float16", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "float16", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    },
+    {
+      "bin_filename": "ExtractImagePatches_fp32_nhwc_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "float32", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "float32", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    },
+    {
+      "bin_filename": "ExtractImagePatches_bf16_nhwc_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "bfloat16", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "bfloat16", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    },
+    {
+      "bin_filename": "ExtractImagePatches_int8_nhwc_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "int8", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "int8", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    },
+    {
+      "bin_filename": "ExtractImagePatches_uint8_nhwc_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "uint8", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "uint8", "format": "NHWC", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    },
+    {
+      "bin_filename": "ExtractImagePatches_fp16_nchw_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "float16", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "float16", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    },
+    {
+      "bin_filename": "ExtractImagePatches_fp32_nchw_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "float32", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "float32", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    },
+    {
+      "bin_filename": "ExtractImagePatches_bf16_nchw_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "bfloat16", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "bfloat16", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    },
+    {
+      "bin_filename": "ExtractImagePatches_int8_nchw_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "int8", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "int8", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    },
+    {
+      "bin_filename": "ExtractImagePatches_uint8_nchw_d8a3e2f1b5c6d7e8f9a0b1c2d3e4f5a6",
+      "inputs": [{ "name": "x", "index": 0, "dtype": "uint8", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "outputs": [{ "name": "y", "index": 0, "dtype": "uint8", "format": "NCHW", "paramType": "required", "shape": [-2] }],
+      "attrs": [
+        { "name": "ksizes", "dtype": "list_int", "value": [] },
+        { "name": "strides", "dtype": "list_int", "value": [] },
+        { "name": "rates", "dtype": "list_int", "value": [] },
+        { "name": "padding", "dtype": "string", "value": "" }
+      ]
+    }
+  ]
+}
