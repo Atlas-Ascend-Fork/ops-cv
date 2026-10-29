@@ -86,6 +86,7 @@ objdetect@ops-cv:
                 - ops/ops-cv/objdetect/bounding_box_encode/op_host/
                 - ops/ops-cv/objdetect/bounding_box_encode/op_kernel/
                 - ops/ops-cv/objdetect/bounding_box_encode/examples/
+                - ops/ops-cv/objdetect/bounding_box_encode/tests/
                 - ops/ops-cv/objdetect/check_valid/op_host/
                 - ops/ops-cv/objdetect/check_valid/op_kernel/
                 - ops/ops-cv/objdetect/check_valid/examples/
@@ -164,6 +165,7 @@ objdetect@ops-cv:
                 - ops/ops-cv/objdetect/to_absolute_b_box/op_host/
                 - ops/ops-cv/objdetect/to_absolute_b_box/op_kernel/
                 - ops/ops-cv/objdetect/to_absolute_b_box/examples/
+                - ops/ops-cv/objdetect/to_absolute_b_box/tests/
                 - ops/ops-cv/objdetect/yolo/op_host/
                 - ops/ops-cv/objdetect/yolo/op_kernel/
                 - ops/ops-cv/objdetect/yolo/examples/
