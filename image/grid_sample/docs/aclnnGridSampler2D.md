@@ -56,6 +56,17 @@
       y = ((grid_y +1) * H_{in} - 1) / 2
       $$
 
+  - 四角采样示例：当input的shape为(1, 1, 2, 2)、唯一通道的像素为`[[1, 2], [3, 4]]`、alignCorners=true时，归一化坐标与最近邻采样结果如下：
+
+    | grid坐标(x, y) | 图像位置 | 采样结果 |
+    | --- | --- | --- |
+    | (-1, -1) | 左上角 | 1 |
+    | (1, -1) | 右上角 | 2 |
+    | (-1, 1) | 左下角 | 3 |
+    | (1, 1) | 右下角 | 4 |
+
+    alignCorners=true时，-1和1分别映射到首、末像素的中心；alignCorners=false时，分别映射到图像外边界，即x为-0.5和W<sub>in</sub>-0.5、y为-0.5和H<sub>in</sub>-0.5，采样结果还取决于interpolationMode和paddingMode。
+
   - 对于超出范围的坐标，会根据paddingMode进行不同处理：
 
     - paddingMode=0，表示对越界位置用0填充。
@@ -265,6 +276,8 @@ aclnnStatus aclnnGridSampler2D(
   </tbody>
   </table>
 
+  DOUBLE数据通过AI CPU执行，支持bilinear和nearest插值，不支持bicubic。上表列出接口整体支持的数据类型，各产品的具体限制如下。
+
   <!-- npu="910" id7 -->
   - <term>Atlas训练系列产品</term>：
     - 入参`interpolationMode`不支持插值模式2：bicubic（双三次插值）。
@@ -292,11 +305,14 @@ aclnnStatus aclnnGridSampler2D(
   <!-- npu="310p" id10 -->
   - <term>Atlas推理系列产品</term>：
 
+    参数`input`、`grid`、`out`不支持BFLOAT16数据类型。
+
     当接口运行在AI Core时，需要满足如下条件：
     - 入参`interpolationMode`为bilinear。
     - 入参`paddingMode`为zeros。
-    - 参数`input`、`grid`、`out`的数据类型为FLOAT32。
-    - 参数`input`的shape需要满足C维的值为32或者C*H*W < 20480。
+    - 参数`input`、`grid`、`out`的数据类型为FLOAT32或FLOAT16，且满足以下数据类型对应的shape条件。
+    - FLOAT32：参数`input`的shape需要满足C维的值为32或者C*H*W < 20480。
+    - FLOAT16：参数`input`的shape需要满足C*H*W < 20480。input和grid先转换为FLOAT32进行计算，结果再转换回FLOAT16；仅满足C维的值为32不能使用此AI Core路径。
     - 参数`input`的数据格式不支持NHWC。
   <!-- end id10 -->
 
@@ -332,7 +348,7 @@ aclnnStatus aclnnGridSampler2D(
     <tr>
       <td>interpolationMode或paddingMode的值不在支持范围内。</td></tr>
     <tr>
-      <td>interpolationMode为bicubic时，input、grid、out的数据类型不是FLOAT32或者FLOAT16。</td>
+      <td>interpolationMode为bicubic时，当前产品不支持该插值模式，或者input、grid、out的数据类型不是FLOAT32、FLOAT16或BFLOAT16。</td>
     </tr>
     <tr>
       <td>input、grid、out的维度关系不匹配。</td>

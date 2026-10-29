@@ -34,7 +34,7 @@ The dimensions of the input, grid, and output are as follows:
   output: (N, C, H_{out}, W_{out})
   $$
 
-  Here, N of input, grid, and output are consistent; C of input and output are consistent; $H_{out}$ and $W_{out}$ of grid and output are consistent; the last dimension of grid is 2, indicating that the input pixel position information is (x, y), and the value ranges of x and y are normalized to [-1, 1], where (-1, 1) indicates the top-left corner coordinate and (1, -1) indicates the bottom-right corner coordinate.
+  Here, N of input, grid, and output are consistent; C of input and output are consistent; $H_{out}$ and $W_{out}$ of grid and output are consistent; the last dimension of grid is 2, indicating that the input pixel position information is (x, y), and the value ranges of x and y are normalized to [-1, 1], where (-1, -1) indicates the top-left corner coordinate and (1, 1) indicates the bottom-right corner coordinate.
   - Formula for de-normalization:
     - alignCorners=true means the feature value is located at the pixel center.
 
@@ -55,6 +55,17 @@ The dimensions of the input, grid, and output are as follows:
       $$
       y' = ((grid\_y +1) * H_{in} - 1) / 2
       $$
+
+  - Corner sampling example: when input has shape (1, 1, 2, 2), its only channel contains `[[1, 2], [3, 4]]`, and alignCorners=true, the normalized coordinates and nearest-neighbor sampling results are as follows:
+
+    | Grid coordinate (x, y) | Image position | Sampled value |
+    | --- | --- | --- |
+    | (-1, -1) | Top-left | 1 |
+    | (1, -1) | Top-right | 2 |
+    | (-1, 1) | Bottom-left | 3 |
+    | (1, 1) | Bottom-right | 4 |
+
+    When alignCorners=true, -1 and 1 map to the centers of the first and last pixels. When alignCorners=false, they map to the outer image boundaries: -0.5 and W<sub>in</sub>-0.5 for x, and -0.5 and H<sub>in</sub>-0.5 for y. The sampled values then also depend on interpolationMode and paddingMode.
 
   - Coordinates out of range are handled differently according to paddingMode:
 
@@ -266,6 +277,8 @@ aclnnStatus aclnnGridSampler2D(
   </tbody>
   </table>
 
+  DOUBLE data is processed on the AI CPU and supports bilinear and nearest interpolation, but not bicubic interpolation. The table lists the data types supported by the API as a whole. Product-specific restrictions are listed below.
+
   <!-- npu="910" id7 -->
   - <term>Atlas training products</term>:
     - The parameter `interpolationMode` does not support interpolation mode 2: bicubic.
@@ -288,11 +301,14 @@ aclnnStatus aclnnGridSampler2D(
   <!-- npu="310p" id10 -->
   - <term>Atlas inference products</term>:
 
+    The parameters `input`, `grid`, and `out` do not support the BFLOAT16 data type.
+
     When the API runs on the AI Core, the following conditions must be met:
     - The input parameter `interpolationMode` is bilinear.
     - The input parameter `paddingMode` is zeros.
-    - The data types of parameters `input`, `grid`, and `out` are FLOAT32.
-    - The shape of parameter `input` must have a C dimension value of 32, or C*H*W < 20480.
+    - The data types of parameters `input`, `grid`, and `out` are FLOAT32 or FLOAT16, with the corresponding shape requirements below.
+    - FLOAT32: the shape of parameter `input` must satisfy C=32 or C*H*W < 20480.
+    - FLOAT16: the shape of parameter `input` must satisfy C*H*W < 20480. input and grid are converted to FLOAT32 for computation, and the result is converted back to FLOAT16. C=32 alone is insufficient to use this AI Core path.
     - The data format of parameter `input` does not support NHWC.
   <!-- end id10 -->
 
@@ -328,7 +344,7 @@ aclnnStatus aclnnGridSampler2D(
     <tr>
       <td>The value of interpolationMode or paddingMode is not within the supported range.</td></tr>
     <tr>
-      <td>When interpolationMode is bicubic, the data type of input, grid, or output is not FLOAT32 or FLOAT16.</td>
+      <td>When interpolationMode is bicubic, the current product does not support this interpolation mode, or the data type of input, grid, or out is not FLOAT32, FLOAT16, or BFLOAT16.</td>
     </tr>
     <tr>
       <td>The dimension relationship among input, grid, and output does not match.</td>
