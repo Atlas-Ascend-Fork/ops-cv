@@ -130,13 +130,19 @@ def has_aclnn_entry(op_path: str) -> bool:
         api_dir = os.path.join(op_path, sub_dir)
         if os.path.isdir(api_dir):
             for entry in os.listdir(api_dir):
-                if entry.startswith("aclnn_"):
+                if entry.startswith("aclnn_") and os.path.isfile(
+                    os.path.join(api_dir, entry)
+                ):
                     return True
     for sub_dir in ACLNN_CMAKE_DIRS:
         cmake = os.path.join(op_path, sub_dir, "CMakeLists.txt")
         try:
             with open(cmake, encoding="utf-8", errors="ignore") as file:
-                if ACLNN_TYPE_RE.search(file.read()):
+                # Ignore ordinary full-line comments while preserving multiline declarations.
+                content = "".join(
+                    line for line in file if not line.lstrip().startswith("#")
+                )
+                if ACLNN_TYPE_RE.search(content):
                     return True
         except OSError:
             continue
