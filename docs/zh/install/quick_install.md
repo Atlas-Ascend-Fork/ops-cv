@@ -120,7 +120,7 @@
       下载与CANN版本配套的分支源码，命令如下，`${tag_version}`替换为分支标签名。
 
       ```bash
-      git clone -b ${tag_version} https://gitcode.com/cann/ops-cv.git
+      git clone -b ${tag_version} https://gitcode.com/cann/ops-cv.git && cd ops-cv
       ```
 
   2. 安装依赖。
