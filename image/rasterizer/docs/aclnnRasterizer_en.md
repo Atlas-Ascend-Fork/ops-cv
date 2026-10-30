@@ -46,7 +46,7 @@ The computation process is as follows:
         - Use the depth prior map to compute the depth threshold depth_thres
         - If depth < depth_thres, process the next pixel in the rectangle; otherwise, perform the following steps
 
-f. Z-Buffer update:
+       f. Z-Buffer update:
 
        - If $depth < z_{\min}(x_i, y_i)$:
 

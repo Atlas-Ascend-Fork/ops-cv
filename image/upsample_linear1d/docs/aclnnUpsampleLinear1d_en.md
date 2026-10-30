@@ -41,12 +41,12 @@
     \end{cases}
     $$
 
-Therefore, for a point p(x) in a certain direction of the output, the point mapped back to the original image is denoted as q(x'), and the relationship is as follows:
+    Therefore, for a point p(x) in a certain direction of the output, the point mapped back to the original image is denoted as q(x'), and the relationship is as follows:
 
     $$
     x' =\begin{cases}
-    x * scale & alignCorners=true \\
-    MAX(0,{(x+0.5)*scale-0.5}) & alignCorners=false
+    x * scales & alignCorners=true \\
+    MAX(0,{(x+0.5)*scales-0.5}) & alignCorners=false
     \end{cases}
     $$
 

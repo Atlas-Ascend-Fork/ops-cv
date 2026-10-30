@@ -55,7 +55,7 @@
     \tilde{h}_1 = \text{ph} \cdot \Delta h + \tilde{y}_1,\quad \tilde{h}_2 = (\text{ph}+1) \cdot \Delta h + \tilde{y}_1
     $$
 
-Round and clip to $[0,W) \times [0,H)$:
+    Round and clip to $[0,W) \times [0,H)$:
 
     $$
     w_1 = \text{clip}(\lfloor\tilde{w}_1\rfloor,\, 0,\, W),\quad w_2 = \text{clip}(\lceil\tilde{w}_2\rceil,\, 0,\, W)

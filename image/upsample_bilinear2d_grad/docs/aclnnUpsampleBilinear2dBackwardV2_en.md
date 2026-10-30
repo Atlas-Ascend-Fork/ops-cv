@@ -56,7 +56,7 @@
     \end{cases}
     $$
 
-Therefore, for a point p(x,y) in a certain direction of the output, the point mapped back to the original image is denoted as q(x',y'), and the relationship is as follows:
+    Therefore, for a point p(x,y) in a certain direction of the output, the point mapped back to the original image is denoted as q(x',y'), and the relationship is as follows:
 
     $$
     x' =\begin{cases}
