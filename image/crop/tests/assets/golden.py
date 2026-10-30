@@ -40,6 +40,13 @@ class CropTestSpec:
         return x_torch, size_shape, stride, storage_offset
 
     @staticmethod
+    def _output_shape(x_shape, size_shape, axis):
+        rank = len(x_shape)
+        if axis < 0:
+            axis += rank
+        return list(x_shape[:axis]) + list(size_shape[axis:])
+
+    @staticmethod
     def _apply_crop(x_torch, size_shape, axis, offsets):
         """golden 路径：normalize + as_strided_copy + contiguous（转 numpy）。"""
         x_torch, size_shape, stride, storage_offset = CropTestSpec._normalize(
@@ -56,15 +63,21 @@ class CropTestSpec:
     def golden(x, size, *, axis=2, offsets=None, **kwargs):
         """Crop golden：numpy -> torch -> _apply_crop -> numpy。"""
         x_torch = torch.from_numpy(np.ascontiguousarray(x))
-        result = CropTestSpec._apply_crop(x_torch, list(size.shape), axis, offsets)
+        out_shape = CropTestSpec._output_shape(
+            list(x_torch.shape), list(size.shape), axis
+        )
+        result = CropTestSpec._apply_crop(x_torch, out_shape, axis, offsets)
         return [result.numpy()]
 
     class _TorchCropImpl:
         """third_party 性能对比实现：__call__ 仅 as_strided_copy，零元数据操作。"""
 
         def __init__(self, x, size, *, axis=2, offsets=None, **kwargs):
+            out_shape = CropTestSpec._output_shape(
+                list(x.shape), list(size.shape), axis
+            )
             x, self._size, self._stride, self._storage_offset = CropTestSpec._normalize(
-                x, list(size.shape), axis, offsets
+                x, out_shape, axis, offsets
             )
             self._x = x
 
