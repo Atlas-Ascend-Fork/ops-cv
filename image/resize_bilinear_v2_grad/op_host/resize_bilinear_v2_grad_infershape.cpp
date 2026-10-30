@@ -30,7 +30,9 @@ static ge::graphStatus InferShape4ResizeBilinearV2Grad(gert::InferShapeContext* 
     OP_CHECK_NULL_WITH_CONTEXT(context, original_image_shape);
     gert::Shape* y_shape = context->GetOutputShape(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, y_shape);
-    OP_CHECK_IF(grad_shape->GetDimNum() != 4 || original_image_shape->GetDimNum() != 4,
+    OP_CHECK_IF(!Ops::Base::IsUnknownRank(*grad_shape) && grad_shape->GetDimNum() != 4,
+                OP_LOGE(context->GetNodeName(), "Input rank must be 4."), return GRAPH_FAILED);
+    OP_CHECK_IF(!Ops::Base::IsUnknownRank(*original_image_shape) && original_image_shape->GetDimNum() != 4,
                 OP_LOGE(context->GetNodeName(), "Input rank must be 4."), return GRAPH_FAILED);
 
     auto image_desc = context->GetInputDesc(1);
@@ -41,12 +43,6 @@ static ge::graphStatus InferShape4ResizeBilinearV2Grad(gert::InferShapeContext* 
                 OP_LOGE(context->GetNodeName(), "input format only support [NHWC, NCHW], but is %s",
                         Ops::Base::ToString(input_format).c_str()),
                 return GRAPH_FAILED);
-
-    const size_t n_idx = 0;
-    const size_t c_idx = input_format == FORMAT_NHWC ? 3 : 1;
-    OP_CHECK_IF((grad_shape->GetDim(n_idx) != original_image_shape->GetDim(n_idx)) ||
-                    (grad_shape->GetDim(c_idx) != original_image_shape->GetDim(c_idx)),
-                OP_LOGE(context->GetNodeName(), "NC must be same."), return GRAPH_FAILED);
 
     *y_shape = *original_image_shape;
     OP_LOGD(context->GetNodeName(), "output y = %s", Ops::Base::ToString(*y_shape).c_str());

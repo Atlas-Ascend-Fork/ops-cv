@@ -109,3 +109,63 @@ TEST_F(ResizeBilinearV2GradInfershape, resize_bilinear_v2_grad_rank_three_reject
         });
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
 }
+
+TEST_F(ResizeBilinearV2GradInfershape, resize_bilinear_v2_grad_rank_three_grad_with_unknown_rank_image_rejected)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeBilinearV2Grad",
+        {
+            {{{3, 9, 5}, {3, 9, 5}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+            {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+        },
+        {
+            {"align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(false)},
+            {"half_pixel_centers", Ops::Cv::AnyValue::CreateFrom<bool>(false)},
+            {"scales", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f})},
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ResizeBilinearV2GradInfershape, resize_bilinear_v2_grad_unknown_rank_grad_with_rank_three_image_rejected)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeBilinearV2Grad",
+        {
+            {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+            {{{3, 9, 5}, {3, 9, 5}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+        },
+        {
+            {"align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(false)},
+            {"half_pixel_centers", Ops::Cv::AnyValue::CreateFrom<bool>(false)},
+            {"scales", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f})},
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ResizeBilinearV2GradInfershape, resize_bilinear_v2_grad_unknown_rank_success)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeBilinearV2Grad",
+        {
+            {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+            {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+        },
+        {
+            {"align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(false)},
+            {"half_pixel_centers", Ops::Cv::AnyValue::CreateFrom<bool>(false)},
+            {"scales", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f})},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {-2},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
