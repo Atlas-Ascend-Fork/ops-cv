@@ -314,6 +314,11 @@ static ge::graphStatus PasteSubImgTilingFunc(gert::TilingContext* context)
         return ge::GRAPH_SUCCESS;
     }
 
+    OP_CHECK_IF(coord.activeW > INT32_MAX / coord.activeC,
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "core_area_coord",
+                                          std::to_string(coord.activeW).c_str(), "activeW * activeC <= INT32_MAX"),
+                return ge::GRAPH_FAILED);
+
     int64_t sCy2Pre = static_cast<int64_t>(static_cast<float>(cy2) * scale);
     int64_t sCx2Pre = static_cast<int64_t>(static_cast<float>(cx2) * scale);
     OP_CHECK_IF(sCy2Pre > patchH || sCx2Pre > patchW, OP_LOGE(context, "coord*scale out of patch_img bounds"),
