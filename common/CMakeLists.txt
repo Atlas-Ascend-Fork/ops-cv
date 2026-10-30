@@ -38,6 +38,13 @@ if(BUILD_WITH_INSTALLED_DEPENDENCY_CANN_PKG)
   add_subdirectory(stub)
 endif()
 
+# FE 兼容融合注册适配层（预埋休眠）：默认 OFF，本目录不参与构建，产物与 master 一致；
+# 首个真实消费者接入时置 ON 并在 fusion_pass_common.cpp 登记名单
+option(OP_GRAPH_FE_REGISTRY "编译 FE 兼容融合注册适配层（首个真实消费者接入时启用）" OFF)
+if(OP_GRAPH_FE_REGISTRY AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/op_graph/CMakeLists.txt")
+  add_subdirectory(src/op_graph)
+endif()
+
 if(ENABLE_TEST)
   add_subdirectory(tests)
 endif()
