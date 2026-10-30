@@ -42,9 +42,9 @@ original_image.
 *@li half_pixel_centers: An optional bool. If true, the center of pixels locate in [0.5, 0.5]. Defaults to false.
 *@li scales: An optional listfloat which has two elements. The first element represents the ratio of the H axis
      subscripts of pixels in grads to the H axis subscripts of pixels in y, only takes effect when align_corners is
-     true and the value is greater than 0. The second element represents the ratio of the W axis subscripts of pixels in
-     grads to the W axis subscripts of pixels in y, only takes effect when align_corners is true and the value is
-     greater than 0.0f. Defaults to {0.0f, 0.0f}.
+     false and the value is greater than 0. The second element represents the ratio of the W axis subscripts of pixels
+in grads to the W axis subscripts of pixels in y, only takes effect when align_corners is false and the value is greater
+than 0.0f. Defaults to {0.0f, 0.0f}.
 
 *@par Third-party framework compatibility
 *Compatible with tensorflow and pytorch ResizeBilinearV2Grad operator.

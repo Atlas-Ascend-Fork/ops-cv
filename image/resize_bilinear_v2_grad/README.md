@@ -88,6 +88,27 @@
       <td>ND</td>
     </tr>
     <tr>
+      <td>align_corners</td>
+      <td>可选属性</td>
+      <td>为true时对齐输入和输出图像四角像素的中心；默认为false。</td>
+      <td>BOOL</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>half_pixel_centers</td>
+      <td>可选属性</td>
+      <td>为true时按半像素中心坐标进行采样；不能与align_corners同时为true，默认为false。</td>
+      <td>BOOL</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>scales</td>
+      <td>可选属性</td>
+      <td>包含H、W两个缩放系数，表示grads与y对应空间轴下标的比例；仅在align_corners为false且对应值大于0时生效，默认值为[0.0, 0.0]。</td>
+      <td>LIST_FLOAT</td>
+      <td>-</td>
+    </tr>
+    <tr>
       <td>y</td>
       <td>输出</td>
       <td>正向resize的输入的梯度Tensor，对应公式中y。</td>
@@ -98,7 +119,8 @@
 
 ## 约束说明
 
-无
+- `align_corners`和`half_pixel_centers`不能同时为true。
+- `scales`设置时应提供H、W两个缩放系数；默认值为`[0.0, 0.0]`。
 
 ## 调用说明
 
