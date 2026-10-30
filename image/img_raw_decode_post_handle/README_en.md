@@ -137,7 +137,7 @@ The 4 channels are interleaved into a 2D RAW image output according to the Bayer
 - The output width w_out must be greater than or equal to 16.
 - h_gm must be greater than or equal to h_out/2, and w_gm must be greater than or equal to w_out/2.
 - Empty tensors are not supported.
-- Non-contiguous tensors are not supported.
+- Non-contiguous tensors are automatically converted to contiguous tensors before processing.
 - The output of this operator is of the uint16 integer type. The gamma correction path involves ln/exp floating-point computation, and an integer tolerance comparison with atol=2 is allowed.
 
 ## Invocation Description

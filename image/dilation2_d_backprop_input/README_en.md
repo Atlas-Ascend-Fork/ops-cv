@@ -65,7 +65,7 @@ Here $(h_{in\_max}, w_{in\_max})$ is the position where `x + filter` reaches the
   <tr>
     <td>out_backprop</td>
     <td>Input</td>
-    <td>Output gradient. It is 4D, and its shape is the same as that of the forward output. In NHWC format, the shape is (N, Ho, Wo, C).</td>
+    <td>Output gradient. It is 4D, and its shape is the same as that of the forward output. In NHWC format, the shape is (N, Ho, Wo, C). In NCHW format, the shape is (N, C, Ho, Wo).</td>
     <td>float32</td>
     <td>ND</td>
   </tr>
@@ -134,7 +134,7 @@ Here $(h_{in\_max}, w_{in\_max})$ is the position where `x + filter` reaches the
   - The value of padding_mode must be one of {"SAME", "VALID", "CALCULATED"}.
   - The length of pads must be 4. In CALCULATED mode, pads[i] must be less than window_h/w (window_h = (filter_h - 1) * rate_h + 1).
   - The value of data_format must be one of {"NHWC", "NCHW"}.
-- **Format constraints**: The formats of x, out_backprop, and y are the same, and all are ND. The format must be consistent with data_format.
+- **Format constraints**: The GE memory layout formats of x, filter, out_backprop, and y are all ND. data_format only defines the dimension order of the 4D shape: NHWC is (N, H, W, C), and NCHW is (N, C, H, W).
 - **Value constraints**: The argmax comparison uses `>` (strictly greater than). The position corresponding to the first maximum value is selected for gradient accumulation, and equal values are not accumulated to multiple positions. In CALCULATED mode, the padding area is filled with an extremely small value to ensure that it does not participate in argmax.
 
 ## Invocation Description

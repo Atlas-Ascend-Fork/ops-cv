@@ -232,7 +232,8 @@ aclnnStatus aclnnThreeInterpolateBackward(
 
 ## Constraints
 
-- The value in idx should be less than m.
+- The values in idx are within the range [0, m) (non-negative and less than m). The correctness of computation results is not guaranteed for out-of-range values (negative values or values greater than or equal to m).
+- grad_x, idx, weight, and grad_y must satisfy the dimension correspondence: idx and weight have the same shape of (b, n, 3), and their b and n dimensions are consistent with the b and n dimensions of grad_x; the b and c dimensions of grad_y are consistent with those of grad_x, and its m dimension equals the attribute m. If the shapes are inconsistent, the API returns ACLNN_ERR_PARAM_INVALID.
 - Deterministic computation:
   <!-- npu="A3,910b" id7 -->
   - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>: aclnnThreeInterpolateBackward defaults to a non-deterministic implementation and does not support enabling via configuration.

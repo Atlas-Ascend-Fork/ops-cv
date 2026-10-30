@@ -432,7 +432,7 @@ int main() {
   int outputHeight = 3;
   int outputWidth = 3;
   int samplingRatio = 0;
-  float spatialScale = 1.0f;
+  float spatialScale = 0.25f;
 
   // 3. Call the CANN operator library API
   uint64_t workspaceSize = 0;

@@ -96,4 +96,4 @@ English | [简体中文](./README.md)
 | :---- | :---- | :---- |
 | aclnn interface | [test_aclnn_upsample_nearest2d_backward](examples/test_aclnn_upsample_nearest2d_backward.cpp) | Call the ResizeNearestNeighborV2Grad operator through the [aclnnUpsampleNearest2dBackward](../upsample_nearest2d_grad/docs/aclnnUpsampleNearest2dBackward_en.md) interface. |
 | aclnn interface | [test_aclnn_upsample_nearest1d_backward](examples/test_aclnn_upsample_nearest1d_backward.cpp) | Call the ResizeNearestNeighborV2Grad operator through the [aclnnUpsampleNearest1dBackward](../upsample_nearest2d_grad/docs/aclnnUpsampleNearest1dBackward_en.md) interface. |
-| Graph mode | - | Call the ResizeNearestNeighborV2Grad operator by building a graph through [operator IR](op_graph/resize_nearest_neighbor_v2_grad_proto.h). |
+| Graph mode | [test_geir_resize_nearest_neighbor_v2_grad](examples/test_geir_resize_nearest_neighbor_v2_grad.cpp) | Call the ResizeNearestNeighborV2Grad operator by building a graph through [operator IR](op_graph/resize_nearest_neighbor_v2_grad_proto.h), verifying that the output dtype follows the input grads in graph mode. |

@@ -80,8 +80,8 @@ English | [简体中文](./README.md)
 
 ## Constraints
 
-- The values in `idx` must be less than `m`.
-- The shape of `grad_x` is (B, C, N), the shape of `idx`/`weight` is (B, N, 3), and the shape of `grad_y` is (B, C, M).
+- The values in `idx` are within the range [0, m) (non-negative and less than `m`). The correctness of computation results is not guaranteed for out-of-range values (negative values or values greater than or equal to `m`).
+- The shape of `grad_x` is (B, C, N), the shape of `idx`/`weight` is (B, N, 3), and the shape of `grad_y` is (B, C, M). In addition, the B/N dimensions of `idx`/`weight` must be consistent with those of `grad_x`; the B/C dimensions of `grad_y` must be consistent with those of `grad_x`, and M must equal the attribute `m`. If the shapes are inconsistent, the API verification fails.
 - The attribute `m` must be greater than 0.
 - `grad_x`/`weight`/`grad_y` are FLOAT32 or FLOAT16, and `idx` is INT32 or INT64.
 - <term>Atlas A2 products</term> and <term>Atlas A3 products</term>: the data format of `grad_x` and `grad_y` is 5HD (that is, NC1HWC0, consistent with `FORMAT_NC1HWC0` defined in the operator IR).
