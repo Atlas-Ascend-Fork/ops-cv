@@ -28,6 +28,7 @@
 #include "aclnn/aclnn_base.h"
 #include "acl/acl_rt.h"
 #include "op_api/level2_base_cv.h"
+#include "op_api/aclnn_check.h"
 #include "grid_sampler3d_grad.h"
 #include "aclnn_grid_sampler3d_backward.h"
 
@@ -212,9 +213,8 @@ static bool CheckTranspose(const aclTensor* input, int64_t channel)
         deterministicValue = 0;
         OP_LOGD("Unable to get system param deterministic = %ld.", deterministicValue);
     }
-    bool transposeArch = curArch != NpuArch::DAV_1001 && curArch != NpuArch::DAV_3510;
-    bool regbaseTranspose = curArch == NpuArch::DAV_3510 && deterministicValue == 0 &&
-                            channel >= REGBASE_MAX_CHANNEL_NUM;
+    bool transposeArch = curArch != NpuArch::DAV_1001 && !IsRegBase(curArch);
+    bool regbaseTranspose = IsRegBase(curArch) && deterministicValue == 0 && channel >= REGBASE_MAX_CHANNEL_NUM;
     if ((input->GetStorageFormat() == op::Format::FORMAT_NCDHW || input->GetStorageFormat() == op::Format::FORMAT_ND) &&
         (channel <= AICORE_CHANNEL_LIMIT) && (transposeArch || regbaseTranspose)) {
         OP_CHECK_DTYPE_NOT_SUPPORT(input, ASCEND910B_DTYPE_SUPPORT_LIST, return false);
@@ -338,8 +338,7 @@ aclnnStatus aclnnGridSampler3DBackwardGetWorkspaceSize(const aclTensor* gradOutp
         auto castDtype = inputContiguous->GetDataType();
         auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
         bool dtypeCast = castDtype == op::DataType::DT_FLOAT16 || castDtype == op::DataType::DT_BF16;
-        bool regBaseCast = curArch != NpuArch::DAV_3510 ||
-                           (curArch == NpuArch::DAV_3510 && channel >= AICORE_CHANNEL_LIMIT);
+        bool regBaseCast = !IsRegBase(curArch) || channel >= AICORE_CHANNEL_LIMIT;
         if (dtypeCast && regBaseCast) {
             gradOutputContiguous = l0op::Cast(gradOutputContiguous, op::DataType::DT_FLOAT, uniqueExecutor.get());
             CHECK_RET(gradOutputContiguous != nullptr, ACLNN_ERR_INNER_NULLPTR);

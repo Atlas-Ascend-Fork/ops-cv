@@ -47,6 +47,7 @@ public:
             .ExtendCfgInfo("opFile.value", "nms_with_mask_apt");
         this->AICore().AddConfig("ascend950", aicoreConfig);
         this->AICore().AddConfig("ascend350", aicoreConfig);
+        this->AICore().AddConfig("ascend960dt", aicoreConfig);
     }
 };
 OP_ADD(NMSWithMask);

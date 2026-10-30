@@ -1,0 +1,206 @@
+{
+    "op_type" : "GridSample",
+    "op_list" : [
+      {
+        "bin_filename": "GridSample_f923f5f5a1ce9454438ac0461786f215",
+        "inputs": [
+          {
+            "name": "x",
+            "index": 0,
+              "dtype": "float32",
+              "format": "ND",
+                  "paramType": "required",
+                  "shape": [
+                      -2
+                  ],
+                  "format_match_mode": "FormatAgnostic"
+              },
+              {
+                  "name": "grid",
+                  "index": 1,
+                  "dtype": "float32",
+                  "format": "ND",
+                  "paramType": "required",
+                  "shape": [
+                      -2
+                  ],
+                  "format_match_mode": "FormatAgnostic"
+              }
+          ],
+          "outputs": [
+              {
+                  "name": "y",
+                  "index": 0,
+                  "dtype": "float32",
+                  "format": "ND",
+                  "paramType": "required",
+                  "shape": [
+                      -2
+                  ],
+                  "format_match_mode": "FormatAgnostic"
+              }
+          ],
+          "attrs": [
+              {
+                  "name": "interpolation_mode",
+                  "dtype": "string",
+                  "value": "ALL"
+              },
+              {
+                  "name": "padding_mode",
+                  "dtype": "string",
+                  "value": "ALL"
+              },
+              {
+                  "name": "align_corners",
+                  "dtype": "bool",
+                  "value": null
+              },
+              {
+                  "name": "channel_last",
+                  "dtype": "bool",
+                  "value": null
+              },
+              {
+                  "name": "scheduler_mode",
+                  "dtype": "int",
+                  "value": null
+              }
+          ]
+      },
+      {
+          "bin_filename": "GridSample_f923f5f5a1ce9454438ac0461786e979",
+          "inputs": [
+              {
+                  "name": "x",
+                  "index": 0,
+                  "dtype": "float16",
+                  "format": "ND",
+                  "paramType": "required",
+                  "shape": [
+                      -2
+                  ],
+                  "format_match_mode": "FormatAgnostic"
+              },
+              {
+                  "name": "grid",
+                  "index": 1,
+                  "dtype": "float16",
+                  "format": "ND",
+                  "paramType": "required",
+                  "shape": [
+                      -2
+                  ],
+                  "format_match_mode": "FormatAgnostic"
+              }
+          ],
+          "outputs": [
+              {
+                  "name": "y",
+                  "index": 0,
+                  "dtype": "float16",
+                  "format": "ND",
+                  "paramType": "required",
+                  "shape": [
+                      -2
+                  ],
+                  "format_match_mode": "FormatAgnostic"
+              }
+          ],
+          "attrs": [
+              {
+                  "name": "interpolation_mode",
+                  "dtype": "string",
+                  "value": "ALL"
+              },
+              {
+                  "name": "padding_mode",
+                  "dtype": "string",
+                  "value": "ALL"
+              },
+              {
+                  "name": "align_corners",
+                  "dtype": "bool",
+                  "value": null
+              },
+              {
+                  "name": "channel_last",
+                  "dtype": "bool",
+                  "value": null
+              },
+              {
+                  "name": "scheduler_mode",
+                  "dtype": "int",
+                  "value": null
+              }
+          ]
+      },
+      {
+        "bin_filename": "GridSample_f923f5f5a1ce9454438ac0461786e990",
+        "inputs": [
+            {
+                "name": "x",
+                "index": 0,
+                "dtype": "bfloat16",
+                "format": "ND",
+                "paramType": "required",
+                "shape": [
+                    -2
+                ],
+                "format_match_mode": "FormatAgnostic"
+            },
+            {
+                "name": "grid",
+                "index": 1,
+                "dtype": "bfloat16",
+                "format": "ND",
+                "paramType": "required",
+                "shape": [
+                    -2
+                ],
+                "format_match_mode": "FormatAgnostic"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "y",
+                "index": 0,
+                "dtype": "bfloat16",
+                "format": "ND",
+                "paramType": "required",
+                "shape": [
+                    -2
+                ],
+                "format_match_mode": "FormatAgnostic"
+            }
+        ],
+        "attrs": [
+            {
+                "name": "interpolation_mode",
+                "dtype": "string",
+                "value": "ALL"
+            },
+            {
+                "name": "padding_mode",
+                "dtype": "string",
+                "value": "ALL"
+            },
+            {
+                "name": "align_corners",
+                "dtype": "bool",
+                "value": null
+            },
+            {
+                "name": "channel_last",
+                "dtype": "bool",
+                "value": null
+            },
+            {
+                "name": "scheduler_mode",
+                "dtype": "int",
+                "value": null
+            }
+        ]
+    }
+    ]
+  }

@@ -145,6 +145,7 @@ public:
         this->AICore().AddConfig("mc62", aicore95_config);
         this->AICore().AddConfig("ascend950", aicore95_config);
         this->AICore().AddConfig("ascend350", aicore95_config);
+        this->AICore().AddConfig("ascend960dt", aicore95_config);
 
         OpAICoreConfig config_310p = Get310PCoreConfig();
         this->AICore().AddConfig("ascend310p", config_310p);

@@ -23,6 +23,7 @@ using namespace NMSWithMaskOp;
 extern "C" __global__ __aicore__ void nms_with_mask(GM_ADDR box_scores, GM_ADDR selected_boxes, GM_ADDR selected_idx,
                                                     GM_ADDR selected_mask, GM_ADDR workspace, GM_ADDR tiling)
 {
+    KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
     if (workspace == nullptr) {
         return;
     }
