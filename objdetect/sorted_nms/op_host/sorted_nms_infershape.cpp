@@ -66,5 +66,6 @@ static ge::graphStatus InferDataTypeForSortedNMS(gert::InferDataTypeContext* con
 IMPL_OP_INFERSHAPE(SortedNMS)
     .InferShape(InferShapeForSortedNMS)
     .InferShapeRange(InferShapeRangeForSortedNMS)
-    .InferDataType(InferDataTypeForSortedNMS);
+    .InferDataType(InferDataTypeForSortedNMS)
+    .OutputShapeDependOnCompute({OUTPUT_SELECTED_INDICES});
 } // namespace ops
