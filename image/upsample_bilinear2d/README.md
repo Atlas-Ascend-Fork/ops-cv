@@ -28,7 +28,9 @@
 
     $$
     scale\_h =\begin{cases}
-    (self.dim[2]-1) / (outputSize[0]-1) & alignCorners=true \\
+    1 & self.dim[2]=outputSize[0]=1 \\
+    (self.dim[2]-1) / (outputSize[0]-1) & alignCorners=true\&outputSize[0]>1 \\
+    0 & alignCorners=true\&outputSize[0]\le1 \\
     1 / scales\_h & alignCorners=false\&scales\_h>0\\
     self.dim[2] / outputSize[0] & alignCorners=false
     \end{cases}
@@ -36,11 +38,15 @@
 
     $$
     scale\_w =\begin{cases}
-    (self.dim[3]-1) / (outputSize[1]-1) & alignCorners=true \\
+    1 & self.dim[3]=outputSize[1]=1 \\
+    (self.dim[3]-1) / (outputSize[1]-1) & alignCorners=true\&outputSize[1]>1 \\
+    0 & alignCorners=true\&outputSize[1]\le1 \\
     1 / scales\_w & alignCorners=false\&scales\_w>0\\
     self.dim[3] / outputSize[1] & alignCorners=false
     \end{cases}
     $$
+
+    当输入和输出的某轴长度都为1时，该轴scale为1；其他情况下，当`alignCorners=true`且该轴`outputSize`不大于1时，scale为0，唯一的输出坐标映射到输入坐标0。
 
     因此，对于output的某个方向上的点p(x,y)，映射回原始图像中的点记为q(x',y')，则有关系：
 
