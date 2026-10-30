@@ -19,7 +19,7 @@
 - 计算公式：对于一个二维插值点$(N, C, H, W)$，插值$I(N, C, H, W)$可以表示为：
 
   $$
-  {I(N, C, H, W)} = \sum_{i=0}^{kW}\sum_{j=0}^{kH}{w(i) * w(j)} * {f(h_i, w_j)}/\sum_{i=0}^{kW}w(i)/\sum_{j=0}^{kH}w(j)
+  {I(N, C, H, W)} = \sum_{i=0}^{kH}\sum_{j=0}^{kW}{w(i) * w(j)} * {f(h_i, w_j)}/\sum_{i=0}^{kH}w(i)/\sum_{j=0}^{kW}w(j)
   $$
 
   $$

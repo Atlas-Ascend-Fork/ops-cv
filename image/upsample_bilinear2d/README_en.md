@@ -48,15 +48,15 @@ English | [简体中文](./README.md)
 
     $$
     x' =\begin{cases}
-    x * scale\_h & alignCorners=true \\
-    MAX(0,{(x+0.5)*scale\_h-0.5}) & alignCorners=false
+    x * scale\_w & alignCorners=true \\
+    MAX(0,{(x+0.5)*scale\_w-0.5}) & alignCorners=false
     \end{cases}
     $$
 
     $$
     y' =\begin{cases}
-    y * scale\_w & alignCorners=true \\
-    MAX(0,{(y+0.5)*scale\_w-0.5}) & alignCorners=false
+    y * scale\_h & alignCorners=true \\
+    MAX(0,{(y+0.5)*scale\_h-0.5}) & alignCorners=false
     \end{cases}
     $$
 

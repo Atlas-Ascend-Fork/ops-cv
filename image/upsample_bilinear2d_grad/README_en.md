@@ -40,19 +40,19 @@ English | [简体中文](./README.md)
     \end{cases}
     $$
 
-    Therefore, for a point p(x,y) in a direction of the output, the point mapped back to the original image is denoted as q(x',y'). The relationship is as follows:
+    Therefore, consider a point p(x,y) in a the output image, where x and y represent the horizontal (W direction) and vertical (H direction) coordinates, respectivvely. Its corresponding point mapped back to the original image is denoted as q(x',y'), defined by the following relationship:
 
     $$
     x' =\begin{cases}
-    x * scale\_h & alignCorners=true \\
-    MAX(0,{(x+0.5)*scale\_h-0.5}) & alignCorners=false
+    x * scale\_w & alignCorners=true \\
+    MAX(0,{(x+0.5)*scale\_w-0.5}) & alignCorners=false
     \end{cases}
     $$
 
     $$
     y' =\begin{cases}
-    y * scale\_w & alignCorners=true \\
-    MAX(0,{(y+0.5)*scale\_w-0.5}) & alignCorners=false
+    y * scale\_h & alignCorners=true \\
+    MAX(0,{(y+0.5)*scale\_h-0.5}) & alignCorners=false
     \end{cases}
     $$
 

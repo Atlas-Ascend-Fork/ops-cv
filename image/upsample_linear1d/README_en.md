@@ -26,10 +26,10 @@ English | [简体中文](./README.md)
     The scaling mode is classified into corner alignment and edge alignment. Corner alignment (alignCorners is true) indicates alignment by the center of the top-left pixel of the original image. Edge alignment (alignCorners is false) indicates alignment by the top-left vertex and two edges of the original image. Differences exist in the calculation of the scaling coefficients and coordinate positions. The following formula applies:
 
     $$
-    scale =\begin{cases}
+    scales =\begin{cases}
     (self.dim[2]-1) / (outputSize[0]-1) & alignCorners=true\&outputSize[0]>1 \\
     0 & alignCorners=true\&outputSize[0]=1 \\
-    1 / scales & alignCorners=false\&scales>0\\
+    1 / scale & alignCorners=false\&scale>0\\
     self.dim[2] / outputSize[0] & alignCorners=false
     \end{cases}
     $$
@@ -38,8 +38,8 @@ English | [简体中文](./README.md)
 
     $$
     x' =\begin{cases}
-    x * scale & alignCorners=true \\
-    MAX(0,{(x+0.5)*scale-0.5}) & alignCorners=false
+    x * scales & alignCorners=true \\
+    MAX(0,{(x+0.5)*scales-0.5}) & alignCorners=false
     \end{cases}
     $$
 
@@ -95,9 +95,9 @@ English | [简体中文](./README.md)
       <td>-</td>
     </tr>
     <tr>
-      <td>scales</td>
+      <td>scale</td>
       <td>Optional attr</td>
-      <td><ul><li>Specifies the multiplier of the L dimension of output `y`, corresponding to `scales` in the formula.</li><li>There is no default value.</li></ul></td>
+      <td><ul><li>Specifies the multiplier of the L dimension of output `y`, corresponding to `scale` in the formula.</li><li>There is no default value.</li></ul></td>
       <td>FLOAT32</td>
       <td>-</td>
     </tr>

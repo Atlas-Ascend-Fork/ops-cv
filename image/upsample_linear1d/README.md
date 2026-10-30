@@ -24,10 +24,10 @@
     缩放方式分为角对齐和边对齐，角对齐（alignCorners为true）表示按照原始图片左上角像素中心点对齐，边对齐（alignCorners为false）表示按照原始图片左上角顶点及两条边对齐，在计算缩放系数和坐标位置时存在差异。则有以下公式：
 
     $$
-    scale =\begin{cases}
+    scales =\begin{cases}
     (self.dim[2]-1) / (outputSize[0]-1) & alignCorners=true\&outputSize[0]>1 \\
     0 & alignCorners=true\&outputSize[0]=1 \\
-    1 / scales & alignCorners=false\&scales>0\\
+    1 / scale & alignCorners=false\&scale>0\\
     self.dim[2] / outputSize[0] & alignCorners=false
     \end{cases}
     $$
@@ -36,8 +36,8 @@
 
     $$
     x' =\begin{cases}
-    x * scale & alignCorners=true \\
-    MAX(0,{(x+0.5)*scale-0.5}) & alignCorners=false
+    x * scales & alignCorners=true \\
+    MAX(0,{(x+0.5)*scales-0.5}) & alignCorners=false
     \end{cases}
     $$
 
@@ -93,9 +93,9 @@
       <td>-</td>
     </tr>
     <tr>
-      <td>scales</td>
+      <td>scale</td>
       <td>可选属性</td>
-      <td><ul><li>表示输出`y`的L维度乘数，对应公式中的`scales`。</li><li>无默认值。</li></ul></td>
+      <td><ul><li>表示输出`y`的L维度乘数，对应公式中的`scale`。</li><li>无默认值。</li></ul></td>
       <td>FLOAT32</td>
       <td>-</td>
     </tr>

@@ -21,7 +21,7 @@ English | [简体中文](./README.md)
 - Calculation formula: for a 2D interpolation point $(N, C, H, W)$, the interpolation $I(N, C, H, W)$ can be expressed as:
 
   $$
-  {I(N, C, H, W)} = \sum_{i=0}^{kW}\sum_{j=0}^{kH}{w(i) * w(j)} * {f(h_i, w_j)}/\sum_{i=0}^{kW}w(i)/\sum_{j=0}^{kH}w(j)
+  {I(N, C, H, W)} = \sum_{i=0}^{kH}\sum_{j=0}^{kW}{w(i) * w(j)} * {f(h_i, w_j)}/\sum_{i=0}^{kH}w(i)/\sum_{j=0}^{kW}w(j)
   $$
 
   $$

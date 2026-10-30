@@ -38,19 +38,19 @@
     \end{cases}
     $$
 
-    因此，对于output的某个方向上的点p(x,y)，映射回原始图像中的点记为q(x',y')，则有关系：
+    因此，对于output中横向（W方向）坐标为x、纵向（H方向）坐标为y的点p(x,y)，映射回原始图像中的点记为q(x',y')，则有关系：
 
     $$
     x' =\begin{cases}
-    x * scale\_h & alignCorners=true \\
-    MAX(0,{(x+0.5)*scale\_h-0.5}) & alignCorners=false
+    x * scale\_w & alignCorners=true \\
+    MAX(0,{(x+0.5)*scale\_w-0.5}) & alignCorners=false
     \end{cases}
     $$
 
     $$
     y' =\begin{cases}
-    y * scale\_w & alignCorners=true \\
-    MAX(0,{(y+0.5)*scale\_w-0.5}) & alignCorners=false
+    y * scale\_h & alignCorners=true \\
+    MAX(0,{(y+0.5)*scale\_h-0.5}) & alignCorners=false
     \end{cases}
     $$
 

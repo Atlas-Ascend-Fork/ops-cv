@@ -55,15 +55,15 @@
 
     $$
     x' =\begin{cases}
-    x * scaleH & alignCorners=true \\
-    MAX(0,{(x+0.5)*scaleH-0.5}) & alignCorners=false
+    x * scaleW & alignCorners=true \\
+    MAX(0,{(x+0.5)*scaleW-0.5}) & alignCorners=false
     \end{cases}
     $$
 
     $$
     y' =\begin{cases}
-    y * scaleW & alignCorners=true \\
-    MAX(0,{(y+0.5)*scaleW-0.5}) & alignCorners=false
+    y * scaleH & alignCorners=true \\
+    MAX(0,{(y+0.5)*scaleH-0.5}) & alignCorners=false
     \end{cases}
     $$
 
