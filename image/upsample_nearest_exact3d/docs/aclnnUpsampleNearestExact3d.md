@@ -137,7 +137,7 @@ aclnnStatus aclnnUpsampleNearestExact3d(
       <td>scalesD（double）</td>
       <td>输入</td>
       <td>表示指定输出`out`的depth维度乘数，对应公式中的`scalesD`。</td>
-      <td>值为正数才生效。</td>
+      <td>仅当scalesD、scalesH和scalesW均大于0时，才使用这三个缩放系数；否则根据输入shape和outputSize推导缩放系数。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -147,7 +147,7 @@ aclnnStatus aclnnUpsampleNearestExact3d(
       <td>scalesH（double）</td>
       <td>输入</td>
       <td>表示指定输出`out`的height维度乘数，对应公式中的`scalesH`。</td>
-      <td>值为正数才生效。</td>
+      <td>仅当scalesD、scalesH和scalesW均大于0时，才使用这三个缩放系数；否则根据输入shape和outputSize推导缩放系数。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -157,7 +157,7 @@ aclnnStatus aclnnUpsampleNearestExact3d(
       <td>scalesW（double）</td>
       <td>输入</td>
       <td>表示指定输出`out`的width维度乘数，对应公式中的`scalesW`。</td>
-      <td>值为正数才生效。</td>
+      <td>仅当scalesD、scalesH和scalesW均大于0时，才使用这三个缩放系数；否则根据输入shape和outputSize推导缩放系数。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>

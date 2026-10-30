@@ -88,16 +88,30 @@
       <td>-</td>
     </tr>
     <tr>
-      <td>scales</td>
+      <td>scale_d</td>
       <td>可选属性</td>
-      <td><ul><li>指定沿每个维度的缩放数组，包含3个元素：scale_depth, scale_height, scale_width，对应公式中的`scalesD`、`scalesH`、`scalesW`。</li><li>默认值为[0.0, 0.0, 0.0]。</li></ul></td>
-      <td>LISTFLOAT</td>
+      <td><ul><li>指定D维采样缩放系数，对应公式中的scalesD。</li><li>默认值为0.0；仅当scale_d、scale_h和scale_w均大于0时，才使用这三个系数；否则根据输入shape和output_size推导缩放系数。</li></ul></td>
+      <td>FLOAT32</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>scale_h</td>
+      <td>可选属性</td>
+      <td><ul><li>指定H维采样缩放系数，对应公式中的scalesH。</li><li>默认值为0.0；仅当scale_d、scale_h和scale_w均大于0时，才使用这三个系数；否则根据输入shape和output_size推导缩放系数。</li></ul></td>
+      <td>FLOAT32</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>scale_w</td>
+      <td>可选属性</td>
+      <td><ul><li>指定W维采样缩放系数，对应公式中的scalesW。</li><li>默认值为0.0；仅当scale_d、scale_h和scale_w均大于0时，才使用这三个系数；否则根据输入shape和output_size推导缩放系数。</li></ul></td>
+      <td>FLOAT32</td>
       <td>-</td>
     </tr>
     <tr>
       <td>y</td>
       <td>输出</td>
-      <td>表示采样后的输出张量，对应公式描述中的`out`。数据类型和数据格式需与入参`self`的数据类型和数据格式保持一致，shape取决于输入x和output_size/scales。</td>
+      <td>表示采样后的输出张量，对应公式描述中的`out`。数据类型和数据格式需与入参`self`的数据类型和数据格式保持一致，shape由输入x的N/C维和output_size决定；scale_d、scale_h和scale_w仅影响采样坐标。</td>
       <td>FLOAT32、FLOAT16、BFLOAT16</td>
       <td>NCDHW</td>
     </tr>

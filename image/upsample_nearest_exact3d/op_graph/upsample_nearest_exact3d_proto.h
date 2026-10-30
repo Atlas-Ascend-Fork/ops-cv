@@ -26,19 +26,19 @@ namespace ge {
 * float16, float32, bfloat16. \n
 
 *@par Attributes:
-*@li output_size: An required listInt. Defaults to none.
-* Contain 3 elements: output_depth, output_height, output_width. The number of elements of 'output_size'
-* should be the same as the rank of input 'x'. Only one of 'scales' and 'output_size' can be specified. \n
-*@li scales: An optional listFloat. Defaults to `[0.0, 0.0, 0.0]`.
-* The scale array along each dimension, contain 3 elements: scale_depth, scale_height, scale_width.
-* The number of elements of 'scales' should be the same as the rank of input 'x'. One of 'scales' and
-* 'output_size' must be specified and it is an error if both are specified. \n
-
+*@li output_size: A required listInt. Defaults to none.
+* Must contain exactly 3 elements: output_depth, output_height, and output_width. \n
+*@li scale_d: An optional float. Defaults to 0.0. Specifies the depth sampling scale. \n
+*@li scale_h: An optional float. Defaults to 0.0. Specifies the height sampling scale. \n
+*@li scale_w: An optional float. Defaults to 0.0. Specifies the width sampling scale. \n
+* The three scale attributes are applied only if all of them are greater than zero; otherwise, the scales are derived
+* from the input shape and output_size. \n
+*
 *@par Outputs:
 *y: A 5-D tensor. The format must be NCDHW. Must be one of the following types:
 * float16, float32, bfloat16.
-* Has the same type as input x, shape depends on x and output_size/scales. \n
-
+* Has the same type as input x. The N and C dimensions match x; output D, H, and W are specified by output_size. \n
+*
 */
 
 REG_OP(UpsampleNearestExact3d)
