@@ -32,6 +32,7 @@ static constexpr size_t OFFSETS_REQUIRED_RANK = 2;
 static constexpr int64_t OFFSETS_COORD_DIM = 2;
 static constexpr size_t SIZE_REQUIRED_RANK = 1;
 static constexpr int64_t SIZE_ELEMENT_COUNT = 2;
+static constexpr int64_t SIZE_DATA_BYTES = SIZE_ELEMENT_COUNT * static_cast<int64_t>(sizeof(int32_t));
 static constexpr size_t OUTPUT_RANK = 4;
 
 static ge::graphStatus ValidateInputShapes(gert::InferShapeContext* context, const gert::Shape* inputShape,
@@ -79,8 +80,21 @@ static ge::graphStatus ReadSizeData(gert::InferShapeContext* context, int64_t& g
     OP_CHECK_NULL_WITH_CONTEXT(context, sizeTensor);
     const int32_t* sizeData = static_cast<const int32_t*>(sizeTensor->GetAddr());
     OP_CHECK_IF(sizeData == nullptr, OP_LOGE(context, "size data is null"), return ge::GRAPH_FAILED);
+    // 数据不足 2 个 int32 时拒绝，避免越界读；size 为值依赖输入，未知声明形状下实际元素数以张量为准
+    OP_CHECK_IF(sizeTensor->GetSize() < SIZE_DATA_BYTES,
+                OP_LOGE_WITH_INVALID_INPUT_SHAPESIZE(context->GetNodeName(), IDX_1,
+                                                     std::to_string(sizeTensor->GetSize() / sizeof(int32_t)).c_str(),
+                                                     std::to_string(SIZE_ELEMENT_COUNT).c_str()),
+                return ge::GRAPH_FAILED);
     glimpseH = static_cast<int64_t>(sizeData[0]);
     glimpseW = static_cast<int64_t>(sizeData[1]);
+    // 负值 size 会产出负维度输出形状，属非法输入，在读值后立即受控拒绝
+    OP_CHECK_IF(glimpseH < 0 || glimpseW < 0,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                    context->GetNodeName(), "size",
+                    ("[" + std::to_string(glimpseH) + ", " + std::to_string(glimpseW) + "]").c_str(),
+                    "size elements must not be negative"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 

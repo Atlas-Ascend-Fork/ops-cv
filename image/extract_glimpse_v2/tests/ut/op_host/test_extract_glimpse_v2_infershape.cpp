@@ -174,3 +174,51 @@ TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_mixed_offsets_u
     };
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
+
+// Negative size: value-domain violation must be rejected at InferShape, not propagated into output dims
+TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_fail_size_negative)
+{
+    int32_t sizeData[2] = {-2, -3};
+    gert::InfershapeContextPara infershapeContextPara("ExtractGlimpseV2",
+                                                      {
+                                                          {{{1, 3, 3, 3}, {1, 3, 3, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{2}, {2}}, ge::DT_INT32, ge::FORMAT_ND, true, sizeData},
+                                                          {{{1, 2}, {1, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+// Size tensor shorter than 2 int32 elements: reject before reading, avoid out-of-bounds read
+TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_fail_size_short_buffer)
+{
+    int32_t sizeData[1] = {5};
+    gert::InfershapeContextPara infershapeContextPara("ExtractGlimpseV2",
+                                                      {
+                                                          {{{1, 3, 3, 3}, {1, 3, 3, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{1}, {1}}, ge::DT_INT32, ge::FORMAT_ND, true, sizeData},
+                                                          {{{1, 2}, {1, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+// Unknown-rank branch shares the same size validation: short buffer must be rejected there too
+TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_fail_size_short_buffer_unknown_rank)
+{
+    int32_t sizeData[1] = {5};
+    gert::InfershapeContextPara infershapeContextPara("ExtractGlimpseV2",
+                                                      {
+                                                          {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{1}, {1}}, ge::DT_INT32, ge::FORMAT_ND, true, sizeData},
+                                                          {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}

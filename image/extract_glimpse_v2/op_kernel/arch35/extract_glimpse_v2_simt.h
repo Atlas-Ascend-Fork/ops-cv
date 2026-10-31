@@ -81,8 +81,10 @@ __simt_vf__ __aicore__ __launch_bounds__(THREADS<IDX_T>) inline void OpExtractGl
         int32_t oh = static_cast<int32_t>(remaining - q3 * static_cast<IDX_T>(glimpseH));
         int32_t b = static_cast<int32_t>(q3);
 
-        float offsetY = offsets[b * OFFSETS_STRIDE];
-        float offsetX = offsets[b * OFFSETS_STRIDE + 1];
+        // batch 可达 INT32_MAX，b*2 乘法须在 64 位域完成，避免 int32 有符号溢出（UB）
+        const int64_t offsetIdx = static_cast<int64_t>(b) * static_cast<int64_t>(OFFSETS_STRIDE);
+        float offsetY = offsets[offsetIdx];
+        float offsetX = offsets[offsetIdx + 1];
 
         if (offsetY != offsetY || offsetX != offsetX) {
             output[idx] = static_cast<T>(0);

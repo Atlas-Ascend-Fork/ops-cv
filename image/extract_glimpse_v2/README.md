@@ -61,7 +61,7 @@ $$
     <tr>
       <td>size</td>
       <td>输入</td>
-      <td>裁剪尺寸[size_h, size_w]，1D const tensor，shape为[2]，不能小于0。</td>
+      <td>裁剪尺寸[size_h, size_w]，1D const tensor，shape为[2]，每个元素必须大于0。</td>
       <td>INT32</td>
       <td>ND</td>
     </tr>
@@ -113,13 +113,28 @@ $$
 
 - input必须为4D tensor。
 - offsets必须为2D tensor，且第二维必须为2。
-- size必须为1D const tensor，且长度为2，大小不能小于0。
+- size必须为1D const tensor，且长度为2，每个元素必须大于0。
 - input和offsets的batch维度必须一致。
 - 当前仅支持float32数据类型。
-- 当前仅支持noise="zero"的越界填充模式。
+- uniform_noise仅支持false，noise仅支持"zero"。
+- 各维度值不超过INT32_MAX（2147483647）；输出元素总数（batch×size_h×size_w×channels）不超过2^62。
+- 支持零维张量输入（batch、height、width或channels为0），此时输出为空tensor且不执行设备计算。
+- 支持动态shape与动态rank输入：未知维度以-1表示，未知rank以-2表示；输出H/W维始终取size张量的实际数值（size为值依赖输入）。
+
+## 拒绝行为说明
+
+| 拒绝条件 | 拒绝阶段 |
+| --- | --- |
+| input非4D / offsets非2D / offsets第二维非2 / size非1D且长度非2 / input与offsets的batch不一致 | InferShape |
+| size张量实际元素数不足2 | InferShape |
+| size元素存在负值 | InferShape |
+| size元素存在0 | Tiling |
+| 输入dtype非FLOAT（size非INT32、offsets非FLOAT） | Tiling |
+| uniform_noise=true 或 noise非"zero" | Tiling |
+| 输出元素总数溢出int64 | Tiling |
 
 ## 调用说明
 
 | 调用方式   | 样例代码           | 说明                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| 图模式 | -  | 通过[算子IR](op_graph/extract_glimpse_v2_proto.h)构图方式调用ExtractGlimpseV2算子。         |
+| GE图模式 | [样例](examples/arch35/test_geir_extract_glimpse_v2.cpp)  | 通过[算子IR](op_graph/extract_glimpse_v2_proto.h)构图方式调用ExtractGlimpseV2算子。         |

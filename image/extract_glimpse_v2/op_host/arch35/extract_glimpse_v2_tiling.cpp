@@ -178,7 +178,24 @@ static ge::graphStatus ValidateAttributes(gert::TilingContext* context, bool& ce
 static ge::graphStatus ComputeAndSetTiling(gert::TilingContext* context, const ShapeInfo& info, bool centered,
                                            bool normalized)
 {
-    int64_t outputTotalElements = static_cast<int64_t>(info.batchSize) * info.glimpseH * info.glimpseW * info.channels;
+    // 逐级除法防溢出：各维均 ≤ INT32_MAX，两两乘积 ≤ (2^31-1)^2 < 2^62 安全；
+    // 上限 2^62 同时保证后续 perCore/needCoreNum 的加法不溢出（perCore ≤ total，2*total-1 ≤ INT64_MAX）。
+    // batch/glimpseH/channels 为 0 时空输出，不进入乘法链
+    constexpr int64_t MAX_OUTPUT_ELEMENTS = static_cast<int64_t>(1) << 62;
+    const int64_t batchSize = static_cast<int64_t>(info.batchSize);
+    const int64_t glimpseH = static_cast<int64_t>(info.glimpseH);
+    const int64_t glimpseW = static_cast<int64_t>(info.glimpseW);
+    const int64_t channels = static_cast<int64_t>(info.channels);
+    const int64_t batchGlimpseH = batchSize * glimpseH;
+    int64_t outputTotalElements = 0;
+    if (batchGlimpseH > 0 && channels > 0) {
+        OP_CHECK_IF(batchGlimpseH > MAX_OUTPUT_ELEMENTS / glimpseW,
+                    OP_LOGE(context, "output element count exceeds int64 range"), return ge::GRAPH_FAILED);
+        const int64_t batchGlimpseHW = batchGlimpseH * glimpseW;
+        OP_CHECK_IF(batchGlimpseHW > MAX_OUTPUT_ELEMENTS / channels,
+                    OP_LOGE(context, "output element count exceeds int64 range"), return ge::GRAPH_FAILED);
+        outputTotalElements = batchGlimpseHW * channels;
+    }
 
     int64_t perCoreElements = (outputTotalElements + info.maxCoreNum - 1) / info.maxCoreNum;
     if (perCoreElements < PER_CORE_MIN) {
@@ -216,19 +233,15 @@ static ge::graphStatus ComputeAndSetTiling(gert::TilingContext* context, const S
 
 static ge::graphStatus SetupMemoryAndWorkspace(gert::TilingContext* context, uint64_t ubSize)
 {
-    fe::PlatFormInfos* platformInfoPtr = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfoPtr);
-    auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfoPtr);
-
     OP_CHECK_IF((ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE),
                 OP_LOGE(context, "ubSize %lu <= DCACHE_SIZE + STATIC_UB_ESTIMATE", ubSize), return ge::GRAPH_FAILED);
     auto res = context->SetLocalMemorySize(static_cast<uint32_t>(ubSize - DCACHE_SIZE - STATIC_UB_ESTIMATE));
     OP_CHECK_IF((res != ge::GRAPH_SUCCESS), OP_LOGE(context, "SetLocalMemorySize failed"), return ge::GRAPH_FAILED);
 
-    uint64_t sysWorkspaceSize = ascendcPlatform.GetLibApiWorkSpaceSize();
-    size_t* ws = context->GetWorkspaceSizes(WORKSPACE_COUNT);
-    OP_CHECK_NULL_WITH_CONTEXT(context, ws);
-    ws[0] = static_cast<size_t>(sysWorkspaceSize);
+    // kernel 全路径不使用系统 workspace，按同型算子清理标准（d4d883a5）置 0，避免每次调用白占约 16MB 设备内存
+    size_t* currentWorkspace = context->GetWorkspaceSizes(WORKSPACE_COUNT);
+    OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
+    currentWorkspace[0] = 0;
     return ge::GRAPH_SUCCESS;
 }
 

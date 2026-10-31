@@ -18,24 +18,19 @@
 #include "arch35/extract_glimpse_v2_simt.h"
 
 template <uint32_t schMode>
-__global__ __aicore__ void extract_glimpse_v2(
-    GM_ADDR input, GM_ADDR size, GM_ADDR offsets,
-    GM_ADDR output, GM_ADDR workspace, GM_ADDR tiling)
+__global__ __aicore__ void extract_glimpse_v2(GM_ADDR input, GM_ADDR size, GM_ADDR offsets, GM_ADDR output,
+                                              GM_ADDR workspace, GM_ADDR tiling)
 {
     REGISTER_TILING_DEFAULT(ExtractGlimpseV2TilingData);
     GET_TILING_DATA_WITH_STRUCT(ExtractGlimpseV2TilingData, tilingData, tiling);
 
     if constexpr (schMode == SCENE_MODE_0) {
-        NsExtractGlimpseV2::Process<DTYPE_INPUT, false, false>(
-            input, size, offsets, output, workspace, &tilingData);
+        NsExtractGlimpseV2::Process<DTYPE_INPUT, false, false>(input, size, offsets, output, workspace, &tilingData);
     } else if constexpr (schMode == SCENE_MODE_1) {
-        NsExtractGlimpseV2::Process<DTYPE_INPUT, false, true>(
-            input, size, offsets, output, workspace, &tilingData);
+        NsExtractGlimpseV2::Process<DTYPE_INPUT, false, true>(input, size, offsets, output, workspace, &tilingData);
     } else if constexpr (schMode == SCENE_MODE_2) {
-        NsExtractGlimpseV2::Process<DTYPE_INPUT, true, false>(
-            input, size, offsets, output, workspace, &tilingData);
+        NsExtractGlimpseV2::Process<DTYPE_INPUT, true, false>(input, size, offsets, output, workspace, &tilingData);
     } else {
-        NsExtractGlimpseV2::Process<DTYPE_INPUT, true, true>(
-            input, size, offsets, output, workspace, &tilingData);
+        NsExtractGlimpseV2::Process<DTYPE_INPUT, true, true>(input, size, offsets, output, workspace, &tilingData);
     }
 }

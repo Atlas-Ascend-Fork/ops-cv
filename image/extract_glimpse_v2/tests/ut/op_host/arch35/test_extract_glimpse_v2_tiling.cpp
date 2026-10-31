@@ -51,7 +51,7 @@ TEST_F(ExtractGlimpseV2Tiling, extract_glimpse_v2_0)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 3;
     string expectTilingData = "4294967297 12884901891 8589934595 4294967298 1 12 1024 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
@@ -78,7 +78,7 @@ TEST_F(ExtractGlimpseV2Tiling, extract_glimpse_v2_1)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 0;
     string expectTilingData = "64424509445 68719476749 8589934608 9 0 4320 1024 ";
-    std::vector<size_t> expectWorkspaces = {16777216};
+    std::vector<size_t> expectWorkspaces = {0};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
@@ -311,6 +311,58 @@ TEST_F(ExtractGlimpseV2Tiling, fail_offsets_batch_mismatch)
         },
         {
             {{{2, 2, 2, 3}, {2, 2, 2, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr("centered", Ops::Cv::AnyValue::CreateFrom<bool>(true)),
+            gert::TilingContextPara::OpAttr("normalized", Ops::Cv::AnyValue::CreateFrom<bool>(true)),
+            gert::TilingContextPara::OpAttr("uniform_noise", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+            gert::TilingContextPara::OpAttr("noise", Ops::Cv::AnyValue::CreateFrom<std::string>("zero")),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+TEST_F(ExtractGlimpseV2Tiling, fail_size_zero)
+{
+    struct ExtractGlimpseV2CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractGlimpseV2",
+        {
+            {{{1, 3, 3, 3}, {1, 3, 3, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2}, {2}}, ge::DT_INT32, ge::FORMAT_ND},
+            {{{1, 2}, {1, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 0, 2, 3}, {1, 0, 2, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr("centered", Ops::Cv::AnyValue::CreateFrom<bool>(true)),
+            gert::TilingContextPara::OpAttr("normalized", Ops::Cv::AnyValue::CreateFrom<bool>(true)),
+            gert::TilingContextPara::OpAttr("uniform_noise", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+            gert::TilingContextPara::OpAttr("noise", Ops::Cv::AnyValue::CreateFrom<std::string>("zero")),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// Each dim stays within INT32_MAX while the product exceeds the int64 overflow guard bound
+TEST_F(ExtractGlimpseV2Tiling, fail_output_elements_overflow)
+{
+    struct ExtractGlimpseV2CompileInfo {
+    } compileInfo;
+    constexpr int64_t kInt32Max = 2147483647;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractGlimpseV2",
+        {
+            {{{kInt32Max, 1, 1, kInt32Max}, {kInt32Max, 1, 1, kInt32Max}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2}, {2}}, ge::DT_INT32, ge::FORMAT_ND},
+            {{{kInt32Max, 2}, {kInt32Max, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{kInt32Max, kInt32Max, kInt32Max, kInt32Max}, {kInt32Max, kInt32Max, kInt32Max, kInt32Max}},
+             ge::DT_FLOAT,
+             ge::FORMAT_ND},
         },
         {
             gert::TilingContextPara::OpAttr("centered", Ops::Cv::AnyValue::CreateFrom<bool>(true)),
