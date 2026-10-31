@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <fstream>
 #include <string.h>
@@ -340,11 +341,24 @@ void PrintReport(const std::vector<CaseResult>& results)
     printf("Summary: %d/%d passed\n", pass_cnt, total);
 }
 
+std::string GetDeviceId()
+{
+    const char* env = std::getenv("ASCEND_DEVICE_ID");
+    if (env != nullptr && strlen(env) > 0) {
+        return std::string(env);
+    }
+    printf("%s - WARN - [XIR]: ASCEND_DEVICE_ID not set, fallback to 0\n", GetTime().c_str());
+    return "0";
+}
+
 int main(int argc, char* argv[])
 {
+    std::string device_id = GetDeviceId();
+
     printf("%s - INFO - [XIR]: Start to initialize ge using ge global options\n", GetTime().c_str());
-    std::map<AscendString, AscendString> global_options = {
-        {"ge.exec.deviceId", "5"}, {"ge.graphRunMode", "0"}, {"ge.exec.precision_mode", "must_keep_origin_dtype"}};
+    std::map<AscendString, AscendString> global_options = {{"ge.exec.deviceId", device_id.c_str()},
+                                                           {"ge.graphRunMode", "0"},
+                                                           {"ge.exec.precision_mode", "must_keep_origin_dtype"}};
     Status ret = ge::GEInitialize(global_options);
     if (ret != SUCCESS) {
         printf("%s - INFO - [XIR]: Initialize ge using ge global options failed\n", GetTime().c_str());
