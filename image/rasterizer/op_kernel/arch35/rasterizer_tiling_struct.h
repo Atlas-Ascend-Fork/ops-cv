@@ -35,12 +35,19 @@ struct alignas(8) RasterizerTilingData {
 
 constexpr std::size_t kRasterizerTilingDataSerializedSize = 96U;
 
+// findices (int32) stores the 1-based winning face index, and the kernel keeps the
+// 0-based face index inside int32 with INT32_MAX reserved as the "no winner"
+// sentinel, so the interface can only serve numFaces <= INT32_MAX. Larger inputs
+// must be rejected by Host tiling before dispatch.
+constexpr uint64_t kRasterizerMaxFaces = 2147483647U;
+
 constexpr bool RasterizerTilingDataHasValidCommonFields(const RasterizerTilingData& data) noexcept
 {
-    return data.numFaces >= 1U && data.height >= 1U && data.height <= 4096U && data.width >= 1U &&
-           data.width <= 4096U && data.totalPixels == static_cast<uint64_t>(data.height) * data.width &&
-           data.totalPixels >= 1U && data.totalPixels <= UINT64_C(16777216) && data.activeCoreNum >= 1U &&
-           data.pixelBlockLen >= 1U && data.pixelTileLen >= 1U;
+    return data.numFaces >= 1U && data.numFaces <= kRasterizerMaxFaces && data.height >= 1U && data.height <= 4096U &&
+           data.width >= 1U && data.width <= 4096U &&
+           data.totalPixels == static_cast<uint64_t>(data.height) * data.width && data.totalPixels >= 1U &&
+           data.totalPixels <= UINT64_C(16777216) && data.activeCoreNum >= 1U && data.pixelBlockLen >= 1U &&
+           data.pixelTileLen >= 1U;
 }
 
 // DESIGN-BRANCH-0 §1: direct pixel ownership has no merge phase or user workspace.

@@ -18,10 +18,11 @@ constexpr uint32_t kLegacyCompatTileLen = 1024U;
 
 __aicore__ inline bool HasValidArch35Tiling(const RasterizerTilingData& data)
 {
-    return data.numFaces >= 1U && data.height >= 1U && data.height <= 4096U && data.width >= 1U &&
-           data.width <= 4096U && data.totalPixels == static_cast<uint64_t>(data.height) * data.width &&
-           data.totalPixels >= 1U && data.totalPixels <= UINT64_C(16777216) && data.activeCoreNum >= 1U &&
-           data.pixelBlockLen >= 1U && data.pixelTileLen >= RasterizerKernel::kFloatLanes;
+    return data.numFaces >= 1U && data.numFaces <= kRasterizerMaxFaces && data.height >= 1U && data.height <= 4096U &&
+           data.width >= 1U && data.width <= 4096U &&
+           data.totalPixels == static_cast<uint64_t>(data.height) * data.width && data.totalPixels >= 1U &&
+           data.totalPixels <= UINT64_C(16777216) && data.activeCoreNum >= 1U && data.pixelBlockLen >= 1U &&
+           data.pixelTileLen >= RasterizerKernel::kFloatLanes;
 }
 
 // The built-in Rasterizer host currently serializes the legacy 24-byte layout:
@@ -37,8 +38,8 @@ __aicore__ inline bool BuildLegacyCompatTiling(const RasterizerTilingData& raw, 
     const uint32_t legacyWidth = static_cast<uint32_t>(packedHeightAndWidth >> 32U);
     const uint32_t activeCoreNum = AscendC::GetBlockNum();
 
-    if (legacyNumFaces < 1U || legacyHeight < 1U || legacyHeight > 4096U || legacyWidth < 1U || legacyWidth > 4096U ||
-        activeCoreNum < 1U) {
+    if (legacyNumFaces < 1U || legacyNumFaces > kRasterizerMaxFaces || legacyHeight < 1U || legacyHeight > 4096U ||
+        legacyWidth < 1U || legacyWidth > 4096U || activeCoreNum < 1U) {
         return false;
     }
 

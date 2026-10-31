@@ -4,7 +4,7 @@
 
 |产品             |  是否支持  |
 |:-------------------------|:----------:|
-|  <term>Ascend 950PR&950DT系列产品</term>   |     ×    |
+|  <term>Ascend 950PR&950DT系列产品</term>   |     √    |
 |  <term>Atlas A3系列产品</term>   |     √    |
 |  <term>Atlas A2系列产品</term>     |     √    |
 |  <term>Atlas 200I/500 A2推理产品</term>    |     ×    |
@@ -166,7 +166,7 @@
       <td>occlusion_truncation</td>
       <td>输入</td>
       <td><ul><li>遮挡截断，用于计算深度阈值，此参数不生效但需要传入。</li><li>默认值为0.0，当前仅支持取值为0.0。</li></ul></td>
-      <td>DOUBLE</td>
+      <td>FLOAT32</td>
       <td>-</td>
     </tr>
     <tr>

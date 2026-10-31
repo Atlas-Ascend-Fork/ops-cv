@@ -216,8 +216,8 @@ void ComputeRasterizerPublicTiling(const RasterizerPublicTilingInputs& in, Raste
         return;
     }
     if (!IsRank(in.v, 2U) || in.v.dims[0] == 0U || in.v.dims[1] != 4U || !IsRank(in.f, 2U) || in.f.dims[0] == 0U ||
-        in.f.dims[1] != 3U || (in.d.present && !IsRank(in.d, 2U)) || !in.v.ndContiguous || !in.f.ndContiguous ||
-        (in.d.present && !in.d.ndContiguous) || !in.findices.present ||
+        in.f.dims[0] > kRasterizerMaxFaces || in.f.dims[1] != 3U || (in.d.present && !IsRank(in.d, 2U)) ||
+        !in.v.ndContiguous || !in.f.ndContiguous || (in.d.present && !in.d.ndContiguous) || !in.findices.present ||
         in.findices.dtype != RasterizerPublicDataType::kInt32 || !IsRank(in.findices, 2U) ||
         !in.findices.ndContiguous || !in.barycentric.present ||
         in.barycentric.dtype != RasterizerPublicDataType::kFloat32 || !IsRank(in.barycentric, 3U) ||
