@@ -35,6 +35,7 @@ The dimensions of the input, grid, and output are as follows:
   $$
 
   Here, N of input, grid, and output are consistent; C of input and output are consistent; $H_{out}$ and $W_{out}$ of grid and output are consistent; the last dimension of grid is 2, indicating that the input pixel position information is (x, y), and the value ranges of x and y are normalized to [-1, 1], where (-1, -1) indicates the top-left corner coordinate and (1, 1) indicates the bottom-right corner coordinate.
+
   - Formula for de-normalization:
     - alignCorners=true means the feature value is located at the pixel center.
 

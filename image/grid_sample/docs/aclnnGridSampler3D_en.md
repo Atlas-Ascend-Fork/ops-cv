@@ -182,7 +182,7 @@ aclnnStatus aclnnGridSampler3D(
       <td>input(aclTensor*)</td>
       <td>Input</td>
       <td>The input tensor for interpolation, corresponding to `input` described in the formula.</td>
-      <td><ul><li>Empty tensors are supported.</li><li>When the data format is ND, it is processed in NCDHW format; NDHWC is supported only when the conditions are met (data type is FLOAT32 && interpolationMode is 0 && C axis is a multiple of 4).</li></ul></td>
+      <td><ul><li>Empty tensors are supported.</li><li>When the data format is ND, it is processed in NCDHW format.</li></ul></td>
       <td>FLOAT16, FLOAT32, DOUBLE, BFLOAT16</td>
       <td>NCDHW, NDHWC, ND</td>
       <td>5</td>
@@ -351,7 +351,7 @@ aclnnStatus aclnnGridSampler3D(
 
 ## Constraints
 
-- For input `input`, (D-axis size * H-axis size * W-axis size) < maximum value of INT32.
+- For input `input`, (D-axis size \* H-axis size \* W-axis size) < maximum value of INT32.
 - Deterministic computation:
   - aclnnGridSampler3D defaults to a deterministic implementation.
 

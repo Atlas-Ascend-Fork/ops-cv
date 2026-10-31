@@ -321,7 +321,7 @@ English | [简体中文](./README.md)
     - The data types of the input and output support only FLOAT32.
     - The attribute `interpolation_mode` must be set to `bilinear`.
     - The attribute `padding_mode` must be set to `zeros`.
-    - The C axis value of the input `x` is 32, or $(the size of the C axis * the size of the H axis * the size of the W axis) < 20k$.
+    - The shape of parameter `x` must satisfy C=32 or C \* H \* W < 20480.
   - The 3D scenario is not supported.
 
 - <term>Kirin X90 processor products</term> and <term>Kirin 9030 processor products</term>: BFLOAT16 is not supported.
@@ -330,11 +330,12 @@ English | [简体中文](./README.md)
 
 - In the 3D scenario:
   - The attribute `interpolation_mode` does not support the "bicubic" configuration.
-  - For the input `x`, $(the size of the D axis * the size of the H axis * the size of the W axis) < the maximum value of INT32$.
-- In the 2D scenario, for the input `x`, $(the size of the H axis * the size of the W axis) < the maximum value of INT32$.
+  - For input `x`, (D-axis size \* H-axis size \* W-axis size) < maximum value of INT32.
+- In the 2D scenario:
+  - For input `x`, (H-axis size * W-axis size) < maximum value of INT32.
+  - For input `x`, precision deviations may occur if the value of (C_size \* (H_size \* W_size - 1) \* sizeof(T)) exceeds INT32_MAX.
 - For the shapes of `x` and `grid`, all dimensions must be greater than 0.
-- For the input `x`, $(the size of the D axis * the size of the H axis * the size of the W axis) < the maximum value of INT32$.
-- For grid, when $the input value * the image (height or width) > the 24-bit binary number (16777216)$, sampling points may contain errors, and the precision may deviate.
+- When the input value of `grid` multiplied by the image length or width exceeds the 24-bit binary number (16777216), sampling points may have errors and precision may deviate.
 - <term>Atlas A2 products</term> and <term>Atlas A3 products</term>: If grid contains data beyond the range [-1, 1], errors may occur when computing small-range data with bicubic interpolation, and the precision may deviate.
 
 ## Invocation Description

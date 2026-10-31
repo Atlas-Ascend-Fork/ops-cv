@@ -182,7 +182,7 @@ aclnnStatus aclnnGridSampler3D(
       <td>input（aclTensor*）</td>
       <td>输入</td>
       <td>进行插值计算的输入张量，对应公式中描述的`input`。</td>
-      <td><ul><li>支持空Tensor。</li><li>当数据格式为ND时，会按照NCDHW格式进行处理；仅当满足条件（数据类型为FLOAT32 && interpolationMode为0 && C轴为4的倍数）时支持NDHWC。</li></ul></td>
+      <td><ul><li>支持空Tensor。</li><li>当数据格式为ND时，会按照NCDHW格式进行处理。</li></ul></td>
       <td>FLOAT16、FLOAT32、DOUBLE、BFLOAT16</td>
       <td>NCDHW、NDHWC、ND</td>
       <td>5</td>
