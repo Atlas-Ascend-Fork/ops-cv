@@ -1,0 +1,1534 @@
+/**
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
+/*!
+ * \file test_aclnn_integral_image.cpp
+ * \brief IntegralImage 算子功能测试（aclnn 接口）
+ *
+ * 数据格式：
+ *   输入 image: (H,W) 或 (H,W,C)，uint8/float16/float32，ND（HWC 布局）
+ *   输出 sat  : (H+1,W+1) 或 (H+1,W+1,C)，UINT8 默认 INT32，浮点输入或 sdepth=1 为 FLOAT32
+ *
+ * 验证点：
+ *   1. 物理零填充边 sat[0][*]=sat[*][0]=0
+ *   2. CPU 参考逐元素比对（含 3D 逐通道独立）
+ *   3. 窄 dtype（uint8/float16）Cast 拓宽正确性
+ *   4. two-phase 多核列累加、HWC 分块及块起始补偿
+ */
+#include <iostream>
+#include <cmath>
+#include <cstring>
+#include <typeinfo>
+#include <vector>
+#include <chrono>
+#include <algorithm>
+#include <numeric>
+#include <string>
+#include <cstdlib>
+#include <utility>
+#include "acl/acl.h"
+#include "aclnn_integral_image.h"
+#include "integral_image_test_utils.h"
+
+#define CHECK_RET(cond, return_expr) \
+    do {                             \
+        if (!(cond)) {               \
+            return_expr;             \
+        }                            \
+    } while (0)
+
+int64_t GetShapeSize(const std::vector<int64_t>& shape)
+{
+    int64_t shapeSize = 1;
+    for (auto i : shape) {
+        shapeSize *= i;
+    }
+    return shapeSize;
+}
+
+int Init(int32_t deviceId, aclrtStream* stream)
+{
+    auto ret = aclInit(nullptr);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "aclInit failed: " << ret << std::endl; return ret);
+    ret = aclrtSetDevice(deviceId);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "aclrtSetDevice failed: " << ret << std::endl; return ret);
+    ret = aclrtCreateStream(stream);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "aclrtCreateStream failed: " << ret << std::endl; return ret);
+    return 0;
+}
+
+template <typename T>
+int CreateAclTensor(const std::vector<T>& hostData, const std::vector<int64_t>& shape, void** deviceAddr,
+                    aclDataType dataType, aclTensor** tensor)
+{
+    auto size = GetShapeSize(shape) * sizeof(T);
+    auto ret = aclrtMalloc(deviceAddr, size, ACL_MEM_MALLOC_HUGE_FIRST);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "aclrtMalloc failed: " << ret << std::endl; return ret);
+    if (!hostData.empty()) {
+        ret = aclrtMemcpy(*deviceAddr, size, hostData.data(), size, ACL_MEMCPY_HOST_TO_DEVICE);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "aclrtMemcpy failed: " << ret << std::endl; return ret);
+    }
+    std::vector<int64_t> strides(shape.size(), 1);
+    for (int64_t i = shape.size() - 2; i >= 0; i--) {
+        strides[i] = shape[i + 1] * strides[i + 1];
+    }
+    *tensor = aclCreateTensor(shape.data(), shape.size(), dataType, strides.data(), 0, aclFormat::ACL_FORMAT_ND,
+                              shape.data(), shape.size(), *deviceAddr);
+    return 0;
+}
+
+// 将测试输入转换为 IEEE 754 half。
+uint16_t FloatToHalf(float f)
+{
+    uint32_t x;
+    memcpy(&x, &f, 4);
+    uint32_t sign = (x >> 16) & 0x8000;
+    uint32_t exp = (x >> 23) & 0xFF;
+    uint32_t mant = x & 0x7FFFFF;
+    if (exp == 0xFF) {
+        return static_cast<uint16_t>(sign | 0x7C00 | (mant ? 0x200 : 0));
+    }
+    int32_t e = static_cast<int32_t>(exp) - 127 + 15;
+    if (e >= 0x1F) {
+        return static_cast<uint16_t>(sign | 0x7C00);
+    }
+    if (e <= 0) {
+        return static_cast<uint16_t>(sign);
+    }
+    return static_cast<uint16_t>(sign | (static_cast<uint32_t>(e) << 10) | (mant >> 13));
+}
+
+// CPU reference for the tilted integral (closed-form inverted-triangle sum):
+//   tilted[y][x] = sum_{k<=y} sum_{j in [x-(y-k), x+(y-k)] clipped to [0,W)} src[k][j]
+// Boundaries: column W and row H are zero (defined by the kernel).
+template <typename InT>
+void ComputeTiltedRef(const std::vector<InT>& input, int64_t H, int64_t W, std::vector<double>& tilted)
+{
+    const int64_t OHW = W + 1;
+    tilted.assign((H + 1) * OHW, 0.0);
+    auto toD = [](InT v) -> double {
+        if constexpr (std::is_same<InT, uint16_t>::value) {
+            uint32_t sign = (static_cast<uint32_t>(v) & 0x8000u) << 16;
+            uint32_t exp = (static_cast<uint32_t>(v) >> 10) & 0x1Fu;
+            uint32_t mant = static_cast<uint32_t>(v) & 0x3FFu;
+            uint32_t f;
+            if (exp == 0) {
+                if (mant == 0) {
+                    f = sign;
+                } else {
+                    int e = -14;
+                    uint32_t m = mant;
+                    while ((m & 0x400u) == 0) {
+                        m <<= 1;
+                        e--;
+                    }
+                    m &= 0x3FFu;
+                    f = sign | (static_cast<uint32_t>(e + 127) << 23) | (m << 13);
+                }
+            } else if (exp == 31) {
+                f = sign | 0x7F800000u | (mant << 13);
+            } else {
+                f = sign | ((exp - 15 + 127) << 23) | (mant << 13);
+            }
+            float out;
+            std::memcpy(&out, &f, sizeof(out));
+            return static_cast<double>(out);
+        } else {
+            return static_cast<double>(v);
+        }
+    };
+    for (int64_t y = 0; y < H; y++) {
+        for (int64_t x = 0; x < W; x++) {
+            double s = 0.0;
+            for (int64_t k = 0; k <= y; k++) {
+                int64_t lo = x - (y - k);
+                int64_t hi = x + (y - k);
+                if (lo < 0) {
+                    lo = 0;
+                }
+                if (hi >= W) {
+                    hi = W - 1;
+                }
+                for (int64_t j = lo; j <= hi; j++) {
+                    s += toD(input[k * W + j]);
+                }
+            }
+            tilted[y * OHW + x] = s;
+        }
+    }
+}
+
+// 通用 2D 用例：输入 InT、输出 OutT，期望值以 double 存储（int/float 统一比较）
+template <typename InT, typename OutT>
+int RunCaseT(aclrtStream stream, int64_t H, int64_t W, const std::vector<InT>& input, aclDataType inAclType,
+             aclDataType outAclType, const std::vector<double>& expected, int64_t sdepth = -1,
+             const std::vector<double>& expectedSq = {}, const std::vector<double>& expectedTilted = {},
+             bool withTilted = true, bool withSqsum = true, bool optionalAsNullptr = false)
+{
+    const int64_t OH = H + 1;
+    const int64_t OW = W + 1;
+
+    aclTensor* imageTensor = nullptr;
+    aclTensor* satTensor = nullptr;
+    aclTensor* sqsumTensor = nullptr;
+    aclTensor* tiltedTensor = nullptr;
+    void* imageDev = nullptr;
+    void* satDev = nullptr;
+    void* sqsumDev = nullptr;
+    void* tiltedDev = nullptr;
+    std::vector<int64_t> inShape = {H, W};
+    std::vector<int64_t> outShape = {OH, OW};
+
+    int ret = CreateAclTensor(input, inShape, &imageDev, inAclType, &imageTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "create image tensor failed" << std::endl; return ret);
+    ret = CreateAclTensor(std::vector<OutT>(), outShape, &satDev, outAclType, &satTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "create sat tensor failed" << std::endl; return ret);
+    if (withSqsum) {
+        ret = CreateAclTensor(std::vector<float>(), outShape, &sqsumDev, ACL_FLOAT, &sqsumTensor);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "create sqsum tensor failed" << std::endl; return ret);
+    } else if (optionalAsNullptr) {
+        // optional output not requested: pass a literal nullptr
+        // (the other supported form; the framework treats it as "not provided")
+        sqsumTensor = nullptr;
+        sqsumDev = nullptr;
+    } else {
+        // optional output not requested: pass an empty tensor (shape [0])
+        std::vector<int64_t> emptyShape = {0};
+        std::vector<int64_t> emptyStrides = {0};
+        sqsumTensor = aclCreateTensor(emptyShape.data(), 1, ACL_FLOAT, emptyStrides.data(), 0, aclFormat::ACL_FORMAT_ND,
+                                      emptyShape.data(), 1, nullptr);
+        sqsumDev = nullptr;
+    }
+    if (withTilted) {
+        ret = CreateAclTensor(std::vector<OutT>(), outShape, &tiltedDev, outAclType, &tiltedTensor);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "create tilted tensor failed" << std::endl; return ret);
+    } else if (optionalAsNullptr) {
+        // optional output not requested: pass a literal nullptr
+        // (the other supported form; the framework treats it as "not provided")
+        tiltedTensor = nullptr;
+        tiltedDev = nullptr;
+    } else {
+        // optional output not requested: pass an empty tensor (shape [0])
+        std::vector<int64_t> emptyShape = {0};
+        std::vector<int64_t> emptyStrides = {0};
+        tiltedTensor = aclCreateTensor(emptyShape.data(), 1, outAclType, emptyStrides.data(), 0,
+                                       aclFormat::ACL_FORMAT_ND, emptyShape.data(), 1, nullptr);
+        tiltedDev = nullptr;
+    }
+
+    uint64_t workspaceSize = 0;
+    aclOpExecutor* executor = nullptr;
+    ret = aclnnIntegralImageGetWorkspaceSize(imageTensor, sdepth, satTensor, sqsumTensor, tiltedTensor, &workspaceSize,
+                                             &executor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "GetWorkspaceSize failed: " << ret << std::endl; return ret);
+    void* workspaceAddr = nullptr;
+    if (workspaceSize > 0) {
+        ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "workspace malloc failed: " << ret << std::endl; return ret);
+    }
+    ret = aclnnIntegralImage(workspaceAddr, workspaceSize, executor, stream);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "aclnnIntegralImage failed: " << ret << std::endl; return ret);
+    ret = aclrtSynchronizeStream(stream);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "sync stream failed: " << ret << std::endl; return ret);
+
+    std::vector<OutT> actual(OH * OW, 0);
+    ret = aclrtMemcpy(actual.data(), actual.size() * sizeof(OutT), satDev, actual.size() * sizeof(OutT),
+                      ACL_MEMCPY_DEVICE_TO_HOST);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "copy sat back failed: " << ret << std::endl; return ret);
+
+    std::vector<float> actualSq;
+    if (withSqsum) {
+        actualSq.assign(OH * OW, 0);
+        ret = aclrtMemcpy(actualSq.data(), actualSq.size() * sizeof(float), sqsumDev, actualSq.size() * sizeof(float),
+                          ACL_MEMCPY_DEVICE_TO_HOST);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "copy sqsum back failed: " << ret << std::endl; return ret);
+    }
+
+    std::vector<OutT> actualTilted;
+    if (withTilted) {
+        actualTilted.assign(OH * OW, 0);
+        ret = aclrtMemcpy(actualTilted.data(), actualTilted.size() * sizeof(OutT), tiltedDev,
+                          actualTilted.size() * sizeof(OutT), ACL_MEMCPY_DEVICE_TO_HOST);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "copy tilted back failed: " << ret << std::endl; return ret);
+    }
+
+#ifdef DUMP_SAT
+    std::cout << "dump sat (first 5 rows, first 8 cols):" << std::endl;
+    for (int64_t rr = 0; rr < 5 && rr < OH; rr++) {
+        for (int64_t cc = 0; cc < 8 && cc < OW; cc++) {
+            std::cout << static_cast<double>(actual[rr * OW + cc]) << " ";
+        }
+        std::cout << std::endl;
+    }
+#endif
+
+    bool ok = true;
+    for (int64_t i = 0; i < OH * OW; i++) {
+        if constexpr (std::is_same<OutT, int32_t>::value) {
+            // integer outputs: exact comparison (dtype wrap-around included)
+            int64_t want = static_cast<int64_t>(static_cast<int32_t>(expected[i]));
+            if (static_cast<int64_t>(actual[i]) != want) {
+                ok = false;
+                std::cout << "sat mismatch at " << i / OW << "," << i % OW << ": got "
+                          << static_cast<int64_t>(actual[i]) << " expected " << want << std::endl;
+                break;
+            }
+        } else {
+            double got = static_cast<double>(actual[i]);
+            double want = expected[i];
+            double tol = (std::fabs(want) > 1.0) ? std::fabs(want) * 1e-4 : 1e-3;
+            if (!IntegralImageTest::IsFiniteClose(got, want, tol)) {
+                ok = false;
+                std::cout << "sat mismatch at " << i / OW << "," << i % OW << ": got " << got << " expected " << want
+                          << std::endl;
+                break;
+            }
+        }
+    }
+
+    if (withSqsum && !expectedSq.empty()) {
+        for (int64_t i = 0; i < OH * OW; i++) {
+            double got = static_cast<double>(actualSq[i]);
+            double want = expectedSq[i];
+            double tol = (std::fabs(want) > 1.0) ? std::fabs(want) * 1e-4 : 1e-3;
+            if (!IntegralImageTest::IsFiniteClose(got, want, tol)) {
+                ok = false;
+                std::cout << "sqsum mismatch at " << i / OW << "," << i % OW << ": got " << got << " expected " << want
+                          << std::endl;
+                break;
+            }
+        }
+    }
+
+    if (withTilted && !expectedTilted.empty()) {
+        for (int64_t i = 0; i < OH * OW; i++) {
+            double got = static_cast<double>(actualTilted[i]);
+            double want = expectedTilted[i];
+            double tol = (std::fabs(want) > 1.0) ? std::fabs(want) * 1e-4 : 1e-3;
+            if (!IntegralImageTest::IsFiniteClose(got, want, tol)) {
+                ok = false;
+                std::cout << "tilted mismatch at " << i / OW << "," << i % OW << ": got " << got << " expected " << want
+                          << std::endl;
+                break;
+            }
+        }
+    }
+
+    if (workspaceSize > 0) {
+        aclrtFree(workspaceAddr);
+    }
+    aclDestroyTensor(imageTensor);
+    aclDestroyTensor(satTensor);
+    if (withSqsum) {
+        aclDestroyTensor(sqsumTensor);
+    }
+    if (withTilted) {
+        aclDestroyTensor(tiltedTensor);
+    }
+    aclrtFree(imageDev);
+    aclrtFree(satDev);
+    if (withSqsum) {
+        aclrtFree(sqsumDev);
+    }
+    if (withTilted) {
+        aclrtFree(tiltedDev);
+    }
+
+    std::cout << (ok ? "[PASS]" : "[FAIL]") << " IntegralImage " << typeid(InT).name() << " H=" << H << " W=" << W
+              << std::endl;
+    return ok ? 0 : 1;
+}
+
+// CPU reference for the 3D tilted integral (HWC layout, per channel independent)
+template <typename InT>
+void ComputeTiltedRef3D(const std::vector<InT>& input, int64_t C, int64_t H, int64_t W, std::vector<double>& tilted)
+{
+    const int64_t OHW = W + 1;
+    tilted.assign(C * (H + 1) * OHW, 0.0);
+    for (int64_t c = 0; c < C; c++) {
+        for (int64_t y = 0; y < H; y++) {
+            for (int64_t x = 0; x < W; x++) {
+                double s = 0.0;
+                for (int64_t k = 0; k <= y; k++) {
+                    int64_t lo = x - (y - k);
+                    int64_t hi = x + (y - k);
+                    if (lo < 0)
+                        lo = 0;
+                    if (hi >= W)
+                        hi = W - 1;
+                    for (int64_t j = lo; j <= hi; j++) {
+                        s += static_cast<double>(input[(k * W + j) * C + c]);
+                    }
+                }
+                tilted[(y * OHW + x) * C + c] = s;
+            }
+        }
+    }
+}
+
+// 通用 3D 用例：输入 (H,W,C)，输出 (H+1,W+1,C)（HWC 布局）
+template <typename InT, typename OutT>
+int RunCase3DT(aclrtStream stream, int64_t C, int64_t H, int64_t W, const std::vector<InT>& input,
+               aclDataType inAclType, aclDataType outAclType, const std::vector<double>& expected, int64_t sdepth = -1,
+               const std::vector<double>& expectedSq = {}, const std::vector<double>& expectedTilted = {})
+{
+    const int64_t OH = H + 1;
+    const int64_t OW = W + 1;
+
+    aclTensor* imageTensor = nullptr;
+    aclTensor* satTensor = nullptr;
+    aclTensor* sqsumTensor = nullptr;
+    aclTensor* tiltedTensor = nullptr;
+    void* imageDev = nullptr;
+    void* satDev = nullptr;
+    void* sqsumDev = nullptr;
+    void* tiltedDev = nullptr;
+    std::vector<int64_t> inShape = {H, W, C};
+    std::vector<int64_t> outShape = {OH, OW, C};
+
+    int ret = CreateAclTensor(input, inShape, &imageDev, inAclType, &imageTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "create image tensor failed" << std::endl; return ret);
+    ret = CreateAclTensor(std::vector<OutT>(), outShape, &satDev, outAclType, &satTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "create sat tensor failed" << std::endl; return ret);
+    ret = CreateAclTensor(std::vector<float>(), outShape, &sqsumDev, ACL_FLOAT, &sqsumTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "create sqsum tensor failed" << std::endl; return ret);
+    ret = CreateAclTensor(std::vector<OutT>(), outShape, &tiltedDev, outAclType, &tiltedTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "create tilted tensor failed" << std::endl; return ret);
+
+    uint64_t workspaceSize = 0;
+    aclOpExecutor* executor = nullptr;
+    ret = aclnnIntegralImageGetWorkspaceSize(imageTensor, sdepth, satTensor, sqsumTensor, tiltedTensor, &workspaceSize,
+                                             &executor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "GetWorkspaceSize failed: " << ret << std::endl; return ret);
+
+    void* workspaceAddr = nullptr;
+    if (workspaceSize > 0) {
+        ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "workspace malloc failed: " << ret << std::endl; return ret);
+    }
+    ret = aclnnIntegralImage(workspaceAddr, workspaceSize, executor, stream);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "aclnnIntegralImage failed: " << ret << std::endl; return ret);
+    ret = aclrtSynchronizeStream(stream);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "sync stream failed: " << ret << std::endl; return ret);
+
+    std::vector<OutT> actual(C * OH * OW, 0);
+    ret = aclrtMemcpy(actual.data(), actual.size() * sizeof(OutT), satDev, actual.size() * sizeof(OutT),
+                      ACL_MEMCPY_DEVICE_TO_HOST);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "copy sat back failed: " << ret << std::endl; return ret);
+
+    std::vector<float> actualSq(C * OH * OW, 0);
+    ret = aclrtMemcpy(actualSq.data(), actualSq.size() * sizeof(float), sqsumDev, actualSq.size() * sizeof(float),
+                      ACL_MEMCPY_DEVICE_TO_HOST);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "copy sqsum back failed: " << ret << std::endl; return ret);
+
+    std::vector<OutT> actualTilted(C * OH * OW, 0);
+    ret = aclrtMemcpy(actualTilted.data(), actualTilted.size() * sizeof(OutT), tiltedDev,
+                      actualTilted.size() * sizeof(OutT), ACL_MEMCPY_DEVICE_TO_HOST);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "copy tilted back failed: " << ret << std::endl; return ret);
+
+    bool ok = true;
+    for (int64_t i = 0; i < C * OH * OW; i++) {
+        double got = static_cast<double>(actual[i]);
+        double want = expected[i];
+        double tol = (std::fabs(want) > 1.0) ? std::fabs(want) * 1e-4 : 1e-3;
+        if (!IntegralImageTest::IsFiniteClose(got, want, tol)) {
+            ok = false;
+            std::cout << "sat3d mismatch at " << i << ": got " << got << " expected " << want << std::endl;
+            break;
+        }
+    }
+
+    if (!expectedSq.empty()) {
+        for (int64_t i = 0; i < C * OH * OW; i++) {
+            double got = static_cast<double>(actualSq[i]);
+            double want = expectedSq[i];
+            double tol = (std::fabs(want) > 1.0) ? std::fabs(want) * 1e-4 : 1e-3;
+            if (!IntegralImageTest::IsFiniteClose(got, want, tol)) {
+                ok = false;
+                std::cout << "sqsum3d mismatch at " << i << ": got " << got << " expected " << want << std::endl;
+                break;
+            }
+        }
+    }
+
+    if (!expectedTilted.empty()) {
+        for (int64_t i = 0; i < C * OH * OW; i++) {
+            double got = static_cast<double>(actualTilted[i]);
+            double want = expectedTilted[i];
+            double tol = (std::fabs(want) > 1.0) ? std::fabs(want) * 1e-4 : 1e-3;
+            if (!IntegralImageTest::IsFiniteClose(got, want, tol)) {
+                ok = false;
+                std::cout << "tilted3d mismatch at " << i << ": got " << got << " expected " << want << std::endl;
+                break;
+            }
+        }
+    }
+
+    if (workspaceSize > 0) {
+        aclrtFree(workspaceAddr);
+    }
+    aclDestroyTensor(imageTensor);
+    aclDestroyTensor(satTensor);
+    aclDestroyTensor(sqsumTensor);
+    aclDestroyTensor(tiltedTensor);
+    aclrtFree(imageDev);
+    aclrtFree(satDev);
+    aclrtFree(sqsumDev);
+    aclrtFree(tiltedDev);
+
+    std::cout << (ok ? "[PASS]" : "[FAIL]") << " IntegralImage 3D " << typeid(InT).name() << " C=" << C << " H=" << H
+              << " W=" << W << std::endl;
+    return ok ? 0 : 1;
+}
+
+// ---------------- benchmark ----------------
+// 与 torch_npu 基线同口径：warmup 3 次，迭代 iters 次，取中位数（微秒）。
+// 计时区域 = aclnnIntegralImage 下发 + aclrtSynchronizeStream 等待完成。
+template <typename InT, typename OutT>
+// 返回 {e2e_us, device_us}：
+//   e2e_us    = aclnnIntegralImage 下发 + aclrtSynchronizeStream 等待完成（host 墙钟）
+//   device_us = aclrtEvent 时间戳测得的设备侧执行时间
+std::pair<double, double> BenchShape(aclrtStream stream, int64_t H, int64_t W, aclDataType inAclType,
+                                     aclDataType outAclType, int iters, bool withTilted = true, bool withSqsum = true,
+                                     int mode = 2)
+{
+    const int64_t OH = H + 1;
+    const int64_t OW = W + 1;
+
+    // 伪随机输入 0..255（与 torch 基线 randint(0,256) 对齐）
+    std::vector<InT> input(H * W);
+    unsigned int seed = 12345u;
+    for (auto& v : input) {
+        seed = seed * 1103515245u + 12345u;
+        v = static_cast<InT>((seed >> 16) & 0xFF);
+    }
+
+    aclTensor* imageTensor = nullptr;
+    aclTensor* satTensor = nullptr;
+    aclTensor* sqsumTensor = nullptr;
+    aclTensor* tiltedTensor = nullptr;
+    void* imageDev = nullptr;
+    void* satDev = nullptr;
+    void* sqsumDev = nullptr;
+    void* tiltedDev = nullptr;
+    std::vector<int64_t> inShape = {H, W};
+    std::vector<int64_t> outShape = {OH, OW};
+
+    int ret = CreateAclTensor(input, inShape, &imageDev, inAclType, &imageTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: create image tensor failed" << std::endl;
+              return std::make_pair(-1.0, -1.0));
+    ret = CreateAclTensor(std::vector<OutT>(), outShape, &satDev, outAclType, &satTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: create sat tensor failed" << std::endl;
+              return std::make_pair(-1.0, -1.0));
+    if (withSqsum) {
+        ret = CreateAclTensor(std::vector<float>(), outShape, &sqsumDev, ACL_FLOAT, &sqsumTensor);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: create sqsum tensor failed" << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+    } else {
+        std::vector<int64_t> emptyShape = {0};
+        std::vector<int64_t> emptyStrides = {0};
+        sqsumTensor = aclCreateTensor(emptyShape.data(), 1, ACL_FLOAT, emptyStrides.data(), 0, aclFormat::ACL_FORMAT_ND,
+                                      emptyShape.data(), 1, nullptr);
+        sqsumDev = nullptr;
+    }
+    if (withTilted) {
+        ret = CreateAclTensor(std::vector<OutT>(), outShape, &tiltedDev, outAclType, &tiltedTensor);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: create tilted tensor failed" << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+    } else {
+        std::vector<int64_t> emptyShape = {0};
+        std::vector<int64_t> emptyStrides = {0};
+        tiltedTensor = aclCreateTensor(emptyShape.data(), 1, outAclType, emptyStrides.data(), 0,
+                                       aclFormat::ACL_FORMAT_ND, emptyShape.data(), 1, nullptr);
+        tiltedDev = nullptr;
+    }
+
+    aclrtEvent startEv = nullptr;
+    aclrtEvent endEv = nullptr;
+    ret = aclrtCreateEvent(&startEv);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: create start event failed: " << ret << std::endl;
+              return std::make_pair(-1.0, -1.0));
+    ret = aclrtCreateEvent(&endEv);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: create end event failed: " << ret << std::endl;
+              return std::make_pair(-1.0, -1.0));
+
+    const int warmup = 3;
+    for (int i = 0; i < warmup; i++) {
+        uint64_t wsSizeTmp = 0;
+        aclOpExecutor* exTmp = nullptr;
+        ret = aclnnIntegralImageGetWorkspaceSize(imageTensor, -1, satTensor, sqsumTensor, tiltedTensor, &wsSizeTmp,
+                                                 &exTmp);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: GetWorkspaceSize failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        void* wsTmp = nullptr;
+        if (wsSizeTmp > 0) {
+            ret = aclrtMalloc(&wsTmp, wsSizeTmp, ACL_MEM_MALLOC_HUGE_FIRST);
+            CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: workspace malloc failed" << std::endl;
+                      return std::make_pair(-1.0, -1.0));
+        }
+        ret = aclnnIntegralImage(wsTmp, wsSizeTmp, exTmp, stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: aclnnIntegralImage failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        ret = aclrtSynchronizeStream(stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: sync stream failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        if (wsSizeTmp > 0) {
+            aclrtFree(wsTmp);
+        }
+    }
+
+    std::vector<double> e2eTimes;
+    std::vector<double> devTimes;
+    e2eTimes.reserve(iters);
+    devTimes.reserve(iters);
+
+    // Pass 1：e2e = aclnnIntegralImage 下发 + aclrtSynchronizeStream 等待完成（host 墙钟）。
+    // 墙钟统计独立于事件统计，避免事件记录影响 Host 计时。
+    for (int i = 0; i < iters; i++) {
+        ret = aclrtSynchronizeStream(stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: sync stream failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        uint64_t wsSizeTmp = 0;
+        aclOpExecutor* exTmp = nullptr;
+        ret = aclnnIntegralImageGetWorkspaceSize(imageTensor, -1, satTensor, sqsumTensor, tiltedTensor, &wsSizeTmp,
+                                                 &exTmp);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: GetWorkspaceSize failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        void* wsTmp = nullptr;
+        if (wsSizeTmp > 0) {
+            ret = aclrtMalloc(&wsTmp, wsSizeTmp, ACL_MEM_MALLOC_HUGE_FIRST);
+            CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: workspace malloc failed" << std::endl;
+                      return std::make_pair(-1.0, -1.0));
+        }
+        auto t0 = std::chrono::steady_clock::now();
+        ret = aclnnIntegralImage(wsTmp, wsSizeTmp, exTmp, stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: aclnnIntegralImage failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        ret = aclrtSynchronizeStream(stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: sync stream failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        auto t1 = std::chrono::steady_clock::now();
+        e2eTimes.push_back(std::chrono::duration<double, std::micro>(t1 - t0).count());
+        if (wsSizeTmp > 0) {
+            aclrtFree(wsTmp);
+        }
+    }
+
+    // Pass 2：device = aclrtEvent 时间戳（start 事件先于 kernel 入队，end 事件后于 kernel 入队，
+    // 在流上顺序执行，两者间隔为设备侧执行时间）。
+    for (int i = 0; i < iters; i++) {
+        ret = aclrtSynchronizeStream(stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: sync stream failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        uint64_t wsSizeTmp = 0;
+        aclOpExecutor* exTmp = nullptr;
+        ret = aclnnIntegralImageGetWorkspaceSize(imageTensor, -1, satTensor, sqsumTensor, tiltedTensor, &wsSizeTmp,
+                                                 &exTmp);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: GetWorkspaceSize failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        void* wsTmp = nullptr;
+        if (wsSizeTmp > 0) {
+            ret = aclrtMalloc(&wsTmp, wsSizeTmp, ACL_MEM_MALLOC_HUGE_FIRST);
+            CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: workspace malloc failed" << std::endl;
+                      return std::make_pair(-1.0, -1.0));
+        }
+        ret = aclrtRecordEvent(startEv, stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: record start event failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        ret = aclnnIntegralImage(wsTmp, wsSizeTmp, exTmp, stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: aclnnIntegralImage failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        ret = aclrtRecordEvent(endEv, stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: record end event failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        ret = aclrtSynchronizeStream(stream);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: sync stream failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        float devMs = 0.0f;
+        ret = aclrtEventElapsedTime(&devMs, startEv, endEv);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "bench: event elapsed failed: " << ret << std::endl;
+                  return std::make_pair(-1.0, -1.0));
+        devTimes.push_back(devMs * 1000.0);
+        if (wsSizeTmp > 0) {
+            aclrtFree(wsTmp);
+        }
+    }
+
+    std::sort(e2eTimes.begin(), e2eTimes.end());
+    std::sort(devTimes.begin(), devTimes.end());
+    double medE2e = e2eTimes[iters / 2];
+    double medDev = devTimes[iters / 2];
+    const char* modeName = (mode == 0) ? "sat" : ((mode == 1) ? "sat+sq" : "full");
+    std::cout << "op integral_image[" << modeName << "] " << typeid(InT).name() << "->" << typeid(OutT).name()
+              << " H=" << H << " W=" << W << ": e2e median=" << medE2e << " us (min=" << e2eTimes.front()
+              << ", max=" << e2eTimes.back() << ", n=" << iters << ")" << std::endl;
+    std::cout << "op integral_image[" << modeName << "] " << typeid(InT).name() << "->" << typeid(OutT).name()
+              << " H=" << H << " W=" << W << ": device median=" << medDev << " us (min=" << devTimes.front()
+              << ", max=" << devTimes.back() << ", n=" << iters << ")" << std::endl;
+
+    aclrtDestroyEvent(startEv);
+    aclrtDestroyEvent(endEv);
+    aclDestroyTensor(imageTensor);
+    aclDestroyTensor(satTensor);
+    if (withSqsum) {
+        aclDestroyTensor(sqsumTensor);
+    }
+    if (withTilted) {
+        aclDestroyTensor(tiltedTensor);
+    }
+    aclrtFree(imageDev);
+    aclrtFree(satDev);
+    if (withSqsum) {
+        aclrtFree(sqsumDev);
+    }
+    return {medE2e, medDev};
+}
+
+int RunBench(aclrtStream stream, int iters)
+{
+    // UINT8->INT32 基准，与 torch_npu cumsum int32 使用相同输出类型和尺寸。
+    int64_t sizes[][2] = {{1024, 1024}, {2048, 2048}, {4096, 4096}};
+    for (int mode = 0; mode <= 2; mode++) {
+        bool withSq = (mode >= 1);
+        bool withTilt = (mode >= 2);
+        for (auto& s : sizes) {
+            auto t = BenchShape<uint8_t, int32_t>(stream, s[0], s[1], ACL_UINT8, ACL_INT32, iters, withTilt, withSq,
+                                                  mode);
+            if (t.first < 0) {
+                return 1;
+            }
+        }
+        for (auto& s : sizes) {
+            auto t = BenchShape<float, float>(stream, s[0], s[1], ACL_FLOAT, ACL_FLOAT, iters, withTilt, withSq, mode);
+            if (t.first < 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+// sdepth 属性负向校验：非法组合应在 GetWorkspaceSize/tiling 阶段被拒绝
+int RunAttrNegativeTests(aclrtStream stream)
+{
+    int ret = 0;
+    // fp16 输入 + sdepth=0(int32)：非法（int32 仅允许 uint8 输入）
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 64;
+        std::vector<uint16_t> in(H * W, FloatToHalf(1.0f));
+        aclTensor* imageTensor = nullptr;
+        aclTensor* satTensor = nullptr;
+        aclTensor* sqsumTensor = nullptr;
+        aclTensor* tiltedTensor = nullptr;
+        void* imageDev = nullptr;
+        void* satDev = nullptr;
+        void* sqsumDev = nullptr;
+        void* tiltedDev = nullptr;
+        std::vector<int64_t> inShape = {H, W};
+        std::vector<int64_t> outShape = {H + 1, W + 1};
+        CHECK_RET(CreateAclTensor(in, inShape, &imageDev, ACL_FLOAT16, &imageTensor) == ACL_SUCCESS, return 1);
+        CHECK_RET(CreateAclTensor(std::vector<float>(), outShape, &satDev, ACL_FLOAT, &satTensor) == ACL_SUCCESS,
+                  return 1);
+        CHECK_RET(CreateAclTensor(std::vector<float>(), outShape, &sqsumDev, ACL_FLOAT, &sqsumTensor) == ACL_SUCCESS,
+                  return 1);
+        CHECK_RET(CreateAclTensor(std::vector<float>(), outShape, &tiltedDev, ACL_FLOAT, &tiltedTensor) == ACL_SUCCESS,
+                  return 1);
+        uint64_t ws = 0;
+        aclOpExecutor* ex = nullptr;
+        auto r = aclnnIntegralImageGetWorkspaceSize(imageTensor, 0, satTensor, sqsumTensor, tiltedTensor, &ws, &ex);
+        bool ok = (r != ACL_SUCCESS);
+        std::cout << (ok ? "[PASS]" : "[FAIL]") << " attr-neg: fp16+sdepth=0 rejected (ret=" << r << ")" << std::endl;
+        ret |= ok ? 0 : 1;
+        aclDestroyTensor(imageTensor);
+        aclDestroyTensor(satTensor);
+        aclDestroyTensor(sqsumTensor);
+        aclDestroyTensor(tiltedTensor);
+        aclrtFree(imageDev);
+        aclrtFree(satDev);
+        aclrtFree(sqsumDev);
+        aclrtFree(tiltedDev);
+    }
+    // UINT8 输入 + sdepth=2：超出合法属性取值范围。
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 64;
+        std::vector<uint8_t> in(H * W, 1);
+        aclTensor* imageTensor = nullptr;
+        aclTensor* satTensor = nullptr;
+        aclTensor* sqsumTensor = nullptr;
+        aclTensor* tiltedTensor = nullptr;
+        void* imageDev = nullptr;
+        void* satDev = nullptr;
+        void* sqsumDev = nullptr;
+        void* tiltedDev = nullptr;
+        std::vector<int64_t> inShape = {H, W};
+        std::vector<int64_t> outShape = {H + 1, W + 1};
+        CHECK_RET(CreateAclTensor(in, inShape, &imageDev, ACL_UINT8, &imageTensor) == ACL_SUCCESS, return 1);
+        CHECK_RET(CreateAclTensor(std::vector<float>(), outShape, &satDev, ACL_FLOAT, &satTensor) == ACL_SUCCESS,
+                  return 1);
+        CHECK_RET(CreateAclTensor(std::vector<float>(), outShape, &sqsumDev, ACL_FLOAT, &sqsumTensor) == ACL_SUCCESS,
+                  return 1);
+        CHECK_RET(CreateAclTensor(std::vector<float>(), outShape, &tiltedDev, ACL_FLOAT, &tiltedTensor) == ACL_SUCCESS,
+                  return 1);
+        uint64_t ws = 0;
+        aclOpExecutor* ex = nullptr;
+        auto r = aclnnIntegralImageGetWorkspaceSize(imageTensor, 2, satTensor, sqsumTensor, tiltedTensor, &ws, &ex);
+        bool ok = (r != ACL_SUCCESS);
+        std::cout << (ok ? "[PASS]" : "[FAIL]") << " attr-neg: u8+sdepth=2 rejected (ret=" << r << ")" << std::endl;
+        ret |= ok ? 0 : 1;
+        aclDestroyTensor(imageTensor);
+        aclDestroyTensor(satTensor);
+        aclDestroyTensor(sqsumTensor);
+        aclDestroyTensor(tiltedTensor);
+        aclrtFree(imageDev);
+        aclrtFree(satDev);
+        aclrtFree(sqsumDev);
+        aclrtFree(tiltedDev);
+    }
+    return ret;
+}
+
+// Validate parameter rejection at GetWorkspaceSize; no rejected case launches a kernel.
+int RunParameterValidationTests()
+{
+    struct TestCase {
+        const char* name;
+        std::vector<int64_t> input;
+        std::vector<int64_t> sat;
+        std::vector<int64_t> sqsum;
+        std::vector<int64_t> tilted;
+        int64_t sdepth = -1;
+        aclDataType satType = ACL_INT32;
+        aclDataType sqsumType = ACL_FLOAT;
+        aclDataType tiltedType = ACL_INT32;
+    };
+    const std::vector<TestCase> cases = {
+        {"sat-small", {1, 1}, {1, 1}, {}, {}},
+        {"sat-rank", {1, 1}, {4}, {}, {}},
+        {"sat-spatial-dimensions", {1, 2}, {3, 2}, {}, {}},
+        {"sat-hwc-channel", {1, 1, 3}, {2, 2, 2}, {}, {}},
+        {"sqsum-shape", {1, 1}, {2, 2}, {1, 1}, {}},
+        {"tilted-shape", {1, 1}, {2, 2}, {}, {1, 1}},
+        {"sqsum-hwc-channel", {1, 1, 3}, {2, 2, 3}, {2, 2, 2}, {}},
+        {"tilted-rank", {1, 1}, {2, 2}, {}, {4}},
+        {"depth1-int32", {1, 1}, {2, 2}, {}, {}, 1},
+        {"depth0-float32", {1, 1}, {2, 2}, {}, {}, 0, ACL_FLOAT},
+        {"depth-auto-float32", {1, 1}, {2, 2}, {}, {}, -1, ACL_FLOAT},
+        {"tilted-type", {1, 1}, {2, 2}, {}, {2, 2}, 1, ACL_FLOAT},
+        {"sqsum-type", {1, 1}, {2, 2}, {2, 2}, {}, -1, ACL_INT32, ACL_INT32},
+    };
+    int passed = 0;
+    for (const auto& test : cases) {
+        aclTensor* image = nullptr;
+        void* imageDev = nullptr;
+        aclTensor* outputs[3] = {nullptr, nullptr, nullptr};
+        void* outputDevs[3] = {nullptr, nullptr, nullptr};
+        const std::vector<int64_t> shapes[3] = {test.sat, test.sqsum, test.tilted};
+        const aclDataType types[3] = {test.satType, test.sqsumType, test.tiltedType};
+        bool created = CreateAclTensor(std::vector<uint8_t>(GetShapeSize(test.input), 7), test.input, &imageDev,
+                                       ACL_UINT8, &image) == ACL_SUCCESS &&
+                       image != nullptr;
+        for (size_t i = 0; created && i < 3; ++i) {
+            if (!shapes[i].empty()) {
+                created = CreateAclTensor(std::vector<uint32_t>(), shapes[i], &outputDevs[i], types[i], &outputs[i]) ==
+                              ACL_SUCCESS &&
+                          outputs[i] != nullptr;
+            }
+        }
+        uint64_t workspaceSize = 0;
+        aclOpExecutor* executor = nullptr;
+        const auto ret = created ? aclnnIntegralImageGetWorkspaceSize(image, test.sdepth, outputs[0], outputs[1],
+                                                                      outputs[2], &workspaceSize, &executor) :
+                                   -1;
+        const bool ok = created && ret != ACL_SUCCESS;
+        std::cout << (ok ? "[PASS]" : "[FAIL]") << " parameter-check: " << test.name << " ret=" << ret << std::endl;
+        passed += ok ? 1 : 0;
+        if (image != nullptr) {
+            aclDestroyTensor(image);
+        }
+        if (imageDev != nullptr) {
+            aclrtFree(imageDev);
+        }
+        for (size_t i = 0; i < 3; ++i) {
+            if (outputs[i] != nullptr) {
+                aclDestroyTensor(outputs[i]);
+            }
+            if (outputDevs[i] != nullptr) {
+                aclrtFree(outputDevs[i]);
+            }
+        }
+    }
+    std::cout << "IntegralImage parameter validation: " << passed << " / " << cases.size()
+              << (passed == static_cast<int>(cases.size()) ? " PASS" : " FAIL") << std::endl;
+    return passed == static_cast<int>(cases.size()) ? 0 : 1;
+}
+
+// Exercise the generated ACLNN entry with UINT8 input and sdepth=1.
+// Small nonuniform integers keep every reference value exactly representable in FP32.
+int RunU8F32(aclrtStream stream)
+{
+    const int64_t shapes[][3] = {{8, 64, 1}, {8, 131, 1}, {17, 131, 1}, {2, 1031, 1},
+                                 {1, 1, 1},  {9, 1, 1},   {4, 6, 3},    {9, 33, 3}};
+    int passed = 0;
+    int total = 0;
+    for (const auto& shape : shapes) {
+        const int64_t H = shape[0];
+        const int64_t W = shape[1];
+        const int64_t C = shape[2];
+        std::vector<uint8_t> input(H * W * C);
+        for (size_t i = 0; i < input.size(); ++i) {
+            input[i] = static_cast<uint8_t>((i * 7 + 3) % 17);
+        }
+        std::vector<double> expected((H + 1) * (W + 1) * C, 0.0);
+        std::vector<double> expectedSq(expected.size(), 0.0);
+        std::vector<double> expectedTilted;
+        for (int64_t y = 1; y <= H; ++y) {
+            for (int64_t x = 1; x <= W; ++x) {
+                for (int64_t c = 0; c < C; ++c) {
+                    const int64_t idx = (y * (W + 1) + x) * C + c;
+                    const int64_t top = idx - (W + 1) * C;
+                    const double value = input[((y - 1) * W + x - 1) * C + c];
+                    expected[idx] = expected[top] + expected[idx - C] - expected[top - C] + value;
+                    expectedSq[idx] = expectedSq[top] + expectedSq[idx - C] - expectedSq[top - C] + value * value;
+                }
+            }
+        }
+        ComputeTiltedRef3D(input, C, H, W, expectedTilted);
+        const int firstForm = (C == 1) ? 1 : 3;
+        for (int form = firstForm; form <= 3; ++form) {
+            std::cout << "[U8_F32] H=" << H << " W=" << W << " C=" << C << " form=" << form << std::endl;
+            int ret;
+            if (C == 1) {
+                ret = RunCaseT<uint8_t, float>(stream, H, W, input, ACL_UINT8, ACL_FLOAT, expected, 1, expectedSq,
+                                               expectedTilted, form == 3, form >= 2, true);
+            } else {
+                ret = RunCase3DT<uint8_t, float>(stream, C, H, W, input, ACL_UINT8, ACL_FLOAT, expected, 1, expectedSq,
+                                                 expectedTilted);
+            }
+            ++total;
+            passed += (ret == 0) ? 1 : 0;
+        }
+    }
+    std::cout << "IntegralImage UINT8->FLOAT32 ACLNN: " << passed << " / " << total
+              << ((passed == total) ? " PASS" : " FAIL") << std::endl;
+    return (passed == total) ? 0 : 1;
+}
+
+int RunAll(aclrtStream stream)
+{
+    int ret = RunU8F32(stream);
+
+    // 用例 1：uint8 8x64 全 1（单核），期望 sat[i][j]=i*j，验证零填充边
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 64;
+        std::vector<uint8_t> in(H * W, 1);
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        std::vector<double> expSq((H + 1) * (W + 1), 0);
+        std::vector<double> expTilted;
+        ComputeTiltedRef(in, H, W, expTilted);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = static_cast<double>(i) * j;
+                expSq[i * (W + 1) + j] = static_cast<double>(i) * j; // 1^2 = 1
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp, -1, expSq, expTilted);
+    }
+
+    // 用例 1c：uint8 8x64 全 1，tilted 不传（optional 输出为空）——两路模式，验证 sat/sqsum 仍正确
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 64;
+        std::vector<uint8_t> in(H * W, 1);
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        std::vector<double> expSq((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = static_cast<double>(i) * j;
+                expSq[i * (W + 1) + j] = static_cast<double>(i) * j;
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp, -1, expSq, {}, false);
+    }
+
+    // 用例 1d：uint8 8x64 全 1，sqsum 和 tilted 都不传（仅 sat）——OpenCV integral（只 sum）形态
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 64;
+        std::vector<uint8_t> in(H * W, 1);
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = static_cast<double>(i) * j;
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp, -1, {}, {}, false, false);
+    }
+
+    // 用例 1e：uint8 8x64 全 1，optional 输出以 nullptr 方式缺省（形态 1，等价于 1d 的空 tensor 写法）
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 64;
+        std::vector<uint8_t> in(H * W, 1);
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = static_cast<double>(i) * j;
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp, -1, {}, {}, false, false, true);
+    }
+
+    // 用例 1f：uint8 8x64 全 1，sqsum 使能、tilted 以 nullptr 缺省（形态 2）
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 64;
+        std::vector<uint8_t> in(H * W, 1);
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        std::vector<double> expSq((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = static_cast<double>(i) * j;
+                expSq[i * (W + 1) + j] = static_cast<double>(i) * j;
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp, -1, expSq, {}, false, true,
+                                          true);
+    }
+
+    // 用例 1b：uint8 8x64 全 1，sdepth=1 显式指定 FLOAT32 输出。
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 64;
+        std::vector<uint8_t> in(H * W, 1);
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = static_cast<double>(i) * j;
+            }
+        }
+        ret |= RunCaseT<uint8_t, float>(stream, H, W, in, ACL_UINT8, ACL_FLOAT, exp, 1);
+    }
+
+#ifndef DUMP_SAT
+    // 用例 2：uint8 8x384 伪随机，验证 two-phase 行扫描与多核列累加。
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 384;
+        std::vector<uint8_t> in(H * W);
+        std::vector<double> expSq((H + 1) * (W + 1), 0);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<uint8_t>((i * 7 + 3) % 97);
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+                expSq[i * (W + 1) + j] = expSq[(i - 1) * (W + 1) + j] + expSq[i * (W + 1) + j - 1] -
+                                         expSq[(i - 1) * (W + 1) + j - 1] +
+                                         static_cast<double>(in[(i - 1) * W + (j - 1)]) *
+                                             static_cast<double>(in[(i - 1) * W + (j - 1)]);
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp, -1, expSq);
+    }
+
+    // 用例 3：float16 8x128 全 1.0（两级转换 fp16 -> fp32）
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 128;
+        std::vector<uint16_t> in(H * W, FloatToHalf(1.0f));
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = static_cast<double>(i) * j;
+            }
+        }
+        ret |= RunCaseT<uint16_t, float>(stream, H, W, in, ACL_FLOAT16, ACL_FLOAT, exp);
+    }
+
+    // 用例 4：float32 8x128 伪随机（fp32 -> fp32）
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 128;
+        std::vector<float> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<float>((i * 3 % 17)) * 0.25f;
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<float, float>(stream, H, W, in, ACL_FLOAT, ACL_FLOAT, exp);
+    }
+
+    // 用例 5：float32 3D 2x8x128（HWC 逐通道独立）
+    {
+        constexpr int64_t C = 2;
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 128;
+        std::vector<float> in(C * H * W);
+        for (int64_t i = 0; i < C * H * W; i++) {
+            in[i] = static_cast<float>((i * 13 + 5) % 89);
+        }
+        std::vector<double> exp((H + 1) * (W + 1) * C, 0);
+        for (int64_t c = 0; c < C; c++) {
+            for (int64_t i = 1; i <= H; i++) {
+                for (int64_t j = 1; j <= W; j++) {
+                    // HWC 索引：idx = i*(W+1)*C + j*C + c
+                    int64_t idx = i * (W + 1) * C + j * C + c;
+                    exp[idx] = exp[(i - 1) * (W + 1) * C + j * C + c] + exp[i * (W + 1) * C + (j - 1) * C + c] -
+                               exp[(i - 1) * (W + 1) * C + (j - 1) * C + c] + in[(i - 1) * W * C + (j - 1) * C + c];
+                }
+            }
+        }
+        std::vector<double> expTilted;
+        ComputeTiltedRef3D(in, C, H, W, expTilted);
+        ret |= RunCase3DT<float, float>(stream, C, H, W, in, ACL_FLOAT, ACL_FLOAT, exp, -1, {}, expTilted);
+    }
+
+    // 用例 5b：float32 3D 小图 2x2x3（legacy 路径，非对齐 W 与 3D tilted HWC）
+    {
+        constexpr int64_t C = 2;
+        constexpr int64_t H = 2;
+        constexpr int64_t W = 3;
+        std::vector<float> in(C * H * W);
+        for (int64_t i = 0; i < C * H * W; i++) {
+            in[i] = static_cast<float>((i * 7 + 2) % 13) * 0.25f;
+        }
+        std::vector<double> exp((H + 1) * (W + 1) * C, 0);
+        std::vector<double> expSq((H + 1) * (W + 1) * C, 0);
+        for (int64_t c = 0; c < C; c++) {
+            for (int64_t i = 1; i <= H; i++) {
+                for (int64_t j = 1; j <= W; j++) {
+                    int64_t idx = i * (W + 1) * C + j * C + c;
+                    double v = in[(i - 1) * W * C + (j - 1) * C + c];
+                    exp[idx] = exp[(i - 1) * (W + 1) * C + j * C + c] + exp[i * (W + 1) * C + (j - 1) * C + c] -
+                               exp[(i - 1) * (W + 1) * C + (j - 1) * C + c] + v;
+                    expSq[idx] = expSq[(i - 1) * (W + 1) * C + j * C + c] + expSq[i * (W + 1) * C + (j - 1) * C + c] -
+                                 expSq[(i - 1) * (W + 1) * C + (j - 1) * C + c] + v * v;
+                }
+            }
+        }
+        std::vector<double> expTilted;
+        ComputeTiltedRef3D(in, C, H, W, expTilted);
+        ret |= RunCase3DT<float, float>(stream, C, H, W, in, ACL_FLOAT, ACL_FLOAT, exp, -1, expSq, expTilted);
+    }
+
+    // 用例 6：uint8 1x1（W<32 全尾部，DataCopyPad 路径）
+    {
+        constexpr int64_t H = 1;
+        constexpr int64_t W = 1;
+        std::vector<uint8_t> in(H * W, 7);
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = static_cast<double>(i) * j * 7;
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // 用例 7：uint8 1x64（单行）
+    {
+        constexpr int64_t H = 1;
+        constexpr int64_t W = 64;
+        std::vector<uint8_t> in(H * W, 3);
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = static_cast<double>(i) * j * 3;
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // 用例 8：uint8 8x1（单列，W<32）
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 1;
+        std::vector<uint8_t> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<uint8_t>(i + 1);
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // 用例 9：uint8 257x513，覆盖 two-phase 非对齐尾块。
+    {
+        constexpr int64_t H = 257;
+        constexpr int64_t W = 513;
+        std::vector<uint8_t> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<uint8_t>((i * 5 + 1) % 251);
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // 用例 10：uint8 8x2048，覆盖 two-phase 多核列累加。
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 2048;
+        std::vector<uint8_t> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<uint8_t>((i * 3 + 11) % 233);
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // 用例 11：uint8 8x4097，覆盖 two-phase 多核及非对齐尾块。
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 4097;
+        std::vector<uint8_t> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<uint8_t>((i * 7 + 5) % 199);
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // Case 12: uint8 256x256 large two-phase smoke
+    {
+        constexpr int64_t H = 256;
+        constexpr int64_t W = 256;
+        std::vector<uint8_t> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<uint8_t>((i * 11 + 7) % 173);
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // Case 13: uint8 512x512 common size (same as torch baseline 512x512 path)
+    {
+        constexpr int64_t H = 512;
+        constexpr int64_t W = 512;
+        std::vector<uint8_t> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<uint8_t>((i * 17 + 3) % 251);
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // Case 14: uint8 1x4096 single row (two-phase, only core0 does horizontal scan)
+    {
+        constexpr int64_t H = 1;
+        constexpr int64_t W = 4096;
+        std::vector<uint8_t> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<uint8_t>((i * 3 + 5) % 199);
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // Case 14b: float32 8x65 non-aligned tail with sqsum (fp two-phase unaligned path)
+    {
+        constexpr int64_t H = 8;
+        constexpr int64_t W = 65;
+        std::vector<float> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<float>((i * 7 + 3) % 31) * 0.5f;
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        std::vector<double> expSq((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+                expSq[i * (W + 1) + j] = expSq[(i - 1) * (W + 1) + j] + expSq[i * (W + 1) + j - 1] -
+                                         expSq[(i - 1) * (W + 1) + j - 1] +
+                                         in[(i - 1) * W + (j - 1)] * in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<float, float>(stream, H, W, in, ACL_FLOAT, ACL_FLOAT, exp, -1, expSq);
+    }
+
+    // Case 15: uint8 4096x1 single column (W<128 legacy single-core path)
+    {
+        constexpr int64_t H = 4096;
+        constexpr int64_t W = 1;
+        std::vector<uint8_t> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<uint8_t>((i * 5 + 1) % 233);
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<uint8_t, int32_t>(stream, H, W, in, ACL_UINT8, ACL_INT32, exp);
+    }
+
+    // Case 16: float32 480x640 non-standard resolution
+    {
+        constexpr int64_t H = 480;
+        constexpr int64_t W = 640;
+        std::vector<float> in(H * W);
+        for (int64_t i = 0; i < H * W; i++) {
+            in[i] = static_cast<float>((i * 7 % 97)) * 0.125f;
+        }
+        std::vector<double> exp((H + 1) * (W + 1), 0);
+        for (int64_t i = 1; i <= H; i++) {
+            for (int64_t j = 1; j <= W; j++) {
+                exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                       exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+            }
+        }
+        ret |= RunCaseT<float, float>(stream, H, W, in, ACL_FLOAT, ACL_FLOAT, exp);
+    }
+
+    ret |= RunAttrNegativeTests(stream);
+    ret |= RunParameterValidationTests();
+    return ret;
+#endif
+}
+
+// Run the FLOAT32 480x640 case independently.
+int RunCase16Only(aclrtStream stream)
+{
+    constexpr int64_t H = 480;
+    constexpr int64_t W = 640;
+    std::vector<float> in(H * W);
+    for (int64_t i = 0; i < H * W; i++) {
+        in[i] = static_cast<float>((i * 7 % 97)) * 0.125f;
+    }
+    std::vector<double> exp((H + 1) * (W + 1), 0);
+    for (int64_t i = 1; i <= H; i++) {
+        for (int64_t j = 1; j <= W; j++) {
+            exp[i * (W + 1) + j] = exp[(i - 1) * (W + 1) + j] + exp[i * (W + 1) + j - 1] -
+                                   exp[(i - 1) * (W + 1) + j - 1] + in[(i - 1) * W + (j - 1)];
+        }
+    }
+    return RunCaseT<float, float>(stream, H, W, in, ACL_FLOAT, ACL_FLOAT, exp);
+}
+
+// Strict large-shape verification: runs the operator and compares with an int64 CPU reference.
+// int32 outputs are compared exactly (wrap-around semantics included); float outputs use a tight
+// relative tolerance and require finite values.
+template <typename InT, typename OutT>
+int VerifyShapeT(aclrtStream stream, int64_t H, int64_t W, aclDataType inAclType, aclDataType outAclType, bool isFloat)
+{
+    const int64_t OH = H + 1;
+    const int64_t OW = W + 1;
+    std::vector<InT> input(H * W);
+    unsigned int seed = 12345u;
+    for (auto& v : input) {
+        seed = seed * 1103515245u + 12345u;
+        v = static_cast<InT>((seed >> 16) & 0xFF);
+    }
+    // CPU reference: int64 horizontal prefix then int64 vertical accumulation.
+    std::vector<int64_t> refSat(OH * OW, 0);
+    std::vector<int64_t> rowPrefix(W, 0);
+    for (int64_t r = 0; r < H; r++) {
+        int64_t run = 0;
+        for (int64_t c = 0; c < W; c++) {
+            run += static_cast<int64_t>(input[r * W + c]);
+            rowPrefix[c] = run;
+        }
+        for (int64_t c = 0; c < W; c++) {
+            refSat[(r + 1) * OW + (c + 1)] = refSat[r * OW + (c + 1)] + rowPrefix[c];
+        }
+    }
+
+    aclTensor* imageTensor = nullptr;
+    aclTensor* satTensor = nullptr;
+    aclTensor* sqsumTensor = nullptr;
+    aclTensor* tiltedTensor = nullptr;
+    void* imageDev = nullptr;
+    void* satDev = nullptr;
+    void* sqsumDev = nullptr;
+    void* tiltedDev = nullptr;
+    std::vector<int64_t> inShape = {H, W};
+    std::vector<int64_t> outShape = {OH, OW};
+
+    int ret = CreateAclTensor(input, inShape, &imageDev, inAclType, &imageTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "verify: create image tensor failed" << std::endl; return ret);
+    ret = CreateAclTensor(std::vector<OutT>(), outShape, &satDev, outAclType, &satTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "verify: create sat tensor failed" << std::endl; return ret);
+    ret = CreateAclTensor(std::vector<float>(), outShape, &sqsumDev, ACL_FLOAT, &sqsumTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "verify: create sqsum tensor failed" << std::endl; return ret);
+    ret = CreateAclTensor(std::vector<OutT>(), outShape, &tiltedDev, outAclType, &tiltedTensor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "verify: create tilted tensor failed" << std::endl; return ret);
+
+    uint64_t workspaceSize = 0;
+    aclOpExecutor* executor = nullptr;
+    ret = aclnnIntegralImageGetWorkspaceSize(imageTensor, -1, satTensor, sqsumTensor, tiltedTensor, &workspaceSize,
+                                             &executor);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "verify: GetWorkspaceSize failed: " << ret << std::endl; return ret);
+    void* workspaceAddr = nullptr;
+    if (workspaceSize > 0) {
+        ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        CHECK_RET(ret == ACL_SUCCESS, std::cout << "verify: workspace malloc failed" << std::endl; return ret);
+    }
+    ret = aclnnIntegralImage(workspaceAddr, workspaceSize, executor, stream);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "verify: aclnnIntegralImage failed: " << ret << std::endl; return ret);
+    ret = aclrtSynchronizeStream(stream);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "verify: sync failed: " << ret << std::endl; return ret);
+
+    std::vector<OutT> actual(OH * OW, 0);
+    ret = aclrtMemcpy(actual.data(), actual.size() * sizeof(OutT), satDev, actual.size() * sizeof(OutT),
+                      ACL_MEMCPY_DEVICE_TO_HOST);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "verify: copy back failed" << std::endl; return ret);
+
+    int64_t badCount = 0;
+    int64_t firstBadR = -1;
+    int64_t firstBadC = -1;
+    double gotV = 0.0;
+    double wantV = 0.0;
+    for (int64_t i = 0; i < OH * OW; i++) {
+        double got = static_cast<double>(actual[i]);
+        double want = static_cast<double>(refSat[i]);
+        if (isFloat) {
+            if (!IntegralImageTest::IsFiniteClose(got, want, 1e-3 * std::max(1.0, std::fabs(want)))) {
+                if (badCount == 0) {
+                    firstBadR = i / OW;
+                    firstBadC = i % OW;
+                    gotV = got;
+                    wantV = want;
+                }
+                badCount++;
+            }
+        } else {
+            // exact int32 comparison (wrap-around is part of the dtype semantics)
+            int64_t wrapped = static_cast<int64_t>(static_cast<int32_t>(refSat[i]));
+            if (static_cast<int64_t>(actual[i]) != wrapped) {
+                if (badCount == 0) {
+                    firstBadR = i / OW;
+                    firstBadC = i % OW;
+                    gotV = static_cast<double>(actual[i]);
+                    wantV = static_cast<double>(wrapped);
+                }
+                badCount++;
+            }
+        }
+    }
+    if (workspaceSize > 0) {
+        aclrtFree(workspaceAddr);
+    }
+    aclDestroyTensor(imageTensor);
+    aclDestroyTensor(satTensor);
+    aclDestroyTensor(sqsumTensor);
+    aclDestroyTensor(tiltedTensor);
+    aclrtFree(imageDev);
+    aclrtFree(satDev);
+    aclrtFree(sqsumDev);
+    aclrtFree(tiltedDev);
+
+    std::cout << (badCount == 0 ? "[VERIFY-PASS]" : "[VERIFY-FAIL]") << " " << typeid(InT).name() << " H=" << H
+              << " W=" << W << " bad=" << badCount;
+    if (badCount > 0) {
+        std::cout << " first=" << firstBadR << "," << firstBadC << " got=" << gotV << " want=" << wantV;
+    }
+    std::cout << std::endl;
+    return badCount == 0 ? 0 : 1;
+}
+
+int RunVerify(aclrtStream stream)
+{
+    int ret = 0;
+    int64_t sizes[][2] = {{1024, 1024}, {2048, 2048}, {4096, 4096}};
+    for (auto& s : sizes) {
+        ret |= VerifyShapeT<uint8_t, int32_t>(stream, s[0], s[1], ACL_UINT8, ACL_INT32, false);
+    }
+    for (auto& s : sizes) {
+        ret |= VerifyShapeT<float, float>(stream, s[0], s[1], ACL_FLOAT, ACL_FLOAT, true);
+    }
+    return ret;
+}
+
+int main(int argc, char* argv[])
+{
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    int32_t deviceId = 0;
+    aclrtStream stream;
+    auto ret = Init(deviceId, &stream);
+    CHECK_RET(ret == ACL_SUCCESS, std::cout << "Init acl failed: " << ret << std::endl; return ret);
+
+    bool benchMode = (argc >= 2) && (std::string(argv[1]) == "bench");
+    if (benchMode) {
+        int iters = (argc >= 3) ? std::atoi(argv[2]) : 20;
+        if (iters <= 0) {
+            iters = 20;
+        }
+        std::cout << "==== IntegralImage benchmark mode, iters=" << iters << " ====" << std::endl;
+        ret = RunBench(stream, iters);
+    } else if ((argc >= 2) && (std::string(argv[1]) == "case16")) {
+        ret = RunCase16Only(stream);
+    } else if ((argc >= 2) && (std::string(argv[1]) == "verify")) {
+        ret = RunVerify(stream);
+    } else if ((argc >= 2) && (std::string(argv[1]) == "validation")) {
+        ret = RunParameterValidationTests();
+    } else if ((argc >= 2) && (std::string(argv[1]) == "u8_f32")) {
+        ret = RunU8F32(stream);
+    } else {
+        ret = RunAll(stream);
+    }
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(deviceId);
+    aclFinalize();
+    return ret;
+}
