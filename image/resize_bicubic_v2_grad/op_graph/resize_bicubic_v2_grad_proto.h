@@ -37,11 +37,10 @@ original_image.
 *@li align_corners: An optional bool. If true, the centers of the 4 corner pixels of the input and output tensors are
      aligned, preserving the values at the corner pixels. If false, calculate interpolation using half pixel centers.
      Defaults to false.
-*@li scales: An optional listfloat which has two elements. The first element represents the ratio of the H axis
-     subscripts of pixels in grads to the H axis subscripts of pixels in y, only takes effect when align_corners is
-     true and the value is greater than 0. The second element represents the ratio of the W axis subscripts of pixels in
-     grads to the W axis subscripts of pixels in y, only takes effect when align_corners is true and the value is
-     greater than 0.0f. Defaults to {0.0f, 0.0f}.
+*@li scales: An optional listfloat with two elements, the scale factors for the H and W axes, respectively. When
+     align_corners is false, a value greater than 0 is used for the corresponding axis; otherwise, its scale is
+     calculated from the shapes of grads and y. When align_corners is true, scales are calculated from the tensor
+     shapes and this attribute does not take effect. Defaults to {0.0f, 0.0f}.
 
 *@par Third-party framework compatibility
 *Compatible with PyTorch upsample_bicubic2d_backward operator.
