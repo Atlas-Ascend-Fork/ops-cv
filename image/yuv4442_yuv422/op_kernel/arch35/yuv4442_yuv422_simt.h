@@ -67,7 +67,8 @@ __simt_vf__ __aicore__ __launch_bounds__(THREADS<INDEX_T>) inline void OpYuv4442
             INDEX_T colEven = colPair * 2;
             INDEX_T colOdd = colEven + 1;
 
-            // 2. Compute GM offsets (R003: 32-bit when possible), using actual width w
+            // 2. Compute GM offsets (uint32-safe: the 32-bit path is only entered when
+            //    h*w <= 2^30, so the max input element offset 4*h*w-1 <= UINT32_MAX), using actual width w
             INDEX_T inOffsetEven = (row * w + colEven) * 4;
             INDEX_T inOffsetOdd = (row * w + colOdd) * 4;
             INDEX_T outOffsetEven = (row * w + colEven) * 2;
@@ -145,10 +146,14 @@ __aicore__ inline void Process(GM_ADDR input, GM_ADDR output, const Yuv4442yuv42
     __gm__ InputT* inputGm = (__gm__ InputT*)input;
     __gm__ OutputT* outputGm = (__gm__ OutputT*)output;
 
-    // R003: Select 32-bit or 64-bit index path based on data size
+    // R003: Select the 32-bit path only when GM element offsets are uint32-representable:
+    // max input offset 4*h*w-1 <= UINT32_MAX requires h*w <= 2^30 (output *2 is looser);
+    // totalPairsAll is then also < INT32_MAX. Division form avoids h*w overflow.
     // R002: Precompute magic/shift for fast division by wPairs
     // When wPairs == 0 (w=1), all items are orphans, magic/shift unused
-    if (totalPairsAll <= static_cast<int64_t>(INT32_MAX)) {
+    constexpr int64_t MAX_PIXELS_FOR_U32_OFFSET = INT64_C(1) << 30;
+    bool offsetFitsU32 = (w > 0) && (tilingData->h <= MAX_PIXELS_FOR_U32_OFFSET / w);
+    if (offsetFitsU32) {
         uint32_t magic = 0;
         uint32_t shiftVal = 0;
         if (wPairs > 0) {
