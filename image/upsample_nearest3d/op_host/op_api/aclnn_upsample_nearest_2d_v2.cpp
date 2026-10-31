@@ -17,6 +17,7 @@
 #include "level0/squeeze.h"
 #include "level0/unsqueeze.h"
 #include "aclnn_kernels/contiguous.h"
+#include "level0/fill.h"
 #include "aclnn_kernels/transdata.h"
 #include "aclnn_kernels/transpose.h"
 #include "aclnn/aclnn_base.h"
@@ -328,6 +329,17 @@ const aclTensor* upsampleNearest2dAiCoreCompute(const aclTensor* selfContiguous,
 }
 } // namespace
 
+// self 为空但 out 非空时，输出仍有元素待写，按 kernel 语义清零，避免早退返回未初始化内存。
+static const aclTensor* GetOutTensorWithValueZero(aclTensor* out, aclOpExecutor* executor)
+{
+    aclScalar* scalar = executor->AllocScalar(0);
+    auto valueTensor = executor->ConvertToTensor(scalar, out->GetDataType());
+    auto outDims = op::ToShapeVector(out->GetViewShape());
+    aclIntArray* dimArray = executor->AllocIntArray(outDims.data(), outDims.size());
+    auto dimTensor = executor->ConvertToTensor(dimArray, op::DataType::DT_INT64);
+    return l0op::Fill(dimTensor, valueTensor, dimArray, executor);
+}
+
 aclnnStatus aclnnUpsampleNearest2dV2GetWorkspaceSize(const aclTensor* self, const aclIntArray* outputSize,
                                                      float scalesH, float scalesW, aclTensor* out,
                                                      uint64_t* workspaceSize, aclOpExecutor** executor)
@@ -339,7 +351,17 @@ aclnnStatus aclnnUpsampleNearest2dV2GetWorkspaceSize(const aclTensor* self, cons
     CHECK_RET(CheckNotNull(self, outputSize, out), ACLNN_ERR_PARAM_NULLPTR);
 
     if (self->IsEmpty() || out->IsEmpty()) {
-        *workspaceSize = static_cast<uint64_t>(0);
+        // out 为空时无元素可写，直接成功；self 为空而 out 非空时清零输出，避免返回未初始化内存
+        if (out->IsEmpty()) {
+            *workspaceSize = static_cast<uint64_t>(0);
+            uniqueExecutor.ReleaseTo(executor);
+            return ACLNN_SUCCESS;
+        }
+        auto fillOut = GetOutTensorWithValueZero(out, uniqueExecutor.get());
+        CHECK_RET(fillOut != nullptr, ACLNN_ERR_INNER_NULLPTR);
+        auto viewCopyResult = l0op::ViewCopy(fillOut, out, uniqueExecutor.get());
+        CHECK_RET(viewCopyResult != nullptr, ACLNN_ERR_INNER_NULLPTR);
+        *workspaceSize = uniqueExecutor->GetWorkspaceSize();
         uniqueExecutor.ReleaseTo(executor);
         return ACLNN_SUCCESS;
     }
