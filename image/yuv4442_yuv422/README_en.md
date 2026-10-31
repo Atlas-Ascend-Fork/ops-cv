@@ -32,6 +32,8 @@ $$
 y[i, j+1, 1] = \text{clip\_uint8}(V_0)
 $$
 
+- Numerical conversion behavior (float16 → uint8): the value is first rounded to the nearest integer (half away from zero, e.g., 2.5 → 3) and then clamped to [0, 255], that is, clip_uint8(x) = min(max(round(x), 0), 255). Special values: NaN outputs 0; +Inf outputs 255; -Inf and values less than 0 output 0; values greater than 255 output 255.
+
 ## Parameter Description
 
 <table style="undefined;table-layout: fixed; width: 980px"><colgroup>
@@ -70,6 +72,7 @@ $$
 
 - The input must be a 3D tensor, and the third dimension is fixed to 4 (the channel order is [Y, U, V, pad]; the fourth channel (index 3) is ignored).
 - The output is a 3D tensor. The first two dimensions are the same as those of the input, and the third dimension is fixed to 2 (the two-channel packed format of YUV422).
+- Odd W: supported. The output is still (h, w, 2), and the pixels in the last column write only the [Y, U] components (no paired pixels, and no out-of-bounds reads or writes occur).
 - Only float16 input and uint8 output are supported.
 - The input and output require contiguous storage (ND layout).
 
@@ -77,4 +80,4 @@ $$
 
 | Invocation Method   | Sample Code           | Description                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| Graph mode | [test_geir_yuv4442_yuv422](examples/test_geir_yuv4442_yuv422.cpp) | Call the YUV4442YUV422 operator by constructing a graph in the [operator IR](op_graph/yuv4442_yuv422_proto.h) mode. |
+| GE graph mode | [test_geir_yuv4442_yuv422](examples/test_geir_yuv4442_yuv422.cpp) | Call the YUV4442YUV422 operator by constructing a graph in the [operator IR](op_graph/yuv4442_yuv422_proto.h) mode. |

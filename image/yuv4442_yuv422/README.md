@@ -30,6 +30,8 @@ $$
 y[i, j+1, 1] = \text{clip\_uint8}(V_0)
 $$
 
+- 数值转换行为（float16 → uint8）：先就近取整（半值向远离零方向进位，如 2.5 → 3），再截断到 [0, 255]，即 clip_uint8(x) = min(max(round(x), 0), 255)。特殊值处理：NaN 输出 0；+Inf 输出 255；-Inf 及小于 0 的值输出 0；大于 255 的值输出 255。
+
 ## 参数说明
 
 <table style="undefined;table-layout: fixed; width: 980px"><colgroup>
@@ -68,6 +70,7 @@ $$
 
 - 输入必须为 3 维张量，第三维固定为 4（通道顺序为 [Y, U, V, pad]，第 4 个通道（索引 3）会被忽略）。
 - 输出为 3 维张量，前两个维度与输入相同，第三维固定为 2（YUV422 的 2 通道打包格式）。
+- 奇数W：支持。输出仍为 (h, w, 2)，最后一列像素仅写入 [Y, U] 分量（无配对像素，不产生越界读写）。
 - 仅支持 float16 输入、uint8 输出。
 - 输入输出要求连续存储（ND layout）。
 
@@ -75,4 +78,4 @@ $$
 
 | 调用方式   | 样例代码           | 说明                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| 图模式 | [test_geir_yuv4442_yuv422](examples/test_geir_yuv4442_yuv422.cpp)  | 通过[算子IR](op_graph/yuv4442_yuv422_proto.h)构图方式调用YUV4442YUV422算子。         |
+| GE图模式 | [test_geir_yuv4442_yuv422](examples/test_geir_yuv4442_yuv422.cpp)  | 通过[算子IR](op_graph/yuv4442_yuv422_proto.h)构图方式调用YUV4442YUV422算子。         |
