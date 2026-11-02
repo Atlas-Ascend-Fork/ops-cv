@@ -9,6 +9,9 @@
 # -----------------------------------------------------------------------------------------------------------
 
 if(UT_TEST_ALL OR OP_API_UT)
+    if(NOT "${ASCEND_OP_NAME}" STREQUAL "" AND NOT "upsample_nearest3d" IN_LIST ASCEND_OP_NAME)
+        return()
+    endif()
     if(NOT TARGET ${OP_API_MODULE_NAME}_cases_obj)
         add_library(${OP_API_MODULE_NAME}_cases_obj OBJECT)
     endif()
