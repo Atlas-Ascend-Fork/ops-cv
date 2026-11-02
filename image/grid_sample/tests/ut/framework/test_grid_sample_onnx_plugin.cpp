@@ -17,6 +17,15 @@
 namespace {
 ge::Operator CreateOperator(const std::string& name) { return ge::Operator(name.c_str(), "TestOp"); }
 
+class GridSampleDescriptorOperator : public ge::Operator {
+public:
+    explicit GridSampleDescriptorOperator(const char* name) : ge::Operator(name, "TestOp")
+    {
+        InputRegister("x");
+        OutputRegister("y");
+    }
+};
+
 ge::Operator CreateSourceOperator(const std::string& attrs)
 {
     ge::Operator op_src = CreateOperator("src");
@@ -201,4 +210,35 @@ TEST(OnnxGridSamplePluginTest, ParseParamsGridSampleV2InvalidJson)
     ge::Operator op_src = CreateSourceOperator("{");
     ge::Operator op_dest = CreateOperator("grid_sample_v2");
     EXPECT_EQ(domi::ParseParamsGridSampleV2(op_src, op_dest), domi::FAILED);
+}
+
+TEST(OnnxGridSamplePluginTest, ParseParamsGridSamplePreservesFloat16OutputDescriptor)
+{
+    ge::Operator op_src = CreateSourceOperator(R"({"attribute":[]})");
+    GridSampleDescriptorOperator op_dest("grid_sample");
+    const ge::TensorDesc input_desc(ge::Shape({1, 3, 8, 8}), ge::FORMAT_ND, ge::DT_FLOAT16);
+    const ge::TensorDesc output_desc(ge::Shape({1, 3, 4, 5}), ge::FORMAT_ND, ge::DT_FLOAT16);
+    ASSERT_EQ(op_dest.UpdateInputDesc("x", input_desc), ge::GRAPH_SUCCESS);
+    ASSERT_EQ(op_dest.UpdateOutputDesc("y", output_desc), ge::GRAPH_SUCCESS);
+
+    ASSERT_EQ(domi::ParseParamsGridSample(op_src, op_dest), domi::SUCCESS);
+    const auto actual = op_dest.GetOutputDescByName("y");
+    EXPECT_EQ(actual.GetShape().GetDims(), output_desc.GetShape().GetDims());
+    EXPECT_EQ(actual.GetDataType(), ge::DT_FLOAT16);
+    EXPECT_EQ(actual.GetFormat(), ge::FORMAT_NCHW);
+    EXPECT_EQ(actual.GetOriginFormat(), ge::FORMAT_NCHW);
+}
+
+TEST(OnnxGridSamplePluginTest, ParseParamsGridSampleKeepsDistinctInputAndOutputShapes)
+{
+    ge::Operator op_src = CreateSourceOperator(R"({"attribute":[]})");
+    GridSampleDescriptorOperator op_dest("grid_sample");
+    const ge::TensorDesc input_desc(ge::Shape({2, 7, 8, 9}), ge::FORMAT_ND, ge::DT_FLOAT);
+    const ge::TensorDesc output_desc(ge::Shape({2, 7, 3, 6}), ge::FORMAT_ND, ge::DT_FLOAT);
+    ASSERT_EQ(op_dest.UpdateInputDesc("x", input_desc), ge::GRAPH_SUCCESS);
+    ASSERT_EQ(op_dest.UpdateOutputDesc("y", output_desc), ge::GRAPH_SUCCESS);
+
+    ASSERT_EQ(domi::ParseParamsGridSample(op_src, op_dest), domi::SUCCESS);
+    EXPECT_EQ(op_dest.GetInputDescByName("x").GetShape().GetDims(), input_desc.GetShape().GetDims());
+    EXPECT_EQ(op_dest.GetOutputDescByName("y").GetShape().GetDims(), output_desc.GetShape().GetDims());
 }

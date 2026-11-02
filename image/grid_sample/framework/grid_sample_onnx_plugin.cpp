@@ -61,7 +61,7 @@ static Status ParseParamsGridSample(const ge::Operator& op_src, ge::Operator& op
     orgTensorX.SetFormat(ge::FORMAT_NCHW);
     op_dest.UpdateInputDesc("x", orgTensorX);
 
-    auto orgTensorY = op_dest.GetInputDescByName("y");
+    auto orgTensorY = op_dest.GetOutputDescByName("y");
     orgTensorY.SetOriginFormat(ge::FORMAT_NCHW);
     orgTensorY.SetFormat(ge::FORMAT_NCHW);
     op_dest.UpdateOutputDesc("y", orgTensorY);
