@@ -22,10 +22,6 @@ constexpr int32_t CV_DTYPE_INT8 = 2;
 constexpr int32_t CV_DTYPE_INT32 = 3;
 constexpr int32_t CV_DTYPE_DOUBLE = 11;
 
-constexpr int32_t CV_FMT_NCHW = 0;
-constexpr int32_t CV_FMT_NHWC = 1;
-constexpr int32_t CV_FMT_ND = 2;
-
 constexpr uint32_t CV_STATUS_SUCCESS = 0;
 constexpr uint32_t CV_STATUS_FAILED = 0xFFFFFFFF;
 
@@ -37,11 +33,9 @@ struct CheckValidPublicInputs {
     int64_t bbox_rows;
     int64_t bbox_cols;
     int32_t bbox_dtype;
-    int32_t bbox_format;
+    int32_t img_metas_rank;
     int64_t img_metas_numel;
     int32_t img_metas_dtype;
-    int32_t img_metas_format;
-    int32_t out_format;
     float H;
     float W;
     float r;

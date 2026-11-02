@@ -1,5 +1,7 @@
 # CheckValid
 
+[English](./README_en.md) | 简体中文
+
 ## 产品支持情况
 
 | 产品 | 是否支持 |
@@ -18,6 +20,8 @@
 $$
 \text{valid} = (x_0 \geq 0) \wedge (y_0 \geq 0) \wedge (x_1 \leq W \cdot r - 1) \wedge (y_1 \leq H \cdot r - 1)
 $$
+
+计算时，两路输入均转换为float32；图像上界的乘法、减1及四个比较均在float32中完成。临界值按float32舍入后的结果判定，可能与实数或double中间量的结果不同。
 
 输出`valid_tensor`为int8类型，1表示合法、0表示非法。
 
@@ -51,7 +55,7 @@ $$
 <tr>
 <td>img_metas</td>
 <td>输入</td>
-<td>图像元信息(H,W,r)，至少3个元素，前3个有效。</td>
+<td>一维图像元信息，shape=(G,)，G≥3；前三个元素为(H,W,r)，其余元素忽略。</td>
 <td>FLOAT16、FLOAT</td>
 <td>ND</td>
 </tr>
@@ -68,8 +72,8 @@ $$
 ## 约束说明
 
 - bbox_tensor的shape必须为(N, 4)，末维固定为4。
-- bbox_tensor与img_metas的dtype必须一致，支持float16/float32。
-- img_metas的元素数必须≥3（前3个为H, W, r）。
+- bbox_tensor与img_metas的dtype必须一致，支持组合为(FLOAT16, FLOAT16)和(FLOAT, FLOAT)。
+- img_metas必须是一维张量(G,)，G≥3；前三个元素为H、W、r，其余元素忽略。bbox_tensor为空时，该约束同样适用。
 - 输入仅支持ND数据格式。
 
 ## 调用说明
@@ -95,3 +99,25 @@ $$
 </tr>
 </tbody>
 </table>
+
+### GE 示例执行与结果
+
+示例使用 FLOAT 输入：`bbox_tensor=[[0,0,2,2],[-1,0,2,2]]`，`img_metas=[2,3,1.5]`。
+预期输出为 INT8 张量 `[[1],[0]]`，shape 为 `(2,1)`，分别覆盖合法框和非法框。
+
+加载 CANN 环境和包含 CheckValid 的算子包后，在仓库根目录执行：
+
+```bash
+ASCEND_DEVICE_ID=0 bash build.sh --soc=ascend950 --run_example check_valid graph
+```
+
+设备编号可通过 `ASCEND_DEVICE_ID` 设置，默认是 0；也可直接向 `build/` 中编译后的程序传入设备编号：
+
+```bash
+./build/test_geir_check_valid 0
+```
+
+示例会逐元素比较输出，只有执行、结果比较和资源释放均成功时才打印
+`CheckValid GE example passed` 并返回 0。输入和输出二进制文件保存在运行目录下，文件名分别为
+`tc_ge_irrun_test_npu_input_0.bin`、`tc_ge_irrun_test_npu_input_1.bin` 和
+`tc_ge_irrun_test_npu_output_0.bin`；文件写入或关闭失败时返回非零值。

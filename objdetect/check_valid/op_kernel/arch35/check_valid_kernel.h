@@ -41,8 +41,7 @@ __simd_vf__ inline void CheckValidVF(__ubuf__ T* dst, __ubuf__ T* src, float img
     uint32_t remaining = totalElems;
     for (uint16_t i = 0; i < repeatTime; ++i) {
         int32_t off = static_cast<int32_t>(i) * static_cast<int32_t>(VL_F);
-        uint32_t procCount = (remaining > VL_F) ? VL_F : remaining;
-        AscendC::Reg::MaskReg mask = AscendC::Reg::UpdateMask<float>(procCount);
+        AscendC::Reg::MaskReg mask = AscendC::Reg::UpdateMask<float>(remaining);
 
         AscendC::Reg::RegTensor<float> x0Reg, y0Reg, x1Reg, y1Reg;
 
@@ -76,15 +75,15 @@ __simd_vf__ inline void CheckValidVF(__ubuf__ T* dst, __ubuf__ T* src, float img
         AscendC::Reg::MaskReg m12;
         AscendC::Reg::And(m12, c1, c2, mask);
 
-        AscendC::Reg::RegTensor<float> x1MinusImgW;
-        AscendC::Reg::Adds<float>(x1MinusImgW, x1Reg, -imgW, mask);
+        AscendC::Reg::RegTensor<float> imgWReg;
+        AscendC::Reg::Duplicate<float>(imgWReg, imgW);
         AscendC::Reg::MaskReg c3;
-        AscendC::Reg::Compare<float, AscendC::CMPMODE::GE>(c3, zeroReg, x1MinusImgW, mask);
+        AscendC::Reg::Compare<float, AscendC::CMPMODE::LE>(c3, x1Reg, imgWReg, mask);
 
-        AscendC::Reg::RegTensor<float> y1MinusImgH;
-        AscendC::Reg::Adds<float>(y1MinusImgH, y1Reg, -imgH, mask);
+        AscendC::Reg::RegTensor<float> imgHReg;
+        AscendC::Reg::Duplicate<float>(imgHReg, imgH);
         AscendC::Reg::MaskReg c4;
-        AscendC::Reg::Compare<float, AscendC::CMPMODE::GE>(c4, zeroReg, y1MinusImgH, mask);
+        AscendC::Reg::Compare<float, AscendC::CMPMODE::LE>(c4, y1Reg, imgHReg, mask);
 
         AscendC::Reg::MaskReg m34;
         AscendC::Reg::And(m34, c3, c4, mask);
@@ -104,8 +103,6 @@ __simd_vf__ inline void CheckValidVF(__ubuf__ T* dst, __ubuf__ T* src, float img
         } else {
             AscendC::Reg::StoreAlign<float>(dst + off, resultReg, mask);
         }
-
-        remaining -= procCount;
     }
 }
 
@@ -145,8 +142,10 @@ public:
             Wf = gmMetas_.GetValue(1);
             rf = gmMetas_.GetValue(2);
         }
-        imgWf_ = Wf * rf - 1.0f;
-        imgHf_ = Hf * rf - 1.0f;
+        volatile float scaledW = Wf * rf;
+        volatile float scaledH = Hf * rf;
+        imgWf_ = scaledW - 1.0f;
+        imgHf_ = scaledH - 1.0f;
 
         const int64_t blockIdx = AscendC::GetBlockIdx();
         int64_t start, end;
@@ -156,11 +155,7 @@ public:
             bool isTail = (tileIdx == td_->num_tiles - 1);
             int64_t rowCount = isTail ? td_->tile_n_tail : td_->tile_n;
             int64_t rowBegin = tileIdx * td_->tile_n;
-            uint8_t eid = static_cast<uint8_t>(tileIdx % 2);
-
-            if (tileIdx - start >= 2) {
-                AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(eid);
-            }
+            constexpr uint8_t eid = 0;
 
             CopyInTile(rowBegin, rowCount);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(eid);
@@ -168,10 +163,15 @@ public:
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(eid);
             ComputeTile(rowCount);
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(eid);
+            // B0 is also FP32 conversion scratch; release it before the next input DMA.
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(eid);
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(eid);
 
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(eid);
             CopyOutTile(rowBegin, rowCount);
+            // B2 has one physical allocation; finish reading it before the next vector write.
+            AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(eid);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(eid);
         }
     }
 
@@ -195,9 +195,9 @@ private:
         AscendC::DataCopyPadExtParams<T> pad(false, 0, 0, 0);
         const uint32_t cap = static_cast<uint32_t>(td_->tile_n);
         for (int32_t c = 0; c < kBboxCols; ++c) {
-            AscendC::DataCopyPad<T, AscendC::PaddingMode::Compact>(
-                buf_[0].Get<T>()[static_cast<uint32_t>(c) * cap],
-                gmBbox_[static_cast<uint64_t>(rowBegin * kBboxCols + c)], params, pad);
+            const uint64_t bboxOffset = static_cast<uint64_t>(rowBegin) * kBboxCols + static_cast<uint64_t>(c);
+            AscendC::DataCopyPad<T, AscendC::PaddingMode::Compact>(buf_[0].Get<T>()[static_cast<uint32_t>(c) * cap],
+                                                                   gmBbox_[bboxOffset], params, pad);
         }
     }
 

@@ -14,22 +14,32 @@
 #include "arch35/check_valid_struct.h"
 
 template <typename T>
+__aicore__ inline void RunCheckValid(GM_ADDR bbox_tensor, GM_ADDR img_metas, GM_ADDR valid_tensor, GM_ADDR tiling,
+                                     const CheckValidTilingData* tilingData)
+{
+    if (tilingData->N == 0) {
+        CheckValidKernel<T, true> kernel;
+        kernel.Init(bbox_tensor, img_metas, valid_tensor, tiling, tilingData);
+        kernel.Process();
+    } else {
+        CheckValidKernel<T, false> kernel;
+        kernel.Init(bbox_tensor, img_metas, valid_tensor, tiling, tilingData);
+        kernel.Process();
+    }
+}
+
+template <uint32_t SCH_MODE>
 __global__ __aicore__ void check_valid(GM_ADDR bbox_tensor, GM_ADDR img_metas, GM_ADDR valid_tensor, GM_ADDR workspace,
                                        GM_ADDR tiling)
 {
     REGISTER_TILING_DEFAULT(CheckValidTilingData);
     GET_TILING_DATA_WITH_STRUCT(CheckValidTilingData, tilingData, tiling);
 
-    if (tilingData.N == 0) {
-        CheckValidKernel<T, true> kernel;
-        kernel.Init(bbox_tensor, img_metas, valid_tensor, tiling, &tilingData);
-        kernel.Process();
-    } else {
-        CheckValidKernel<T, false> kernel;
-        kernel.Init(bbox_tensor, img_metas, valid_tensor, tiling, &tilingData);
-        kernel.Process();
+    if constexpr (SCH_MODE == CHECK_VALID_MODE_FP32) {
+        RunCheckValid<float>(bbox_tensor, img_metas, valid_tensor, tiling, &tilingData);
+    } else if constexpr (SCH_MODE == CHECK_VALID_MODE_FP16) {
+        RunCheckValid<half>(bbox_tensor, img_metas, valid_tensor, tiling, &tilingData);
     }
 
-    (void)img_metas;
     (void)workspace;
 }

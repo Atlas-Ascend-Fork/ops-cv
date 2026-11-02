@@ -21,6 +21,8 @@ $$
 \text{valid} = (x_0 \geq 0) \wedge (y_0 \geq 0) \wedge (x_1 \leq W \cdot r - 1) \wedge (y_1 \leq H \cdot r - 1)
 $$
 
+Both inputs are converted to float32 before calculation. The image bound multiplication, subtraction of 1, and all four comparisons are performed in float32. Boundary cases are decided using float32 rounding and may differ from results computed with real numbers or double-precision intermediates.
+
 The output `valid_tensor` is of the int8 type. 1 indicates valid, and 0 indicates invalid.
 
 ## Parameter Description
@@ -53,7 +55,7 @@ The output `valid_tensor` is of the int8 type. 1 indicates valid, and 0 indicate
 <tr>
 <td>img_metas</td>
 <td>Input</td>
-<td>Image metadata (H,W,r). It contains at least three elements, and the first three are valid.</td>
+<td>One-dimensional image metadata with shape (G,), where G ≥ 3. The first three elements are (H, W, r); any remaining elements are ignored.</td>
 <td>FLOAT16, FLOAT</td>
 <td>ND</td>
 </tr>
@@ -70,8 +72,8 @@ The output `valid_tensor` is of the int8 type. 1 indicates valid, and 0 indicate
 ## Constraints
 
 - The shape of bbox_tensor must be (N, 4), and the last dimension is fixed to 4.
-- The dtypes of bbox_tensor and img_metas must be the same. float16/float32 is supported.
-- The number of elements in img_metas must be ≥3 (the first three elements are H, W, and r).
+- bbox_tensor and img_metas must have the same dtype. The supported pairs are (FLOAT16, FLOAT16) and (FLOAT, FLOAT).
+- img_metas must be a one-dimensional tensor with shape (G,), where G ≥ 3. Its first three elements are H, W, and r; any remaining elements are ignored. This constraint also applies when bbox_tensor is empty.
 - Only the ND data format is supported for the input.
 
 ## Invocation Description
@@ -97,3 +99,22 @@ The output `valid_tensor` is of the int8 type. 1 indicates valid, and 0 indicate
 </tr>
 </tbody>
 </table>
+
+### Running the GE Example and Checking the Result
+
+The example uses FLOAT inputs: `bbox_tensor=[[0,0,2,2],[-1,0,2,2]]` and `img_metas=[2,3,1.5]`.
+The expected output is an INT8 tensor `[[1],[0]]` with shape `(2,1)`, covering one valid box and one invalid box.
+
+After loading the CANN environment and an operator package containing CheckValid, run the following command from the repository root:
+
+```bash
+ASCEND_DEVICE_ID=0 bash build.sh --soc=ascend950 --run_example check_valid graph
+```
+
+Set `ASCEND_DEVICE_ID` to select the device; the default is 0. You can also pass the device ID directly to the compiled program in `build/`:
+
+```bash
+./build/test_geir_check_valid 0
+```
+
+The example compares every output element. It prints `CheckValid GE example passed` and returns 0 only after execution, result comparison, and resource cleanup succeed. Input and output binaries are written to the working directory as `tc_ge_irrun_test_npu_input_0.bin`, `tc_ge_irrun_test_npu_input_1.bin`, and `tc_ge_irrun_test_npu_output_0.bin`. A file write or close failure causes a nonzero return value.

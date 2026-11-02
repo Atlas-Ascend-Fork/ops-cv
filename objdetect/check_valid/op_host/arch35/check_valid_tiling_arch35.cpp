@@ -13,10 +13,12 @@
 #include <cstring>
 
 #include "../../op_kernel/arch35/check_valid_tiling_struct.h"
+#include "../../op_kernel/arch35/check_valid_struct.h"
 #include "../check_valid_tiling_host.h"
 #include "exe_graph/runtime/tiling_context.h"
 #include "exe_graph/runtime/tensor.h"
 #include "graph/types.h"
+#include "log/log.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "register/op_def_registry.h"
 
@@ -43,6 +45,7 @@ static ge::graphStatus CheckValidTilingFunc(gert::TilingContext* context)
 
     const gert::StorageShape* bboxShape = context->GetInputShape(0);
     if (bboxShape == nullptr) {
+        OP_LOGE(context, "bbox_tensor input[0] shape is null; expected a required input shape.");
         return ge::GRAPH_FAILED;
     }
     const auto& bboxStorage = bboxShape->GetStorageShape();
@@ -52,23 +55,26 @@ static ge::graphStatus CheckValidTilingFunc(gert::TilingContext* context)
 
     const gert::Tensor* bboxTensor = context->GetInputTensor(0);
     if (bboxTensor == nullptr) {
+        OP_LOGE(context, "bbox_tensor input[0] tensor metadata is null; expected dtype metadata.");
         return ge::GRAPH_FAILED;
     }
     int32_t bboxDtype = static_cast<int32_t>(bboxTensor->GetDataType());
-    int32_t bboxFormat = static_cast<int32_t>(bboxTensor->GetStorageFormat());
 
     const gert::StorageShape* imgMetasShape = context->GetInputShape(1);
     if (imgMetasShape == nullptr) {
+        OP_LOGE(context, "img_metas input[1] shape is null; expected a required input shape.");
         return ge::GRAPH_FAILED;
     }
-    int64_t imgMetasNumel = imgMetasShape->GetStorageShape().GetShapeSize();
+    const auto& imgMetasStorage = imgMetasShape->GetStorageShape();
+    const int32_t imgMetasRank = static_cast<int32_t>(imgMetasStorage.GetDimNum());
+    const int64_t imgMetasNumel = imgMetasStorage.GetShapeSize();
 
     const gert::Tensor* imgMetasTensor = context->GetInputTensor(1);
     if (imgMetasTensor == nullptr) {
+        OP_LOGE(context, "img_metas input[1] tensor metadata is null; expected dtype metadata.");
         return ge::GRAPH_FAILED;
     }
     int32_t imgMetasDtype = static_cast<int32_t>(imgMetasTensor->GetDataType());
-    int32_t imgMetasFormat = static_cast<int32_t>(imgMetasTensor->GetStorageFormat());
 
     float H = 0.0f, W = 0.0f, r = 0.0f;
 
@@ -77,11 +83,9 @@ static ge::graphStatus CheckValidTilingFunc(gert::TilingContext* context)
     in.bbox_rows = bboxRows;
     in.bbox_cols = bboxCols;
     in.bbox_dtype = bboxDtype;
-    in.bbox_format = bboxFormat;
+    in.img_metas_rank = imgMetasRank;
     in.img_metas_numel = imgMetasNumel;
     in.img_metas_dtype = imgMetasDtype;
-    in.img_metas_format = imgMetasFormat;
-    in.out_format = CV_FMT_ND;
     in.H = H;
     in.W = W;
     in.r = r;
@@ -96,11 +100,17 @@ static ge::graphStatus CheckValidTilingFunc(gert::TilingContext* context)
 
     CheckValidTilingData* tiling = context->GetTilingData<CheckValidTilingData>();
     if (tiling == nullptr) {
+        const auto* rawTiling = context->GetRawTilingData();
+        OP_LOGE(context,
+                "tiling data buffer=%p, capacity=%zu bytes; expected a nonnull buffer with at least %zu bytes.",
+                static_cast<const void*>(rawTiling), rawTiling == nullptr ? 0UL : rawTiling->GetCapacity(),
+                sizeof(CheckValidTilingData));
         return ge::GRAPH_FAILED;
     }
     std::memcpy(tiling, &out.td, sizeof(CheckValidTilingData));
 
-    context->SetTilingKey(static_cast<uint64_t>(bboxDtype));
+    const uint32_t schMode = bboxDtype == CV_DTYPE_FLOAT ? CHECK_VALID_MODE_FP32 : CHECK_VALID_MODE_FP16;
+    context->SetTilingKey(GET_TPL_TILING_KEY(schMode));
 
     uint32_t blockDim = 1;
     if (out.td.N > 0) {

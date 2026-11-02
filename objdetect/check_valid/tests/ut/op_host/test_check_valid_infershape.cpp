@@ -136,3 +136,68 @@ TEST_F(CheckValidInfershape, cv_unknown_rank)
     std::vector<std::vector<int64_t>> expectOutputShape = {{-2}};
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
+
+TEST_F(CheckValidInfershape, cv_invalid_bbox_negative_rows)
+{
+    for (auto dtype : {ge::DT_FLOAT16, ge::DT_FLOAT}) {
+        for (int64_t rows : {-3, -2}) {
+            SCOPED_TRACE(testing::Message() << "dtype=" << dtype << ", bbox N=" << rows);
+            gert::InfershapeContextPara para(
+                "CheckValid", {{{{rows, 4}, {rows, 4}}, dtype, ge::FORMAT_ND}, {{{3}, {3}}, dtype, ge::FORMAT_ND}},
+                {{{{}, {}}, ge::DT_INT8, ge::FORMAT_ND}}, std::vector<gert::InfershapeContextPara::OpAttr>{});
+            ExecuteTestCase(para, ge::GRAPH_FAILED);
+        }
+    }
+}
+
+TEST_F(CheckValidInfershape, cv_img_metas_shape_contract)
+{
+    struct MetaCase {
+        const char* name;
+        gert::StorageShape shape;
+        bool valid;
+    };
+    const MetaCase metaCases[] = {
+        {"length3", {{3}, {3}}, true},          {"length16", {{16}, {16}}, true},
+        {"dynamic_length", {{-1}, {-1}}, true}, {"unknown_rank", {{-2}, {-2}}, true},
+        {"empty", {{0}, {0}}, false},           {"length1", {{1}, {1}}, false},
+        {"length2", {{2}, {2}}, false},         {"scalar", {{}, {}}, false},
+        {"rank2", {{1, 3}, {1, 3}}, false},     {"rank3", {{1, 1, 3}, {1, 1, 3}}, false},
+    };
+    struct BboxCase {
+        gert::StorageShape shape;
+        std::vector<int64_t> outputShape;
+    };
+    const BboxCase bboxCases[] = {
+        {{{8, 4}, {8, 4}}, {8, 1}},
+        {{{0, 4}, {0, 4}}, {0, 1}},
+        {{{-1, 4}, {-1, 4}}, {-1, 1}},
+        {{{-2}, {-2}}, {-2}},
+    };
+    for (auto dtype : {ge::DT_FLOAT16, ge::DT_FLOAT}) {
+        for (const auto& bbox : bboxCases) {
+            for (const auto& meta : metaCases) {
+                SCOPED_TRACE(testing::Message() << "dtype=" << dtype << ", meta=" << meta.name
+                                                << ", output first dim=" << bbox.outputShape[0]);
+                gert::InfershapeContextPara para(
+                    "CheckValid", {{bbox.shape, dtype, ge::FORMAT_ND}, {meta.shape, dtype, ge::FORMAT_ND}},
+                    {{{{}, {}}, ge::DT_INT8, ge::FORMAT_ND}}, std::vector<gert::InfershapeContextPara::OpAttr>{});
+                ExecuteTestCase(para, meta.valid ? ge::GRAPH_SUCCESS : ge::GRAPH_FAILED, {bbox.outputShape});
+            }
+        }
+    }
+}
+
+TEST_F(CheckValidInfershape, cv_missing_img_metas)
+{
+    for (auto dtype : {ge::DT_FLOAT16, ge::DT_FLOAT}) {
+        for (const gert::StorageShape& bbox : {gert::StorageShape({8, 4}, {8, 4}), gert::StorageShape({0, 4}, {0, 4}),
+                                               gert::StorageShape({-1, 4}, {-1, 4}), gert::StorageShape({-2}, {-2})}) {
+            SCOPED_TRACE(testing::Message() << "dtype=" << dtype << ", bbox=" << bbox.GetOriginShape().GetDim(0));
+            gert::InfershapeContextPara para("CheckValid", {{bbox, dtype, ge::FORMAT_ND}},
+                                             {{{{}, {}}, ge::DT_INT8, ge::FORMAT_ND}},
+                                             std::vector<gert::InfershapeContextPara::OpAttr>{});
+            ExecuteTestCase(para, ge::GRAPH_FAILED);
+        }
+    }
+}

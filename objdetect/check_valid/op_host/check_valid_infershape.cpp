@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "graph/types.h"
+#include "log/log.h"
 
 using namespace ge;
 
@@ -32,15 +33,28 @@ bool IsUnknownRank(const gert::Shape* shape)
  * InferShapeForCheckValid: GE shape inference callback.
  *
  * valid_tensor.shape = (bbox_tensor.shape[0], 1) = (N, 1).
- * Validates that bbox_tensor is rank-2 with last dim == 4.
+ * Validates bbox_tensor rank/last dim and img_metas rank/minimum length when known.
  * Empty tensor (N==0) is supported 鈥?output (0, 1) propagates.
  */
 ge::graphStatus InferShapeForCheckValid(gert::InferShapeContext* context)
 {
     const gert::Shape* bboxShape = context->GetInputShape(0);
+    const gert::Shape* imgMetasShape = context->GetInputShape(1);
     gert::Shape* validShape = context->GetOutputShape(0);
-    if (bboxShape == nullptr || validShape == nullptr) {
+    if (bboxShape == nullptr || imgMetasShape == nullptr || validShape == nullptr) {
         return GRAPH_FAILED;
+    }
+
+    // Unknown bbox rank must not bypass known img_metas constraints.
+    if (!IsUnknownRank(imgMetasShape)) {
+        if (imgMetasShape->GetDimNum() != 1) {
+            return GRAPH_FAILED;
+        }
+        const int64_t length = imgMetasShape->GetDim(0);
+        if (length != ge::UNKNOWN_DIM && length < 3) {
+            OP_LOGE(context->GetNodeName(), "img_metas length must be at least 3, but got %ld.", length);
+            return GRAPH_FAILED;
+        }
     }
 
     if (IsUnknownRank(bboxShape)) {
@@ -56,9 +70,13 @@ ge::graphStatus InferShapeForCheckValid(gert::InferShapeContext* context)
     if (bboxShape->GetDim(1) != 4 && bboxShape->GetDim(1) != ge::UNKNOWN_DIM) {
         return GRAPH_FAILED;
     }
+    const int64_t rows = bboxShape->GetDim(0);
+    if (rows < 0 && rows != ge::UNKNOWN_DIM) {
+        return GRAPH_FAILED;
+    }
 
     validShape->SetDimNum(2);
-    validShape->SetDim(0, bboxShape->GetDim(0));
+    validShape->SetDim(0, rows);
     validShape->SetDim(1, 1);
     return GRAPH_SUCCESS;
 }

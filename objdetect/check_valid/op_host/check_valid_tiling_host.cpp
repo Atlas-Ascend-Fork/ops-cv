@@ -10,6 +10,13 @@
 
 #include "check_valid_tiling_host.h"
 
+#include <algorithm>
+#include <cinttypes>
+#include <limits>
+
+#include "graph/utils/type_utils.h"
+#include "log/log.h"
+
 namespace optiling {
 
 uint32_t ComputePublicTiling(const CheckValidPublicInputs& in, CheckValidPublicResult& out)
@@ -17,23 +24,46 @@ uint32_t ComputePublicTiling(const CheckValidPublicInputs& in, CheckValidPublicR
     bool bbox_dtype_ok = (in.bbox_dtype == CV_DTYPE_FLOAT || in.bbox_dtype == CV_DTYPE_FLOAT16);
     bool dtype_match = (in.bbox_dtype == in.img_metas_dtype);
     if (!bbox_dtype_ok || !dtype_match) {
-        return CV_STATUS_FAILED;
-    }
-
-    bool format_ok = (in.bbox_format == CV_FMT_ND && in.img_metas_format == CV_FMT_ND && in.out_format == CV_FMT_ND);
-    if (!format_ok) {
+        OP_LOGE("CheckValid", "bbox_tensor dtype=%s, img_metas dtype=%s; expected matching FLOAT16 or FLOAT inputs.",
+                ge::TypeUtils::DataTypeToSerialString(static_cast<ge::DataType>(in.bbox_dtype)).c_str(),
+                ge::TypeUtils::DataTypeToSerialString(static_cast<ge::DataType>(in.img_metas_dtype)).c_str());
         return CV_STATUS_FAILED;
     }
 
     if (in.bbox_rank != 2) {
+        OP_LOGE("CheckValid", "bbox_tensor rank=%d; expected rank=2.", in.bbox_rank);
         return CV_STATUS_FAILED;
     }
 
     if (in.bbox_cols != 4) {
+        OP_LOGE("CheckValid", "bbox_tensor last dim=%" PRId64 "; expected last dim=4.", in.bbox_cols);
+        return CV_STATUS_FAILED;
+    }
+
+    if (in.bbox_rows < 0) {
+        OP_LOGE("CheckValid", "bbox_tensor runtime N=%" PRId64 "; expected a nonnegative row count.", in.bbox_rows);
+        return CV_STATUS_FAILED;
+    }
+
+    if (in.img_metas_rank != 1) {
+        OP_LOGE("CheckValid", "img_metas rank=%d; expected rank=1 (a one-dimensional tensor).", in.img_metas_rank);
         return CV_STATUS_FAILED;
     }
 
     if (in.img_metas_numel < 3) {
+        OP_LOGE("CheckValid", "img_metas element count=%" PRId64 "; expected at least 3 elements (H, W, r).",
+                in.img_metas_numel);
+        return CV_STATUS_FAILED;
+    }
+
+    const uint64_t elementBytes = in.bbox_dtype == CV_DTYPE_FLOAT16 ? 2 : 4;
+    const uint64_t maxRows = std::min(static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) / 4,
+                                      std::numeric_limits<uint64_t>::max() / (4 * elementBytes));
+    if (in.bbox_rows > static_cast<int64_t>(maxRows)) {
+        OP_LOGE("CheckValid",
+                "bbox_tensor N=%" PRId64 " exceeds capacity N<=%" PRIu64 "; element size=%" PRIu64
+                " bytes; require 4*N<=INT64_MAX and 4*N*element_size<=UINT64_MAX.",
+                in.bbox_rows, maxRows, elementBytes);
         return CV_STATUS_FAILED;
     }
 
@@ -69,6 +99,7 @@ uint32_t ComputePublicTiling(const CheckValidPublicInputs& in, CheckValidPublicR
 uint32_t ComputeBranch0Tiling(const CheckValidBranch0Inputs& in, CheckValidBranch0Result& out)
 {
     if (in.N <= 0) {
+        OP_LOGE("CheckValid", "nonempty tiling N=%" PRId64 "; expected N>0.", in.N);
         return CV_STATUS_FAILED;
     }
     int64_t sizeofT;
@@ -77,25 +108,32 @@ uint32_t ComputeBranch0Tiling(const CheckValidBranch0Inputs& in, CheckValidBranc
     } else if (in.dtype == CV_DTYPE_FLOAT) {
         sizeofT = 4;
     } else {
+        OP_LOGE("CheckValid", "nonempty tiling dtype=%d; expected FLOAT16(%d) or FLOAT(%d).", in.dtype,
+                CV_DTYPE_FLOAT16, CV_DTYPE_FLOAT);
         return CV_STATUS_FAILED;
     }
 
     constexpr int64_t P = 3;
     constexpr int64_t COLS = 4;
+    // VF loads 64 elements per column, including inactive lanes of the final vector.
+    constexpr int64_t VECTOR_ROWS = 64;
 
     int64_t per_buf_bytes = (in.ub_available / P) & ~31;
 
     int64_t per_buf_elems = per_buf_bytes / sizeofT;
     int64_t raw_tile_n = per_buf_elems / COLS;
 
-    int64_t rowAlignMask = (sizeofT == 2) ? ~15 : ~7;
-    int64_t tile_n = raw_tile_n & rowAlignMask;
+    int64_t tile_n = (raw_tile_n / VECTOR_ROWS) * VECTOR_ROWS;
 
     if (tile_n <= 0) {
-        tile_n = (sizeofT == 2) ? 16 : 8;
+        OP_LOGE("CheckValid",
+                "UB tiling cannot fit one vector per column: ub_available=%" PRId64 ", per_buf_bytes=%" PRId64
+                ", dtype=%d; expected capacity for 64 rows of 4 elements per buffer.",
+                in.ub_available, per_buf_bytes, in.dtype);
+        return CV_STATUS_FAILED;
     }
 
-    int64_t num_tiles = (in.N + tile_n - 1) / tile_n;
+    int64_t num_tiles = in.N / tile_n + (in.N % tile_n != 0);
     int64_t tile_n_tail = in.N - (num_tiles - 1) * tile_n;
     if (tile_n_tail == 0 && num_tiles > 0) {
         tile_n_tail = tile_n;
@@ -123,9 +161,12 @@ uint32_t ComputeBranch0Tiling(const CheckValidBranch0Inputs& in, CheckValidBranc
 uint32_t ComputeBranch1Tiling(const CheckValidBranch1Inputs& in, CheckValidBranch1Result& out)
 {
     if (in.N != 0) {
+        OP_LOGE("CheckValid", "empty tiling N=%" PRId64 "; expected N=0.", in.N);
         return CV_STATUS_FAILED;
     }
     if (in.dtype != CV_DTYPE_FLOAT16 && in.dtype != CV_DTYPE_FLOAT) {
+        OP_LOGE("CheckValid", "empty tiling dtype=%d; expected FLOAT16(%d) or FLOAT(%d).", in.dtype, CV_DTYPE_FLOAT16,
+                CV_DTYPE_FLOAT);
         return CV_STATUS_FAILED;
     }
 
