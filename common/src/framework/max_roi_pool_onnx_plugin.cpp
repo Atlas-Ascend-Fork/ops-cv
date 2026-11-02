@@ -14,6 +14,8 @@
  * \file max_roi_pool_onnx_plugin.cpp
  * \brief
  */
+#include <cstdint>
+
 #include "cv_plugin_util.h"
 #include "graph/operator.h"
 #include "nlohmann/json.hpp"
@@ -27,7 +29,7 @@ static const size_t POOLED_SHAPE_SIZE = 2;
 static Status ParseParamsMaxRoiPool(const ge::Operator& op_src, ge::Operator& op_dest)
 {
     float spatial_scale = 1.0;
-    std::vector<int> pooled_shape;
+    std::vector<int64_t> pooled_shape;
 
     ge::AscendString attrs_string;
     try {
@@ -38,7 +40,7 @@ static Status ParseParamsMaxRoiPool(const ge::Operator& op_src, ge::Operator& op
                     const std::string name = attr.value("name", "");
                     if (name == "pooled_shape" && attr.contains("ints")) {
                         for (auto& v : attr["ints"]) {
-                            pooled_shape.push_back(static_cast<int>(v.get<int64_t>()));
+                            pooled_shape.push_back(v.get<int64_t>());
                         }
                     } else if (name == "spatial_scale" && attr.value("type", -1) == ATTR_TYPE_FLOAT) {
                         // GE omits f when spatial_scale is 0. Do not keep the default 1.0.

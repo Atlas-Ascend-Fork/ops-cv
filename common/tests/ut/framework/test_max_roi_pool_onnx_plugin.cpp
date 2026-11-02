@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <string>
 
 #include "../../../src/framework/max_roi_pool_onnx_plugin.cpp"
@@ -83,4 +84,47 @@ TEST(OnnxMaxRoiPoolPluginTest, ReturnFailedWhenAttributeJsonInvalid)
     ge::Operator op_src = CreateSourceOperator("{");
     ge::Operator op_dest = CreateOperator("max_roi_pool");
     EXPECT_EQ(domi::ParseParamsMaxRoiPool(op_src, op_dest), domi::FAILED);
+}
+
+TEST(OnnxMaxRoiPoolPluginTest, PreserveInt64PooledHeight)
+{
+    ge::Operator op_src = CreateSourceOperator(
+        R"({"attribute":[{"name":"pooled_shape","type":7,"ints":[4294967303,8]}]})");
+    ge::Operator op_dest = CreateOperator("max_roi_pool");
+    int64_t pooled_h = 0;
+    int64_t pooled_w = 0;
+    ASSERT_EQ(domi::ParseParamsMaxRoiPool(op_src, op_dest), domi::SUCCESS);
+    ASSERT_EQ(op_dest.GetAttr("pooled_h", pooled_h), ge::GRAPH_SUCCESS);
+    ASSERT_EQ(op_dest.GetAttr("pooled_w", pooled_w), ge::GRAPH_SUCCESS);
+    EXPECT_EQ(pooled_h, 4294967303LL);
+    EXPECT_EQ(pooled_w, 8);
+}
+
+TEST(OnnxMaxRoiPoolPluginTest, PreserveInt64PooledWidth)
+{
+    ge::Operator op_src = CreateSourceOperator(
+        R"({"attribute":[{"name":"pooled_shape","type":7,"ints":[7,4294967304]}]})");
+    ge::Operator op_dest = CreateOperator("max_roi_pool");
+    int64_t pooled_h = 0;
+    int64_t pooled_w = 0;
+    ASSERT_EQ(domi::ParseParamsMaxRoiPool(op_src, op_dest), domi::SUCCESS);
+    ASSERT_EQ(op_dest.GetAttr("pooled_h", pooled_h), ge::GRAPH_SUCCESS);
+    ASSERT_EQ(op_dest.GetAttr("pooled_w", pooled_w), ge::GRAPH_SUCCESS);
+    EXPECT_EQ(pooled_h, 7);
+    EXPECT_EQ(pooled_w, 4294967304LL);
+}
+
+TEST(OnnxMaxRoiPoolPluginTest, PreserveInt32BoundaryWithoutChangingSpatialScale)
+{
+    ge::Operator op_src = CreateSourceOperator(
+        R"({"attribute":[{"name":"pooled_shape","type":7,"ints":[2147483647,8]},)"
+        R"({"name":"spatial_scale","type":1,"f":"0.25"}]})");
+    ge::Operator op_dest = CreateOperator("max_roi_pool");
+    int64_t pooled_h = 0;
+    float spatial_scale_h = 0.0f;
+    ASSERT_EQ(domi::ParseParamsMaxRoiPool(op_src, op_dest), domi::SUCCESS);
+    ASSERT_EQ(op_dest.GetAttr("pooled_h", pooled_h), ge::GRAPH_SUCCESS);
+    ASSERT_EQ(op_dest.GetAttr("spatial_scale_h", spatial_scale_h), ge::GRAPH_SUCCESS);
+    EXPECT_EQ(pooled_h, 2147483647LL);
+    EXPECT_FLOAT_EQ(spatial_scale_h, 0.25f);
 }
