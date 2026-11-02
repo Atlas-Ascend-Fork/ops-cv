@@ -125,6 +125,78 @@ static bool CheckOutputMask(const aclBoolArray* outputMask)
     return true;
 }
 
+static bool CheckFormat(const aclTensor* gradOutput, const aclTensor* input, const aclTensor* grid,
+                        const aclTensor* inputGrad, const aclTensor* gridGrad)
+{
+    // 资料约束：gradOutput/input/inputGrad 的 format 一致且属于 {NCDHW, NDHWC}。
+    // host 侧按 input 的 format 决定轴序与是否转置，NCDHW 与 ND 轴序语义等价（同族），
+    // 混入不同族的 NDHWC 会读错轴，形状对称时静默算错、否则触发设备侧 AICPU 异常 507018
+    const op::Format inputFormat = input->GetStorageFormat();
+    OP_CHECK(inputFormat == op::Format::FORMAT_NCDHW || inputFormat == op::Format::FORMAT_ND ||
+                 inputFormat == op::Format::FORMAT_NDHWC,
+             OP_LOGE_FOR_INVALID_FORMAT("aclnnGridSampler3DBackward", "input", op::ToString(inputFormat).GetString(),
+                                        "NCDHW, ND or NDHWC"),
+             return false);
+    bool inputIsNcdhwFamily = inputFormat == op::Format::FORMAT_NCDHW || inputFormat == op::Format::FORMAT_ND;
+    OP_CHECK((gradOutput->GetStorageFormat() == op::Format::FORMAT_NCDHW ||
+              gradOutput->GetStorageFormat() == op::Format::FORMAT_ND) == inputIsNcdhwFamily,
+             OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON(
+                 "aclnnGridSampler3DBackward", "gradOutput and input",
+                 (std::string(op::ToString(gradOutput->GetStorageFormat()).GetString()) + ", " +
+                  std::string(op::ToString(inputFormat).GetString()))
+                     .c_str(),
+                 "gradOutput storage format should be in the same family (NCDHW/ND or NDHWC) as input storage format"),
+             return false);
+    OP_CHECK((inputGrad->GetStorageFormat() == op::Format::FORMAT_NCDHW ||
+              inputGrad->GetStorageFormat() == op::Format::FORMAT_ND) == inputIsNcdhwFamily,
+             OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON(
+                 "aclnnGridSampler3DBackward", "inputGrad and input",
+                 (std::string(op::ToString(inputGrad->GetStorageFormat()).GetString()) + ", " +
+                  std::string(op::ToString(inputFormat).GetString()))
+                     .c_str(),
+                 "inputGrad storage format should be in the same family (NCDHW/ND or NDHWC) as input storage format"),
+             return false);
+    // 资料约束：grid/gridGrad 仅支持 NDHWC；声明 NCDHW/ND 时按 (N, D, H, W, 3) 轴序解读，
+    // 为兼容既有行为不拦截（同族 NCDHW/ND 视作合法）
+    OP_CHECK(grid->GetStorageFormat() == op::Format::FORMAT_NDHWC ||
+                 grid->GetStorageFormat() == op::Format::FORMAT_NCDHW ||
+                 grid->GetStorageFormat() == op::Format::FORMAT_ND,
+             OP_LOGE_FOR_INVALID_FORMAT("aclnnGridSampler3DBackward", "grid",
+                                        op::ToString(grid->GetStorageFormat()).GetString(), "NDHWC, NCDHW or ND"),
+             return false);
+    OP_CHECK(gridGrad->GetStorageFormat() == op::Format::FORMAT_NDHWC ||
+                 gridGrad->GetStorageFormat() == op::Format::FORMAT_NCDHW ||
+                 gridGrad->GetStorageFormat() == op::Format::FORMAT_ND,
+             OP_LOGE_FOR_INVALID_FORMAT("aclnnGridSampler3DBackward", "gridGrad",
+                                        op::ToString(gridGrad->GetStorageFormat()).GetString(), "NDHWC, NCDHW or ND"),
+             return false);
+    // 资料约束：DOUBLE dtype 不支持 NDHWC，放行会下发 kernel 触发设备侧 AICPU 异常 507018
+    if (input->GetDataType() == op::DataType::DT_DOUBLE) {
+        OP_CHECK(
+            input->GetStorageFormat() != op::Format::FORMAT_NDHWC,
+            OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON(
+                "aclnnGridSampler3DBackward", "input dtype and format",
+                (std::string("DOUBLE, ") + std::string(op::ToString(input->GetStorageFormat()).GetString())).c_str(),
+                "DOUBLE dtype does not support NDHWC format"),
+            return false);
+        OP_CHECK(gradOutput->GetStorageFormat() != op::Format::FORMAT_NDHWC,
+                 OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON(
+                     "aclnnGridSampler3DBackward", "gradOutput dtype and format",
+                     (std::string("DOUBLE, ") + std::string(op::ToString(gradOutput->GetStorageFormat()).GetString()))
+                         .c_str(),
+                     "DOUBLE dtype does not support NDHWC format"),
+                 return false);
+        OP_CHECK(inputGrad->GetStorageFormat() != op::Format::FORMAT_NDHWC,
+                 OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON(
+                     "aclnnGridSampler3DBackward", "inputGrad dtype and format",
+                     (std::string("DOUBLE, ") + std::string(op::ToString(inputGrad->GetStorageFormat()).GetString()))
+                         .c_str(),
+                     "DOUBLE dtype does not support NDHWC format"),
+                 return false);
+    }
+    return true;
+}
+
 static bool CheckShape(const aclTensor* gradOutput, const aclTensor* input, const aclTensor* grid,
                        const aclTensor* inputGrad, const aclTensor* gridGrad)
 {
@@ -161,6 +233,16 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* input, cons
                                                "expect input and gradOutput to have same channel size");
         return false;
     }
+    // input 的 D/H/W 均不可为 0（与 2D 版本对齐，资料要求返回 161002）
+    int64_t inputD = formatNCDHW ? inputShape.GetDim(THIRD_DIM) : inputShape.GetDim(SECOND_DIM);
+    int64_t inputH = formatNCDHW ? inputShape.GetDim(FOURTH_DIM) : inputShape.GetDim(THIRD_DIM);
+    int64_t inputW = formatNCDHW ? inputShape.GetDim(FIFTH_DIM) : inputShape.GetDim(FOURTH_DIM);
+    if (inputD == 0 || inputH == 0 || inputW == 0) {
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnGridSampler3DBackward", "input",
+                                              op::ToString(inputShape).GetString(),
+                                              "expect input to have non-empty spatial dimensions");
+        return false;
+    }
     if (gridShape.GetDim(SECOND_DIM) != gradOutputD || gridShape.GetDim(THIRD_DIM) != gradOutputH ||
         gridShape.GetDim(FOURTH_DIM) != gradOutputW) {
         OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnGridSampler3DBackward", "grid",
@@ -192,13 +274,17 @@ static aclnnStatus CheckParams(const aclTensor* gradOutput, const aclTensor* inp
     // 2. 检查输入、输出的数据类型是否在API支持的数据类型范围之内，需要根据api定义校验
     CHECK_RET(CheckDtypeValid(gradOutput, input, grid, inputGrad, gridGrad), ACLNN_ERR_PARAM_INVALID);
 
-    // 3. 检查属性参数是否在支持范围内
+    // 3. 检查输入、输出的 format 契约（gradOutput/input/inputGrad 同族且属于 {NCDHW, ND, NDHWC}，
+    // grid/gridGrad 仅支持 NDHWC（NCDHW/ND 为既有兼容），DOUBLE 不支持 NDHWC）
+    CHECK_RET(CheckFormat(gradOutput, input, grid, inputGrad, gridGrad), ACLNN_ERR_PARAM_INVALID);
+
+    // 4. 检查属性参数是否在支持范围内
     CHECK_RET(CheckAttrValid(interpolationMode, paddingMode), ACLNN_ERR_PARAM_INVALID);
 
-    // 4. 检查输入、输出的shape匹配关系
+    // 5. 检查输入、输出的shape匹配关系
     CHECK_RET(CheckShape(gradOutput, input, grid, inputGrad, gridGrad), ACLNN_ERR_PARAM_INVALID);
 
-    // 5. 检查outputMask长度
+    // 6. 检查outputMask长度
     CHECK_RET(CheckOutputMask(outputMask), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;

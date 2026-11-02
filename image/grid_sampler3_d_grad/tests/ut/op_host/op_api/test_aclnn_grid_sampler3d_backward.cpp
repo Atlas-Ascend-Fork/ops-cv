@@ -197,7 +197,7 @@ TEST_F(l2_grid_sampler3d_backward_test, ascend910B2_case_no_transpose)
     auto gradOutputDesc = TensorDesc({1, 1, 2, 2, 1}, ACL_FLOAT16, ACL_FORMAT_NDHWC);
     auto inputDesc = TensorDesc({1, 1, 3, 3, 1}, ACL_FLOAT16, ACL_FORMAT_NDHWC);
     auto gridDesc = TensorDesc({1, 1, 2, 2, 3}, ACL_FLOAT16, ACL_FORMAT_NCDHW).ValueRange(-1, 1);
-    auto inputGradDesc = TensorDesc({1, 1, 3, 3, 1}, ACL_FLOAT16, ACL_FORMAT_NCDHW);
+    auto inputGradDesc = TensorDesc({1, 1, 3, 3, 1}, ACL_FLOAT16, ACL_FORMAT_NDHWC);
     auto gridGradDesc = TensorDesc({1, 1, 2, 2, 3}, ACL_FLOAT16, ACL_FORMAT_NCDHW);
     auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
     auto ut = OP_API_UT(aclnnGridSampler3DBackward,
@@ -412,4 +412,157 @@ TEST_F(l2_grid_sampler3d_backward_test, zero_channel_mask1_only_should_be_zeroed
     uint64_t workspaceSize = 0;
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
     EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
+
+// fp64 + NDHWC 组合应在 host 侧返回 161002（DOUBLE 不支持 NDHWC）
+TEST_F(l2_grid_sampler3d_backward_test, double_ndhwc_should_be_rejected)
+{
+    auto gradOutputDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_DOUBLE, ACL_FORMAT_NDHWC);
+    auto inputDesc = TensorDesc({2, 3, 4, 3, 3}, ACL_DOUBLE, ACL_FORMAT_NDHWC);
+    auto gridDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_DOUBLE, ACL_FORMAT_NDHWC).ValueRange(-1, 1);
+    auto inputGradDesc = TensorDesc({2, 3, 4, 3, 3}, ACL_DOUBLE, ACL_FORMAT_NDHWC);
+    auto gridGradDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_DOUBLE, ACL_FORMAT_NDHWC);
+    auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler3DBackward,
+                        INPUT(gradOutputDesc, inputDesc, gridDesc, 0, 0, false, outputMaskDesc),
+                        OUTPUT(inputGradDesc, gridGradDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// input D=0 应在 host 侧返回 161002（D/H/W 非零校验）
+TEST_F(l2_grid_sampler3d_backward_test, input_d_zero_should_be_rejected)
+{
+    auto gradOutputDesc = TensorDesc({2, 3, 2, 3, 2}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto inputDesc = TensorDesc({2, 3, 0, 4, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto gridDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW).ValueRange(-1, 1);
+    auto inputGradDesc = TensorDesc({2, 3, 0, 4, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto gridGradDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler3DBackward,
+                        INPUT(gradOutputDesc, inputDesc, gridDesc, 0, 0, false, outputMaskDesc),
+                        OUTPUT(inputGradDesc, gridGradDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// input H=0 应在 host 侧返回 161002
+TEST_F(l2_grid_sampler3d_backward_test, input_h_zero_should_be_rejected)
+{
+    auto gradOutputDesc = TensorDesc({2, 3, 2, 3, 2}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto inputDesc = TensorDesc({2, 3, 3, 0, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto gridDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW).ValueRange(-1, 1);
+    auto inputGradDesc = TensorDesc({2, 3, 3, 0, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto gridGradDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler3DBackward,
+                        INPUT(gradOutputDesc, inputDesc, gridDesc, 0, 0, false, outputMaskDesc),
+                        OUTPUT(inputGradDesc, gridGradDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// input W=0 应在 host 侧返回 161002
+TEST_F(l2_grid_sampler3d_backward_test, input_w_zero_should_be_rejected)
+{
+    auto gradOutputDesc = TensorDesc({2, 3, 2, 3, 2}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto inputDesc = TensorDesc({2, 3, 3, 4, 0}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto gridDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW).ValueRange(-1, 1);
+    auto inputGradDesc = TensorDesc({2, 3, 3, 4, 0}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto gridGradDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler3DBackward,
+                        INPUT(gradOutputDesc, inputDesc, gridDesc, 0, 0, false, outputMaskDesc),
+                        OUTPUT(inputGradDesc, gridGradDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// gradOutput 声明 NDHWC 而 input 声明 NCDHW（不同族），应在 host 侧返回 161002（format 一致性校验）
+TEST_F(l2_grid_sampler3d_backward_test, gradoutput_ndhwc_input_ncdhw_should_be_rejected)
+{
+    auto gradOutputDesc = TensorDesc({2, 3, 2, 3, 2}, ACL_FLOAT, ACL_FORMAT_NDHWC);
+    auto inputDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto gridDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NDHWC).ValueRange(-1, 1);
+    auto inputGradDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto gridGradDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NDHWC);
+    auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler3DBackward,
+                        INPUT(gradOutputDesc, inputDesc, gridDesc, 0, 0, false, outputMaskDesc),
+                        OUTPUT(inputGradDesc, gridGradDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// inputGrad 声明 NCDHW 而 input 声明 NDHWC（不同族），应在 host 侧返回 161002（format 一致性校验）
+TEST_F(l2_grid_sampler3d_backward_test, inputgrad_ncdhw_input_ndhwc_should_be_rejected)
+{
+    auto gradOutputDesc = TensorDesc({2, 3, 2, 3, 2}, ACL_FLOAT16, ACL_FORMAT_NDHWC);
+    auto inputDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_FLOAT16, ACL_FORMAT_NDHWC);
+    auto gridDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT16, ACL_FORMAT_NDHWC).ValueRange(-1, 1);
+    auto inputGradDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_FLOAT16, ACL_FORMAT_NCDHW);
+    auto gridGradDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT16, ACL_FORMAT_NDHWC);
+    auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler3DBackward,
+                        INPUT(gradOutputDesc, inputDesc, gridDesc, 0, 0, false, outputMaskDesc),
+                        OUTPUT(inputGradDesc, gridGradDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// input 声明 NCDHW 而 gradOutput/inputGrad 声明 NDHWC（不同族），应在 host 侧返回 161002
+TEST_F(l2_grid_sampler3d_backward_test, input_ncdhw_others_ndhwc_should_be_rejected)
+{
+    auto gradOutputDesc = TensorDesc({2, 3, 2, 3, 2}, ACL_FLOAT, ACL_FORMAT_NDHWC);
+    auto inputDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto gridDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW).ValueRange(-1, 1);
+    auto inputGradDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_FLOAT, ACL_FORMAT_NDHWC);
+    auto gridGradDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler3DBackward,
+                        INPUT(gradOutputDesc, inputDesc, gridDesc, 0, 0, false, outputMaskDesc),
+                        OUTPUT(inputGradDesc, gridGradDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// DOUBLE + gradOutput NDHWC（input 为 NCDHW 且不同族），DOUBLE 约束与族一致性任一触发即返回 161002
+TEST_F(l2_grid_sampler3d_backward_test, double_gradoutput_ndhwc_should_be_rejected)
+{
+    auto gradOutputDesc = TensorDesc({2, 3, 2, 3, 2}, ACL_DOUBLE, ACL_FORMAT_NDHWC);
+    auto inputDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_DOUBLE, ACL_FORMAT_NCDHW);
+    auto gridDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_DOUBLE, ACL_FORMAT_NCDHW).ValueRange(-1, 1);
+    auto inputGradDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_DOUBLE, ACL_FORMAT_NCDHW);
+    auto gridGradDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_DOUBLE, ACL_FORMAT_NCDHW);
+    auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler3DBackward,
+                        INPUT(gradOutputDesc, inputDesc, gridDesc, 0, 0, false, outputMaskDesc),
+                        OUTPUT(inputGradDesc, gridGradDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// input 声明非法 format（NCHW），应在 host 侧返回 161002
+TEST_F(l2_grid_sampler3d_backward_test, input_nchw_should_be_rejected)
+{
+    auto gradOutputDesc = TensorDesc({2, 3, 2, 3, 2}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto inputDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto gridDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NDHWC).ValueRange(-1, 1);
+    auto inputGradDesc = TensorDesc({2, 3, 3, 4, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto gridGradDesc = TensorDesc({2, 2, 3, 2, 3}, ACL_FLOAT, ACL_FORMAT_NDHWC);
+    auto outputMaskDesc = BoolArrayDesc(vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler3DBackward,
+                        INPUT(gradOutputDesc, inputDesc, gridDesc, 0, 0, false, outputMaskDesc),
+                        OUTPUT(inputGradDesc, gridGradDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
