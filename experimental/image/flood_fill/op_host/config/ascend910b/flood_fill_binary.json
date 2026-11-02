@@ -1,0 +1,254 @@
+{
+    "op_type": "FloodFill",
+    "op_list": [
+        {
+            "bin_filename": "FloodFill_uint8",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "mask_in",
+                    "index": 1,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "optional",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "seed",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "new_value",
+                    "dtype": "list_float",
+                    "value": []
+                },
+                {
+                    "name": "lo_diff",
+                    "dtype": "list_float",
+                    "value": []
+                },
+                {
+                    "name": "up_diff",
+                    "dtype": "list_float",
+                    "value": []
+                },
+                {
+                    "name": "connectivity",
+                    "dtype": "int64",
+                    "value": null
+                },
+                {
+                    "name": "diff_mode",
+                    "dtype": "string",
+                    "value": null
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "mask_out",
+                    "index": 1,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "optional",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ]
+        },
+        {
+            "bin_filename": "FloodFill_int32",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "int32",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "mask_in",
+                    "index": 1,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "optional",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "seed",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "new_value",
+                    "dtype": "list_float",
+                    "value": []
+                },
+                {
+                    "name": "lo_diff",
+                    "dtype": "list_float",
+                    "value": []
+                },
+                {
+                    "name": "up_diff",
+                    "dtype": "list_float",
+                    "value": []
+                },
+                {
+                    "name": "connectivity",
+                    "dtype": "int64",
+                    "value": null
+                },
+                {
+                    "name": "diff_mode",
+                    "dtype": "string",
+                    "value": null
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "int32",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "mask_out",
+                    "index": 1,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "optional",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ]
+        },
+        {
+            "bin_filename": "FloodFill_float32",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "float32",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "mask_in",
+                    "index": 1,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "optional",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "seed",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "new_value",
+                    "dtype": "list_float",
+                    "value": []
+                },
+                {
+                    "name": "lo_diff",
+                    "dtype": "list_float",
+                    "value": []
+                },
+                {
+                    "name": "up_diff",
+                    "dtype": "list_float",
+                    "value": []
+                },
+                {
+                    "name": "connectivity",
+                    "dtype": "int64",
+                    "value": null
+                },
+                {
+                    "name": "diff_mode",
+                    "dtype": "string",
+                    "value": null
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "float32",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                },
+                {
+                    "name": "mask_out",
+                    "index": 1,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "optional",
+                    "shape": [
+                        -2
+                    ],
+                    "format_match_mode": "FormatAgnostic"
+                }
+            ]
+        }
+    ]
+}
