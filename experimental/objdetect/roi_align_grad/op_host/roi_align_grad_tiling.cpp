@@ -424,7 +424,7 @@ static ge::graphStatus RoiAlignGradTilingPrepare(gert::TilingParseContext* conte
     return ge::GRAPH_SUCCESS;
 }
 
-IMPL_OP_OPTILING(RoiAlignGrad)
+IMPL_OP_OPTILING(ROIAlignGrad)
     .Tiling(RoiAlignGradTilingFunc)
     .TilingParse<RoiAlignGradCompileInfo>(RoiAlignGradTilingPrepare);
 } // namespace optiling

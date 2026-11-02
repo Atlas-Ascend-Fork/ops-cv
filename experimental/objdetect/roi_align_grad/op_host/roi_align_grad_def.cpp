@@ -15,9 +15,9 @@
 #include "register/op_def_registry.h"
 
 namespace ops {
-class RoiAlignGrad : public OpDef {
+class ROIAlignGrad : public OpDef {
 public:
-    explicit RoiAlignGrad(const char* name) : OpDef(name)
+    explicit ROIAlignGrad(const char* name) : OpDef(name)
     {
         this->Input("y_diff")
             .ParamType(REQUIRED)
@@ -51,5 +51,5 @@ public:
     }
 };
 
-OP_ADD(RoiAlignGrad);
+OP_ADD(ROIAlignGrad);
 } // namespace ops

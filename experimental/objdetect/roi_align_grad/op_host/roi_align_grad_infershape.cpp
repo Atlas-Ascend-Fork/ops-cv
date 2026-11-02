@@ -164,5 +164,5 @@ static ge::graphStatus InferShapeRoiAlignGrad(gert::InferShapeContext* context)
     return GRAPH_SUCCESS;
 }
 
-IMPL_OP_INFERSHAPE(RoiAlignGrad).InferShape(InferShapeRoiAlignGrad);
+IMPL_OP_INFERSHAPE(ROIAlignGrad).InferShape(InferShapeRoiAlignGrad);
 } // namespace ops

@@ -49,7 +49,7 @@ gert::InfershapeContextPara MakeContext(const std::vector<int64_t>& yDiffShape, 
         OpAttr("sample_num", Ops::Cv::AnyValue::CreateFrom<int64_t>(2)),
         OpAttr("roi_end_mode", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
     };
-    return gert::InfershapeContextPara("RoiAlignGrad", inputs, outputs, attrs);
+    return gert::InfershapeContextPara("ROIAlignGrad", inputs, outputs, attrs);
 }
 
 void ExpectFailure(const std::vector<int64_t>& yDiffShape, const std::vector<int64_t>& roisShape,

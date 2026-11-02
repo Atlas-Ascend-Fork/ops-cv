@@ -232,7 +232,7 @@ aclnnStatus aclnnRoiAlignV2BackwardGetWorkspaceSize(const aclTensor* gradOutput,
     int64_t roiEndMode = aligned ? DIM_TWO : DIM_ZERO; // roiEndMode = 2 for torch aligned = true
 
     // 进行计算
-    auto roiAlignBackwardOut = l0op::RoiAlignGrad(gradOutputTransData, boxesContiguous, inputShape, pooledHeight,
+    auto roiAlignBackwardOut = l0op::ROIAlignGrad(gradOutputTransData, boxesContiguous, inputShape, pooledHeight,
                                                   pooledWidth, spatialScale, samplingRatio, roiEndMode,
                                                   uniqueExecutor.get());
     CHECK_RET(roiAlignBackwardOut != nullptr, ACLNN_ERR_INNER_NULLPTR);
