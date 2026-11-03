@@ -24,6 +24,8 @@
 #include "opdev/op_log.h"
 #include "op_api/aclnn_check.h"
 
+#include <cmath>
+
 #include "aclnn_kernels/contiguous.h"
 #include "aclnn_kernels/transdata.h"
 #include "aclnn_kernels/transdata.h"
@@ -53,8 +55,11 @@ static constexpr double EPSILON = 1e-5;
 static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST_DATA = {op::DataType::DT_FLOAT16,
                                                                             op::DataType::DT_FLOAT};
 
+// 950/960（RegBase）路径支持 BF16，910B 系列内置二进制不支持
 static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST_DATA_REGBASE = {
     op::DataType::DT_FLOAT16, op::DataType::DT_FLOAT, op::DataType::DT_BF16};
+
+static inline bool IsBf16SupportedSoc(const NpuArch curArch) { return IsRegBase(curArch); }
 
 static bool CheckScalesSize(const aclFloatArray* scales)
 {
@@ -77,6 +82,16 @@ static bool CheckShape(const aclTensor* self, const aclTensor* out)
         return false;
     }
 
+    // API定义不支持空Tensor，N/C/H/W任一维为0即拒绝
+    for (size_t i = 0; i < NCHW_DIM_NUM; i++) {
+        if (selfShape.GetDim(i) <= 0 || outShape.GetDim(i) <= 0) {
+            OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                    "The dim of self or out must be greater than 0, self dim[%zu]=%ld, out dim[%zu]=%ld.", i,
+                    selfShape.GetDim(i), i, outShape.GetDim(i));
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -95,6 +110,15 @@ static bool CheckInputElement(const aclTensor* self, const aclFloatArray* scales
         dimChannel = DIM_CHANNEL_NHWC;
         dimHeight = DIM_HEIGHT_NHWC;
         dimWidth = DIM_WIDTH_NHWC;
+    }
+
+    // API定义仅支持调整H/W维，scales的N/C位必须为1
+    if (std::fabs(static_cast<double>((*scales)[dimBatch]) - 1.0) > EPSILON ||
+        std::fabs(static_cast<double>((*scales)[dimChannel]) - 1.0) > EPSILON) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                "The scales of batch and channel must be 1, but got scales[%zu]=%lf, scales[%zu]=%lf.", dimBatch,
+                static_cast<double>((*scales)[dimBatch]), dimChannel, static_cast<double>((*scales)[dimChannel]));
+        return false;
     }
 
     if (selfShape.GetDim(dimBatch) != outShape.GetDim(dimBatch) ||
@@ -145,10 +169,12 @@ static bool CheckNotNull(const aclTensor* self, const aclFloatArray* scales, con
     return true;
 }
 
-static bool CheckDtypeValid(const aclTensor* self, const aclTensor* out, bool extendFlag)
+static bool CheckDtypeValid(const aclTensor* self, const aclTensor* out, bool extendFlag, NpuArch curArch)
 {
     if (extendFlag) {
-        OP_CHECK_DTYPE_NOT_SUPPORT(self, DTYPE_SUPPORT_LIST_DATA_REGBASE, return false);
+        OP_CHECK_DTYPE_NOT_SUPPORT(
+            self, IsBf16SupportedSoc(curArch) ? DTYPE_SUPPORT_LIST_DATA_REGBASE : DTYPE_SUPPORT_LIST_DATA,
+            return false);
     } else {
         OP_CHECK_DTYPE_NOT_SUPPORT(self, DTYPE_SUPPORT_LIST_DATA, return false);
     }
@@ -191,7 +217,7 @@ static bool CheckFormat(const aclTensor* self, const aclTensor* out, bool extend
 }
 
 static aclnnStatus CheckParams(const aclTensor* self, const aclFloatArray* scales, const char* mode,
-                               const aclTensor* out, bool extendFlag)
+                               const aclTensor* out, bool extendFlag, NpuArch curArch)
 {
     // 1. 检查参数是否为空指针
     CHECK_RET(CheckNotNull(self, scales, mode, out), ACLNN_ERR_PARAM_NULLPTR);
@@ -200,7 +226,7 @@ static aclnnStatus CheckParams(const aclTensor* self, const aclFloatArray* scale
     // 3. 检查mode是否支持
     CHECK_RET(CheckModeStr(mode), ACLNN_ERR_PARAM_INVALID);
     // 4. 检查参数的数据类型是否符合预期
-    CHECK_RET(CheckDtypeValid(self, out, extendFlag), ACLNN_ERR_PARAM_INVALID);
+    CHECK_RET(CheckDtypeValid(self, out, extendFlag, curArch), ACLNN_ERR_PARAM_INVALID);
     // 5. 检查输入格式是否为NCHW
     CHECK_RET(CheckFormat(self, out, extendFlag), ACLNN_ERR_PARAM_INVALID);
     // 6. 检查输入元素是否合法
@@ -253,8 +279,9 @@ aclnnStatus aclnnResizeGetWorkspaceSize(const aclTensor* self, const aclFloatArr
     L2_DFX_PHASE_1(aclnnResize, DFX_IN(self, scales, mode), DFX_OUT(out));
     // 参数检查
     bool extendFlag = GetExtendPathFlag();
+    auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
 
-    auto ret = CheckParams(self, scales, mode, out, extendFlag);
+    auto ret = CheckParams(self, scales, mode, out, extendFlag, curArch);
     CHECK_RET(ret == ACLNN_SUCCESS, ret);
     // 创建OpExecutor
     auto uniqueExecutor = CREATE_EXECUTOR();

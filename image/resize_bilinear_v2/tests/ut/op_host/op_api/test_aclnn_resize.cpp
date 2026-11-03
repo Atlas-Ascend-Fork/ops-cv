@@ -533,3 +533,93 @@ TEST_F(l2_resize_test, case_32)
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
+
+// bf16 self/out must be rejected on 910B (DAV_2201) in the first phase, issue #1397 case 1
+TEST_F(l2_resize_test, Ascend910B_bf16_unsupported_case_33)
+{
+    auto self = TensorDesc({1, 1, 2, 2}, ACL_BF16, ACL_FORMAT_NCHW).Value(vector<float>{1, 2, 3, 4});
+
+    auto scales = FloatArrayDesc(vector<float>{1, 1, 2, 2});
+    auto out = TensorDesc({1, 1, 4, 4}, ACL_BF16, ACL_FORMAT_NCHW).Value(vector<float>(16));
+    const char* mode = "bilinear";
+    auto ut = OP_API_UT(aclnnResize, INPUT(self, scales, mode, out), OUTPUT());
+    // SAMPLE: only test GetWorkspaceSize
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// empty self (N=0) must be rejected in the first phase, issue #1397 case 2
+TEST_F(l2_resize_test, empty_self_case_34)
+{
+    auto self = TensorDesc({0, 1, 2, 4}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>{});
+
+    auto scales = FloatArrayDesc(vector<float>{1, 1, 2, 2});
+    auto out = TensorDesc({0, 1, 4, 8}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>{});
+    const char* mode = "bilinear";
+    auto ut = OP_API_UT(aclnnResize, INPUT(self, scales, mode, out), OUTPUT());
+    // SAMPLE: only test GetWorkspaceSize
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// empty out (H=0) must be rejected in the first phase, issue #1397 case 2
+TEST_F(l2_resize_test, empty_out_case_35)
+{
+    auto self = TensorDesc({1, 1, 2, 4}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>(8));
+
+    auto scales = FloatArrayDesc(vector<float>{1, 1, 2, 2});
+    auto out = TensorDesc({1, 1, 0, 8}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>{});
+    const char* mode = "bilinear";
+    auto ut = OP_API_UT(aclnnResize, INPUT(self, scales, mode, out), OUTPUT());
+    // SAMPLE: only test GetWorkspaceSize
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// scales N/C dims must be 1: N=2 must be rejected, issue #1397 case 4
+TEST_F(l2_resize_test, scales_nc_invalid_case_36)
+{
+    auto self = TensorDesc({1, 1, 2, 2}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>{1, 2, 3, 4});
+
+    auto scales = FloatArrayDesc(vector<float>{2, 1, 2, 2});
+    auto out = TensorDesc({1, 1, 4, 4}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>(16));
+    const char* mode = "bilinear";
+    auto ut = OP_API_UT(aclnnResize, INPUT(self, scales, mode, out), OUTPUT());
+    // SAMPLE: only test GetWorkspaceSize
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// scales N/C dims must be 1: C=3 must be rejected, issue #1397 case 4
+TEST_F(l2_resize_test, scales_nc_invalid_case_37)
+{
+    auto self = TensorDesc({1, 1, 2, 2}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>{1, 2, 3, 4});
+
+    auto scales = FloatArrayDesc(vector<float>{1, 3, 2, 2});
+    auto out = TensorDesc({1, 1, 4, 4}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>(16));
+    const char* mode = "bilinear";
+    auto ut = OP_API_UT(aclnnResize, INPUT(self, scales, mode, out), OUTPUT());
+    // SAMPLE: only test GetWorkspaceSize
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// positive: scales N/C equal to 1 still pass, issue #1397 case 4
+TEST_F(l2_resize_test, scales_nc_valid_case_38)
+{
+    auto self = TensorDesc({1, 1, 2, 4}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>(8));
+
+    auto scales = FloatArrayDesc(vector<float>{1, 1, 2, 2});
+    auto out = TensorDesc({1, 1, 4, 8}, ACL_FLOAT, ACL_FORMAT_NCHW).Value(vector<float>(32));
+    const char* mode = "bilinear";
+    auto ut = OP_API_UT(aclnnResize, INPUT(self, scales, mode, out), OUTPUT());
+    // SAMPLE: only test GetWorkspaceSize
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACL_SUCCESS);
+}
