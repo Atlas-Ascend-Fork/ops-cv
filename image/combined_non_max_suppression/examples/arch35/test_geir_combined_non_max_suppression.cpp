@@ -111,21 +111,29 @@ int main()
     Graph graph("combined_non_max_suppression_geir_graph");
     auto boxes = op::Data("boxes").set_attr_index(0);
     auto scores = op::Data("scores").set_attr_index(1);
-    auto maxPerClass = op::Data("max_output_size_per_class").set_attr_index(2);
-    auto maxTotal = op::Data("max_total_size").set_attr_index(3);
-    auto iouThreshold = op::Data("iou_threshold").set_attr_index(4);
-    auto scoreThreshold = op::Data("score_threshold").set_attr_index(5);
+    // Shape inference and tiling need the scalar values while compiling the graph.
+    auto maxPerClass = op::Const("max_output_size_per_class")
+                           .set_attr_value(MakeTensor(scalarShape, DT_INT32, vector<int32_t>{3}));
+    auto maxTotal = op::Const("max_total_size").set_attr_value(MakeTensor(scalarShape, DT_INT32, vector<int32_t>{3}));
+    auto iouThreshold = op::Const("iou_threshold")
+                            .set_attr_value(MakeTensor(scalarShape, DT_FLOAT, vector<float>{0.5F}));
+    auto scoreThreshold = op::Const("score_threshold")
+                              .set_attr_value(MakeTensor(scalarShape, DT_FLOAT, vector<float>{0.0F}));
 
     TensorDesc boxesDesc(ge::Shape(boxesShape), FORMAT_ND, DT_FLOAT);
     TensorDesc scoresDesc(ge::Shape(scoresShape), FORMAT_ND, DT_FLOAT);
     TensorDesc intScalarDesc(ge::Shape(scalarShape), FORMAT_ND, DT_INT32);
     TensorDesc floatScalarDesc(ge::Shape(scalarShape), FORMAT_ND, DT_FLOAT);
+    boxesDesc.SetPlacement(ge::kPlacementHost);
+    scoresDesc.SetPlacement(ge::kPlacementHost);
     boxes.update_input_desc_x(boxesDesc);
+    boxes.update_output_desc_y(boxesDesc);
     scores.update_input_desc_x(scoresDesc);
-    maxPerClass.update_input_desc_x(intScalarDesc);
-    maxTotal.update_input_desc_x(intScalarDesc);
-    iouThreshold.update_input_desc_x(floatScalarDesc);
-    scoreThreshold.update_input_desc_x(floatScalarDesc);
+    scores.update_output_desc_y(scoresDesc);
+    maxPerClass.update_output_desc_y(intScalarDesc);
+    maxTotal.update_output_desc_y(intScalarDesc);
+    iouThreshold.update_output_desc_y(floatScalarDesc);
+    scoreThreshold.update_output_desc_y(floatScalarDesc);
 
     auto nms = op::CombinedNonMaxSuppression("combined_non_max_suppression");
     nms.set_input_boxes(boxes);
@@ -146,7 +154,7 @@ int main()
     nms.update_output_desc_nmsed_scores(TensorDesc(ge::Shape({1, 3}), FORMAT_ND, DT_FLOAT));
     nms.update_output_desc_nmsed_classes(TensorDesc(ge::Shape({1, 3}), FORMAT_ND, DT_FLOAT));
     nms.update_output_desc_valid_detections(TensorDesc(ge::Shape({1}), FORMAT_ND, DT_INT32));
-    graph.SetInputs({boxes, scores, maxPerClass, maxTotal, iouThreshold, scoreThreshold}).SetOutputs({nms});
+    graph.SetInputs({boxes, scores}).SetOutputs({nms});
 
     std::map<AscendString, AscendString> buildOptions;
     ge::Session* session = new Session(buildOptions);
@@ -168,10 +176,6 @@ int main()
     vector<Tensor> inputs = {
         MakeTensor(boxesShape, DT_FLOAT, boxesData),
         MakeTensor(scoresShape, DT_FLOAT, scoresData),
-        MakeTensor(scalarShape, DT_INT32, vector<int32_t>{3}),
-        MakeTensor(scalarShape, DT_INT32, vector<int32_t>{3}),
-        MakeTensor(scalarShape, DT_FLOAT, vector<float>{0.5F}),
-        MakeTensor(scalarShape, DT_FLOAT, vector<float>{0.0F}),
     };
     vector<Tensor> outputs;
     ret = session->RunGraph(graphId, inputs, outputs);

@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "array_ops.h"
 #include "ge_api.h"
 #include "ge_api_types.h"
 #include "ge_error_codes.h"
