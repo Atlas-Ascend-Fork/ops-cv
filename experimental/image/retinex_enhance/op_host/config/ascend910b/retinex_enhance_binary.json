@@ -1,0 +1,31 @@
+{
+  "op_type": "RetinexEnhance",
+  "op_list": [
+    {
+      "bin_filename": "RetinexEnhance_57b035201474b27710c071275075a165",
+      "inputs": [
+        {
+          "name": "image",
+          "index": 0,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [-2],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ],
+      "attrs": [],
+      "outputs": [
+        {
+          "name": "enhanced",
+          "index": 0,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [-2],
+          "format_match_mode": "FormatAgnostic"
+        }
+      ]
+    }
+  ]
+}
