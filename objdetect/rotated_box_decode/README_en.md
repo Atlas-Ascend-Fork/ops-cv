@@ -100,7 +100,7 @@ $$
 - The tensors must be 3D, shape[1] must be 5, shape[0] ≥ 0, and shape[2] ≥ 0.
 - The length of weight must be 5, and no element can be 0 (otherwise inf/NaN is generated; the kernel does not check this).
 - The data layout is ND, and other layouts are not supported.
-- Tiling is computed at compilation time, and dynamic shapes are not supported.
+- Dynamic shape and dynamic rank are supported: the operator registration enables DynamicShapeSupportFlag and DynamicRankSupportFlag, and the dimensions of anchor_box/deltas can be marked as -1 (unknown dimension), while the whole shape can be marked as -2 (unknown rank). InferShape allows unknown dimensions and unknown ranks. After the dimensions are materialized, Tiling validates them: Tiling only checks rank = 3 and shape[1] = 5, so an unknown rank ({-2}) or shape[1] = -1 is rejected by Tiling, whereas shape[0]/shape[2] = -1 is NOT rejected by Tiling and must be materialized before Tiling, otherwise the tiling parameters are invalid and the result is undefined.
 - During FLOAT16 computation, the operator promotes the data to FLOAT32 and then casts the result back to FLOAT16.
 - Empty tensors (B=0 or N=0) are supported.
 

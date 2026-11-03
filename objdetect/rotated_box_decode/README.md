@@ -98,8 +98,7 @@ $$
 - 必须 3D，shape[1] 必须为 5，shape[0] ≥ 0，shape[2] ≥ 0。
 - weight 长度必须为 5，各元素不能为 0（否则产生 inf/NaN，kernel 不校验）。
 - 数据布局为 ND，不支持其他布局。
-- tiling 在编译期计算，不支持动态 shape。
-- FLOAT16 计算时升 FLOAT32，结果降回 FLOAT16。
+- 支持动态 Shape 与动态 Rank：算子注册开启 DynamicShapeSupportFlag 与 DynamicRankSupportFlag，anchor_box/deltas 的维度可标记为 -1（未知维），整体 shape 可标记为 -2（未知秩）。InferShape 对未知维/未知秩放行；维度被具体化后再由 Tiling 校验：Tiling 仅校验 rank=3 与 shape[1]=5，因此未知秩（{-2}）或 shape[1]=-1 会被 Tiling 拒绝；shape[0]/shape[2] 为 -1 时 Tiling 不做拒绝，必须在 Tiling 前具体化，否则 tiling 参数非法、结果未定义。
 - 支持空 Tensor（B=0 或 N=0）。
 
 ## 调用说明
