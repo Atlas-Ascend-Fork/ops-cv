@@ -20,6 +20,7 @@ target_sources(${COMMON_NAME}_obj PRIVATE ${CPP_SOURCES})
 
 target_include_directories(${COMMON_NAME}_obj
   PRIVATE
+  ${OPBASE_INC_DIRS}
   ${C_SEC_INCLUDE}
   ${NPURUNTIME_INCLUDE_DIRS}
   ${TILINGAPI_INC_DIRS}

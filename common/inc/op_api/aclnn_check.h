@@ -18,18 +18,19 @@
 
 #include <set>
 #include "opdev/platform.h"
+#include "op_common/op_host/util/op_const_def.h"
 
 namespace op {
 static inline bool IsRegBase()
 {
-    const static std::set<NpuArch> regbaseArch = {NpuArch::DAV_3510, NpuArch::DAV_9201};
+    const static std::set<NpuArch> regbaseArch = {Ops::Base::DAV_3510, Ops::Base::DAV_9201, Ops::Base::DAV_5162};
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
     return regbaseArch.find(curArch) != regbaseArch.end();
 }
 
 static inline bool IsRegBase(NpuArch arch)
 {
-    const static std::set<NpuArch> regbaseArch = {NpuArch::DAV_3510, NpuArch::DAV_9201};
+    const static std::set<NpuArch> regbaseArch = {Ops::Base::DAV_3510, Ops::Base::DAV_9201, Ops::Base::DAV_5162};
     return regbaseArch.find(arch) != regbaseArch.end();
 }
 } // namespace op

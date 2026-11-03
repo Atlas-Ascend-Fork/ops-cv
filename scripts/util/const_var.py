@@ -38,7 +38,7 @@ SOC_MAP_EXT = {
     "kirinx90": "KirinX90",
     "kirin9030": "Kirin9030",
     "mc62": "MC62CM12AA",
-    "ascend5162a": "Ascend5162A",
+    "ascend5162": "Ascend5162A",
 }
 BIN_CMD = "asc_opc $1 --main_func={fun} --input_param={param} --soc_version={soc} \
 --output=$2 --impl_mode={impl} --simplified_key_mode=0 --op_mode=dynamic\n"

@@ -15,6 +15,7 @@
 
 #include "op_host/tiling_util.h"
 #include "platform/platform_ascendc.h"
+#include "op_common/op_host/util/op_const_def.h"
 
 namespace Ops {
 namespace Cv {
@@ -23,7 +24,7 @@ static const gert::Shape g_vec_1_shape = {1};
 
 static bool IsRegbaseSocVersion(NpuArch npuArch)
 {
-    const static std::set<NpuArch> regbaseArch = {NpuArch::DAV_3510, NpuArch::DAV_9201};
+    const static std::set<NpuArch> regbaseArch = {Ops::Base::DAV_3510, Ops::Base::DAV_9201, Ops::Base::DAV_5162};
 
     return regbaseArch.find(npuArch) != regbaseArch.end();
 }
@@ -40,6 +41,28 @@ bool IsRegbaseSocVersion(const gert::TilingContext* context)
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
     auto arch = ascendcPlatform.GetCurNpuArch();
     return IsRegbaseSocVersion(arch);
+}
+
+static bool IsSimtSupported(NpuArch npuArch)
+{
+    const static std::set<NpuArch> simtSupportedArch = {Ops::Base::DAV_3510, Ops::Base::DAV_5102, Ops::Base::DAV_9201,
+                                                        Ops::Base::DAV_9202};
+
+    return simtSupportedArch.find(npuArch) != simtSupportedArch.end();
+}
+
+bool IsSimtSupported(const gert::TilingParseContext* context)
+{
+    auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
+    auto arch = ascendcPlatform.GetCurNpuArch();
+    return IsSimtSupported(arch);
+}
+
+bool IsSimtSupported(const gert::TilingContext* context)
+{
+    auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
+    auto arch = ascendcPlatform.GetCurNpuArch();
+    return IsSimtSupported(arch);
 }
 
 const gert::Shape& EnsureNotScalar(const gert::Shape& inShape)
