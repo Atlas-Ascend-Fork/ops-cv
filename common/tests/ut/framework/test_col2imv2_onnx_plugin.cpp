@@ -12,7 +12,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "../../../src/framework/col2imv2_onnx_plugin.cpp"
 
@@ -24,6 +26,20 @@ ge::Operator CreateSourceOperator(const std::string& attrs, const std::string& n
     ge::Operator op_src = CreateOperator(name);
     op_src.SetAttr("attribute", ge::AscendString(attrs.c_str()));
     return op_src;
+}
+
+void ExpectSpatialAttributes(const ge::Operator& op, const std::vector<int32_t>& expected_dilation,
+                             const std::vector<int32_t>& expected_padding, const std::vector<int32_t>& expected_stride)
+{
+    std::vector<int32_t> dilation;
+    std::vector<int32_t> padding;
+    std::vector<int32_t> stride;
+    ASSERT_EQ(op.GetAttr("dilation", dilation), ge::GRAPH_SUCCESS);
+    ASSERT_EQ(op.GetAttr("padding", padding), ge::GRAPH_SUCCESS);
+    ASSERT_EQ(op.GetAttr("stride", stride), ge::GRAPH_SUCCESS);
+    EXPECT_EQ(dilation, expected_dilation);
+    EXPECT_EQ(padding, expected_padding);
+    EXPECT_EQ(stride, expected_stride);
 }
 } // namespace
 
@@ -61,6 +77,39 @@ TEST(OnnxCol2ImV2PluginTest, SuccessWhenAttributeEmpty)
     ge::Operator op_src = CreateSourceOperator(R"({"attribute":[]})");
     ge::Operator op_dest = CreateOperator("col2im");
     EXPECT_EQ(domi::ParseOnnxParamsCol2ImV2(op_src, op_dest), domi::SUCCESS);
+    ExpectSpatialAttributes(op_dest, {1, 1}, {0, 0}, {1, 1});
+}
+
+TEST(OnnxCol2ImV2PluginTest, MaterializeDefaultsWhenAttributeMetadataMissing)
+{
+    ge::Operator op_src = CreateOperator("src");
+    ge::Operator op_dest = CreateOperator("col2im");
+    ASSERT_EQ(domi::ParseOnnxParamsCol2ImV2(op_src, op_dest), domi::SUCCESS);
+    ExpectSpatialAttributes(op_dest, {1, 1}, {0, 0}, {1, 1});
+}
+
+TEST(OnnxCol2ImV2PluginTest, MaterializeDefaultsWhenAttributeArrayMissing)
+{
+    ge::Operator op_src = CreateSourceOperator("{}");
+    ge::Operator op_dest = CreateOperator("col2im");
+    ASSERT_EQ(domi::ParseOnnxParamsCol2ImV2(op_src, op_dest), domi::SUCCESS);
+    ExpectSpatialAttributes(op_dest, {1, 1}, {0, 0}, {1, 1});
+}
+
+TEST(OnnxCol2ImV2PluginTest, ExplicitStrideKeepsOtherDefaults)
+{
+    ge::Operator op_src = CreateSourceOperator(R"({"attribute":[{"name":"strides","type":7,"ints":[2,3]}]})");
+    ge::Operator op_dest = CreateOperator("col2im");
+    ASSERT_EQ(domi::ParseOnnxParamsCol2ImV2(op_src, op_dest), domi::SUCCESS);
+    ExpectSpatialAttributes(op_dest, {1, 1}, {0, 0}, {2, 3});
+}
+
+TEST(OnnxCol2ImV2PluginTest, ExplicitPaddingKeepsOtherDefaults)
+{
+    ge::Operator op_src = CreateSourceOperator(R"({"attribute":[{"name":"pads","type":7,"ints":[2,3]}]})");
+    ge::Operator op_dest = CreateOperator("col2im");
+    ASSERT_EQ(domi::ParseOnnxParamsCol2ImV2(op_src, op_dest), domi::SUCCESS);
+    ExpectSpatialAttributes(op_dest, {1, 1}, {2, 3}, {1, 1});
 }
 
 TEST(OnnxCol2ImV2PluginTest, ReturnFailedWhenDilationsLengthInvalid)

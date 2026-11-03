@@ -33,16 +33,10 @@ static void SetCol2ImV2ByCondition(ge::Operator& op_dest, bool set_dilations_fla
                                    bool set_pads_flag, std::vector<int>& v_pads, bool set_strides_flag,
                                    std::vector<int>& v_strides)
 {
-    if (set_dilations_flag) {
-        op_dest.SetAttr("dilation", v_dilations);
-    }
-    if (set_pads_flag) {
-        op_dest.SetAttr("padding", v_pads);
-    }
-
-    if (set_strides_flag) {
-        op_dest.SetAttr("stride", v_strides);
-    }
+    // Col2Im attributes are optional in ONNX, but required by the Col2ImV2 graph builder.
+    op_dest.SetAttr("dilation", set_dilations_flag ? v_dilations : std::vector<int>{1, 1});
+    op_dest.SetAttr("padding", set_pads_flag ? v_pads : std::vector<int>{0, 0});
+    op_dest.SetAttr("stride", set_strides_flag ? v_strides : std::vector<int>{1, 1});
 }
 
 static void SetCol2ImV2ByOp(ge::Operator& op_dest, const ge::Operator& op_src)
