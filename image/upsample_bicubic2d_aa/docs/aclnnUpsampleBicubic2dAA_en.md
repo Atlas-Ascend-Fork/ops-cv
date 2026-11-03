@@ -302,7 +302,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
     - N represents the N axis of the input and output.
     - C represents the C axis of the input and output.
     - dtype represents the data type of the input tensor.
-  - N * C * x_H < 2^31
+  - N \* C \* x_H < 2^31
 
 <!-- npu="A3,910b" id7 -->
 - <term>Atlas A3 training products/Atlas A3 inference products</term>, <term>Atlas A2 training products/Atlas A2 inference products</term>:

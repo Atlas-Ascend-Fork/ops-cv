@@ -34,7 +34,8 @@
   $$
 
 ## Example
-  Assume rgb is a three-channel color image and alpha is its corresponding transparency (single channel). After using this operator, the image can be generated as a three-channel image with transparency.
+
+Assume rgb is a three-channel color image and alpha is its corresponding transparency (single channel). After using this operator, the image can be generated as a three-channel image with transparency.
 
 ## Function Prototype
 

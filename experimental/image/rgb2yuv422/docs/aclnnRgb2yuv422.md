@@ -101,7 +101,6 @@ aclnnStatus aclnnRgb2yuv422(
 - 通道维大小必须为 3
 - data_format 必须为 "NHWC" 或 "NCHW"
 - 输入输出 dtype 必须一致
-- 仅支持 ascend950 平台
 
 ## 调用示例
 

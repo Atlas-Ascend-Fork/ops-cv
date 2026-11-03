@@ -353,7 +353,7 @@ aclnnStatus aclnnGridSampler3D(
 
 ## Constraints
 
-- For input `input`, (D-axis size * H-axis size * W-axis size) < maximum value of INT32.
+- For input `input`, (D-axis size \* H-axis size \* W-axis size) < maximum value of INT32.
 - Deterministic computation:
   - aclnnGridSampler3D defaults to a deterministic implementation.
 

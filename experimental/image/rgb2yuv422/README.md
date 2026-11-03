@@ -88,4 +88,4 @@ $$
 
 ## 约束说明
 
-输入必须至少为 3 维，通道维大小必须为 3。输入 dtype 支持 uint8、float16 和 float32，输出 dtype 与输入 dtype 一致。data_format 必须为 "NHWC" 或 "NCHW"。仅支持 Ascend 950PR&950DT系列产品。
+输入必须至少为3维，通道维大小必须为3。输入 dtype支持 uint8、float16 和 float32，输出dtype与输入dtype一致。data_format必须为"NHWC"或"NCHW"。仅支持Ascend 950PR&950DT系列产品。

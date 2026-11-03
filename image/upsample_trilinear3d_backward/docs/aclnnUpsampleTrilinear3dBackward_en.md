@@ -386,7 +386,7 @@ aclnnStatus aclnnUpsampleTrilinear3dBackward(
     - N represents the N axis of the input and output.
     - C represents the C axis of the input and output.
     - dtype represents the data type of the input tensor.
-  - N * C * gradOut_D * gradOut_H < 2^31
+  - N \* C \* gradOut_D \* gradOut_H < 2^31
   - gradInput_W * gradInput_H < 2^31
 - When the values of scalesD, scalesH, and scalesW are all greater than 0, parameters inputSize, outputSize, scalesD, scalesH, and scalesW must satisfy the following constraints:
 
