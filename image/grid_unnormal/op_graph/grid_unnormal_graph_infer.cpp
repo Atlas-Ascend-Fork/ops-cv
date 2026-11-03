@@ -17,12 +17,16 @@
 #include "log/log.h"
 #include "grid_unnormal_proto.h"
 
+namespace {
+bool IsSupportedGridDtype(ge::DataType dtype) { return dtype == ge::DT_FLOAT16 || dtype == ge::DT_FLOAT; }
+} // namespace
+
 namespace ge {
 IMPLEMT_VERIFIER(GridUnnormal, VerifyGridUnnormal)
 {
     const DataType gridDtype = op.GetInputDesc(0).GetDataType();
     const DataType assistDtype = op.GetInputDesc(1).GetDataType();
-    if (gridDtype != assistDtype) {
+    if (gridDtype != assistDtype || !IsSupportedGridDtype(gridDtype)) {
         return GRAPH_FAILED;
     }
     return GRAPH_SUCCESS;
@@ -49,8 +53,19 @@ static ge::graphStatus InferDataTypeGridUnnormal(gert::InferDataTypeContext* con
                 static_cast<int32_t>(gridDtype), static_cast<int32_t>(assistDtype));
         return GRAPH_FAILED;
     }
-    context->SetOutputDataType(kOutputDiffIdx, gridDtype);
-    context->SetOutputDataType(kOutputPosIdx, ge::DT_INT32);
+    if (!IsSupportedGridDtype(gridDtype)) {
+        OP_LOGE(context->GetNodeName(), "grid dtype must be float16 or float32, grid=%d",
+                static_cast<int32_t>(gridDtype));
+        return GRAPH_FAILED;
+    }
+    if (context->SetOutputDataType(kOutputDiffIdx, gridDtype) != ge::GRAPH_SUCCESS) {
+        OP_LOGE(context->GetNodeName(), "failed to set diff dtype");
+        return GRAPH_FAILED;
+    }
+    if (context->SetOutputDataType(kOutputPosIdx, ge::DT_INT32) != ge::GRAPH_SUCCESS) {
+        OP_LOGE(context->GetNodeName(), "failed to set position dtype");
+        return GRAPH_FAILED;
+    }
 
     OP_LOGD(context->GetNodeName(), "End to do InferDataTypeGridUnnormal");
     return GRAPH_SUCCESS;

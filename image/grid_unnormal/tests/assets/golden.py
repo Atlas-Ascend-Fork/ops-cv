@@ -26,6 +26,8 @@ _TOL = {
     "float16": {"standard": "cross_check", "level": "L1"},
     "int32": {"standard": "binary_equal"},
 }
+_INT32_MIN = torch.iinfo(torch.int32).min
+_INT32_MAX = torch.iinfo(torch.int32).max
 
 
 def _normalize_attr_bool(value):
@@ -49,7 +51,9 @@ def _validate_grid_unnormal_inputs(grid, assist):
         np.dtype(np.float32),
         np.dtype(np.float64),
     ):
-        raise TypeError("grid and assist dtype must be float16, float32, or float64")
+        raise TypeError(
+            "grid and assist dtype must be float16, float32, or promoted float64"
+        )
 
 
 def _grid_unnormal_torch(grid, assist, align_corners):
@@ -88,7 +92,12 @@ def _grid_unnormal_native_position(grid_tensor, assist_tensor, align_corners):
         pos_base = torch.mul(normalized, torch.sub(assist_compute, 1.0))
     else:
         pos_base = torch.sub(torch.mul(normalized, assist_compute), 0.5)
-    return torch.floor(pos_base).to(torch.int32)
+    if not torch.all(torch.isfinite(pos_base)).item():
+        raise ValueError("position is undefined for non-finite inputs")
+    floor = torch.floor(pos_base.to(torch.float64))
+    if torch.any(floor < _INT32_MIN).item() or torch.any(floor > _INT32_MAX).item():
+        raise ValueError("floor(pos_base) must be representable as int32")
+    return floor.to(torch.int32)
 
 
 def _grid_unnormal_golden_compute(grid_tensor, assist_tensor, align_corners):
@@ -102,10 +111,9 @@ def _grid_unnormal_golden_compute(grid_tensor, assist_tensor, align_corners):
     floor = torch.floor(pos_base)
     diff = (pos_base - floor).to(out_dtype)
 
-    # TTK promotes fp32 golden inputs to fp64 for the continuous cross-check
-    # output. Position is a discrete output whose contract uses the native
-    # fp16/fp32 operator domain (FP32 arithmetic) before floor. Computing floor
-    # in promoted fp64 changes the adjacent integer at rounding boundaries.
+    # TTK promotes fp32 golden inputs to fp64 for continuous-output checking.
+    # The discrete position output must still follow the operator's fp32
+    # arithmetic semantics before floor.
     position = _grid_unnormal_native_position(grid_tensor, assist_tensor, align_corners)
     return [diff, position]
 
