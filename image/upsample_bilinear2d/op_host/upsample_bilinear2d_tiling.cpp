@@ -167,7 +167,9 @@ ge::graphStatus UpsampleBilinear2dTiling::get_scale_from_out()
 inline float UpsampleBilinear2dTiling::compute_scale_value(const int64_t inputSize, const int64_t outputSize,
                                                            const bool alignCorners, const float scale) const
 {
-    if (outputSize == inputSize) {
+    // A positive explicit scale remains authoritative even when floor(inputSize * scale) == outputSize.
+    // Only align-corners or an omitted/non-positive scale uses the same-size identity shortcut.
+    if (outputSize == inputSize && (alignCorners || scale <= 0.0f)) {
         return static_cast<float>(1);
     }
     if (alignCorners) {

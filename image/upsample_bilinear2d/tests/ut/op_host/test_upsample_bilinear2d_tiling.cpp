@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 #include <iostream>
+#include <cstring>
 #include <vector>
 #include <gtest/gtest.h>
 #include "../../../op_host/upsample_bilinear2d_tiling.h"
@@ -135,4 +136,37 @@ TEST_F(UpsampleBilinear2dTiling, upsample_bilinear2d_tiling_003)
                               "0 0 0 0 0 0 0 ";
     std::vector<size_t> expectWorkspaces = {33592832};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// Explicit positive scales must remain effective for same-size axes, including values close to one.
+// The L0 wrapper converts user scales to the coordinate scale before this tiling entry point.
+TEST_F(UpsampleBilinear2dTiling, upsample_bilinear2d_same_size_keeps_explicit_near_one_scale)
+{
+    optiling::UpsampleBilinear2dCompileInfo compileInfo = {1};
+    gert::TilingContextPara tilingContextPara(
+        "UpsampleBilinear2d",
+        {
+            {{{1, 1, 2, 2}, {1, 1, 2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2}, {2}}, ge::DT_INT32, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 2, 2}, {1, 1, 2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+         gert::TilingContextPara::OpAttr("scales",
+                                         Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.001f, 1.001f}))},
+        &compileInfo);
+
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    constexpr size_t kScaleOffset = sizeof(uint64_t) * 4;
+    const float expectedScale = 1.001f;
+    uint32_t expectedScaleBits = 0;
+    std::memcpy(&expectedScaleBits, &expectedScale, sizeof(expectedScaleBits));
+    uint32_t scaleWBits = 0;
+    uint32_t scaleHBits = 0;
+    std::memcpy(&scaleWBits, tilingInfo.tilingData.get() + kScaleOffset, sizeof(scaleWBits));
+    std::memcpy(&scaleHBits, tilingInfo.tilingData.get() + kScaleOffset + sizeof(scaleWBits), sizeof(scaleHBits));
+    EXPECT_EQ(scaleWBits, expectedScaleBits);
+    EXPECT_EQ(scaleHBits, expectedScaleBits);
 }
