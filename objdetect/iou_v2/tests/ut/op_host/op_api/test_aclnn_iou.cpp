@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@
 using namespace op;
 using namespace std;
 
-// IFA aclnn ut for 910b has error in UT environment. Deleted.
 class l2_iou_test : public testing::Test {
 protected:
     static void SetUpTestCase() { cout << "l2_iou_test SetUp" << endl; }
@@ -28,101 +27,101 @@ protected:
     static void TearDownTestCase() { cout << "l2_iou_test TearDown" << endl; }
 };
 
-// TEST_F(l2_iou_test, success_case_1)
-// {
-//   auto bBoxes = TensorDesc({20, 4}, ACL_FLOAT, ACL_FORMAT_ND);
-//   auto gtBoxes = TensorDesc({20, 4}, ACL_FLOAT, ACL_FORMAT_ND);
-//   auto overlap = TensorDesc({20, 1}, ACL_FLOAT, ACL_FORMAT_ND);
+TEST_F(l2_iou_test, success_case_1)
+{
+    auto bBoxes = TensorDesc({20, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto gtBoxes = TensorDesc({20, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto overlap = TensorDesc({20, 1}, ACL_FLOAT, ACL_FORMAT_ND);
 
-//   auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iou", 0.01, true), OUTPUT(overlap));
-//   uint64_t workspace_size = 0;
-//   aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-//   EXPECT_EQ(aclRet, ACLNN_SUCCESS);
-// }
+    auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iou", 0.01, true), OUTPUT(overlap));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
 
-// TEST_F(l2_iou_test, success_case_2)
-// {
-//   auto bBoxes = TensorDesc({30, 4}, ACL_FLOAT, ACL_FORMAT_ND);
-//   auto gtBoxes = TensorDesc({30, 4}, ACL_FLOAT, ACL_FORMAT_ND);
-//   auto overlap = TensorDesc({30, 1}, ACL_FLOAT, ACL_FORMAT_ND);
+TEST_F(l2_iou_test, success_case_2)
+{
+    auto bBoxes = TensorDesc({30, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto gtBoxes = TensorDesc({30, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto overlap = TensorDesc({30, 1}, ACL_FLOAT, ACL_FORMAT_ND);
 
-//   auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iou", 0.0, true), OUTPUT(overlap));
-//   uint64_t workspace_size = 0;
-//   aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-//   EXPECT_EQ(aclRet, ACLNN_SUCCESS);
-// }
+    auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iou", 0.0, true), OUTPUT(overlap));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
 
-// TEST_F(l2_iou_test, success_case_3)
-// {
-//   auto bBoxes = TensorDesc({1024, 4}, ACL_FLOAT, ACL_FORMAT_ND);
-//   auto gtBoxes = TensorDesc({60, 4}, ACL_FLOAT, ACL_FORMAT_ND);
-//   auto overlap = TensorDesc({1024, 60}, ACL_FLOAT, ACL_FORMAT_ND);
+TEST_F(l2_iou_test, success_case_3)
+{
+    auto bBoxes = TensorDesc({1024, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto gtBoxes = TensorDesc({60, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto overlap = TensorDesc({1024, 60}, ACL_FLOAT, ACL_FORMAT_ND);
 
-//   auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iou", 0.01, false), OUTPUT(overlap));
-//   uint64_t workspace_size = 0;
-//   aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-//   EXPECT_EQ(aclRet, ACLNN_SUCCESS);
-// }
+    auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iou", 0.01, false), OUTPUT(overlap));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
 
-// TEST_F(l2_iou_test, success_case_4)
-// {
-//   auto bBoxes = TensorDesc({1025, 4}, ACL_FLOAT, ACL_FORMAT_ND);
-//   auto gtBoxes = TensorDesc({61, 4}, ACL_FLOAT, ACL_FORMAT_ND);
-//   auto overlap = TensorDesc({1025, 61}, ACL_FLOAT, ACL_FORMAT_ND);
+TEST_F(l2_iou_test, success_case_4)
+{
+    auto bBoxes = TensorDesc({1025, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto gtBoxes = TensorDesc({61, 4}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto overlap = TensorDesc({1025, 61}, ACL_FLOAT, ACL_FORMAT_ND);
 
-//   auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iou", 0.0, false), OUTPUT(overlap));
-//   uint64_t workspace_size = 0;
-//   aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-//   EXPECT_EQ(aclRet, ACLNN_SUCCESS);
-// }
+    auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iou", 0.0, false), OUTPUT(overlap));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
 
-// TEST_F(l2_iou_test, success_case_5)
-// {
-//   auto bBoxes = TensorDesc({16, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
-//   auto gtBoxes = TensorDesc({16, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
-//   auto overlap = TensorDesc({16, 1}, ACL_FLOAT16, ACL_FORMAT_ND);
+TEST_F(l2_iou_test, success_case_5)
+{
+    auto bBoxes = TensorDesc({16, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
+    auto gtBoxes = TensorDesc({16, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
+    auto overlap = TensorDesc({16, 1}, ACL_FLOAT16, ACL_FORMAT_ND);
 
-//   auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iof", 0.01, true), OUTPUT(overlap));
-//   uint64_t workspace_size = 0;
-//   aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-//   EXPECT_EQ(aclRet, ACLNN_SUCCESS);
-// }
+    auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iof", 0.01, true), OUTPUT(overlap));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
 
-// TEST_F(l2_iou_test, success_case_6)
-// {
-//   auto bBoxes = TensorDesc({10, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
-//   auto gtBoxes = TensorDesc({10, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
-//   auto overlap = TensorDesc({10, 1}, ACL_FLOAT16, ACL_FORMAT_ND);
+TEST_F(l2_iou_test, success_case_6)
+{
+    auto bBoxes = TensorDesc({10, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
+    auto gtBoxes = TensorDesc({10, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
+    auto overlap = TensorDesc({10, 1}, ACL_FLOAT16, ACL_FORMAT_ND);
 
-//   auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iof", 0.0, true), OUTPUT(overlap));
-//   uint64_t workspace_size = 0;
-//   aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-//   EXPECT_EQ(aclRet, ACLNN_SUCCESS);
-// }
+    auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iof", 0.0, true), OUTPUT(overlap));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
 
-// TEST_F(l2_iou_test, success_case_7)
-// {
-//   auto bBoxes = TensorDesc({101, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
-//   auto gtBoxes = TensorDesc({201, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
-//   auto overlap = TensorDesc({101, 201}, ACL_FLOAT16, ACL_FORMAT_ND);
+TEST_F(l2_iou_test, success_case_7)
+{
+    auto bBoxes = TensorDesc({101, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
+    auto gtBoxes = TensorDesc({201, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
+    auto overlap = TensorDesc({101, 201}, ACL_FLOAT16, ACL_FORMAT_ND);
 
-//   auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iof", 0.01, false), OUTPUT(overlap));
-//   uint64_t workspace_size = 0;
-//   aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-//   EXPECT_EQ(aclRet, ACLNN_SUCCESS);
-// }
+    auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iof", 0.01, false), OUTPUT(overlap));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
 
-// TEST_F(l2_iou_test, success_case_8)
-// {
-//   auto bBoxes = TensorDesc({100, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
-//   auto gtBoxes = TensorDesc({200, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
-//   auto overlap = TensorDesc({100, 200}, ACL_FLOAT16, ACL_FORMAT_ND);
+TEST_F(l2_iou_test, success_case_8)
+{
+    auto bBoxes = TensorDesc({100, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
+    auto gtBoxes = TensorDesc({200, 4}, ACL_FLOAT16, ACL_FORMAT_ND);
+    auto overlap = TensorDesc({100, 200}, ACL_FLOAT16, ACL_FORMAT_ND);
 
-//   auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iof", 0.0, false), OUTPUT(overlap));
-//   uint64_t workspace_size = 0;
-//   aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-//   EXPECT_EQ(aclRet, ACLNN_SUCCESS);
-// }
+    auto ut = OP_API_UT(aclnnIou, INPUT(bBoxes, gtBoxes, "iof", 0.0, false), OUTPUT(overlap));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}
 
 // 空指针
 TEST_F(l2_iou_test, case_nullptr_bboxes)

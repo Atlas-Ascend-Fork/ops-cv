@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -235,8 +235,7 @@ TEST_F(three_interpolate_backward_test, hostapi_test_1_2_6_5_fp32)
 
     uint64_t workspaceSize = 0;
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
-    // EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
-    // ut.TestPrecision();
+    EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
 }
 
 // ===== issue #1407：grad_x/idx/weight/grad_y 形状一致性负例，均期望 ACLNN_ERR_PARAM_INVALID =====

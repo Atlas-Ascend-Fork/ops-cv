@@ -161,64 +161,30 @@ TEST_F(IouV2, IouV2_inferdatatype_accepts_matching_input_dtype)
     EXPECT_EQ(context->GetOutputDataType(0), ge::DT_FLOAT16);
 }
 
-// TEST_F(IouV2, IouV2_infershape_iof_false_case_2)
-// {
-//     ge::op::IouV2 op;
-//     float32_t eps_value = 1;
-//     op.UpdateInputDesc("bboxes", create_desc({1020, 4}, ge::DT_FLOAT));
-//     op.UpdateInputDesc("gtboxes", create_desc({1020, 4}, ge::DT_FLOAT));
-//     op.SetAttr("mode", "iof");
-//     op.SetAttr("eps", eps_value);
-//     op.SetAttr("aligned", false);
-//     Runtime2TestParam param{{"mode", "eps", "aligned"}, {}, {}};
-//     EXPECT_EQ(InferShapeTest(op, param), ge::GRAPH_SUCCESS);
+TEST_F(IouV2, IouV2_infershape_iof_false_case_2)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IouV2",
+        {{{{1020, 4}, {1020, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}, {{{1020, 4}, {1020, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {gert::InfershapeContextPara::OpAttr("mode", Ops::Cv::AnyValue::CreateFrom<std::string>("iof")),
+         gert::InfershapeContextPara::OpAttr("eps", Ops::Cv::AnyValue::CreateFrom<float>(1.0)),
+         gert::InfershapeContextPara::OpAttr("aligned", Ops::Cv::AnyValue::CreateFrom<bool>(false))});
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{1020, 1020}});
+}
 
-//     auto output_desc = op.GetOutputDesc("overlap");
-//     std::vector<int64_t> expected_output_shape = {1020, 1020};
-//     EXPECT_EQ(output_desc.GetShape().GetDims(), expected_output_shape);
-// }
-
-// TEST_F(IouV2, IouV2_infershape_iou_true_case_3)
-// {
-//     ge::op::IouV2 op;
-//     float32_t eps_value = 1;
-//     op.UpdateInputDesc("bboxes", create_desc({1020, 4}, ge::DT_FLOAT));
-//     op.UpdateInputDesc("gtboxes", create_desc({1020, 4}, ge::DT_FLOAT));
-//     op.SetAttr("mode", "iou");
-//     op.SetAttr("eps", eps_value);
-//     op.SetAttr("aligned", true);
-//     Runtime2TestParam param{{"mode", "eps", "aligned"}, {}, {}};
-//     EXPECT_EQ(InferShapeTest(op, param), ge::GRAPH_SUCCESS);
-
-//     auto output_desc = op.GetOutputDesc("overlap");
-//     std::vector<int64_t> expected_output_shape = {4, 1};
-//     EXPECT_EQ(output_desc.GetShape().GetDims(), expected_output_shape);
-// }
-
-// TEST_F(IouV2, IouV2_InferDtype_case_0)
-// {
-//     ASSERT_NE(gert::OpImplRegistry::GetInstance().GetOpImpl("IouV2"), nullptr);
-//     auto data_type_func = gert::OpImplRegistry::GetInstance().GetOpImpl("IouV2")->infer_datatype;
-//     if (data_type_func != nullptr)
-//     {
-//         ge::DataType bboxes = ge::DT_FLOAT;
-//         ge::DataType gtboxes = ge::DT_FLOAT;
-//         ge::DataType output_ref = ge::DT_FLOAT;
-//         auto context_holder = gert::InferDataTypeContextFaker()
-//                                   .IrInputNum(2)
-//                                   .NodeIoNum(2, 1)
-//                                   .NodeInputTd(0, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND)
-//                                   .NodeInputTd(1, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND)
-//                                   .NodeOutputTd(0, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND)
-//                                   .InputDataTypes({&bboxes, &gtboxes})
-//                                   .OutputDataTypes({&output_ref})
-//                                   .Build();
-//         auto context = context_holder.GetContext<gert::InferDataTypeContext>();
-//         EXPECT_EQ(data_type_func(context), ge::GRAPH_SUCCESS);
-//         ASSERT_NE(context, nullptr);
-
-//         EXPECT_EQ(context->GetInputDataType(0), bboxes);
-//         EXPECT_EQ(context->GetInputDataType(1), gtboxes);
-//         EXPECT_EQ(context->GetOutputDataType(0), output_ref);
-//     }
-// }
+TEST_F(IouV2, IouV2_infershape_iou_true_case_3)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IouV2",
+        {{{{4, 1020}, {4, 1020}}, ge::DT_FLOAT, ge::FORMAT_ND}, {{{4, 1020}, {4, 1020}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {gert::InfershapeContextPara::OpAttr("mode", Ops::Cv::AnyValue::CreateFrom<std::string>("iou")),
+         gert::InfershapeContextPara::OpAttr("eps", Ops::Cv::AnyValue::CreateFrom<float>(1.0)),
+         gert::InfershapeContextPara::OpAttr("aligned", Ops::Cv::AnyValue::CreateFrom<bool>(true))});
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{1020, 1}});
+}

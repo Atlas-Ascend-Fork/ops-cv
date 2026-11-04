@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -24,6 +24,26 @@
 
 using namespace ge;
 using namespace std;
+
+namespace {
+struct RoiAlignRotatedGradTilingDataPod {
+    uint32_t coreRoisNums;
+    uint32_t coreRoisTail;
+    uint32_t boxSize;
+    int32_t pooledHeight;
+    int32_t pooledWidth;
+    uint32_t batchSize;
+    uint32_t channelNum;
+    uint32_t width;
+    uint32_t height;
+    bool aligned;
+    bool clockwise;
+    uint8_t samplingRatioPH[2];
+    int32_t samplingRatio;
+    float spatialScale;
+    uint32_t coreNum;
+};
+} // namespace
 
 class TilingForRoiAlignRotatedGrad : public testing::Test {
 protected:
@@ -50,106 +70,28 @@ TEST_F(TilingForRoiAlignRotatedGrad, roi_align_rotated_grad_tiling_0)
 
     std::vector<size_t> expectWorkspaces = {16777216};
     TilingInfo tilingInfo;
-    ExecuteTiling(tilingContextPara, tilingInfo);
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
     uint8_t* tilingDataPtr = tilingInfo.tilingData.get();
+    ASSERT_NE(tilingDataPtr, nullptr);
     EXPECT_EQ(tilingInfo.workspaceSizes.size(), expectWorkspaces.size());
     for (size_t i = 0; i < tilingInfo.workspaceSizes.size(); i++) {
         EXPECT_EQ(tilingInfo.workspaceSizes[i], expectWorkspaces[i]);
     }
-    // EXPECT_EQ(*reinterpret_cast<uint32_t*>(tilingDataPtr), 2);
-    // EXPECT_EQ(*reinterpret_cast<uint32_t*>(tilingDataPtr + 4), 0);
-    // EXPECT_EQ(*reinterpret_cast<uint32_t*>(tilingDataPtr + 8), 8);
-    // EXPECT_EQ(*reinterpret_cast<int32_t*>(tilingDataPtr + 12), 2);
-    // EXPECT_EQ(*reinterpret_cast<int32_t*>(tilingDataPtr + 16), 2);
-    // EXPECT_EQ(*reinterpret_cast<uint32_t*>(tilingDataPtr + 20), 8);
-    // EXPECT_EQ(*reinterpret_cast<uint32_t*>(tilingDataPtr + 24), 1);
-    // EXPECT_EQ(*reinterpret_cast<uint32_t*>(tilingDataPtr + 28), 1);
-    // EXPECT_EQ(*reinterpret_cast<uint32_t*>(tilingDataPtr + 32), 1);
-    // EXPECT_EQ(*reinterpret_cast<bool*>(tilingDataPtr + 36), false);
-    // EXPECT_EQ(*reinterpret_cast<bool*>(tilingDataPtr +37), false);
-    // EXPECT_EQ(*reinterpret_cast<int32_t*>(tilingDataPtr + 38), 0);
-    // EXPECT_EQ(*reinterpret_cast<float*>(tilingDataPtr + 42), 0.5);
-    // EXPECT_EQ(*reinterpret_cast<uint32_t*>(tilingDataPtr + 46), 48);
+
+    ASSERT_GE(tilingInfo.tilingDataSize, sizeof(RoiAlignRotatedGradTilingDataPod));
+    const auto* td = reinterpret_cast<const RoiAlignRotatedGradTilingDataPod*>(tilingDataPtr);
+    EXPECT_EQ(td->coreRoisNums, 0u);
+    EXPECT_EQ(td->coreRoisTail, 8u);
+    EXPECT_EQ(td->boxSize, 8u);
+    EXPECT_EQ(td->pooledHeight, 2);
+    EXPECT_EQ(td->pooledWidth, 2);
+    EXPECT_EQ(td->batchSize, 8u);
+    EXPECT_EQ(td->channelNum, 8u);
+    EXPECT_EQ(td->width, 2u);
+    EXPECT_EQ(td->height, 2u);
+    EXPECT_EQ(td->aligned, false);
+    EXPECT_EQ(td->clockwise, false);
+    EXPECT_EQ(td->samplingRatio, 1);
+    EXPECT_FLOAT_EQ(td->spatialScale, 0.5f);
+    EXPECT_EQ(td->coreNum, 64u);
 }
-
-// TEST_F(TilingForRoiAlignRotatedGrad, roi_align_rotated_grad_tiling_0)
-// {
-//   std::string op_type("RoiAlignRotatedGrad");
-//   ASSERT_NE(gert::OpImplRegistry::GetInstance().GetOpImpl(op_type.c_str()), nullptr);
-//   auto tiling_func = gert::OpImplRegistry::GetInstance().GetOpImpl(op_type.c_str())->tiling;
-//   auto tiling_parse_func = gert::OpImplRegistry::GetInstance().GetOpImpl(op_type.c_str())->tiling_parse;
-//   string compile_info_string = R"({"hardware_info": {"BT_SIZE": 0, "load3d_constraints": "1",
-//                                                        "Intrinsic_fix_pipe_l0c2out": false,
-//                                                        "Intrinsic_data_move_l12ub": true,
-//                                                        "Intrinsic_data_move_l0c2ub": true,
-//                                                        "Intrinsic_data_move_out2l1_nd2nz": false,
-//                                                        "UB_SIZE": 196608, "L2_SIZE": 33554432, "L1_SIZE": 524288,
-//                                                        "L0A_SIZE": 65536, "L0B_SIZE": 65536, "L0C_SIZE": 131072,
-//                                                        "CORE_NUM": 48}
-//                                     })";
-//   map<string, string> soc_infos;
-//   map<string, string> aicore_spec;
-//   map<string, string> intrinsics;
-//   GetPlatFormInfos(compile_info_string.c_str(), soc_infos, aicore_spec, intrinsics);
-
-//   // platform info
-//   fe::PlatFormInfos platform_info;
-//   platform_info.Init();
-//   static optiling::RoiAlignRotatedGradCompileInfo compile_info = {40, 196352};
-//   // tilingParseFunc simulate
-//   auto kernel_holder =
-//       gert::KernelRunContextFaker()
-//           .KernelIONum(2, 1)
-//           .Inputs({const_cast<char *>(compile_info_string.c_str()), reinterpret_cast<void *>(&platform_info)})
-//           .Outputs({&compile_info})
-//           .Build();
-//   ASSERT_TRUE(kernel_holder.GetContext<gert::TilingParseContext>()->GetPlatformInfo()->Init());
-//   kernel_holder.GetContext<gert::TilingParseContext>()->GetPlatformInfo()->SetPlatformRes("SoCInfo", soc_infos);
-//   kernel_holder.GetContext<gert::TilingParseContext>()->GetPlatformInfo()->SetPlatformRes("AICoreSpec", aicore_spec);
-//   kernel_holder.GetContext<gert::TilingParseContext>()->GetPlatformInfo()->SetCoreNumByCoreType("AICore");
-//   kernel_holder.GetContext<gert::TilingParseContext>()->GetPlatformInfo()->SetPlatformRes("AICoreintrinsicDtypeMap",
-//                                                                                           intrinsics);
-//   EXPECT_EQ(tiling_parse_func(kernel_holder.GetContext<gert::KernelContext>()), ge::GRAPH_SUCCESS);
-
-//   // tilingFunc simulate
-//   auto param = gert::TilingData::CreateCap(4096 * 16);
-//   ASSERT_NE(param, nullptr);
-//   auto workspace_size_holer = gert::ContinuousVector::Create<size_t>(4096 * 16);
-//   auto ws_size = reinterpret_cast<gert::ContinuousVector *>(workspace_size_holer.get());
-//   gert::StorageShape input_0 = {{8, 8, 8, 8}, {8, 8, 8, 8}};
-//   gert::StorageShape input_1 = {{6, 8}, {6, 8}};
-//   gert::StorageShape output_shape = {{8, 2, 2, 8}, {8, 2, 2, 8}};
-
-//   std::vector<int64_t> y_grad_shape = {8, 2, 2, 8};
-
-//   // tilingParseFunc simulate
-//   auto holder =
-//       gert::TilingContextFaker()
-//           .NodeIoNum(2, 1)
-//           .IrInstanceNum({1, 1})
-//           .InputShapes({&input_0, &input_1})
-//           .OutputShapes({&output_shape})
-//           .CompileInfo(&compile_info)
-//           .NodeAttrs({{"y_grad_shape", ge::AnyValue::CreateFrom<vector<int64_t>>(y_grad_shape)},
-//                       {"pooled_h", ge::AnyValue::CreateFrom<int64_t>(2)},
-//                       {"pooled_w", ge::AnyValue::CreateFrom<int64_t>(2)},
-//                       {"spatial_scale", ge::AnyValue::CreateFrom<float>(0.5)},
-//                       {"sampling_ratio", ge::AnyValue::CreateFrom<int64_t>(1)},
-//                       {"aligned", ge::AnyValue::CreateFrom<bool>(false)},
-//                       {"clockwise", ge::AnyValue::CreateFrom<bool>(false)}})
-//           .PlatformInfo(reinterpret_cast<char *>(&platform_info))
-//           .NodeInputTd(0, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND)
-//           .NodeInputTd(1, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND)
-//           .NodeOutputTd(0, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND)
-//           .TilingData(param.get())
-//           .Workspace(ws_size)
-//           .Build();
-
-//   gert::TilingContext *tiling_context = holder.GetContext<gert::TilingContext>();
-
-//   // workspaces nullptr return failed
-//   EXPECT_EQ(tiling_func(tiling_context), ge::GRAPH_SUCCESS);
-//   // todo check tiling result
-//   auto tiling_key = tiling_context->GetTilingKey();
-//   EXPECT_EQ(tiling_key, 0);
-// }
