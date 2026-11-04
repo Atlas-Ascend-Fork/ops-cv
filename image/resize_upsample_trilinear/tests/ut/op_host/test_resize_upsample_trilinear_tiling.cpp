@@ -87,7 +87,6 @@ TEST_F(ResizeUpsampleTrilinearTiling, upsample_trilinear3d_tiling_001)
 
 TEST_F(ResizeUpsampleTrilinearTiling, upsample_trilinear3d_tiling_002)
 {
-    dlog_setlevel(0, 0, 0);
     gert::StorageShape input_shape = {{1, 1, 128, 128, 128}, {1, 1, 128, 128, 128}};
     gert::StorageShape out_shape = {{1, 1, 0, 0, 0}, {1, 1, 0, 0, 0}};
 
