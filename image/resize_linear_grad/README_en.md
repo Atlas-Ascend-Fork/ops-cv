@@ -15,11 +15,13 @@ English | [简体中文](./README.md)
 
 ## Function Description
 
-- Operator function: computes the gradient of the input image based on bilinear interpolation.
+- Operator function: computes the backward pass of [ResizeLinear](../resize_linear/README_en.md).
 - Calculation formula:
 
+  Let $\lambda(x_i)$ denote the interpolation weight of input position $x_i$ for forward output position $x$. The backward pass accumulates the output gradient into the input gradient as follows:
+
   $$
-  \frac{\alpha L}{\alpha X_i} = \frac{\alpha L}{\alpha Y_i} \times \frac{y_1 - y_0}{x_1 - x_0}
+  \mathrm{gradInput}(x_i) \mathrel{+}= \mathrm{gradOut}(x) \cdot \lambda(x_i)
   $$
 
 ## Parameter Description
@@ -45,21 +47,21 @@ English | [简体中文](./README.md)
     <tr>
       <td>grads</td>
       <td>Input</td>
-      <td>Image adjusted by the forward single linear interpolation, corresponding to Y in the formula.</td>
+      <td>3D tensor with logical shape [N,C,L_out], containing the gradient of the forward ResizeLinear output and corresponding to gradOut in the formula.</td>
       <td>FLOAT16, FLOAT32, BFLOAT16</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>original_image</td>
       <td>Input</td>
-      <td>Height and width of the original image.</td>
+      <td>3D tensor with logical shape [N,C,L_in], providing the shape of the forward ResizeLinear input; its N and C dimensions match those of grads.</td>
       <td>FLOAT16, FLOAT32, BFLOAT16</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>y</td>
       <td>Output</td>
-      <td>Input gradient of the forward Resize.</td>
+      <td>3D tensor with logical shape [N,C,L_in], containing the gradient of the forward ResizeLinear input and having the same shape as original_image.</td>
       <td>FLOAT16, FLOAT32, BFLOAT16</td>
       <td>ND</td>
     </tr>

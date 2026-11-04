@@ -13,11 +13,13 @@
 
 ## 功能说明
 
-- 算子功能：计算输入图像在双线性插值基础下的梯度。
+- 算子功能：[ResizeLinear](../resize_linear/README.md) 的反向传播。
 - 计算公式：
 
+  设 $\lambda(x_i)$ 为正向插值输出位置 $x$ 对原始输入位置 $x_i$ 的插值权重，则反向传播按下式将输出梯度累加到输入梯度：
+
   $$
-  \frac{\alpha L}{\alpha X_i} = \frac{\alpha L}{\alpha Y_i} \times \frac{y_1 - y_0}{x_1 - x_0}
+  \mathrm{gradInput}(x_i) \mathrel{+}= \mathrm{gradOut}(x) \cdot \lambda(x_i)
   $$
 
 ## 参数说明
@@ -43,21 +45,21 @@
     <tr>
       <td>grads</td>
       <td>输入</td>
-      <td>正向单线性插值调整后的图，对应公式Y。</td>
+      <td>三维Tensor（逻辑形状为[N,C,L_out]），正向ResizeLinear输出的梯度，对应公式中gradOut。</td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>original_image</td>
       <td>输入</td>
-      <td>原图像的高和宽。</td>
+      <td>三维Tensor（逻辑形状为[N,C,L_in]），用于提供正向ResizeLinear输入的形状；N、C维与grads相同。</td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>y</td>
       <td>输出</td>
-      <td>正向Resize的输入梯度。</td>
+      <td>三维Tensor（逻辑形状为[N,C,L_in]），对正向ResizeLinear输入的梯度，形状与original_image相同。</td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
       <td>ND</td>
     </tr>
