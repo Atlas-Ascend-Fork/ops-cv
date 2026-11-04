@@ -229,12 +229,6 @@ int main(int argc, char* argv[])
     std::vector<Operator> inputs{};
     std::vector<Operator> outputs{};
 
-    if (argc < 2) {
-        printf("Usage: %s <arg>\n", argv[0]);
-        return FAILED;
-    }
-    std::cout << argv[1] << std::endl;
-
     DataType inDtype = DT_FLOAT;
 
     std::cout << inDtype << std::endl;
