@@ -17,6 +17,11 @@
 #include <limits>
 #include <numeric>
 #include <string>
+#include <vector>
+
+#include "base/err_msg.h"
+#include "graph/utils/type_utils.h"
+#include "util/shape_util.h"
 
 #include "log/log.h"
 #include "platform/platform_infos_def.h"
@@ -715,10 +720,14 @@ void ComputeRasterizerBranch1Tiling(const RasterizerBranch1TilingInputs& inputs,
 static ge::graphStatus RasterizerTilingFunc(gert::TilingContext* context)
 {
     if (context == nullptr) {
-        OP_LOGE(context, "Rasterizer: tiling context is nullptr");
+        REPORT_PREDEFINED_ERR_MSG(
+            "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+            (std::vector<const char*>{
+                "Rasterizer", "Tiling context is null; check Rasterizer Tiling invocation and context construction."}));
         return ge::GRAPH_FAILED;
     }
 
+    const char* opName = context->GetNodeName() == nullptr ? "Rasterizer" : context->GetNodeName();
     RasterizerPublicTilingInputs inputs{};
     const gert::Tensor* vTensor = context->GetRequiredInputTensor(0U);
     const gert::StorageShape* vShape = context->GetRequiredInputShape(0U);
@@ -730,12 +739,16 @@ static ge::graphStatus RasterizerTilingFunc(gert::TilingContext* context)
     const gert::Tensor* dTensor = context->GetOptionalInputTensor(2U);
     const gert::StorageShape* dShape = context->GetOptionalInputShape(2U);
     if ((dTensor == nullptr) != (dShape == nullptr)) {
-        OP_LOGE(context, "Rasterizer: optional depth tensor and shape must both exist or both be null");
+        REPORT_PREDEFINED_ERR_MSG(
+            "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+            (std::vector<const char*>{opName, "(Optional input d has inconsistent Tensor/shape metadata; both must be "
+                                              "present or both absent. Check Tiling context construction.)"}));
         return ge::GRAPH_FAILED;
     }
     if (dTensor != nullptr && !FillTensorDesc(dTensor, dShape, inputs.d)) {
-        OP_LOGE(context, "Rasterizer: depth tensor desc is invalid, present=%d, rank=%u",
-                static_cast<int>(inputs.d.present), inputs.d.rank);
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(
+            opName, "d", Ops::Base::ToString(dShape->GetStorageShape()).c_str(),
+            "Optional depth requires nonnegative dimensions and a rank-2 shape [height,width].");
         return ge::GRAPH_FAILED;
     }
 
@@ -745,14 +758,32 @@ static ge::graphStatus RasterizerTilingFunc(gert::TilingContext* context)
     const bool barycentricDescReady = FillOutputDesc(barycentricShape, context->GetOutputDesc(1U), inputs.barycentric);
     inputs.outputAllocationSucceeded = findicesShape != nullptr && barycentricShape != nullptr;
     if (!findicesDescReady || !barycentricDescReady) {
-        OP_LOGE(context, "Rasterizer: output desc is invalid, findicesReady=%d, barycentricReady=%d",
-                static_cast<int>(findicesDescReady), static_cast<int>(barycentricDescReady));
+        if (!inputs.findices.present || !inputs.barycentric.present) {
+            REPORT_PREDEFINED_ERR_MSG(
+                "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                (std::vector<const char*>{
+                    opName, (std::string("Output Tensor/shape descriptors are unavailable; findicesReady=") +
+                             std::to_string(findicesDescReady) + ", barycentricReady=" +
+                             std::to_string(barycentricDescReady) + "; check Tiling output context construction.")
+                                .c_str()}));
+        } else {
+            OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(opName, "findices,barycentric",
+                                                   (Ops::Base::ToString(findicesShape->GetStorageShape()) + "," +
+                                                    Ops::Base::ToString(barycentricShape->GetStorageShape()))
+                                                       .c_str(),
+                                                   "Output dimensions must be nonnegative; findices requires "
+                                                   "[height,width] and barycentric requires [height,width,3].");
+        }
         return ge::GRAPH_FAILED;
     }
 
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
     if (attrs == nullptr) {
-        OP_LOGE(context, "Rasterizer: runtime attrs is nullptr");
+        REPORT_PREDEFINED_ERR_MSG(
+            "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+            (std::vector<const char*>{
+                opName,
+                "Runtime attributes are unavailable; check Tiling context construction and Rasterizer registration."}));
         return ge::GRAPH_FAILED;
     }
     const int64_t* width = attrs->GetInt(0U);
@@ -760,7 +791,13 @@ static ge::graphStatus RasterizerTilingFunc(gert::TilingContext* context)
     const float* occlusionTruncation = attrs->GetFloat(2U);
     const int64_t* useDepthPrior = attrs->GetInt(3U);
     if (width == nullptr || height == nullptr || occlusionTruncation == nullptr || useDepthPrior == nullptr) {
-        OP_LOGE(context, "Rasterizer: attr width/height/occlusion_truncation/use_depth_prior is missing");
+        OP_LOGE_FOR_INVALID_ARGUMENT_WITH_REASON(
+            opName,
+            width == nullptr               ? "width" :
+            height == nullptr              ? "height" :
+            occlusionTruncation == nullptr ? "occlusion_truncation" :
+                                             "use_depth_prior",
+            "Required Rasterizer attribute is unavailable; supply the attribute in the operator definition.");
         return ge::GRAPH_FAILED;
     }
     inputs.width = *width;
@@ -795,13 +832,117 @@ static ge::graphStatus RasterizerTilingFunc(gert::TilingContext* context)
     RasterizerPublicTilingResult result{};
     ComputeRasterizerPublicTiling(inputs, result);
     if (result.status != RasterizerPublicTilingStatus::kSuccess || !result.kernelDispatchAllowed) {
-        OP_LOGE(context,
-                "Rasterizer: public tiling failed, status=%d(%s), tilingKey=%u, width=%lld, height=%lld, "
-                "availableAivCores=%llu, ubBytes=%llu, vectorBytes=%llu",
-                static_cast<int32_t>(result.status), RasterizerPublicTilingStatusName(result.status), result.tilingKey,
-                static_cast<long long>(inputs.width), static_cast<long long>(inputs.height),
-                static_cast<unsigned long long>(inputs.availableAivCores),
-                static_cast<unsigned long long>(inputs.ubBytes), static_cast<unsigned long long>(inputs.vectorBytes));
+        const std::string detail = std::string("ComputeRasterizerPublicTiling status=") +
+                                   RasterizerPublicTilingStatusName(result.status) +
+                                   ", tilingKey=" + std::to_string(result.tilingKey) +
+                                   ", width=" + std::to_string(inputs.width) +
+                                   ", height=" + std::to_string(inputs.height) +
+                                   ", AIV cores=" + std::to_string(inputs.availableAivCores) +
+                                   ", UB bytes=" + std::to_string(inputs.ubBytes) +
+                                   ", block bytes=" + std::to_string(inputs.blockBytes) +
+                                   ", vector bytes=" + std::to_string(inputs.vectorBytes) +
+                                   ", system workspace bytes=" + std::to_string(inputs.systemWorkspaceBytes);
+        switch (result.status) {
+            case RasterizerPublicTilingStatus::kNullInput:
+                OP_LOGE_WITH_INVALID_INPUT(opName, !inputs.v.present ? "v" : "f");
+                break;
+            case RasterizerPublicTilingStatus::kDtypeNotSupported: {
+                const char* paramName = inputs.v.dtype != RasterizerPublicDataType::kFloat32 ? "v" :
+                                        inputs.f.dtype != RasterizerPublicDataType::kInt32   ? "f" :
+                                                                                               "d";
+                const gert::Tensor* tensor = inputs.v.dtype != RasterizerPublicDataType::kFloat32 ? vTensor :
+                                             inputs.f.dtype != RasterizerPublicDataType::kInt32   ? fTensor :
+                                                                                                    dTensor;
+                OP_LOGE_FOR_INVALID_DTYPE(opName, paramName,
+                                          ge::TypeUtils::DataTypeToSerialString(tensor->GetDataType()).c_str(),
+                                          inputs.v.dtype == RasterizerPublicDataType::kFloat32 &&
+                                                  inputs.f.dtype != RasterizerPublicDataType::kInt32 ?
+                                              "DT_INT32" :
+                                              "DT_FLOAT");
+                break;
+            }
+            case RasterizerPublicTilingStatus::kShapeMismatch:
+                if (!inputs.v.ndContiguous || !inputs.f.ndContiguous || (inputs.d.present && !inputs.d.ndContiguous) ||
+                    !inputs.findices.ndContiguous || !inputs.barycentric.ndContiguous) {
+                    OP_LOGE_FOR_INVALID_FORMAT_WITH_REASON(
+                        opName, "v,f,d,findices,barycentric",
+                        (std::string("ND flags: ") + std::to_string(inputs.v.ndContiguous) + "," +
+                         std::to_string(inputs.f.ndContiguous) + "," +
+                         (inputs.d.present ? std::to_string(inputs.d.ndContiguous) : "absent") + "," +
+                         std::to_string(inputs.findices.ndContiguous) + "," +
+                         std::to_string(inputs.barycentric.ndContiguous))
+                            .c_str(),
+                        "All present tensors require ND origin and storage formats.");
+                } else {
+                    const std::string shapes = std::string("v=") +
+                                               (vShape == nullptr ? "<missing shape>" :
+                                                                    Ops::Base::ToString(vShape->GetStorageShape())) +
+                                               ",f=" +
+                                               (fShape == nullptr ? "<missing shape>" :
+                                                                    Ops::Base::ToString(fShape->GetStorageShape())) +
+                                               ",d=" +
+                                               (dShape == nullptr ? "<absent>" :
+                                                                    Ops::Base::ToString(dShape->GetStorageShape())) +
+                                               ",findices=" + Ops::Base::ToString(findicesShape->GetStorageShape()) +
+                                               ",barycentric=" +
+                                               Ops::Base::ToString(barycentricShape->GetStorageShape());
+                    OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                        opName, "v,f,d,findices,barycentric", shapes.c_str(),
+                        (std::string("Require nonempty v[N,4], f[M,3] with M <= ") +
+                         std::to_string(kRasterizerMaxFaces) +
+                         "; findices[height,width], barycentric[height,width,3]; optional d must have rank 2 and match "
+                         "height,width unless empty.")
+                            .c_str());
+                }
+                break;
+            case RasterizerPublicTilingStatus::kAttributeValueOutOfRange:
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    opName, "width,height,occlusion_truncation,use_depth_prior",
+                    (std::to_string(inputs.width) + "," + std::to_string(inputs.height) + "," +
+                     std::to_string(inputs.occlusionTruncation) + "," + std::to_string(inputs.useDepthPrior))
+                        .c_str(),
+                    "width and height must be in [1,4096], occlusion_truncation must be finite, and use_depth_prior "
+                    "must be 0.");
+                break;
+            case RasterizerPublicTilingStatus::kNotImplemented:
+                REPORT_PREDEFINED_ERR_MSG(
+                    "EZ3002", (std::vector<const char*>{"optype", "opskernel", "reason"}),
+                    (std::vector<const char*>{
+                        "Rasterizer", "AiCore",
+                        (detail + "; no tiling implementation is available for this input/platform combination.")
+                            .c_str()}));
+                break;
+            case RasterizerPublicTilingStatus::kPlatformInvalid:
+                REPORT_PREDEFINED_ERR_MSG(
+                    "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                    (std::vector<const char*>{opName, (detail + "; platform resources are unavailable or invalid; "
+                                                                "check the SoC-specific OPP and platform metadata.")
+                                                          .c_str()}));
+                break;
+            case RasterizerPublicTilingStatus::kOutOfMemory:
+                REPORT_PREDEFINED_ERR_MSG(
+                    "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                    (std::vector<const char*>{
+                        opName, (detail + "; tiling resource or storage requirements cannot be satisfied; check UB "
+                                          "capacity, system workspace metadata and serialization size limits.")
+                                    .c_str()}));
+                break;
+            case RasterizerPublicTilingStatus::kArithmeticOverflow:
+                REPORT_PREDEFINED_ERR_MSG(
+                    "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                    (std::vector<const char*>{opName,
+                                              (detail + "; arithmetic overflow while computing tiling/workspace sizes; "
+                                                        "check the tiling strategy and platform resource limits.")
+                                                  .c_str()}));
+                break;
+            default:
+                REPORT_PREDEFINED_ERR_MSG(
+                    "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                    (std::vector<const char*>{opName, (detail + "; expected successful tiling with kernel dispatch "
+                                                                "enabled; check the Rasterizer tiling implementation.")
+                                                          .c_str()}));
+                break;
+        }
         return ge::GRAPH_FAILED;
     }
 
@@ -809,9 +950,16 @@ static ge::graphStatus RasterizerTilingFunc(gert::TilingContext* context)
     gert::TilingData* rawTilingData = context->GetRawTilingData();
     if (workspaceSizes == nullptr || rawTilingData == nullptr || rawTilingData->GetData() == nullptr ||
         rawTilingData->GetCapacity() < sizeof(RasterizerTilingData)) {
-        OP_LOGE(context, "Rasterizer: tiling data buffer is invalid, capacity=%zu, required=%zu",
-                rawTilingData == nullptr ? std::size_t{0U} : rawTilingData->GetCapacity(),
-                sizeof(RasterizerTilingData));
+        REPORT_PREDEFINED_ERR_MSG(
+            "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+            (std::vector<const char*>{
+                opName, (std::string("Tiling output buffer is unavailable or too small; workspace slot present=") +
+                         std::to_string(workspaceSizes != nullptr) +
+                         ", raw tiling data present=" + std::to_string(rawTilingData != nullptr) + ", capacity=" +
+                         std::to_string(rawTilingData == nullptr ? std::size_t{0U} : rawTilingData->GetCapacity()) +
+                         ", required=" + std::to_string(sizeof(RasterizerTilingData)) +
+                         "; check Tiling context output buffers.")
+                            .c_str()}));
         return ge::GRAPH_FAILED;
     }
 
@@ -820,16 +968,30 @@ static ge::graphStatus RasterizerTilingFunc(gert::TilingContext* context)
     const uint32_t oldScheduleMode = context->GetScheduleMode();
     const uint32_t scheduleMode = result.tilingKey == 1U ? 1U : 0U;
     if (context->SetTilingKey(result.tilingKey) != ge::GRAPH_SUCCESS) {
-        OP_LOGE(context, "Rasterizer: SetTilingKey failed, tilingKey=%u", result.tilingKey);
+        REPORT_PREDEFINED_ERR_MSG(
+            "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+            (std::vector<const char*>{
+                opName, (std::string("SetTilingKey failed; requested value=") + std::to_string(result.tilingKey) +
+                         "; check the Tiling context output slot.")
+                            .c_str()}));
         return ge::GRAPH_FAILED;
     }
     if (context->SetBlockDim(result.tilingData.activeCoreNum) != ge::GRAPH_SUCCESS) {
-        OP_LOGE(context, "Rasterizer: SetBlockDim failed, blockDim=%u", result.tilingData.activeCoreNum);
+        REPORT_PREDEFINED_ERR_MSG(
+            "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+            (std::vector<const char*>{
+                opName, (std::string("SetBlockDim failed; requested value=") +
+                         std::to_string(result.tilingData.activeCoreNum) + "; check the Tiling context output slot.")
+                            .c_str()}));
         (void)context->SetTilingKey(oldTilingKey);
         return ge::GRAPH_FAILED;
     }
     if (context->SetScheduleMode(scheduleMode) != ge::GRAPH_SUCCESS) {
-        OP_LOGE(context, "Rasterizer: SetScheduleMode failed, scheduleMode=%u", scheduleMode);
+        REPORT_PREDEFINED_ERR_MSG(
+            "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+            (std::vector<const char*>{opName, (std::string("SetScheduleMode failed; requested value=") +
+                                               std::to_string(scheduleMode) + "; check the Tiling context output slot.")
+                                                  .c_str()}));
         (void)context->SetBlockDim(oldBlockDim);
         (void)context->SetTilingKey(oldTilingKey);
         (void)context->SetScheduleMode(oldScheduleMode);
