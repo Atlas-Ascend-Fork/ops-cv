@@ -78,6 +78,18 @@ static ge::graphStatus InferShapeIMGWarpResize(gert::InferShapeContext* context)
                 OP_LOGE(context, "W mismatch: img=%ld, warp_index=%ld", imgShape->GetDim(4), warpIndexShape->GetDim(3)),
                 return GRAPH_FAILED);
 
+    // Validate img N/C/H/W are positive when known (skip -1 unknown dim), aligning the
+    // InferShape gate with the tiling gate (empty tensor unsupported: no zero/negative dim)
+    const int64_t imgN = imgShape->GetDim(0);
+    const int64_t imgC = imgShape->GetDim(2);
+    const int64_t imgH = imgShape->GetDim(3);
+    const int64_t imgW = imgShape->GetDim(4);
+    OP_CHECK_IF(
+        (imgN != UNKNOWN_DIM && imgN <= 0) || (imgC != UNKNOWN_DIM && imgC <= 0) ||
+            (imgH != UNKNOWN_DIM && imgH <= 0) || (imgW != UNKNOWN_DIM && imgW <= 0),
+        OP_LOGE(context, "img N/C/H/W must be positive, got N[%ld] C[%ld] H[%ld] W[%ld]", imgN, imgC, imgH, imgW),
+        return GRAPH_FAILED);
+
     // Output shape: [N, C, H, W], -1 propagated naturally
     warpImgShape->SetDimNum(4);
     warpImgShape->SetDim(0, imgShape->GetDim(0)); // N

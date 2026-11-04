@@ -65,21 +65,21 @@ Here $x_{float}$ and $y_{float}$ come from warp_index, and the four-corner pixel
       <td>img</td>
       <td>Input</td>
       <td>Four-corner pixel values. The shape is [N, 4, C, H, W], and the 4 in dimension 1 = [top_left, top_right, bottom_left, bottom_right].</td>
-      <td>FLOAT16, FLOAT32</td>
+      <td>FLOAT16, FLOAT</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>warp_index</td>
       <td>Input</td>
       <td>Floating-point coordinates. The shape is [N, 2, H, W], and the 2 in dimension 1 = [x_float, y_float].</td>
-      <td>FLOAT32</td>
+      <td>FLOAT</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>warp_img</td>
       <td>Output</td>
       <td>Bilinear interpolation result. The shape is [N, C, H, W], and the dtype is the same as that of img.</td>
-      <td>FLOAT16, FLOAT32</td>
+      <td>FLOAT16, FLOAT</td>
       <td>ND</td>
     </tr>
   </tbody></table>
@@ -90,7 +90,7 @@ Here $x_{float}$ and $y_{float}$ come from warp_index, and the four-corner pixel
 - warp_index must be a 4D tensor [N, 2, H, W], and dimension 1 must be 2.
 - The N, H, and W dimensions of img and warp_index must be the same.
 - Empty tensors are not supported (none of N, C, H, or W can be 0).
-- Non-contiguous tensors are not supported (AutoContiguous is automatically called internally).
+- Non-contiguous tensor inputs are not supported.
 - warp_index is always of the float32 type.
 - All intermediate computations are performed in float32 precision. float16 inputs are first converted to float32 for computation and then converted back to float16 for output.
 - The total number of output elements N*C*H*W does not exceed INT32_MAX.

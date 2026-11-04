@@ -129,11 +129,25 @@ static ge::graphStatus IMGWarpResizeTilingFunc(gert::TilingContext* context)
     OP_CHECK_IF(ValidateDtypes(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ValidateDtypes error"),
                 return ge::GRAPH_FAILED);
 
-    int64_t totalElements = N * C * H * W;
-    int64_t imageArea = H * W;
-    // UintDiv<uint32_t> value range constraint
-    OP_CHECK_IF(totalElements > static_cast<int64_t>(INT32_MAX),
-                OP_LOGE(context, "totalElements %ld exceeds INT32_MAX", totalElements), return ge::GRAPH_FAILED);
+    // Bounds-check before multiply: each dim <= INT32_MAX, then ordered accumulation
+    // with a pre-multiply division check. Prevents signed int64 overflow (N * C * H * W)
+    // from wrapping around 0 and bypassing the INT32_MAX gate (UintDiv<uint32_t> value
+    // range constraint), and guarantees imageArea fits int32 without truncation.
+    OP_CHECK_IF(N > INT32_MAX || C > INT32_MAX || H > INT32_MAX || W > INT32_MAX,
+                OP_LOGE(context, "dim exceeds INT32_MAX: N=%ld C=%ld H=%ld W=%ld", N, C, H, W),
+                return ge::GRAPH_FAILED);
+    int64_t imageArea = W;
+    OP_CHECK_IF(imageArea > static_cast<int64_t>(INT32_MAX) / H,
+                OP_LOGE(context, "H * W exceeds INT32_MAX: H=%ld W=%ld", H, W), return ge::GRAPH_FAILED);
+    imageArea *= H;
+    int64_t totalElements = imageArea;
+    OP_CHECK_IF(totalElements > static_cast<int64_t>(INT32_MAX) / C,
+                OP_LOGE(context, "C * H * W exceeds INT32_MAX: C=%ld H=%ld W=%ld", C, H, W), return ge::GRAPH_FAILED);
+    totalElements *= C;
+    OP_CHECK_IF(totalElements > static_cast<int64_t>(INT32_MAX) / N,
+                OP_LOGE(context, "totalElements N * C * H * W exceeds INT32_MAX: N=%ld C=%ld H=%ld W=%ld", N, C, H, W),
+                return ge::GRAPH_FAILED);
+    totalElements *= N;
 
     // Two-step core allocation
     int64_t perCoreElements = Ops::Base::CeilDiv(totalElements, coreNum);

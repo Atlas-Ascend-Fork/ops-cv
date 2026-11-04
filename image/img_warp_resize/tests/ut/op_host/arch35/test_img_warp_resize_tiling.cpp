@@ -81,3 +81,512 @@ TEST_F(IMGWarpResizeTiling, img_warp_resize_fp16)
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
+
+// ===================== T10 乘法前界检查分支(IMGWarpResize-I-002 留T16域: 巨维直调tiling上下文) =====================
+// 各维先检 <= INT32_MAX, 再按序 W*H→*C→*N 每步乘前先与 INT32_MAX 除法比较, 溢出输入校验阶段拒绝。
+
+// 单维 N 超 INT32_MAX → 拒绝(N*C*H*W 积 2^33 无符号回绕风险形态)
+TEST_F(IMGWarpResizeTiling, dim_n_exceeds_int32max_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "IMGWarpResize",
+        {
+            {{{2147483648LL, 4, 1, 1, 1}, {2147483648LL, 4, 1, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2147483648LL, 2, 1, 1}, {2147483648LL, 2, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 1, 1}, {1, 1, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            /* attrs: none */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// 单维 C 超 INT32_MAX → 拒绝
+TEST_F(IMGWarpResizeTiling, dim_c_exceeds_int32max_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 2147483648LL, 1, 1}, {1, 4, 2147483648LL, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 1, 1}, {1, 2, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 1, 1}, {1, 1, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            /* attrs: none */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// 单维 H 超 INT32_MAX → 拒绝
+TEST_F(IMGWarpResizeTiling, dim_h_exceeds_int32max_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 1, 2147483648LL, 1}, {1, 4, 1, 2147483648LL, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 2147483648LL, 1}, {1, 2, 2147483648LL, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 1, 1}, {1, 1, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            /* attrs: none */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// 单维 W 超 INT32_MAX → 拒绝
+TEST_F(IMGWarpResizeTiling, dim_w_exceeds_int32max_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 1, 1, 2147483648LL}, {1, 4, 1, 1, 2147483648LL}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 1, 2147483648LL}, {1, 2, 1, 2147483648LL}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 1, 1}, {1, 1, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            /* attrs: none */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// H*W 超 INT32_MAX(各维均合法: 65536*32768=2^31>INT32_MAX) → imageArea 前界拒绝
+TEST_F(IMGWarpResizeTiling, hw_product_exceeds_int32max_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 1, 65536, 32768}, {1, 4, 1, 65536, 32768}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 65536, 32768}, {1, 2, 65536, 32768}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 65536, 32768}, {1, 1, 65536, 32768}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            /* attrs: none */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// C*H*W 超 INT32_MAX(imageArea=2^29 合法, *C=4 后 2^31 越界) → 乘 C 前界拒绝
+TEST_F(IMGWarpResizeTiling, chw_product_exceeds_int32max_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 4, 16384, 32768}, {1, 4, 4, 16384, 32768}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 16384, 32768}, {1, 2, 16384, 32768}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 4, 16384, 32768}, {1, 4, 16384, 32768}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            /* attrs: none */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// N*C*H*W 超 INT32_MAX(C*H*W=2^30 合法, *N=8 后 2^33 越界——T10 修复前该形态积 2^33 直接 int64 后仍 >INT32_MAX,
+// 但 65536^4 形态积 2^64 回绕 0 绕过门禁; 本例钉住乘 N 前界检查) → 乘 N 前界拒绝
+TEST_F(IMGWarpResizeTiling, nchw_product_exceeds_int32max_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "IMGWarpResize",
+        {
+            {{{8, 4, 2, 16384, 32768}, {8, 4, 2, 16384, 32768}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{8, 2, 16384, 32768}, {8, 2, 16384, 32768}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{8, 2, 16384, 32768}, {8, 2, 16384, 32768}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            /* attrs: none */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// 边界值: N=INT32_MAX(素数, C=H=W=1) → totalElements 恰为 INT32_MAX 全链放行
+// needCoreNum=CeilDiv(2^31-1,64)=33554432, needCore=CeilDiv(2^31-1,33554432)=64
+TEST_F(IMGWarpResizeTiling, total_elements_int32max_boundary_ok)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "IMGWarpResize",
+        {
+            {{{2147483647LL, 4, 1, 1, 1}, {2147483647LL, 4, 1, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2147483647LL, 2, 1, 1}, {2147483647LL, 2, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{2147483647LL, 1, 1, 1}, {2147483647LL, 1, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            /* attrs: none */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    uint64_t expectTilingKey = 0;
+    // [needCoreNum=64, batchNum=2147483647] = 64 + 2147483647*2^32 = 9223372032559808576
+    // [channelNum=1, imageArea=1] = 4294967297; totalElements = 2147483647
+    string expectTilingData = "9223372032559808576 4294967297 2147483647 ";
+    std::vector<size_t> expectWorkspaces = {16777216};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// 大 shape 多核分配: totalElements=131072 → perCore=CeilDiv(131072,64)=2048>=1024 不触发下限保护
+TEST_F(IMGWarpResizeTiling, large_shape_multi_core_ok)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 2, 256, 256}, {1, 4, 2, 256, 256}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 256, 256}, {1, 2, 256, 256}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 2, 256, 256}, {1, 2, 256, 256}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            /* attrs: none */
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    uint64_t expectTilingKey = 0;
+    // [needCoreNum=64, batchNum=1] = 4294967360; [channelNum=2, imageArea=65536] = 281474976710658
+    string expectTilingData = "4294967360 281474976710658 131072 ";
+    std::vector<size_t> expectWorkspaces = {16777216};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// ===================== 维度校验拒绝分支(ValidateAndExtractDims) =====================
+
+// img 非 5D → 拒绝
+TEST_F(IMGWarpResizeTiling, img_rank_not_5d_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4}, {1, 4, 3, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 3, 4}, {1, 2, 3, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 3, 4}, {1, 3, 3, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// warp_index 非 4D → 拒绝
+TEST_F(IMGWarpResizeTiling, warp_rank_not_4d_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 4}, {1, 4, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 4}, {1, 2, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// img.shape[1] != 4(四角坐标数) → 拒绝
+TEST_F(IMGWarpResizeTiling, img_corner_dim_not_4_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 5, 3, 4, 4}, {1, 5, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 4}, {1, 2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// warp_index.shape[1] != 2(x,y 坐标) → 拒绝
+TEST_F(IMGWarpResizeTiling, warp_coord_dim_not_2_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 4}, {1, 4, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// N 不一致 → 拒绝
+TEST_F(IMGWarpResizeTiling, n_mismatch_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{2, 4, 3, 4, 4}, {2, 4, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 4}, {1, 2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// H 不一致 → 拒绝
+TEST_F(IMGWarpResizeTiling, h_mismatch_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 4}, {1, 4, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 5, 4}, {1, 2, 5, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// W 不一致 → 拒绝
+TEST_F(IMGWarpResizeTiling, w_mismatch_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 4}, {1, 4, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 5}, {1, 2, 4, 5}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// 零维(C=0) → 拒绝
+TEST_F(IMGWarpResizeTiling, zero_dim_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 0, 4, 4}, {1, 4, 0, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 4}, {1, 2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 0, 4, 4}, {1, 0, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// 零维(N=0) → 拒绝(|| 链首子条件)
+TEST_F(IMGWarpResizeTiling, n_zero_dim_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{0, 4, 3, 4, 4}, {0, 4, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{0, 2, 4, 4}, {0, 2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{0, 3, 4, 4}, {0, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// 零维(W=0) → 拒绝(|| 链末子条件)
+TEST_F(IMGWarpResizeTiling, w_zero_dim_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 0}, {1, 4, 3, 4, 0}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 0}, {1, 2, 4, 0}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 0}, {1, 3, 4, 0}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// ===================== dtype 校验拒绝分支(ValidateDtypes) =====================
+
+// img dtype 非 float16/float32 → 拒绝
+TEST_F(IMGWarpResizeTiling, img_dtype_unsupported_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 4}, {1, 4, 3, 4, 4}}, ge::DT_INT32, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 4}, {1, 2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_INT32, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// warp_index dtype 非 float32 → 拒绝
+TEST_F(IMGWarpResizeTiling, warp_dtype_not_float32_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 4}, {1, 4, 3, 4, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 4}, {1, 2, 4, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// ===================== 平台信息防御分支(GetPlatformInfo/UB 容量, faker 可注入) =====================
+
+// coreNum=0 → 拒绝
+TEST_F(IMGWarpResizeTiling, core_num_zero_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 4}, {1, 4, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 4}, {1, 2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 0, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// ubSize=0 → 拒绝
+TEST_F(IMGWarpResizeTiling, ub_size_zero_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 4}, {1, 4, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 4}, {1, 2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 0, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}
+
+// ubSize=131072 == DCACHE_SIZE(ubSize <= DCACHE_SIZE+STATIC_UB_ESTIMATE) → 拒绝
+TEST_F(IMGWarpResizeTiling, ub_size_below_dcache_rejected)
+{
+    struct IMGWarpResizeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("IMGWarpResize",
+                                              {
+                                                  {{{1, 4, 3, 4, 4}, {1, 4, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1, 2, 4, 4}, {1, 2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{1, 3, 4, 4}, {1, 3, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs: none */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 131072, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, 0, "", {});
+}

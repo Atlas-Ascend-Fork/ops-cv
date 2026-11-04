@@ -207,3 +207,282 @@ TEST_F(IMGWarpResizeInfershape, img_warp_resize_n_mismatch_fail)
     std::vector<std::vector<int64_t>> expectOutputShape = {};
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
 }
+
+// 用例11: 失败场景 - img 非 5D
+// img [1, 4, 3, 8] (4D), warp_index [1, 2, 8, 8] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_img_rank_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara("IMGWarpResize",
+                                                      {
+                                                          {{{1, 4, 3, 8}, {1, 4, 3, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{1, 2, 8, 8}, {1, 2, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例12: 失败场景 - warp_index 非 4D
+// img [1, 4, 3, 8, 8], warp_index [1, 2, 8] (3D) → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_warp_rank_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 3, 8, 8}, {1, 4, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 8}, {1, 2, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例13: 失败场景 - img.shape[1] != 4（四角坐标维度）
+// img [1, 5, 3, 8, 8], warp_index [1, 2, 8, 8] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_img_corner_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 5, 3, 8, 8}, {1, 5, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 8, 8}, {1, 2, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例14: 失败场景 - warp_index.shape[1] != 2（x,y 坐标维度）
+// img [1, 4, 3, 8, 8], warp_index [1, 3, 8, 8] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_warp_coord_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 3, 8, 8}, {1, 4, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 3, 8, 8}, {1, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例15: 失败场景 - H 不一致（均为已知值）
+// img [1, 4, 3, 8, 8], warp_index [1, 2, 9, 8] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_h_mismatch_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 3, 8, 8}, {1, 4, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 9, 8}, {1, 2, 9, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例16: 失败场景 - W 不一致（均为已知值）
+// img [1, 4, 3, 8, 8], warp_index [1, 2, 8, 9] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_w_mismatch_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 3, 8, 8}, {1, 4, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 8, 9}, {1, 2, 8, 9}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例17: img.shape[1] = -1（unknown dim 跳过四角校验）→ 输出 [1, 3, 8, 8]
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_img_corner_dim_unknown_ok)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, -1, 3, 8, 8}, {1, -1, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 8, 8}, {1, 2, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {1, 3, 8, 8},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+// 用例18: warp_index.shape[1] = -1（unknown dim 跳过坐标维校验）→ 输出 [1, 3, 8, 8]
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_warp_coord_dim_unknown_ok)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 3, 8, 8}, {1, 4, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, -1, 8, 8}, {1, -1, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {1, 3, 8, 8},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+// ===================== T14 新增守卫: img N/C/H/W 零/负维校验(skip -1) =====================
+// 守卫: (N != -1 && N <= 0) || (C != -1 && C <= 0) || (H != -1 && H <= 0) || (W != -1 && W <= 0)
+//   → 拒绝侧: 零维(用例19-22) + 负维(用例23-26, 仅 -1 豁免,其余负值拒绝)
+//   → skip -1 侧: 已由用例2(N=-1)/用例3(C/H/W=-1)/用例4(全-1)覆盖
+//   → 通过侧: 用例1 等静态正维用例覆盖
+
+// 用例19: 失败场景 - img N=0(空 tensor,|| 链首子条件)
+// img [0, 4, 3, 8, 8], warp_index [0, 2, 8, 8](N 一致性通过) → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_n_zero_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{0, 4, 3, 8, 8}, {0, 4, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{0, 2, 8, 8}, {0, 2, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例20: 失败场景 - img C=0(空 tensor)
+// img [1, 4, 0, 8, 8], warp_index [1, 2, 8, 8] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_c_zero_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 0, 8, 8}, {1, 4, 0, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 8, 8}, {1, 2, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例21: 失败场景 - img H=0(空 tensor,H 一致性通过)
+// img [1, 4, 3, 0, 8], warp_index [1, 2, 0, 8] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_h_zero_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 3, 0, 8}, {1, 4, 3, 0, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 0, 8}, {1, 2, 0, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例22: 失败场景 - img W=0(空 tensor,|| 链末子条件,W 一致性通过)
+// img [1, 4, 3, 8, 0], warp_index [1, 2, 8, 0] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_w_zero_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 3, 8, 0}, {1, 4, 3, 8, 0}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 8, 0}, {1, 2, 8, 0}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例23: 失败场景 - img N=-3(负维;仅 -1 豁免,其余负值拒绝)
+// img [-3, 4, 3, 8, 8], warp_index [-3, 2, 8, 8](N 一致性通过) → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_n_negative_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{-3, 4, 3, 8, 8}, {-3, 4, 3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{-3, 2, 8, 8}, {-3, 2, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例24: 失败场景 - img C=-3(负维)
+// img [1, 4, -3, 8, 8], warp_index [1, 2, 8, 8] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_c_negative_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, -3, 8, 8}, {1, 4, -3, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 8, 8}, {1, 2, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例25: 失败场景 - img H=-3(负维,H 一致性通过)
+// img [1, 4, 3, -3, 8], warp_index [1, 2, -3, 8] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_h_negative_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 3, -3, 8}, {1, 4, 3, -3, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, -3, 8}, {1, 2, -3, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
+
+// 用例26: 失败场景 - img W=-3(负维,|| 链末子条件,W 一致性通过)
+// img [1, 4, 3, 8, -3], warp_index [1, 2, 8, -3] → 期望 GRAPH_FAILED
+TEST_F(IMGWarpResizeInfershape, img_warp_resize_w_negative_dim_fail)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "IMGWarpResize",
+        {
+            {{{1, 4, 3, 8, -3}, {1, 4, 3, 8, -3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 2, 8, -3}, {1, 2, 8, -3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, expectOutputShape);
+}
