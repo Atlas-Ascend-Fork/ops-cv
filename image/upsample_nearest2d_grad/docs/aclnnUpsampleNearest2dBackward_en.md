@@ -310,6 +310,8 @@ aclnnStatus aclnnUpsampleNearest2dBackward(
 
   These relations are advisory and are not used as rejection conditions during parameter validation: the interface does not return an error code when they are violated (the return code scenarios of the first-phase interface are fully listed in the Return Value section above); they only affect the internal execution branch selection. When the relations are violated, the interface still computes according to the actual values of outputSize and inputSize.
 
+- Per-dimension upper limit of `gradOut`, `gradInput`, and each element of inputSize:
+  - Each dimension (including each element of inputSize) must not exceed 2^31-1 (INT32_MAX); otherwise the first stage returns 161002 (invalid parameter).
 - Deterministic computation:
   - aclnnUpsampleNearest2dBackward defaults to a deterministic implementation.
 

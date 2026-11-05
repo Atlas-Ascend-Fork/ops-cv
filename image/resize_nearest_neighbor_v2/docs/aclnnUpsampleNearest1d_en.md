@@ -234,6 +234,8 @@ aclnnStatus aclnnUpsampleNearest1d(
 
 ## Constraints
 
+- Per-dimension upper limit of `self` and `out`:
+  - Each dimension must not exceed 2^31-1 (INT32_MAX); otherwise the first stage returns 161002 (invalid parameter).
 - Deterministic computation:
   - aclnnUpsampleNearest1d defaults to a deterministic implementation.
 

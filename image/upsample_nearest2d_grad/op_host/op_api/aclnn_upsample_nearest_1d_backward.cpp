@@ -149,6 +149,35 @@ static bool CheckScalesFinite(double scales)
     return true;
 }
 
+static bool CheckUplimit(const aclTensor* gradOut, const aclIntArray* inputSize, const aclTensor* out)
+{
+    int64_t gradOutN = gradOut->GetViewShape().GetDim(DIM_ZERO);
+    int64_t gradOutC = gradOut->GetViewShape().GetDim(DIM_ONE);
+    int64_t gradOutL = gradOut->GetViewShape().GetDim(DIM_TWO);
+    int64_t inN = (*inputSize)[DIM_ZERO];
+    int64_t inC = (*inputSize)[DIM_ONE];
+    int64_t inL = (*inputSize)[DIM_TWO];
+    int64_t outN = out->GetViewShape().GetDim(DIM_ZERO);
+    int64_t outC = out->GetViewShape().GetDim(DIM_ONE);
+    int64_t outL = out->GetViewShape().GetDim(DIM_TWO);
+
+    OP_CHECK(
+        gradOutN <= INT32_MAX && gradOutC <= INT32_MAX && gradOutL <= INT32_MAX,
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "GradOut sizes should not be greater than %d, but got gradOut(%ld, %ld, %ld)",
+                INT32_MAX, gradOutN, gradOutC, gradOutL),
+        return false);
+    OP_CHECK(
+        inN <= INT32_MAX && inC <= INT32_MAX && inL <= INT32_MAX,
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "InputSize should not be greater than %d, but got inputSize(%ld, %ld, %ld)",
+                INT32_MAX, inN, inC, inL),
+        return false);
+    OP_CHECK(outN <= INT32_MAX && outC <= INT32_MAX && outL <= INT32_MAX,
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Out sizes should not be greater than %d, but got out(%ld, %ld, %ld)",
+                     INT32_MAX, outN, outC, outL),
+             return false);
+    return true;
+}
+
 static aclnnStatus CheckParams(const aclTensor* gradOutTensor, const aclIntArray* outputSize,
                                const aclIntArray* inputSize, double scales, const aclTensor* out)
 {
@@ -169,6 +198,9 @@ static aclnnStatus CheckParams(const aclTensor* gradOutTensor, const aclIntArray
 
     // 6. 检查scales是否为有限值,拒绝NaN/Inf
     CHECK_RET(CheckScalesFinite(scales), ACLNN_ERR_PARAM_INVALID);
+
+    // 7. 校验上边界
+    CHECK_RET(CheckUplimit(gradOutTensor, inputSize, out), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;
 }

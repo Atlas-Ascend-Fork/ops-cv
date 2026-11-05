@@ -153,9 +153,6 @@ static bool CheckOutputSize(const aclTensor* out, const aclIntArray* outputSize)
 
 static bool CheckUplimit(const aclTensor* self, const aclTensor* out)
 {
-    if (IsRegBase()) {
-        return true;
-    }
     int64_t inN = self->GetViewShape().GetDim(ZERO);
     int64_t inC = self->GetViewShape().GetDim(ONE);
     int64_t inH = self->GetViewShape().GetDim(TWO);

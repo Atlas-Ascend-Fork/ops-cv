@@ -241,6 +241,7 @@ aclnnStatus aclnnUpsampleNearest2d(
 
 - Shape constraints for parameters `self` and `out`:
   - The value of each dimension is less than or equal to 2^20.
+  - The hard per-dimension upper limit is 2^31-1 (INT32_MAX); exceeding it makes the first stage return 161002 (invalid parameter).
   - The N and C axes of parameter `out` are the same as those of `self`.
   - The memory usage must be less than 60 GB. The formula for memory usage is as follows:
 

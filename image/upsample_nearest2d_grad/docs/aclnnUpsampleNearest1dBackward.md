@@ -274,6 +274,8 @@ aclnnStatus aclnnUpsampleNearest1dBackward(
   outputSize = floor(inputSize\_L * scales)
   $$
 
+- 参数`gradOut`、`out`及inputSize各元素的单维上限约束：
+  - 每个维度（含inputSize各元素）的取值需小于等于2^31-1（INT32_MAX），超出上限第一段返回161002（参数不合法）。
 - 确定性计算：
   - aclnnUpsampleNearest1dBackward默认确定性实现。
 

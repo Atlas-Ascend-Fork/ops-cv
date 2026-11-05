@@ -9,9 +9,12 @@
  */
 
 #include "gtest/gtest.h"
+#include "opdev/platform.h"
 #include "../../../../op_api/aclnn_upsample_nearest_1d.h"
 #include "op_api_ut_common/tensor_desc.h"
 #include "op_api_ut_common/op_api_ut.h"
+
+using namespace op;
 
 class l2_upsamplenearest1d_test : public testing::Test {
 protected:
@@ -173,4 +176,35 @@ TEST_F(l2_upsamplenearest1d_test, l2_upsamplenearest1d_test_out_nc_dim_not_match
     uint64_t workspaceSize = 0;
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// out 单维超过 INT32_MAX（issue #1536）：regbase(950) 上超规格 shape 下沉派发返回 561103，
+// 应改为第一段直接返回 161002（参数不合法）
+TEST_F(l2_upsamplenearest1d_test, l2_upsamplenearest1d_test_out_dim_exceed_int32_max_ascend950)
+{
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    auto selfDesc = TensorDesc({1, 3, 4}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto outDesc = TensorDesc({1, 3, overLimit}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto sizeDesc = IntArrayDesc(vector<int64_t>{overLimit});
+
+    auto ut = OP_API_UT(aclnnUpsampleNearest1d, INPUT(selfDesc, sizeDesc), OUTPUT(outDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
+}
+
+// self 单维超过 INT32_MAX（issue #1536）：910B 上同样缺少上限校验，第一段应返回 161002
+TEST_F(l2_upsamplenearest1d_test, l2_upsamplenearest1d_test_self_dim_exceed_int32_max_910b)
+{
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    auto selfDesc = TensorDesc({1, 3, overLimit}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto outDesc = TensorDesc({1, 3, overLimit}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto sizeDesc = IntArrayDesc(vector<int64_t>{overLimit});
+
+    auto ut = OP_API_UT(aclnnUpsampleNearest1d, INPUT(selfDesc, sizeDesc), OUTPUT(outDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }

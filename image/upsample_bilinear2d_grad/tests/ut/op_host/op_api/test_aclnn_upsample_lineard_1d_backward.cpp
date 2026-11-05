@@ -740,6 +740,52 @@ TEST_F(l2_upsamplelinear1d_backward_test, Ascend95089_l2_upsamplelinear1d_backwa
     SetPlatformSocVersion(SocVersion::ASCEND910B);
 }
 
+// 单维超过 INT32_MAX（issue #1536）：regbase(950) 实现已支持（实跑恒等映射正确），第一段应继续放行
+TEST_F(l2_upsamplelinear1d_backward_test, l2_upsamplelinear1d_backward_test_dim_exceed_int32_max_ascend950)
+{
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    const double_t scales_l = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {overLimit};
+    vector<int64_t> input_size = {1, 1, overLimit};
+
+    auto self_desc = TensorDesc({1, 1, overLimit}, ACL_FLOAT16, ACL_FORMAT_NCL);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, overLimit}, ACL_FLOAT16, ACL_FORMAT_NCL);
+
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleLinear1dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_l),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
+}
+
+// 单维超过 INT32_MAX（issue #1536）：910B 上既有 CheckUplimit 已拦截，第一段应返回 161002
+TEST_F(l2_upsamplelinear1d_backward_test, l2_upsamplelinear1d_backward_test_dim_exceed_int32_max_910b)
+{
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    const double_t scales_l = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {overLimit};
+    vector<int64_t> input_size = {1, 1, overLimit};
+
+    auto self_desc = TensorDesc({1, 1, overLimit}, ACL_FLOAT16, ACL_FORMAT_NCL);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, overLimit}, ACL_FLOAT16, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleLinear1dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_l),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
 // scales 为 +Inf 应在第一段返回 161002
 TEST_F(l2_upsamplelinear1d_backward_test, l2_upsamplelinear1d_backward_test_scales_inf_fail)
 {

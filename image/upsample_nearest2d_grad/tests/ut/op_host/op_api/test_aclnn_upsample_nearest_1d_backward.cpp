@@ -11,9 +11,12 @@
 #include <limits>
 
 #include "gtest/gtest.h"
+#include "opdev/platform.h"
 #include "../../../../op_host/op_api/aclnn_upsample_nearest_1d_backward.h"
 #include "op_api_ut_common/tensor_desc.h"
 #include "op_api_ut_common/op_api_ut.h"
+
+using namespace op;
 
 class l2_upsampleNearest1d_backward_test : public testing::Test {
 protected:
@@ -470,6 +473,49 @@ TEST_F(l2_upsampleNearest1d_backward_test, l2_upsampleNearest1d_backward_test_02
     auto output_size_desc = IntArrayDesc(output_size);
     auto input_size_desc = IntArrayDesc(input_size);
     auto output_desc = TensorDesc({1, 1, 2}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearest1dBackward, INPUT(self_desc, output_size_desc, input_size_desc, scales),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// 单维超过 INT32_MAX（issue #1536）：regbase(950) 上缺少上限校验，超规格 shape 下沉派发返回 561103，
+// 应改为第一段直接返回 161002（参数不合法）
+TEST_F(l2_upsampleNearest1d_backward_test, l2_upsampleNearest1d_backward_test_dim_exceed_int32_max_ascend950)
+{
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    const double_t scales = 0.0;
+    vector<int64_t> output_size = {overLimit};
+    vector<int64_t> input_size = {1, 1, overLimit};
+
+    auto self_desc = TensorDesc({1, 1, overLimit}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, overLimit}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearest1dBackward, INPUT(self_desc, output_size_desc, input_size_desc, scales),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
+}
+
+// 单维超过 INT32_MAX（issue #1536）：910B 上同样缺少上限校验，第一段应返回 161002
+TEST_F(l2_upsampleNearest1d_backward_test, l2_upsampleNearest1d_backward_test_dim_exceed_int32_max_910b)
+{
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    const double_t scales = 0.0;
+    vector<int64_t> output_size = {overLimit};
+    vector<int64_t> input_size = {1, 1, overLimit};
+
+    auto self_desc = TensorDesc({1, 1, overLimit}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, overLimit}, ACL_FLOAT, ACL_FORMAT_NCL);
 
     auto ut = OP_API_UT(aclnnUpsampleNearest1dBackward, INPUT(self_desc, output_size_desc, input_size_desc, scales),
                         OUTPUT(output_desc));

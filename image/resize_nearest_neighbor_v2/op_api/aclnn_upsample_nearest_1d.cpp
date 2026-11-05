@@ -135,6 +135,26 @@ static bool CheckFormat(const aclTensor* self, const aclTensor* out)
     return true;
 }
 
+static bool CheckUplimit(const aclTensor* self, const aclTensor* out)
+{
+    int64_t inN = self->GetViewShape().GetDim(ZERO);
+    int64_t inC = self->GetViewShape().GetDim(ONE);
+    int64_t inL = self->GetViewShape().GetDim(DIM_IDX_2);
+    int64_t outN = out->GetViewShape().GetDim(ZERO);
+    int64_t outC = out->GetViewShape().GetDim(ONE);
+    int64_t outL = out->GetViewShape().GetDim(DIM_IDX_2);
+
+    OP_CHECK(inN <= INT32_MAX && inC <= INT32_MAX && inL <= INT32_MAX,
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Self sizes should not be greater than %d, but got self(%ld, %ld, %ld)",
+                     INT32_MAX, inN, inC, inL),
+             return false);
+    OP_CHECK(outN <= INT32_MAX && outC <= INT32_MAX && outL <= INT32_MAX,
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Out sizes should not be greater than %d, but got out(%ld, %ld, %ld)",
+                     INT32_MAX, outN, outC, outL),
+             return false);
+    return true;
+}
+
 static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out)
 {
     // 1. 检查参数是否为空指针
@@ -151,6 +171,9 @@ static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputS
 
     // 5. 检查format是否支持
     CHECK_RET(CheckFormat(self, out), ACLNN_ERR_PARAM_INVALID);
+
+    // 6. 校验上边界
+    CHECK_RET(CheckUplimit(self, out), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;
 }

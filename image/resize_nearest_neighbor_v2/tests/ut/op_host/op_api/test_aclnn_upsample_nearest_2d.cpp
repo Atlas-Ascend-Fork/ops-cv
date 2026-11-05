@@ -9,9 +9,12 @@
  */
 
 #include "gtest/gtest.h"
+#include "opdev/platform.h"
 #include "../../../../op_api/aclnn_upsample_nearest_2d.h"
 #include "op_api_ut_common/tensor_desc.h"
 #include "op_api_ut_common/op_api_ut.h"
+
+using namespace op;
 
 class l2_upsamplenearest2d_test : public testing::Test {
 protected:
@@ -210,4 +213,35 @@ TEST_F(l2_upsamplenearest2d_test, l2_upsamplenearest2d_test_out_nullptr)
     uint64_t workspaceSize = 0;
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
     EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_NULLPTR);
+}
+
+// out 单维超过 INT32_MAX（issue #1536）：regbase(950) 上 CheckUplimit 因 IsRegBase 直接跳过，
+// 超规格 shape 下沉派发返回 561103，应改为第一段返回 161002（参数不合法）
+TEST_F(l2_upsamplenearest2d_test, l2_upsamplenearest2d_test_out_dim_exceed_int32_max_ascend950)
+{
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    auto selfDesc = TensorDesc({1, 3, 2, 2}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto outDesc = TensorDesc({1, 3, 2, overLimit}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto sizeDesc = IntArrayDesc(vector<int64_t>{2, overLimit});
+
+    auto ut = OP_API_UT(aclnnUpsampleNearest2d, INPUT(selfDesc, sizeDesc), OUTPUT(outDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
+}
+
+// out 单维超过 INT32_MAX（issue #1536）：910B 上既有 CheckUplimit 已拦截，保持第一段返回 161002
+TEST_F(l2_upsamplenearest2d_test, l2_upsamplenearest2d_test_out_dim_exceed_int32_max_910b)
+{
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    auto selfDesc = TensorDesc({1, 3, 2, 2}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto outDesc = TensorDesc({1, 3, 2, overLimit}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto sizeDesc = IntArrayDesc(vector<int64_t>{2, overLimit});
+
+    auto ut = OP_API_UT(aclnnUpsampleNearest2d, INPUT(selfDesc, sizeDesc), OUTPUT(outDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }

@@ -150,6 +150,39 @@ static bool CheckShape(const aclTensor* gradOut, const aclIntArray* outputSize, 
     return true;
 }
 
+static bool CheckUplimit(const aclTensor* gradOut, const aclIntArray* inputSize, const aclTensor* gradInput)
+{
+    int64_t gradOutN = gradOut->GetViewShape().GetDim(DIM_ZERO);
+    int64_t gradOutC = gradOut->GetViewShape().GetDim(DIM_ONE);
+    int64_t gradOutH = gradOut->GetViewShape().GetDim(DIM_TWO);
+    int64_t gradOutW = gradOut->GetViewShape().GetDim(DIM_THREE);
+    int64_t inN = (*inputSize)[DIM_ZERO];
+    int64_t inC = (*inputSize)[DIM_ONE];
+    int64_t inH = (*inputSize)[DIM_TWO];
+    int64_t inW = (*inputSize)[DIM_THREE];
+    int64_t gradInputN = gradInput->GetViewShape().GetDim(DIM_ZERO);
+    int64_t gradInputC = gradInput->GetViewShape().GetDim(DIM_ONE);
+    int64_t gradInputH = gradInput->GetViewShape().GetDim(DIM_TWO);
+    int64_t gradInputW = gradInput->GetViewShape().GetDim(DIM_THREE);
+
+    OP_CHECK(gradOutN <= INT32_MAX && gradOutC <= INT32_MAX && gradOutH <= INT32_MAX && gradOutW <= INT32_MAX,
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                     "GradOut sizes should not be greater than %d, but got gradOut(%ld, %ld, %ld, %ld)", INT32_MAX,
+                     gradOutN, gradOutC, gradOutH, gradOutW),
+             return false);
+    OP_CHECK(inN <= INT32_MAX && inC <= INT32_MAX && inH <= INT32_MAX && inW <= INT32_MAX,
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                     "InputSize should not be greater than %d, but got inputSize(%ld, %ld, %ld, %ld)", INT32_MAX, inN,
+                     inC, inH, inW),
+             return false);
+    OP_CHECK(gradInputN <= INT32_MAX && gradInputC <= INT32_MAX && gradInputH <= INT32_MAX && gradInputW <= INT32_MAX,
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                     "GradInput sizes should not be greater than %d, but got gradInput(%ld, %ld, %ld, %ld)", INT32_MAX,
+                     gradInputN, gradInputC, gradInputH, gradInputW),
+             return false);
+    return true;
+}
+
 static aclnnStatus CheckParams(const aclTensor* gradOut, const aclIntArray* outputSize, const aclIntArray* inputSize,
                                const aclTensor* gradInput)
 {
@@ -167,6 +200,9 @@ static aclnnStatus CheckParams(const aclTensor* gradOut, const aclIntArray* outp
 
     // 5. 检查输入元素是否合法
     CHECK_RET(CheckInputElements(gradOut, outputSize, inputSize), ACLNN_ERR_PARAM_INVALID);
+
+    // 6. 校验上边界
+    CHECK_RET(CheckUplimit(gradOut, inputSize, gradInput), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;
 }

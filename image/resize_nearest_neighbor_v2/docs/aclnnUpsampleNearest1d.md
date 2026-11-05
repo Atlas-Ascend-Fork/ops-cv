@@ -234,6 +234,8 @@ aclnnStatus aclnnUpsampleNearest1d(
 
 ## 约束说明
 
+- 参数`self`、`out`的单维上限约束：
+  - 每个维度的取值需小于等于2^31-1（INT32_MAX），超出上限第一段返回161002（参数不合法）。
 - 确定性计算：
   - aclnnUpsampleNearest1d默认确定性实现。
 

@@ -242,6 +242,7 @@ aclnnStatus aclnnUpsampleNearest2d(
 
 - 参数`self`、`out`的shape约束：
   - 每个维度的取值小于等于2^20。
+  - 单个维度的硬上限为2^31-1（INT32_MAX），超出上限第一段返回161002（参数不合法）。
   - 参数`out`的N轴和C轴与`self`保持一致。
   - 内存占用需小于60GB。内存占用的计算公式如下：
 

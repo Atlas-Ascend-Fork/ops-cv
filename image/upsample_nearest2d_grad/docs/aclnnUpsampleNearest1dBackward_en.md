@@ -274,6 +274,8 @@ aclnnStatus aclnnUpsampleNearest1dBackward(
   outputSize = floor(inputSize\_L * scales)
   $$
 
+- Per-dimension upper limit of `gradOut`, `out`, and each element of inputSize:
+  - Each dimension (including each element of inputSize) must not exceed 2^31-1 (INT32_MAX); otherwise the first stage returns 161002 (invalid parameter).
 - Deterministic computation:
   - aclnnUpsampleNearest1dBackward defaults to a deterministic implementation.
 

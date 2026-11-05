@@ -10,6 +10,7 @@
 #include <array>
 #include <vector>
 #include "gtest/gtest.h"
+#include "opdev/platform.h"
 
 #include "../../../../op_host/op_api/aclnn_upsample_nearest_2d_backward.h"
 
@@ -654,4 +655,50 @@ TEST_F(l2_upsample_nearest_2d_backward_test, ascend910B2_case_float_size)
     uint64_t workspace_size = 0;
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
     EXPECT_EQ(aclRet, ACL_SUCCESS);
+}
+// 单维超过 INT32_MAX（issue #1536）：regbase(950) 上缺少上限校验，超规格 shape 下沉派发返回 561103，
+// 应改为第一段直接返回 161002（参数不合法）
+TEST_F(l2_upsample_nearest_2d_backward_test, ascend950_case_dim_exceed_int32_max)
+{
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    auto grad_out_desc = TensorDesc({1, 1, 2, overLimit}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    vector<int64_t> output_size = {2, overLimit};
+    vector<int64_t> input_size = {1, 1, 2, overLimit};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    auto grad_input_desc = TensorDesc({1, 1, 2, overLimit}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearest2dBackward,
+                        INPUT(grad_out_desc, output_size_desc, input_size_desc, scales_h, scales_w),
+                        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
+}
+
+// 单维超过 INT32_MAX（issue #1536）：910B 上同样缺少上限校验，第一段应返回 161002
+TEST_F(l2_upsample_nearest_2d_backward_test, ascend910B_case_dim_exceed_int32_max)
+{
+    const int64_t overLimit = 2147483648L; // 2^31 > INT32_MAX
+    auto grad_out_desc = TensorDesc({1, 1, 2, overLimit}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    vector<int64_t> output_size = {2, overLimit};
+    vector<int64_t> input_size = {1, 1, 2, overLimit};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    auto grad_input_desc = TensorDesc({1, 1, 2, overLimit}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearest2dBackward,
+                        INPUT(grad_out_desc, output_size_desc, input_size_desc, scales_h, scales_w),
+                        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
