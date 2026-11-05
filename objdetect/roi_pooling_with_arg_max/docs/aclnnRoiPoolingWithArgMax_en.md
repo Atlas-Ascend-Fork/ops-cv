@@ -144,7 +144,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>x(aclTensor*)</td>
       <td>Input</td>
       <td>Input feature map, in NCHW format, (N, C, H, W).</td>
-      <td><ul><li>The input must be 4-dimensional.</li><li>N must be a multiple of 16.</li><li>N is less than or equal to 1024.</li></ul></td>
+      <td><ul><li>Empty tensors are supported; when x or rois is empty, the API returns success and fills y and argmax with 0, and 0 in argmax does not indicate a valid feature-map index.</li><li>The input must be 4-dimensional.</li><li>N must be a multiple of 16.</li><li>N is less than or equal to 1024.</li></ul></td>
       <td>FLOAT32, FLOAT16</td>
       <td>ND</td>
       <td>4</td>
@@ -154,7 +154,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>rois(aclTensor*)</td>
       <td>Input</td>
       <td>ROI boxes, 5 elements per row: batch_idx, x1, y1, x2, y2.</td>
-      <td><ul><li>shape (num_rois, 5).</li><li>The 0th dimension is less than or equal to 1024.</li><li>x1, y1, x2, y2 are greater than or equal to 0.0.</li></ul></td>
+      <td><ul><li>Empty tensors are supported.</li><li>shape (num_rois, 5).</li><li>The 0th dimension is less than or equal to 1024.</li><li>x1, y1, x2, y2 are greater than or equal to 0.0.</li></ul></td>
       <td>FLOAT32, FLOAT16</td>
       <td>ND</td>
       <td>2</td>

@@ -144,7 +144,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>x（aclTensor*）</td>
       <td>输入</td>
       <td>输入特征图，格式为NCHW，(N, C, H, W)。</td>
-      <td><ul><li>输入维度必须为4维。</li><li>N小于等于1024。</li></ul></td>
+      <td><ul><li>支持空Tensor；当x或rois为空时，接口返回成功，并将y与argmax填0，此时argmax中的0不表示有效特征图索引。</li><li>输入维度必须为4维。</li><li>N小于等于1024。</li></ul></td>
       <td>FLOAT32、FLOAT16</td>
       <td>ND</td>
       <td>4</td>
@@ -154,7 +154,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>rois（aclTensor*）</td>
       <td>输入</td>
       <td>ROI框，每行5个元素：batch_idx, x1, y1, x2, y2。</td>
-      <td><ul><li>shape为（num_rois，5）。</li><li>第0维小于等于1024。</li><li>x1, y1, x2, y2大于等于0.0。</li></ul></td>
+      <td><ul><li>支持空Tensor。</li><li>shape为（num_rois，5）。</li><li>第0维小于等于1024。</li><li>x1, y1, x2, y2大于等于0.0。</li></ul></td>
       <td>FLOAT32、FLOAT16</td>
       <td>ND</td>
       <td>2</td>
