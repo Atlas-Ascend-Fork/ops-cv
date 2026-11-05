@@ -167,8 +167,8 @@ aclnnStatus aclnnUpsampleNearest2d(
       <td>The input parameter is a mandatory input, output, or mandatory attribute, and is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="6">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="6">161002</td>
+      <td rowspan="8">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="8">161002</td>
       <td>The data type of self is not within the supported range, or the data type of self differs from that of out.</td>
     </tr>
     <tr>
@@ -178,10 +178,19 @@ aclnnStatus aclnnUpsampleNearest2d(
       <td>The dimensions of the N and C axes of self and out are not equal.</td>
     </tr>
     <tr>
-      <td>The data format of self and out is not within the supported range.</td>
+      <td>The data format of self and out is not within the supported range, or the data format of self differs from that of out.</td>
     </tr>
     <tr>
       <td>outputSize contains an element with a value of 0.</td>
+    </tr>
+    <tr>
+      <td>The size of outputSize is not equal to 2.</td>
+    </tr>
+    <tr>
+      <td>self is an empty tensor, that is, one of the N, C, H, and W dimensions of self is 0.</td>
+    </tr>
+    <tr>
+      <td>The H or W dimension of out does not match the corresponding value of outputSize.</td>
     </tr>
   </tbody></table>
 

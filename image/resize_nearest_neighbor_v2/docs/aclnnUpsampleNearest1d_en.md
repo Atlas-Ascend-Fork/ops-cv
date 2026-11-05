@@ -162,15 +162,30 @@ aclnnStatus aclnnUpsampleNearest1d(
       <td>If the input parameter is a required input, output, or required attribute and is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="4">161002</td>
+      <td rowspan="8">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="8">161002</td>
+      <td>The data type of self or out is not within the supported range, or the data type of self differs from that of out.</td>
     </tr>
     <tr>
-      <td>The data type of self or out is not within the supported range.</td>
+      <td>The shape of self is not 3-dimensional.</td>
     </tr>
-    <tr><td>The shape of self is not 3-dimensional.</td>
+    <tr>
+      <td>The shape of out is not 3-dimensional.</td>
     </tr>
-    <tr><td>The value of outputSize is 0.</td>
+    <tr>
+      <td>The value of outputSize is 0.</td>
+    </tr>
+    <tr>
+      <td>The size of outputSize is not equal to 1.</td>
+    </tr>
+    <tr>
+      <td>self is an empty tensor, that is, one of the N, C, and L dimensions of self is 0.</td>
+    </tr>
+    <tr>
+      <td>The L dimension of out does not match the value of outputSize, or the N and C axes of out differ from those of self.</td>
+    </tr>
+    <tr>
+      <td>The data format of self differs from that of out, or the data format of self is not NCL.</td>
     </tr>
   </tbody></table>
 

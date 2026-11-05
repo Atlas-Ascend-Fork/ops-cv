@@ -31,6 +31,18 @@ namespace ge {
 * Indicates the size of the target image, which is used to determine the height and width of the output image.
 * Must be the type int32. \n
 
+* @attention Data type scope:
+* The type list declared above for "x" and "y" is the full TensorFlow ResizeNearestNeighbor
+* compatible set (see "Third-party framework compatibility" below). It is intentionally a
+* superset of the AI Core registration: the AI Core implementation of this operator registers
+* only float16, float32 and bfloat16 (see op_host/resize_nearest_neighbor_v2_def.cpp). The
+* remaining types (int8, uint8, int16, uint16, int32, int64, double) are served by the AICPU
+* implementation, to which the operator falls back when the input data type is outside the
+* AI Core support list (see op_api/resize_nearest_neighbor_v2.cpp). Both double and uint8 are
+* part of the public ACLNN data type contract of aclnnUpsampleNearest1d/aclnnUpsampleNearest2d
+* and reach this operator through that AICPU path, so this list must not be narrowed to the
+* AI Core subset. \n
+
 * @par Attributes:
 * @li align_corners: An optional bool. Determines whether to align the corners of the input and output images.
 * If set to True, the corner pixels of the input and output images are aligned,

@@ -162,15 +162,30 @@ aclnnStatus aclnnUpsampleNearest1d(
       <td>如果传入参数是必选输入，输出或者必选属性，且是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="4">161002</td>
+      <td rowspan="8">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="8">161002</td>
+      <td>self、out的数据类型不在支持的范围之内，或self与out的数据类型不同。</td>
     </tr>
     <tr>
-      <td>self、out的数据类型不在支持的范围之内。</td>
+      <td>self的shape不是3维。</td>
     </tr>
-    <tr><td>self的shape不是3维。</td>
+    <tr>
+      <td>out的shape不是3维。</td>
     </tr>
-    <tr><td>outputSize的取值为0。</td>
+    <tr>
+      <td>outputSize的取值为0。</td>
+    </tr>
+    <tr>
+      <td>outputSize的size不等于1。</td>
+    </tr>
+    <tr>
+      <td>self为空Tensor，即self的N/C/L中存在为0的维度。</td>
+    </tr>
+    <tr>
+      <td>out在L轴上的维度大小与outputSize的取值不一致，或out的N/C轴与self不一致。</td>
+    </tr>
+    <tr>
+      <td>self与out的数据格式不同，或self的数据格式不是NCL。</td>
     </tr>
   </tbody></table>
 

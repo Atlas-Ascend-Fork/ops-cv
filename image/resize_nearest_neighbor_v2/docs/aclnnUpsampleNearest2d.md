@@ -168,8 +168,8 @@ aclnnStatus aclnnUpsampleNearest2d(
       <td>如果传入参数是必选输入，输出或者必选属性，且是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="6">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="6">161002</td>
+      <td rowspan="8">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="8">161002</td>
       <td>self的数据类型不在支持的范围内或self与out数据类型不同。</td>
     </tr>
     <tr>
@@ -179,10 +179,19 @@ aclnnStatus aclnnUpsampleNearest2d(
       <td>self和out的N/C轴的维度大小不相等。</td>
     </tr>
     <tr>
-      <td>self和out的数据格式不在支持的范围之内。</td>
+      <td>self和out的数据格式不在支持的范围之内，或self与out的数据格式不同。</td>
     </tr>
     <tr>
       <td>outputSize中存在值为0的元素。</td>
+    </tr>
+    <tr>
+      <td>outputSize的size不等于2。</td>
+    </tr>
+    <tr>
+      <td>self为空Tensor，即self的N/C/H/W中存在为0的维度。</td>
+    </tr>
+    <tr>
+      <td>out在H、W轴上的维度大小与outputSize的取值不一致。</td>
     </tr>
   </tbody></table>
 
