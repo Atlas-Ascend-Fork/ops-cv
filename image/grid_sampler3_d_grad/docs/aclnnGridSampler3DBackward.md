@@ -65,7 +65,7 @@
 
   2. paddingMode对梯度乘子的影响：
      - paddingMode="zeros"，`gix_mult`不变
-     - paddingMode="border"，$gix\_mult = gix\_mult × grad\_clip$（坐标在边界外时grad_clip=0，否则=1）
+     - paddingMode="border"，$gix\_mult = gix\_mult × grad\_clip$（反归一化后的像素坐标不满足$0 < coord < (size - 1)$时grad_clip=0，否则为1）
      - paddingMode="reflection"，$gix\_mult = gix\_mult × grad\_refl × grad\_clip$（grad_refl是反射坐标变换函数对输入坐标的导数，表示反射后输出坐标随输入坐标变化的方向和速率。取值为-1，0，1）。
 
   3. 各插值模式的梯度公式：

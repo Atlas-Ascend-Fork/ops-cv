@@ -85,7 +85,7 @@ English | [简体中文](./README.md)
        h = |y_{2o} - y_{1o}| + 1, \quad w = |x_{2o} - x_{1o}| + 1
        $$
 
-    Let $s_y=1$ when $y_{2o} \ge y_{1o}$, and $s_y=-1$ otherwise. $s_x$ is defined in the same way for the width direction. Sampling proceeds along the endpoint order, and a reversed box is flipped on the corresponding axis.
+       Let $s_y=1$ when $y_{2o} \ge y_{1o}$, and $s_y=-1$ otherwise. $s_x$ is defined in the same way for the width direction. Sampling proceeds along the endpoint order, and a reversed box is flipped on the corresponding axis.
 
     2. For the output position $(p_y, p_x)$, compute the floating-point indexes $r_y$ and $r_x$ in the crop window:
 

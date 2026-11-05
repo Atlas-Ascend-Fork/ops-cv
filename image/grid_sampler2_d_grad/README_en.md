@@ -53,7 +53,7 @@ English | [简体中文](./README.md)
 
   2. Impact of padding_mode on the gradient multipliers:
      - padding_mode="zeros": `gix_mult` remains unchanged
-     - padding_mode="border": $gix\_mult = gix\_mult × grad\_clip$ (grad_clip=0 when the coordinate is outside the boundary; otherwise, grad_clip=1)
+     - padding_mode="border": $gix\_mult = gix\_mult × grad\_clip$ (If the pixel coordinates after de-normalization do not meet the condition $0 < coord < (size - 1)$, grad_clip is 0; otherwise, grad_clip is 1.)
      - padding_mode="reflection": $gix\_mult = gix\_mult × grad\_refl × grad\_clip$ (grad_refl is the derivative of the reflection coordinate transformation function with respect to the input coordinate. It indicates the direction and rate at which the output coordinate changes with the input coordinate after reflection. The value is -1, 0, or 1.)
 
   3. Gradient formulas of the interpolation modes:

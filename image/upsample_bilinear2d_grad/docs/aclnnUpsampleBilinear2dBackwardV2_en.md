@@ -360,7 +360,7 @@ aclnnStatus aclnnUpsampleBilinear2dBackwardV2(
     - N represents the N axis of the input and output.
     - C represents the C axis of the input and output.
     - dtype represents the data type of the input tensor.
-  - N * C * gradOut_H < 2^31
+  - N \* C \* gradOut_H < 2^31
 - Parameters inputSize, outputSize, scalesH, and scalesW must satisfy the following constraints:
 
   $$

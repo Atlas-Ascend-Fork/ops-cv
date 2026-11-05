@@ -357,8 +357,8 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
   aclnnUpsampleBicubic2dBackward defaults to a non-deterministic implementation. Deterministic computation can be enabled through aclrtSetSysParamOpt. Deterministic computation is not supported when the following conditions are met:
   - $inputSize\_W$ > 130000
   - $inputSize\_H$/$outputSize\_H$ >=50
-  - $inputSize\_W$/$outputSize\_W$ >=50 && $inputSize\_N$ * $inputSize\_C$ * $inputSize\_H$ > $inputSize\_W$ * 0.5
-  - $inputSize\_H$/$outputSize\_H$ < 0.02 && $inputSize\_W$/$outputSize\_W$ < 0.02 && $inputSize\_N$ * $inputSize\_C$ * $inputSize\_H$ > $inputSize\_W$ * 10000
+  - $inputSize\_W$/$outputSize\_W$ >=50 && $inputSize\_N$ \* $inputSize\_C$ \* $inputSize\_H$ > $inputSize\_W$ * 0.5
+  - $inputSize\_H$/$outputSize\_H$ < 0.02 && $inputSize\_W$/$outputSize\_W$ < 0.02 && $inputSize\_N$ \* $inputSize\_C$ \* $inputSize\_H$ > $inputSize\_W$ * 10000
 
 ## Example
 

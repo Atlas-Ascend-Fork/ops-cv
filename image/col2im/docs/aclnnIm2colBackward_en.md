@@ -31,6 +31,7 @@ Consider a batch input tensor of shape $(N,C,*)$, where $N$ is the batch dimensi
   This operation flattens each sliding block of kernel_size within the spatial dimensions of input into a column (the last dimension) of the 3-D output tensor with shape $(N,C×\prod(kernel\_size),L)$.
 
   where:
+
   - $C×\prod(kernel\_size)$ is the number of values in each block (a block has $\prod(kernel\_size)$ spatial positions, and each spatial position contains a $C$-channel vector), and $L$ is the total number of these blocks:
 
     $$

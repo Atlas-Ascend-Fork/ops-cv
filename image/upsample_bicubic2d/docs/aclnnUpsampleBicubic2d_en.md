@@ -327,7 +327,7 @@ The first segment of the API performs input parameter validation and reports an 
     - N represents the N axis of the input and output.
     - C represents the C axis of the input and output.
     - dtype represents the data type of the input tensor.
-  - N * C * self_H < 2^31
+  - N \* C \* self_H < 2^31
 - When the value of scalesH is greater than 0, parameters self, outputSize, and scalesH must satisfy the following constraints:
 
   $$

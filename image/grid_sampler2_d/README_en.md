@@ -13,7 +13,6 @@ English | [简体中文](./README.md)
 | <term>Atlas inference products</term> | × |
 | <term>Atlas training products</term> | × |
 
-
 ## Function Description
 
 - Operator function: This operator performs 2D grid sampling on the four-dimensional input `x` based on the normalized coordinates provided by `grid`. It supports bilinear, nearest-neighbor, and bicubic interpolation.
