@@ -160,7 +160,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
       <td>scalesH(double)</td>
       <td>Input</td>
       <td>Indicates the height-dimension multiplier of output `gradInput`, corresponding to `scalesH` in the formula.</td>
-      <td>-</td>
+      <td><ul><li>Represents the height-dimension size ratio of gradOut to gradInput (outputSize_H/inputSize_H, i.e. the forward output-to-input spatial size ratio).</li><li>Takes effect only when alignCorners is false and the value is greater than 0, in which case the effective scaling coefficient is 1/scalesH; when alignCorners is true it is ignored and the coefficient is derived from the input/output height-dimension lengths.</li><li>When the value is not greater than 0, the scaling coefficient is derived from the height-dimension lengths of inputSize and outputSize.</li><li>When the value is greater than 0, the constraint outputSize_H = floor(inputSize_H × scalesH) must be satisfied (see Constraints).</li></ul></td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -170,7 +170,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
       <td>scalesW(double)</td>
       <td>Input</td>
       <td>Indicates the width-dimension multiplier of output `gradInput`, corresponding to `scalesW` in the formula.</td>
-      <td>-</td>
+      <td><ul><li>Represents the width-dimension size ratio of gradOut to gradInput (outputSize_W/inputSize_W, i.e. the forward output-to-input spatial size ratio).</li><li>Takes effect only when alignCorners is false and the value is greater than 0, in which case the effective scaling coefficient is 1/scalesW; when alignCorners is true it is ignored and the coefficient is derived from the input/output width-dimension lengths.</li><li>When the value is not greater than 0, the scaling coefficient is derived from the width-dimension lengths of inputSize and outputSize.</li><li>When the value is greater than 0, the constraint outputSize_W = floor(inputSize_W × scalesW) must be satisfied (see Constraints).</li></ul></td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -338,13 +338,19 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
 <!-- end id9 -->
 - Parameters inputSize, outputSize, scalesH, and scalesW must satisfy the following constraints:
 
+  When scalesH is greater than 0:
+
   $$
   outputSize\_H = floor(inputSize\_H * scalesH)
   $$
 
+  When scalesW is greater than 0:
+
   $$
   outputSize\_W = floor(inputSize\_W * scalesW)
   $$
+
+  When scalesH or scalesW is not greater than 0, the corresponding component does not participate in the above constraints, and the scaling coefficient is derived from the corresponding dimension lengths of inputSize and outputSize.
 
 - Deterministic computation:
 
@@ -431,14 +437,16 @@ int main()
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("Init acl failed. ERROR: %d\n", ret); return ret);
 
     // 2. Construct the inputs and outputs, which need to be custom-constructed according to the API definition.
+    // gradOut is 2x2 (corresponding to outputSize={2,2}) and gradInput is 4x4 (corresponding to inputSize={1,1,4,4});
+    // scalesH/scalesW=0.5 satisfies the constraint floor(4*0.5)=2
     std::vector<int64_t> selfShape = {1, 1, 2, 2};
-    std::vector<int64_t> outShape = {1, 1, 3, 3};
+    std::vector<int64_t> outShape = {1, 1, 4, 4};
     void* selfDeviceAddr = nullptr;
     void* outDeviceAddr = nullptr;
     aclTensor* self = nullptr;
     aclTensor* out = nullptr;
     std::vector<float> selfHostData = {1, 2, 3, 4.1};
-    std::vector<float> outHostData = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    std::vector<float> outHostData(GetShapeSize(outShape), 0.0F);
 
     // Create self aclTensor
     ret = CreateAclTensor(selfHostData, selfShape, &selfDeviceAddr, aclDataType::ACL_FLOAT, &self);
@@ -452,18 +460,19 @@ int main()
     const aclIntArray* outputSize = aclCreateIntArray(outArraySize.data(), outArraySize.size());
     CHECK_RET(outputSize != nullptr, return ACL_ERROR_INTERNAL_ERROR);
 
-    std::vector<int64_t> inputArraySize = {1, 1, 3, 3};
+    std::vector<int64_t> inputArraySize = {1, 1, 4, 4};
     const aclIntArray* inputSize = aclCreateIntArray(inputArraySize.data(), inputArraySize.size());
     CHECK_RET(inputSize != nullptr, return ACL_ERROR_INTERNAL_ERROR);
 
     // 3. Call the CANN operator library API; change it to the specific Api name.
     uint64_t workspaceSize = 0;
     aclOpExecutor* executor;
-    const double scalesH = 1.1;
-    const double scalesW = 1.1;
+    const bool alignCorners = false;
+    const double scalesH = 0.5;
+    const double scalesW = 0.5;
     // Call the first-phase API of aclnnUpsampleBicubic2dBackward
-    ret = aclnnUpsampleBicubic2dBackwardGetWorkspaceSize(self, outputSize, inputSize, 1, scalesH, scalesW, out, &workspaceSize,
-                                                         &executor);
+    ret = aclnnUpsampleBicubic2dBackwardGetWorkspaceSize(self, outputSize, inputSize, alignCorners, scalesH, scalesW, out,
+                                                         &workspaceSize, &executor);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBicubic2dBackwardGetWorkspaceSize failed. ERROR: %d\n", ret);
               return ret);
     // Allocate device memory based on the workspaceSize computed by the first-phase API

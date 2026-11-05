@@ -26,8 +26,9 @@ namespace ge {
 *@par Inputs:
 *@li grads: A 4D tensor, represents the gradient of output of ResizeBicubicV2. Format must be NCHW or NHWC. Data dtype
      must be float32, float16 or bfloat16.
-*@li original_image: A 4D tensor, represents the resized image of ResizeBicubicV2. Format and data dtype must be the
-     same as grads.The N, C dimension must be the same as grads.
+*@li original_image: A 4D tensor, represents the original input image of ResizeBicubicV2 (the input of the forward
+     bicubic interpolation). Only its shape is consumed. Format and data dtype must be the same as
+     grads.The N, C dimension must be the same as grads.
 
 *@par Outputs:
 *y: A 4D tensor, represents the gradient of original_image. Format and data dtype and shape must be the same as

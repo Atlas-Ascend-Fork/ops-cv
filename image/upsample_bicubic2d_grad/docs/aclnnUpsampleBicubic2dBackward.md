@@ -160,7 +160,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
       <td>scalesH（double）</td>
       <td>输入</td>
       <td>表示输出`gradInput`的height维度乘数，对应公式中的`scalesH`。</td>
-      <td>-</td>
+      <td><ul><li>表示gradOut与gradInput的height维度尺寸比（outputSize_H/inputSize_H，即正向输出与输入的空间尺寸比）。</li><li>仅当alignCorners为false且取值大于0时生效，有效缩放系数为1/scalesH；alignCorners为true时被忽略，由输入/输出height维度长度推导。</li><li>取值不大于0时，缩放系数由inputSize与outputSize的height维度长度推导。</li><li>取值大于0时，须满足约束outputSize_H = floor(inputSize_H × scalesH)（见约束说明）。</li></ul></td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -170,7 +170,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
       <td>scalesW（double）</td>
       <td>输入</td>
       <td>表示输出`gradInput`的width维度乘数，对应公式中的`scalesW`。</td>
-      <td>-</td>
+      <td><ul><li>表示gradOut与gradInput的width维度尺寸比（outputSize_W/inputSize_W，即正向输出与输入的空间尺寸比）。</li><li>仅当alignCorners为false且取值大于0时生效，有效缩放系数为1/scalesW；alignCorners为true时被忽略，由输入/输出width维度长度推导。</li><li>取值不大于0时，缩放系数由inputSize与outputSize的width维度长度推导。</li><li>取值大于0时，须满足约束outputSize_W = floor(inputSize_W × scalesW)（见约束说明）。</li></ul></td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -338,13 +338,19 @@ aclnnStatus aclnnUpsampleBicubic2dBackward(
 <!-- end id9 -->
 - 参数inputSize、outputSize、scalesH、scalesW需要满足如下约束：
 
+  当输入scalesH取值大于0时：
+
   $$
   outputSize\_H = floor(inputSize\_H * scalesH)
   $$
 
+  当输入scalesW取值大于0时：
+
   $$
   outputSize\_W = floor(inputSize\_W * scalesW)
   $$
+
+  当scalesH或scalesW取值不大于0时，对应分量不参与上述约束，缩放系数由inputSize与outputSize的对应维度长度推导。
 
 - 确定性计算：
 
@@ -431,14 +437,16 @@ int main()
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("Init acl failed. ERROR: %d\n", ret); return ret);
 
     // 2. 构造输入与输出，需要根据API的接口自定义构造
+    // gradOut为2x2（对应outputSize={2,2}），gradInput为4x4（对应inputSize={1,1,4,4}），
+    // scalesH/scalesW=0.5满足约束floor(4*0.5)=2
     std::vector<int64_t> selfShape = {1, 1, 2, 2};
-    std::vector<int64_t> outShape = {1, 1, 3, 3};
+    std::vector<int64_t> outShape = {1, 1, 4, 4};
     void* selfDeviceAddr = nullptr;
     void* outDeviceAddr = nullptr;
     aclTensor* self = nullptr;
     aclTensor* out = nullptr;
     std::vector<float> selfHostData = {1, 2, 3, 4.1};
-    std::vector<float> outHostData = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    std::vector<float> outHostData(GetShapeSize(outShape), 0.0F);
 
     // 创建self aclTensor
     ret = CreateAclTensor(selfHostData, selfShape, &selfDeviceAddr, aclDataType::ACL_FLOAT, &self);
@@ -452,18 +460,19 @@ int main()
     const aclIntArray* outputSize = aclCreateIntArray(outArraySize.data(), outArraySize.size());
     CHECK_RET(outputSize != nullptr, return ACL_ERROR_INTERNAL_ERROR);
 
-    std::vector<int64_t> inputArraySize = {1, 1, 3, 3};
+    std::vector<int64_t> inputArraySize = {1, 1, 4, 4};
     const aclIntArray* inputSize = aclCreateIntArray(inputArraySize.data(), inputArraySize.size());
     CHECK_RET(inputSize != nullptr, return ACL_ERROR_INTERNAL_ERROR);
 
     // 3. 调用CANN算子库API，需要修改为具体的Api名称
     uint64_t workspaceSize = 0;
     aclOpExecutor* executor;
-    const double scalesH = 1.1;
-    const double scalesW = 1.1;
+    const bool alignCorners = false;
+    const double scalesH = 0.5;
+    const double scalesW = 0.5;
     // 调用aclnnUpsampleBicubic2dBackward第一段接口
-    ret = aclnnUpsampleBicubic2dBackwardGetWorkspaceSize(self, outputSize, inputSize, 1, scalesH, scalesW, out, &workspaceSize,
-                                                         &executor);
+    ret = aclnnUpsampleBicubic2dBackwardGetWorkspaceSize(self, outputSize, inputSize, alignCorners, scalesH, scalesW, out,
+                                                         &workspaceSize, &executor);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBicubic2dBackwardGetWorkspaceSize failed. ERROR: %d\n", ret);
               return ret);
     // 根据第一段接口计算出的workspaceSize申请device内存
