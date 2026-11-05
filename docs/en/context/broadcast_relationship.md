@@ -21,7 +21,7 @@ When performing broadcast computation, the following rules generally apply:
   > **NOTE**
   > In this scenario, you only need to ensure that broadcast can be performed along a certain dimension. For example, when computing a+b where a.shape=\(1, 3\) and b.shape=\(3, 1\), the two arrays will be broadcast to a.shape=\(3, 3\) and b.shape=\(3, 3\).
 
-- Rule 3: If the arrays have different numbers of dimensions and neither has a dimension equal to 1, an error is reported.
+- Rule 3: After left-padding with 1 according to Rule 1, broadcasting fails if any pair of corresponding dimensions has unequal sizes and neither size is 1.
 
 Based on the above rules, the broadcast process generally first expands dimensions according to **Rule 1**, and then stretches shapes according to **Rule 2**. A specific example is as follows:
 
