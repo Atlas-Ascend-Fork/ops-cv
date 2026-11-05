@@ -739,3 +739,24 @@ TEST_F(l2_upsamplelinear1d_backward_test, Ascend95089_l2_upsamplelinear1d_backwa
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
     SetPlatformSocVersion(SocVersion::ASCEND910B);
 }
+
+// scales 为 +Inf 应在第一段返回 161002
+TEST_F(l2_upsamplelinear1d_backward_test, l2_upsamplelinear1d_backward_test_scales_inf_fail)
+{
+    const double_t scales_l = std::numeric_limits<double_t>::infinity();
+    bool align_corners = false;
+    vector<int64_t> output_size = {6};
+    vector<int64_t> input_size = {1, 1, 3};
+
+    auto self_desc = TensorDesc({1, 1, 6}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 3}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleLinear1dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_l),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}

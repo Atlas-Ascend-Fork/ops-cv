@@ -182,7 +182,8 @@ static bool CheckShape(const aclTensor* gradOut, const aclIntArray* outputSize, 
     return true;
 }
 
-static bool CheckInputElement(const aclTensor* gradOut, const aclIntArray* outputSize, const aclIntArray* inputSize)
+static bool CheckInputElement(const aclTensor* gradOut, const aclIntArray* outputSize, const aclIntArray* inputSize,
+                              double scales)
 {
     int64_t outH = (*outputSize)[DIM_ZERO];
     int64_t batch = (*inputSize)[DIM_ZERO];
@@ -197,6 +198,10 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclIntArray* outpu
                                                       std::to_string(inputH).c_str(),
                                                       "all input and output dims must be greater than 0"),
              return false);
+
+    // scales 需为有限值；scales<=0 视为「未指定、按尺寸推导」的既有语义保留
+    OP_CHECK(std::isfinite(scales),
+             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "scales should be finite, but got scales [%f].", scales), return false);
 
     for (size_t i = 0; i < dimNum; ++i) {
         if (gradOutShape.GetDim(i) != fullOutputSize[i]) {
@@ -254,7 +259,7 @@ static bool CheckUplimit(const aclTensor* gradOut, const aclTensor* out)
 }
 
 static aclnnStatus CheckParams(const aclTensor* gradOut, const aclIntArray* outputSize, const aclIntArray* inputSize,
-                               const aclTensor* out)
+                               double scales, const aclTensor* out)
 {
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
     // 1. 检查参数是否为空指针
@@ -271,7 +276,7 @@ static aclnnStatus CheckParams(const aclTensor* gradOut, const aclIntArray* outp
     CHECK_RET(CheckDtypeValid(gradOut, out, inputSize), ACLNN_ERR_PARAM_INVALID);
 
     // 4. 校验gradOut的shape是否与输出的output的shape一致
-    CHECK_RET(CheckInputElement(gradOut, outputSize, inputSize), ACLNN_ERR_PARAM_INVALID);
+    CHECK_RET(CheckInputElement(gradOut, outputSize, inputSize, scales), ACLNN_ERR_PARAM_INVALID);
 
     // 5. 校验NC是否一致
     CHECK_RET(CheckNCValid(gradOut, out), ACLNN_ERR_PARAM_INVALID);
@@ -373,7 +378,7 @@ aclnnStatus aclnnUpsampleLinear1dBackwardGetWorkspaceSize(const aclTensor* gradO
     CHECK_RET(uniqueExecutor.get() != nullptr, ACLNN_ERR_INNER_CREATE_EXECUTOR);
 
     // 固定写法，参数检查
-    auto ret = CheckParams(gradOut, outputSize, inputSize, out);
+    auto ret = CheckParams(gradOut, outputSize, inputSize, scales, out);
     CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
     if (gradOut->IsEmpty()) {
