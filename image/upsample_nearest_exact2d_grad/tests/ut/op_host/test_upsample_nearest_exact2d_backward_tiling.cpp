@@ -44,8 +44,10 @@ TEST_F(UpsampleNearestExact2dGradTiling, upsample_upsample_nearest_exact2d_grad_
         &compileInfo, socVersion, 20, 192 * 1024, 10240);
     uint64_t expectTilingKey = 1;
     string expectTilingData =
-        "64 2 4575657222473777152 4575657222473777152 0 0 512 274877911296 1 1 1 128 1 1 1 128 4294967296 0 0 0 0 0 0 "
-        "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+        "64 2 4575657222473777152 4575657222473777152 0 0 128 18691697676544 1 1 1 128 1 1 1 128 4294967296 0 0 0 0 0 "
+        "0 "
+        "0 "
+        "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
@@ -59,7 +61,7 @@ TEST_F(UpsampleNearestExact2dGradTiling, upsample_upsample_nearest_exact2d_grad_
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 4294967297 549755814016 274877907072 4294967424 549755813952 4294967304 4294967297 1 0 "
         "26388279066624 32768 4294967297 4294967297 4294967297 0 8589934594 1 0 0 0 0 0 0 0 0 ";
-    std::vector<size_t> expectWorkspaces = {33593344};
+    std::vector<size_t> expectWorkspaces = {33572352};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
@@ -83,7 +85,7 @@ TEST_F(UpsampleNearestExact2dGradTiling, upsample_upsample_nearest_exact2d_grad_
         &compileInfo, socVersion, 20, 192 * 1024, 10240);
     uint64_t expectTilingKey = 1;
     string expectTilingData =
-        "64 1 4611686019501129728 4539628425446424576 0 0 128 549755817984 1 1 2 64 1 1 1 32 4294967297 0 0 0 0 0 0 0 "
+        "64 1 4611686019501129728 4539628425446424576 0 0 64 17592186048512 1 1 2 64 1 1 1 32 4294967297 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 64 0 0 0 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
@@ -100,7 +102,7 @@ TEST_F(UpsampleNearestExact2dGradTiling, upsample_upsample_nearest_exact2d_grad_
         "4294967297 0 8589934594 1 0 0 0 0 0 0 0 0 4294967297 274877906976 274877907008 8589934624 137438953536 "
         "4294967312 4294967297 1 0 13194139533312 8192 4294967297 4294967297 4294967297 0 8589934594 1 0 0 0 0 0 0 0 "
         "0 ";
-    std::vector<size_t> expectWorkspaces = {33588224};
+    std::vector<size_t> expectWorkspaces = {33562752};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
@@ -124,7 +126,7 @@ TEST_F(UpsampleNearestExact2dGradTiling, upsample_upsample_nearest_exact2d_grad_
         &compileInfo, socVersion, 20, 192 * 1024, 10240);
     uint64_t expectTilingKey = 1;
     string expectTilingData =
-        "64 3 4611686019501129728 4539628425446424576 0 0 128 549755817984 1 1 2 64 1 1 1 32 4294967297 0 0 0 0 0 0 0 "
+        "64 3 4611686019501129728 4539628425446424576 0 0 64 17592186048512 1 1 2 64 1 1 1 32 4294967297 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 64 0 0 0 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
         "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
@@ -141,7 +143,55 @@ TEST_F(UpsampleNearestExact2dGradTiling, upsample_upsample_nearest_exact2d_grad_
         "4294967297 0 8589934594 1 0 0 0 0 0 0 0 0 4294967297 274877906976 274877907008 8589934624 137438953536 "
         "4294967312 4294967297 1 0 13194139533312 8192 4294967297 4294967297 4294967297 0 8589934594 1 0 0 0 0 0 0 0 "
         "0 ";
-    std::vector<size_t> expectWorkspaces = {33588224};
+    std::vector<size_t> expectWorkspaces = {33562752};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// h 方向 K 值占优（singleCoreK_h > singleCoreK_w）的形状，覆盖槽位步长 max(w, h) 取 h 分支
+TEST_F(UpsampleNearestExact2dGradTiling, upsample_upsample_nearest_exact2d_grad_tiling_009)
+{
+    optiling::UpsampleNearestExact2dGradCompileInfo compileInfo = {1};
+    string socVersion = "Ascend910b";
+    gert::TilingContextPara tilingContextPara(
+        "UpsampleNearestExact2dGrad",
+        {
+            {{{1, 1, 64, 16}, {1, 1, 64, 16}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{1, 1, 128, 32}, {1, 1, 128, 32}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {gert::TilingContextPara::OpAttr("output_size", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({128, 32})),
+         gert::TilingContextPara::OpAttr("input_size",
+                                         Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 64, 16})),
+         gert::TilingContextPara::OpAttr("scales_h", Ops::Cv::AnyValue::CreateFrom<float>(2)),
+         gert::TilingContextPara::OpAttr("scales_w", Ops::Cv::AnyValue::CreateFrom<float>(2))},
+        &compileInfo, socVersion, 20, 192 * 1024, 10240);
+    uint64_t expectTilingKey = 1;
+    string expectTilingData = "64 2 4611686019501129728 4539628425446424576 0 0 1024 17592186048512 1 1 64 16 1 1 64 "
+                              "16 4294967297 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 64 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 64 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "
+                              "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 274877906945 "
+                              "68719476752 274877906960 68719476800 274877907008 4294967312 4294967297 "
+                              "1 0 35184372088832 16384 4294967297 4294967297 4294967297 0 8589934594 1 0 0 0 0 0 0 0 "
+                              "0 274877906945 68719476752 274877906960 274877906960 68719476800 "
+                              "4294967360 4294967297 1 0 87960930222080 4096 4294967297 4294967297 4294967297 0 "
+                              "8589934594 1 0 0 0 0 0 0 0 0 ";
+    std::vector<size_t> expectWorkspaces = {33574912};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 

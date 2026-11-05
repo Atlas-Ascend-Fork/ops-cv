@@ -298,14 +298,14 @@ __aicore__ inline void UpSampleNearestExact2dGradND<T>::calculateRadioTensorH(Lo
 template <typename T>
 __aicore__ inline void UpSampleNearestExact2dGradND<T>::copyRadioTensorToGm()
 {
+    // 槽位步长与 host tiling 同口径：max(w, h)，host 侧已按 32 字节对齐
     int64_t radioSize = getMax(radio_matrix_size, radio_matrix_size_h);
     workSpaceRadioOffset = intermediate_matrix_size + radioSize * blockIdx;
-    int8_t size = static_cast<int8_t>(32) / static_cast<int8_t>(sizeof(T));
 
+    // 写入长度不超过实际缓冲大小，避免尾部取整越过槽位边界
     if (dataType == 2) {
         LocalTensor<T> radioTensor = radioQueue.DeQue<T>();
-        DataCopy(intermediateTensorGm[workSpaceRadioOffset], radioTensor,
-                 (radioTensor.GetSize() + size - 1) / size * size);
+        DataCopy(intermediateTensorGm[workSpaceRadioOffset], radioTensor, radioTensor.GetSize());
         event_t eventID2 = static_cast<event_t>(pipe.FetchEventID(HardEvent::MTE3_MTE2));
         SetFlag<HardEvent::MTE3_MTE2>(eventID2);
         WaitFlag<HardEvent::MTE3_MTE2>(eventID2);
@@ -313,8 +313,7 @@ __aicore__ inline void UpSampleNearestExact2dGradND<T>::copyRadioTensorToGm()
         radioQueue.FreeTensor(radioTensor);
     } else {
         LocalTensor<T> radioCastTensor = radioCastQueue.DeQue<T>();
-        DataCopy(intermediateTensorGm[workSpaceRadioOffset], radioCastTensor,
-                 (radioCastTensor.GetSize() + size - 1) / size * size);
+        DataCopy(intermediateTensorGm[workSpaceRadioOffset], radioCastTensor, radioCastTensor.GetSize());
         event_t eventID2 = static_cast<event_t>(pipe.FetchEventID(HardEvent::MTE3_MTE2));
         SetFlag<HardEvent::MTE3_MTE2>(eventID2);
         WaitFlag<HardEvent::MTE3_MTE2>(eventID2);

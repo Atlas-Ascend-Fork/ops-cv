@@ -358,20 +358,26 @@ void UpsampleNearestExact2dGradTiling::getTCubeTiling_w()
     }
 }
 
-// 先只算w方向
+// workspace 布局与 kernel 侧口径保持一致：intermediate 以元素数传递（kernel 按元素偏移访问），
+// 每个 AI Core 的 coefficient 槽位步长取 w/h 两方向较大值，并按 32 字节向上对齐，
+// 避免 kernel 侧 getMax(w,h) 步长与 32B 对齐写入越过 host 分配的槽位边界
 void UpsampleNearestExact2dGradTiling::getWorkSpace(uint32_t needCoreNum)
 {
     size_t* workspaces = tilingContext->GetWorkspaceSizes(1);
-    // 中间tensor
-    uint64_t intermediate_matrix_size = output_shapes[0] * output_shapes[1] * input_shape.GetDim(2) * output_shapes[3] *
-                                        dataTypeSize;
+    // 中间tensor，元素数口径（kernel 直接用作元素偏移）
+    uint64_t intermediate_matrix_size = output_shapes[0] * output_shapes[1] * input_shape.GetDim(2) * output_shapes[3];
 
-    uint64_t radioMatrixWorkspaceSize = slide_size * singleCoreK_w;
-    uint64_t radioMatrixWorkspaceSize_h = slide_size * singleCoreK_h;
+    uint64_t radioMatrixWorkspaceSize = slide_size * std::max(singleCoreK_w, singleCoreK_h);
 
-    workspaces[0] = (intermediate_matrix_size + radioMatrixWorkspaceSize * needCoreNum) * BYTE + WORK_SPACE_SIZE;
+    // 各核槽位与中间矩阵均按 32 字节对齐（kernel 侧 DataCopy 按 32B 块写入）
+    uint64_t alignElemNum = BYTE * BYTE_SIZE_4 / dataTypeSize;
+    radioMatrixWorkspaceSize = CeilA2B(radioMatrixWorkspaceSize, alignElemNum) * alignElemNum;
+    intermediate_matrix_size = CeilA2B(intermediate_matrix_size, alignElemNum) * alignElemNum;
+
+    workspaces[0] = (intermediate_matrix_size + radioMatrixWorkspaceSize * needCoreNum) * dataTypeSize +
+                    WORK_SPACE_SIZE;
     tilingData.set_radio_matrix_size(radioMatrixWorkspaceSize);
-    tilingData.set_radio_matrix_size_h(radioMatrixWorkspaceSize_h);
+    tilingData.set_radio_matrix_size_h(radioMatrixWorkspaceSize);
     tilingData.set_intermediate_matrix_size(intermediate_matrix_size);
 }
 
