@@ -12,6 +12,7 @@
 #include "../../../../op_api/aclnn_upsample_bilinear_2d_backward.h"
 #include "op_api_ut_common/tensor_desc.h"
 #include "op_api_ut_common/op_api_ut.h"
+#include "opdev/platform.h"
 
 class l2_upsamplebilinear2d_backward_test : public testing::Test {
 protected:
@@ -569,4 +570,269 @@ TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_
     uint64_t workspaceSize = 0;
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
     EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// ====== 950(RegBase)平台：同尺寸 + gradOut为FLOAT32 + out为FLOAT16/BFLOAT16 ======
+// 资料约定（npu="950"）：gradOut为FLOAT时out可为FLOAT32/FLOAT16/BFLOAT16，该规则与是否同尺寸无关
+
+// 950平台：同尺寸，fp32 gradOut + fp16 out 应放行（issue #1531 修复目标）
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_026_regbase_same_size_fp32_to_fp16)
+{
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT16, ACL_FORMAT_NCHW);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
+}
+
+// 950平台：同尺寸，fp32 gradOut + bf16 out 应放行（issue #1531 修复目标）
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_027_regbase_same_size_fp32_to_bf16)
+{
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_BF16, ACL_FORMAT_NCHW);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
+}
+
+// 950平台：同尺寸，fp32 gradOut + fp32 out 对照应放行
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_028_regbase_same_size_fp32_to_fp32)
+{
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
+}
+
+// 950平台：非同尺寸，fp32 gradOut + fp16 out 应回归放行
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_029_regbase_diff_size_fp32_to_fp16)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {8, 8};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 8, 8}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT16, ACL_FORMAT_NCHW);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
+}
+
+// 950平台：非同尺寸，fp32 gradOut + bf16 out 应回归放行
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_030_regbase_diff_size_fp32_to_bf16)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {8, 8};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 8, 8}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_BF16, ACL_FORMAT_NCHW);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
+}
+
+// 950平台：同尺寸，fp16 gradOut + fp16 out 应回归放行
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_031_regbase_same_size_fp16_to_fp16)
+{
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT16, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT16, ACL_FORMAT_NCHW);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
+}
+
+// 950平台：同尺寸，bf16 gradOut + bf16 out 应回归放行
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_032_regbase_same_size_bf16_to_bf16)
+{
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 4, 4}, ACL_BF16, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_BF16, ACL_FORMAT_NCHW);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
+}
+
+// 950平台：同尺寸，fp16 gradOut + fp32 out 仍应拒绝（gradOut非FLOAT时out须与gradOut一致）
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_033_regbase_same_size_fp16_to_fp32)
+{
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT16, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
+}
+
+// 950平台：同尺寸，int32 gradOut + int32 out 仍应拒绝（gradOut不在支持列表内）
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_034_regbase_same_size_int32_to_int32)
+{
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 4, 4}, ACL_INT32, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_INT32, ACL_FORMAT_NCHW);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
+}
+
+// 910B平台：同尺寸，fp32 gradOut + fp16 out 仍应拒绝（非RegBase平台out须与gradOut一致）
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_035_910b_same_size_fp32_to_fp16)
+{
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> input_size = {1, 1, 4, 4};
+
+    auto self_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT16, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// 950平台：同尺寸NHWC，fp32 gradOut + fp16 out 应放行
+TEST_F(l2_upsamplebilinear2d_backward_test, l2_upsamplebilinear2d_backward_test_036_regbase_same_size_nhwc_fp32_to_fp16)
+{
+    const double_t scales_h = 1.0;
+    const double_t scales_w = 1.0;
+    bool align_corners = false;
+    vector<int64_t> output_size = {4, 4};
+    vector<int64_t> input_size = {1, 4, 4, 2};
+
+    auto self_desc = TensorDesc({1, 4, 4, 2}, ACL_FLOAT, ACL_FORMAT_NHWC);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    auto output_desc = TensorDesc({1, 4, 4, 2}, ACL_FLOAT16, ACL_FORMAT_NHWC);
+
+    SetPlatformSocVersion(op::SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dBackward,
+                        INPUT(self_desc, output_size_desc, input_size_desc, align_corners, scales_h, scales_w),
+                        OUTPUT(output_desc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
+    SetPlatformSocVersion(op::SocVersion::ASCEND910B);
 }

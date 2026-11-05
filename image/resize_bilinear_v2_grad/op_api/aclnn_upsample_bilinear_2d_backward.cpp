@@ -111,16 +111,18 @@ static bool ChecksInputElement(const aclTensor* gradOut, const aclIntArray* outp
 
 static bool CheckDtypeValid(const aclTensor* gradOut, const aclTensor* out, const aclIntArray* inputSize)
 {
-    if (!CheckIOSizesIsSame(gradOut, inputSize)) {
-        if (IsRegBase()) {
-            OP_CHECK_DTYPE_NOT_SUPPORT(gradOut, DTYPE_SUPPORT_LIST_REGBASE, return false);
-            if (gradOut->GetDataType() != op::DataType::DT_FLOAT) {
-                OP_CHECK_DTYPE_NOT_MATCH(out, gradOut->GetDataType(), return false);
-            } else {
-                OP_CHECK_DTYPE_NOT_SUPPORT(out, DTYPE_SUPPORT_LIST_REGBASE, return false);
-            }
-            return true;
+    if (IsRegBase()) {
+        // 资料约定（npu="950"）：gradOut为FLOAT时out可为FLOAT32/FLOAT16/BFLOAT16，否则out与gradOut保持一致，
+        // 该规则与gradOut和inputSize是否同尺寸无关，需覆盖同尺寸与非同尺寸两条路径
+        OP_CHECK_DTYPE_NOT_SUPPORT(gradOut, DTYPE_SUPPORT_LIST_REGBASE, return false);
+        if (gradOut->GetDataType() != op::DataType::DT_FLOAT) {
+            OP_CHECK_DTYPE_NOT_MATCH(out, gradOut->GetDataType(), return false);
+        } else {
+            OP_CHECK_DTYPE_NOT_SUPPORT(out, DTYPE_SUPPORT_LIST_REGBASE, return false);
         }
+        return true;
+    }
+    if (!CheckIOSizesIsSame(gradOut, inputSize)) {
         OP_CHECK_DTYPE_NOT_SUPPORT(gradOut, DTYPE_SUPPORT_LIST, return false);
     }
     OP_CHECK_DTYPE_NOT_MATCH(out, gradOut->GetDataType(), return false);
@@ -293,6 +295,11 @@ aclnnStatus aclnnUpsampleBilinear2dBackwardGetWorkspaceSize(const aclTensor* gra
             outTransdata = l0op::TransData(outCast, out->GetStorageFormat(), 0, uniqueExecutor.get());
             CHECK_RET(outTransdata != nullptr, ACLNN_ERR_INNER_NULLPTR);
         }
+    } else if (gradOutContiguous->GetDataType() != out->GetDataType()) {
+        // 同尺寸且gradOut与out数据类型不一致（gradOut为FLOAT、out为FLOAT16/BFLOAT16时资料允许）：
+        // 恒等反向仅做数据类型转换，与非同尺寸路径kernel直接产出out数据类型的行为保持一致
+        outTransdata = l0op::Cast(gradOutContiguous, out->GetDataType(), uniqueExecutor.get());
+        CHECK_RET(outTransdata != nullptr, ACLNN_ERR_INNER_NULLPTR);
     }
     CHECK_RET(CheckReduceOutShape(outTransdata, out), ACLNN_ERR_PARAM_INVALID);
     auto viewCopyResult = l0op::ViewCopy(outTransdata, out, uniqueExecutor.get());
