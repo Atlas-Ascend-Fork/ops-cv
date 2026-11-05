@@ -298,17 +298,17 @@ aclnnStatus aclnnUpsampleNearest2dBackward(
 
 ## Constraints
 
-- When the value of scalesH is greater than 0, parameters inputSize, outputSize, and scalesH must satisfy the following constraints:
+- When the values of scalesH and scalesW are greater than 0, it is recommended that parameters inputSize and outputSize satisfy the following relations:
 
   $$
   outputSize\_H = floor(inputSize\_H * scalesH)
   $$
 
-- When the value of scalesW is greater than 0, parameters inputSize, outputSize, and scalesW must satisfy the following constraints:
-
   $$
   outputSize\_W = floor(inputSize\_W * scalesW)
   $$
+
+  These relations are advisory and are not used as rejection conditions during parameter validation: the interface does not return an error code when they are violated (the return code scenarios of the first-phase interface are fully listed in the Return Value section above); they only affect the internal execution branch selection. When the relations are violated, the interface still computes according to the actual values of outputSize and inputSize.
 
 - Deterministic computation:
   - aclnnUpsampleNearest2dBackward defaults to a deterministic implementation.
@@ -447,9 +447,11 @@ int main()
         LOG_PRINT("result[%ld] is: %f\n", i, resultData[i]);
     }
 
-    // 6. Release aclTensor and aclScalar; modify according to the specific API definition.
+    // 6. Release aclTensor, aclIntArray and aclScalar; modify according to the specific API definition.
     aclDestroyTensor(gradOut);
     aclDestroyTensor(gradInput);
+    aclDestroyIntArray(outputSize);
+    aclDestroyIntArray(inputSize);
 
     // 7. Release device resources; modify according to the specific API definition.
     aclrtFree(gradOutDeviceAddr);

@@ -298,17 +298,17 @@ aclnnStatus aclnnUpsampleNearest2dBackward(
 
 ## 约束说明
 
-- 当输入scalesH的取值大于0时，参数inputSize、outputSize、scalesH需要满足如下约束：
+- 当输入scalesH、scalesW的取值大于0时，建议参数inputSize、outputSize与之满足如下关系：
 
   $$
   outputSize\_H = floor(inputSize\_H * scalesH)
   $$
 
-- 当输入scalesW的取值大于0时，参数inputSize、outputSize、scalesW需要满足如下约束：
-
   $$
   outputSize\_W = floor(inputSize\_W * scalesW)
   $$
+
+  该关系为提示性约束，不作为入参校验的拒绝条件：接口不会因违反该关系而返回错误码（第一段接口的返回码场景已在上文返回值章节列全），仅影响实现内部的执行分支选择。违反该关系时，接口仍按outputSize、inputSize的实际取值完成计算。
 
 - 确定性计算：
   - aclnnUpsampleNearest2dBackward默认确定性实现。
@@ -447,9 +447,11 @@ int main()
         LOG_PRINT("result[%ld] is: %f\n", i, resultData[i]);
     }
 
-    // 6. 释放aclTensor和aclScalar，需要根据具体API的接口定义修改
+    // 6. 释放aclTensor、aclIntArray和aclScalar，需要根据具体API的接口定义修改
     aclDestroyTensor(gradOut);
     aclDestroyTensor(gradInput);
+    aclDestroyIntArray(outputSize);
+    aclDestroyIntArray(inputSize);
 
     // 7. 释放device资源，需要根据具体API的接口定义修改
     aclrtFree(gradOutDeviceAddr);
