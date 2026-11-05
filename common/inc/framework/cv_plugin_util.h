@@ -19,10 +19,11 @@
 #include "register/register.h"
 
 namespace domi {
-// ONNX AttributeProto.AttributeType (FLOAT=1, INT=2). Shared by ONNX plugins parsing
+// ONNX AttributeProto.AttributeType (FLOAT=1, INT=2, STRING=3). Shared by ONNX plugins parsing
 // GE "attribute" JSON so callers do not re-define the same magic numbers.
 constexpr int ATTR_TYPE_FLOAT = 1;
 constexpr int ATTR_TYPE_INT = 2;
+constexpr int ATTR_TYPE_STRING = 3;
 
 inline Status StrToFloat(const std::string& value, float& result)
 {

@@ -23,12 +23,16 @@ using ge::Operator;
 namespace domi {
 using json = nlohmann::json;
 
+static constexpr const char* ROI_ALIGN_POOL_MODE_AVG = "avg";
+static constexpr const char* ROI_ALIGN_POOL_MODE_MAX = "max";
+
 static Status OpRoiAlignUpdateInfo(const ge::Operator& op_src, ge::Operator& op_dest)
 {
     int output_height_value = 1;
     int output_width_value = 1;
     int sampling_ratio_value = 0;
     float spatial_scale_value = 1.0;
+    std::string pool_mode_value = ROI_ALIGN_POOL_MODE_AVG;
 
     ge::AscendString attrs_string;
     try {
@@ -56,6 +60,21 @@ static Status OpRoiAlignUpdateInfo(const ge::Operator& op_src, ge::Operator& op_
                                 return FAILED;
                             }
                         }
+                    } else if (name == "mode" && type == ATTR_TYPE_STRING) {
+                        // ONNX RoiAlign STRING attr "mode". Default above stays "avg" only when this
+                        // attr is absent. If the attr is present, "s" must be a real avg/max string;
+                        // do not fall back to "" or silently keep the default (tiling rejects others).
+                        if (!attr.contains("s") || !attr["s"].is_string()) {
+                            OP_LOGE(GetOpName(op_dest).c_str(),
+                                    "mode attribute is present but string value \"s\" is missing.");
+                            return FAILED;
+                        }
+                        pool_mode_value = attr["s"].get<std::string>();
+                        if (pool_mode_value != ROI_ALIGN_POOL_MODE_AVG && pool_mode_value != ROI_ALIGN_POOL_MODE_MAX) {
+                            OP_LOGE(GetOpName(op_dest).c_str(), "pool_mode must be \"avg\" or \"max\", got \"%s\".",
+                                    pool_mode_value.c_str());
+                            return FAILED;
+                        }
                     }
                 }
             }
@@ -74,6 +93,7 @@ static Status OpRoiAlignUpdateInfo(const ge::Operator& op_src, ge::Operator& op_
     op_dest.SetAttr("pooled_width", output_width_value);
     op_dest.SetAttr("sample_num", sampling_ratio_value);
     op_dest.SetAttr("spatial_scale", spatial_scale_value);
+    op_dest.SetAttr("pool_mode", pool_mode_value);
     op_dest.DynamicInputRegister("x", input_size);
     op_dest.DynamicOutputRegister("y", 1);
     return SUCCESS;
@@ -143,6 +163,8 @@ static Status ParseOpToGraphRoiAlign(const ge::Operator& op, Graph& graph)
     op.GetAttr("spatial_scale", spatial_scale);
     int roi_end_mode = 0;
     op.GetAttr("roi_end_mode", roi_end_mode);
+    std::string pool_mode = ROI_ALIGN_POOL_MODE_AVG;
+    op.GetAttr("pool_mode", pool_mode);
 
     auto data0 = op::Data((ori_name + "_data0").c_str()).set_attr_index(0);
     auto data1 = op::Data((ori_name + "_data1").c_str()).set_attr_index(1);
@@ -170,7 +192,8 @@ static Status ParseOpToGraphRoiAlign(const ge::Operator& op, Graph& graph)
                        .set_attr_pooled_height(pooled_height)
                        .set_attr_pooled_width(pooled_width)
                        .set_attr_sample_num(sample_num)
-                       .set_attr_roi_end_mode(roi_end_mode);
+                       .set_attr_roi_end_mode(roi_end_mode)
+                       .set_attr_pool_mode(pool_mode);
     std::vector<ge::Operator> inputs = {data0, data1, data2};
     std::vector<std::pair<ge::Operator, std::vector<size_t>>> output_indexs;
     output_indexs.emplace_back(roli_op, std::vector<size_t>{0});
