@@ -33,6 +33,7 @@ constexpr int ZEROS = 0;
 constexpr int BORDER = 1;
 constexpr int REFLECTION = 2;
 constexpr int TILINGKEY_2 = 2;
+constexpr int64_t MAX_CHANNEL_SIZE = 2048;
 constexpr int BILINEAR_DIVIDE_UB_NUM = 57;
 constexpr int NEAREST_DIVIDE_UB_NUM = 27;
 constexpr int BICUBIC_DIVIDE_UB_NUM = 62;
@@ -411,10 +412,24 @@ static ge::graphStatus GetNCHWInfo(gert::TilingContext* tilingContext, InputPara
         OP_LOGD(tilingContext->GetNodeName(), "input dim is not 4, please check input");
         return ge::GRAPH_FAILED;
     }
-    auto input = tilingContext->GetInputTensor(DIM_INDEX0);
-    auto format = input->GetFormat().GetStorageFormat();
+    auto gradTensor = tilingContext->GetInputTensor(DIM_INDEX0);
+    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, gradTensor);
+    auto xTensor = tilingContext->GetInputTensor(DIM_INDEX1);
+    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, xTensor);
+    auto format = gradTensor->GetFormat().GetStorageFormat();
+    auto xFormat = xTensor->GetFormat().GetStorageFormat();
     auto compileInfo = reinterpret_cast<const Tiling4GridSampler2DGradCompileInfo*>(tilingContext->GetCompileInfo());
     params.regBase = compileInfo->regBase;
+    // 布局判定需 grad 与 x 的解析方向一致（NHWC vs 非NHWC）：一侧 NHWC、一侧 NCHW/ND 的真混合
+    // 无法同时按两种布局解析 x，直接拒绝；ND 与 NCHW 均按 NCHW 语义解析，视为一致
+    params.isNhwc = (format == ge::FORMAT_NHWC);
+    if (params.regBase && params.isNhwc != (xFormat == ge::FORMAT_NHWC)) {
+        OP_LOGE(tilingContext->GetNodeName(),
+                "grad and x must be parsed in the same layout direction (NHWC or NCHW/ND), got grad format [%d], "
+                "x format [%d].",
+                static_cast<int32_t>(format), static_cast<int32_t>(xFormat));
+        return ge::GRAPH_FAILED;
+    }
     uint32_t outH = gradShape->GetStorageShape().GetDim(DIM_INDEX1);
     uint32_t outW = gradShape->GetStorageShape().GetDim(DIM_INDEX2);
     params.batch = xShape->GetStorageShape().GetDim(DIM_INDEX0);
@@ -461,11 +476,20 @@ static ge::graphStatus CheckInputInfo(gert::TilingContext* tilingContext, InputP
     params.padding = PADDING_MODE_MAP[paddingMode];
     params.alignCorners = ALIGN_MODE_MAP[alignCorners];
     uint32_t deterministic = tilingContext->GetDeterministic();
-    if (params.regBase &&
+    // SIMD tilingKey(19-21) 派发的 kernel 按 NHWC 布局访存，仅 NHWC 标签输入可用；
+    // channel 上限与 aclnn 转置路径的 MAX_CHANNEL_SIZE 对齐，避免 aclnn 直传时 tiling 仍选 SIMD key
+    if (params.regBase && params.isNhwc && params.channel <= MAX_CHANNEL_SIZE &&
         (params.channel >= REGBASE_MAX_CHANNEL_NUM && params.padding == BORDER ||
          params.channel >= REGBASE_BIG_CHANNEL_NUM && params.padding == REFLECTION) &&
         dtype == ge::DT_FLOAT && deterministic == 0) {
         params.regBaseSIMD = true;
+    }
+
+    if (params.regBase && params.isNhwc && !params.regBaseSIMD) {
+        OP_LOGE(tilingContext->GetNodeName(),
+                "NHWC format is only supported in large-channel(<=2048) border/reflection float32 non-deterministic "
+                "scenes on regbase soc, please use NCHW/ND layout instead.");
+        return ge::GRAPH_FAILED;
     }
 
     if (params.padding < ZEROS || params.padding > REFLECTION) {

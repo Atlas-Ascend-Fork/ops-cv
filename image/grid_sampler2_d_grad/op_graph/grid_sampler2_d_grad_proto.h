@@ -22,17 +22,15 @@ namespace ge {
 * @brief Computes the gradients of GridSampler2D.
 
 * @par Inputs:
-* @li grad: A 4-D tensor with shape `[batch, out_height, out_width, channels]`.
+* @li grad: A 4-D tensor with shape `[batch, out_height, out_width, channels]` or
+* `[batch, channels, out_height, out_width]`.
 * The gradient of the output of the previous layer during backpropagation.
 * Must be one of the following types: `[float16, float32, bfloat16, double]`.
-* The format must be NHWC.
-* @li x: A 4-D tensor with shape `[batch, height, width, channels]`.
+* The format supports NHWC and NCHW.
+* @li x: A 4-D tensor with the same dtype, format as `grad`.
 * Input tensor representing backpropagation.
-* Must be one of the following types: `[float16, float32, bfloat16, double]`.
-* The format must be NHWC.
 * @li grid: Flow field grid, 4-D tensor with shape `[batch, out_height, out_width, 2]`. Must be one of the following
-* types:
-* `[float16, float32, bfloat16, double]`.
+* types: `[float16, float32, bfloat16, double]`. Has the same dtype as `grad`.
 * The format must be ND.
 
 * @par Attributes:
@@ -48,6 +46,13 @@ feature value.
 * @li dx: Indicates the output gradient of backpropagation. Returns 4-D tensor with the same dtype, format and shape as
 * `x`.
 * @li dgrid: Indicates the grid gradient. Returns 4-D tensor with the same dtype, format and shape as `grid`.
+
+* @attention Constraints:
+* @li When the dtype of `grad` is double, the format of `grad` must be NCHW.
+* @li For Atlas training products: The format of `grad` supports NCHW.
+* @li For Atlas A2 products, Atlas A3 training products: The format of `grad` supports NHWC.
+* @li For Ascend 950PR&950DT products: The format of `grad` supports NHWC and NCHW.
+* @li For other products: The format of `grad` supports NCHW.
 
 * @par Third-party framework compatibility
 * Compatible with pytorch GridSampler2DGrad operator.

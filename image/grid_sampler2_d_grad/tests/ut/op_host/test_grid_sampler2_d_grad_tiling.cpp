@@ -380,6 +380,167 @@ TEST_F(GridSampler2DGradTiling, grid_sampler_grad_tiling_test_dtype_mismatch_cas
     ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
 }
 
+// TilingData 字段序：batch, pNumPerCore, tailPNum, channel, height, width, gridH, gridW, ...
+static constexpr size_t TILING_DATA_CHANNEL_INDEX = 3;
+
+TEST_F(GridSampler2DGradTiling, grid_sampler_grad_tiling_regbase_nd_input_parsed_as_nchw)
+{
+    // regbase(950) 平台，ND 标签输入按 NCHW 语义解析：channel 取 x.dim1；
+    // padding=border + 大通道使其余 SIMD 条件全部满足，验证 ND 标签仍不被派发到 SIMD kernel(19-21)
+    gert::StorageShape grad = {{2, 64, 4, 4}, {2, 64, 4, 4}};
+    gert::StorageShape x = {{2, 64, 16, 16}, {2, 64, 16, 16}};
+    gert::StorageShape grid = {{2, 4, 4, 2}, {2, 4, 4, 2}};
+    gert::StorageShape dx = {{2, 64, 16, 16}, {2, 64, 16, 16}};
+    gert::StorageShape dgrid = {{2, 4, 4, 2}, {2, 4, 4, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {48, 196608, true};
+    gert::TilingContextPara tilingContextPara(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT, ge::FORMAT_ND}, {x, ge::DT_FLOAT, ge::FORMAT_ND}, {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{dx, ge::DT_FLOAT, ge::FORMAT_ND}, {dgrid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("border")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    // ND 标签走 NCHW 解析，channel=dim1=64；若误走 NHWC 解析 channel=dim3=16
+    const auto* tilingData = reinterpret_cast<const uint32_t*>(tilingInfo.tilingData.get());
+    EXPECT_EQ(tilingData[TILING_DATA_CHANNEL_INDEX], 64U);
+    // ND 标签即便满足其余 SIMD 条件（border + 大通道 + float + 非确定），也不派发 SIMD kernel(19-21)
+    EXPECT_LE(tilingInfo.tilingKey, 18);
+}
+
+TEST_F(GridSampler2DGradTiling, grid_sampler_grad_tiling_regbase_nhwc_simd_selected)
+{
+    // regbase(950) 平台，NHWC 标签 + FLOAT + 大通道 border + 非确定：选 SIMD tilingKey(19-21)
+    gert::StorageShape grad = {{2, 4, 4, 64}, {2, 4, 4, 64}};
+    gert::StorageShape x = {{2, 16, 16, 64}, {2, 16, 16, 64}};
+    gert::StorageShape grid = {{2, 4, 4, 2}, {2, 4, 4, 2}};
+    gert::StorageShape dx = {{2, 16, 16, 64}, {2, 16, 16, 64}};
+    gert::StorageShape dgrid = {{2, 4, 4, 2}, {2, 4, 4, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {48, 196608, true};
+    gert::TilingContextPara tilingContextPara(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT, ge::FORMAT_NHWC},
+         {x, ge::DT_FLOAT, ge::FORMAT_NHWC},
+         {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{dx, ge::DT_FLOAT, ge::FORMAT_NHWC}, {dgrid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("border")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    EXPECT_EQ(tilingInfo.tilingKey, 19);
+    // NHWC 标签走 NHWC 解析，channel=dim3=64
+    const auto* tilingData = reinterpret_cast<const uint32_t*>(tilingInfo.tilingData.get());
+    EXPECT_EQ(tilingData[TILING_DATA_CHANNEL_INDEX], 64U);
+}
+
+TEST_F(GridSampler2DGradTiling, grid_sampler_grad_tiling_regbase_nhwc_channel_boundary_2048)
+{
+    // regbase(950) 平台，NHWC 标签 channel=2048 边界：SIMD 条件仍成立（<=2048 取边界值）
+    gert::StorageShape grad = {{1, 4, 4, 2048}, {1, 4, 4, 2048}};
+    gert::StorageShape x = {{1, 16, 16, 2048}, {1, 16, 16, 2048}};
+    gert::StorageShape grid = {{1, 4, 4, 2}, {1, 4, 4, 2}};
+    gert::StorageShape dx = {{1, 16, 16, 2048}, {1, 16, 16, 2048}};
+    gert::StorageShape dgrid = {{1, 4, 4, 2}, {1, 4, 4, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {48, 196608, true};
+    gert::TilingContextPara tilingContextPara(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT, ge::FORMAT_NHWC},
+         {x, ge::DT_FLOAT, ge::FORMAT_NHWC},
+         {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{dx, ge::DT_FLOAT, ge::FORMAT_NHWC}, {dgrid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("nearest")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("border")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    EXPECT_EQ(tilingInfo.tilingKey, 20);
+    // channel 超过 2048：SIMD 不成立且 isNhwc=true，落入 NHWC 拒绝分支
+    gert::StorageShape gradOver = {{1, 4, 4, 2064}, {1, 4, 4, 2064}};
+    gert::StorageShape xOver = {{1, 16, 16, 2064}, {1, 16, 16, 2064}};
+    gert::StorageShape dxOver = {{1, 16, 16, 2064}, {1, 16, 16, 2064}};
+    gert::TilingContextPara paraOver(
+        "GridSampler2DGrad",
+        {{gradOver, ge::DT_FLOAT, ge::FORMAT_NHWC},
+         {xOver, ge::DT_FLOAT, ge::FORMAT_NHWC},
+         {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{dxOver, ge::DT_FLOAT, ge::FORMAT_NHWC}, {dgrid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("nearest")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("border")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    ExecuteTestCase(paraOver, ge::GRAPH_FAILED);
+}
+
+TEST_F(GridSampler2DGradTiling, grid_sampler_grad_tiling_regbase_mixed_format_rejected)
+{
+    // regbase(950) 平台，grad 与 x 混合标签（grad=NHWC、x=ND）：无法同时按两种布局解析 x，拒绝
+    gert::StorageShape grad = {{2, 4, 4, 64}, {2, 4, 4, 64}};
+    gert::StorageShape x = {{2, 64, 16, 16}, {2, 64, 16, 16}};
+    gert::StorageShape grid = {{2, 4, 4, 2}, {2, 4, 4, 2}};
+    gert::StorageShape dx = {{2, 64, 16, 16}, {2, 64, 16, 16}};
+    gert::StorageShape dgrid = {{2, 4, 4, 2}, {2, 4, 4, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {48, 196608, true};
+    gert::TilingContextPara tilingContextPara(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT, ge::FORMAT_NHWC}, {x, ge::DT_FLOAT, ge::FORMAT_ND}, {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{dx, ge::DT_FLOAT, ge::FORMAT_ND}, {dgrid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("border")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(GridSampler2DGradTiling, grid_sampler_grad_tiling_regbase_nhwc_without_simd_rejected)
+{
+    // regbase(950) 平台，NHWC 标签但不满足 SIMD 条件（float16）：拒绝，避免落 NCHW 寻址 kernel 静默算错
+    gert::StorageShape grad = {{2, 4, 4, 64}, {2, 4, 4, 64}};
+    gert::StorageShape x = {{2, 16, 16, 64}, {2, 16, 16, 64}};
+    gert::StorageShape grid = {{2, 4, 4, 2}, {2, 4, 4, 2}};
+    gert::StorageShape dx = {{2, 16, 16, 64}, {2, 16, 16, 64}};
+    gert::StorageShape dgrid = {{2, 4, 4, 2}, {2, 4, 4, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {48, 196608, true};
+    gert::TilingContextPara tilingContextPara(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT16, ge::FORMAT_NHWC},
+         {x, ge::DT_FLOAT16, ge::FORMAT_NHWC},
+         {grid, ge::DT_FLOAT16, ge::FORMAT_ND}},
+        {{dx, ge::DT_FLOAT16, ge::FORMAT_NHWC}, {dgrid, ge::DT_FLOAT16, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("border")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(GridSampler2DGradTiling, grid_sampler_grad_tiling_regbase_nhwc_label_with_nchw_shape_rejected)
+{
+    // NHWC 语义 shape 下仅让 grad.dim1(4) 与 grid.dim1(5) 一处不一致（其余约束自洽）：
+    // border+大通道使 SIMD 条件成立（排除 NHWC 拒绝分支），失败只能来自空间维一致性检查翻转
+    gert::StorageShape grad = {{2, 4, 4, 64}, {2, 4, 4, 64}};
+    gert::StorageShape x = {{2, 4, 16, 64}, {2, 4, 16, 64}};
+    gert::StorageShape grid = {{2, 5, 4, 2}, {2, 5, 4, 2}};
+    gert::StorageShape dx = {{2, 4, 16, 64}, {2, 4, 16, 64}};
+    gert::StorageShape dgrid = {{2, 5, 4, 2}, {2, 5, 4, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {48, 196608, true};
+    gert::TilingContextPara tilingContextPara(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT, ge::FORMAT_NHWC},
+         {x, ge::DT_FLOAT, ge::FORMAT_NHWC},
+         {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{dx, ge::DT_FLOAT, ge::FORMAT_NHWC}, {dgrid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("border")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
 // TEST_F(GridSampler2DGradTiling, grid_sampler_grad_tiling_test_float32_case5)
 // {
 //     gert::StorageShape grad = {{2, 8, 8, 3}, {2, 8, 8, 3}};
