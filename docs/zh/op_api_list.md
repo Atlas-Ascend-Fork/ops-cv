@@ -35,7 +35,7 @@
 | [aclnnGridSampler3D](../../image/grid_sample/docs/aclnnGridSampler3D.md) | 根据网格定义的坐标，从输入张量中采样像素值并重映射到输出空间。 |默认确定性实现|默认确定性实现|
 | [aclnnGridSampler2DBackward](../../image/grid_sampler2_d_grad/docs/aclnnGridSampler2DBackward.md) | [aclnnGridSampler2D](../../image/grid_sample/docs/aclnnGridSampler2D.md)的反向传播，完成张量input与张量grid的梯度计算。 |默认非确定性实现，支持配置开启|默认非确定性实现，支持配置开启|
 | [aclnnGridSampler3DBackward](../../image/grid_sampler3_d_grad/docs/aclnnGridSampler3DBackward.md) | [aclnnGridSampler3D](../../image/grid_sample/docs/aclnnGridSampler3D.md)的反向传播，完成张量input与张量grid的梯度计算。 |默认非确定性实现，支持配置开启|默认非确定性实现，支持配置开启|
-| [aclnnRasterizer](../../image/rasterizer/docs/aclnnRasterizer.md) | 实现光栅化计算。根据给定的三维空间中的点和面，获取屏幕中每个像素点的最小深度及其对应的面片索引，并计算该面片的重心坐标透视矫正插值。      |默认确定性实现| - |
+| [aclnnRasterizer](../../image/rasterizer/docs/aclnnRasterizer.md) | 实现光栅化计算。根据给定的三维空间中的点和面，获取屏幕中每个像素点的最小深度及其对应的面片索引，并计算该面片的重心坐标透视矫正插值。      |默认确定性实现|默认确定性实现|
 | [aclnnResize](../../image/resize_bilinear_v2/docs/aclnnResize.md) | 根据scales调整输入张量的大小。                               |默认确定性实现|默认确定性实现|
 | [aclnnThreeInterpolateBackward](../../image/three_interpolate_backward/docs/aclnnThreeInterpolateBackward.md) | 根据grad_x, idx, weight进行三点插值计算梯度得到grad_y。      |默认非确定性实现，不支持配置开启|默认确定性实现|
 | [aclnnUpsampleNearest1d](../../image/resize_nearest_neighbor_v2/docs/aclnnUpsampleNearest1d.md) | 对由多个输入通道组成的输入信号应用最近邻插值算法进行上采样。 |默认确定性实现|默认确定性实现|
