@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -36,21 +36,50 @@ const uint8_t SECOND_DIM_INDEX = 1;
 const uint8_t THIRD_DIM_INDEX = 2;
 const uint8_t OUTPUT_DIM_NUM = 3;
 const uint8_t TWO_NUM_DIM = 2;
+
+static const char* OpNameOf(gert::InferShapeContext* context)
+{
+    if (context == nullptr || context->GetNodeName() == nullptr) {
+        return "StackGroupPoints";
+    }
+    return context->GetNodeName();
+}
 } // namespace
 
 namespace ops {
 static ge::graphStatus InferShapeForStackGroupPoints(gert::InferShapeContext* context)
 {
+    if (context == nullptr) {
+        OP_LOGE_WITHOUT_REPORT("StackGroupPoints", "InferShapeContext is nullptr");
+        return GRAPH_FAILED;
+    }
+    const char* opName = OpNameOf(context);
+
     const gert::Shape* feture_shape = context->GetInputShape(FEATURE_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, feture_shape);
+    if (feture_shape == nullptr) {
+        OP_LOGE_WITH_INVALID_INPUT(opName, "features");
+        return GRAPH_FAILED;
+    }
     const gert::Shape* featuresBatchCntShape = context->GetInputShape(FEATURE_BATCH_CNT_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, featuresBatchCntShape);
+    if (featuresBatchCntShape == nullptr) {
+        OP_LOGE_WITH_INVALID_INPUT(opName, "features_batch_cnt");
+        return GRAPH_FAILED;
+    }
     const gert::Shape* indices_shape = context->GetInputShape(INDICES_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, indices_shape);
+    if (indices_shape == nullptr) {
+        OP_LOGE_WITH_INVALID_INPUT(opName, "indices");
+        return GRAPH_FAILED;
+    }
     const gert::Shape* indicesBatchCntShape = context->GetInputShape(INDICES_BATCH_CNT_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, indicesBatchCntShape);
+    if (indicesBatchCntShape == nullptr) {
+        OP_LOGE_WITH_INVALID_INPUT(opName, "indices_batch_cnt");
+        return GRAPH_FAILED;
+    }
     gert::Shape* output_shape = context->GetOutputShape(OUTPUT_INDEX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, output_shape);
+    if (output_shape == nullptr) {
+        OP_LOGE_WITH_INVALID_INPUT(opName, "y");
+        return GRAPH_FAILED;
+    }
 
     // unknown rank：输出置 unknown rank 后直接返回
     if (Ops::Base::IsUnknownRank(*feture_shape) || Ops::Base::IsUnknownRank(*indices_shape)) {

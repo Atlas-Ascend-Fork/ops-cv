@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -83,4 +83,18 @@ TEST_F(StackGroupPointsTiling, case_half)
     string expectTilingData = "4 20 64 3 5 4096 256 32 32 0 7680 32 3840 48 ";
     std::vector<size_t> expectWorkspaces = {16 * 1024 * 1024};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+TEST_F(StackGroupPointsTiling, case_invalid_core_num)
+{
+    optiling::StackGroupPointsCompileInfo compileInfo = {0, 196608};
+    gert::TilingContextPara tilingContextPara("StackGroupPoints",
+                                              {{{{32, 64}, {32, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                               {{{4}, {4}}, ge::DT_INT32, ge::FORMAT_ND},
+                                               {{{20, 3}, {20, 3}}, ge::DT_INT32, ge::FORMAT_ND},
+                                               {{{4}, {4}}, ge::DT_INT32, ge::FORMAT_ND}},
+                                              {{{{20, 64, 3}, {20, 64, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+                                              &compileInfo);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(tilingContextPara, info));
 }
