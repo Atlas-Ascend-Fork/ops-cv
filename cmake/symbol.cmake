@@ -140,6 +140,52 @@ function(gen_es_cv_lib_ready_cust)
 endfunction()
 
 
+# Wire the op_graph UT module to the ES generation it now depends on. The UT cases object
+# compiles the same fusion pass sources as ${OP_GRAPH_NAME}_obj (they #include the generated
+# es headers) and the UT exe must resolve the generated es symbols at load time. Must be
+# called only after the es targets exist (end of gen_opgraph_symbol / gen_cust_proto_symbol).
+function(wire_opgraph_ut_es_deps)
+  # Depend on the header-writing codegen targets directly (generate_es_*_code write
+  # es_cv_ops.h / es_math_ops.h), not on the packaging targets whose dependency chains
+  # differ across CANN versions; the build_es_* targets additionally gate the .so packaging.
+  # Only reference targets that actually exist in the current build shape.
+  set(ES_WIRE_TARGETS "")
+  foreach(t build_es_math build_es_cv generate_es_math_code generate_es_cv_code)
+    if(TARGET ${t})
+      list(APPEND ES_WIRE_TARGETS ${t})
+    endif()
+  endforeach()
+
+  set(OPGRAPH_UT_CASES_OBJ ${PKG_NAME}_op_graph_ut_cases_obj)
+  if(TARGET ${OPGRAPH_UT_CASES_OBJ} AND ES_WIRE_TARGETS)
+    add_dependencies(${OPGRAPH_UT_CASES_OBJ} ${ES_WIRE_TARGETS})
+    target_include_directories(${OPGRAPH_UT_CASES_OBJ} PRIVATE
+      ${CMAKE_BINARY_DIR}/common/stub/op_graph/es_math_build/generated_code
+      ${CMAKE_BINARY_DIR}/es_packages_math/include/es_math
+      ${CMAKE_BINARY_DIR}/es_cv_build/generated_code
+      ${CMAKE_BINARY_DIR}/es_packages/include/es_cv
+    )
+  endif()
+
+  # The UT exe lists es_cv as a plain -l name (tests/ut configures before the es targets exist),
+  # so the linker picks the CANN package's partial libes_cv.so which lacks the generated symbols
+  # (e.g. EsResizeD referenced by the resize_d suite). Link the in-tree es_cv target by full path:
+  # the generated symbols resolve and the build rpath finds the in-tree library at runtime. The
+  # UT runner exports an LD_LIBRARY_PATH pointing at the CANN package; a DT_RUNPATH is searched
+  # after it and loses that race, so emit the classic DT_RPATH (searched first) whose first
+  # entries are the in-tree build dirs.
+  set(OPGRAPH_UT_EXE ${PKG_NAME}_op_graph_ut)
+  if(TARGET ${OPGRAPH_UT_EXE})
+    if(ES_WIRE_TARGETS)
+      add_dependencies(${OPGRAPH_UT_EXE} ${ES_WIRE_TARGETS})
+    endif()
+    if(TARGET es_cv)
+      target_link_libraries(${OPGRAPH_UT_EXE} PRIVATE es_cv)
+    endif()
+    target_link_options(${OPGRAPH_UT_EXE} PRIVATE -Wl,--disable-new-dtags)
+  endif()
+endfunction()
+
 # graph_plugin shared
 function(gen_opgraph_symbol)
   gen_es_cv_lib_ready()
@@ -202,6 +248,8 @@ function(gen_opgraph_symbol)
     OPTIONAL
     )
 
+  wire_opgraph_ut_es_deps()
+
 endfunction()
 
 function(gen_opapi_symbol)
@@ -261,7 +309,7 @@ endfunction()
 
 function(gen_cust_proto_symbol)
   # op_proto
-  if(NOT TARGET ${OPHOST_NAME}_infer_obj)
+  if(NOT TARGET ${OPHOST_NAME}_infer_obj AND NOT TARGET ${OP_GRAPH_NAME}_obj)
     return()
   endif()
   npu_op_library(cust_proto GRAPH)
@@ -340,6 +388,8 @@ function(gen_cust_proto_symbol)
     DESTINATION ${OPPROTO_INC_INSTALL_DIR}
     OPTIONAL
     )
+
+  wire_opgraph_ut_es_deps()
 endfunction()
 
 function(gen_aicpu_op_def_symbol)

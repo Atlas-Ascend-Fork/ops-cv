@@ -185,6 +185,9 @@ image@ops-cv:
         - ops/ops-cv/image/grid_sampler2_d_grad/
         - ops/ops-cv/image/grid_sampler3_d_grad/
         - ops/ops-cv/image/resize_upsample_trilinear/
+        - ops/ops-cv/image/resize/
+        - ops/ops-cv/image/resize_d/
+        - ops/ops-cv/image/keep_ratio_resize_bilinear/
         - ops/ops-cv/image/upsample_bicubic2d/
         - ops/ops-cv/image/upsample_bicubic2d_aa/
         - ops/ops-cv/image/upsample_bicubic2d_aa_grad/

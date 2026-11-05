@@ -92,4 +92,100 @@ REG_OP(Fill)
                              DT_INT64,  DT_BOOL,       DT_QINT8,   DT_QUINT8, DT_QINT32, DT_QINT16, DT_QUINT16,
                              DT_UINT16, DT_COMPLEX128, DT_FLOAT16, DT_BF16,   DT_UINT32, DT_UINT64, DT_STRING}))
     .OP_END_FACTORY_REG(Fill)
+
+/**
+ *@brief Extracts a slice of size "size" from a tensor "x" starting at the location specified by "offsets".
+ *@par Inputs:
+ *Three inputs, including:
+ * @li x: A Tensor.
+ * @li offsets: A Tensor of type IndexNumberType, specifying the starting position.
+ * @li size: A Tensor of type IndexNumberType, specifying the size of the slice.
+ *
+ *@par Outputs:
+ *y: A Tensor, the sliced tensor with the same dtype as x.
+ *
+ *@par Third-party framework compatibility
+ *Compatible with the TensorFlow operator Slice.
+ */
+REG_OP(Slice)
+    .INPUT(x, TensorType({BasicType(), DT_HIFLOAT8, DT_FLOAT8_E5M2, DT_FLOAT8_E4M3FN}))
+    .INPUT(offsets, TensorType::IndexNumberType())
+    .INPUT(size, TensorType::IndexNumberType())
+    .OUTPUT(y, TensorType({BasicType(), DT_HIFLOAT8, DT_FLOAT8_E5M2, DT_FLOAT8_E4M3FN}))
+    .OP_END_FACTORY_REG(Slice)
+
+/**
+ *@brief Returns a Tensor with the same shape and contents as the input.
+ *@par Inputs:
+ *One input:
+ * x: A Tensor of any type.
+ *
+ *@par Outputs:
+ *y: A Tensor with the same type and shape as x.
+ *
+ *@par Third-party framework compatibility
+ *Compatible with the TensorFlow operator Identity.
+ */
+REG_OP(Identity).INPUT(x, TensorType::ALL()).OUTPUT(y, TensorType::ALL()).OP_END_FACTORY_REG(Identity)
+
+/**
+ *@brief Permutes the dimensions of the input tensor according to the given permutation.
+ *@par Inputs:
+ *Two inputs, including:
+ * @li x: A Tensor.
+ * @li perm: A Tensor of type int32 or int64, specifying the permutation of the dimensions of x.
+ *
+ *@par Outputs:
+ *y: A Tensor with the same type as x, whose dimensions are permuted.
+ *
+ *@par Third-party framework compatibility
+ *Compatible with the TensorFlow operator Transpose.
+ */
+REG_OP(Transpose)
+    .INPUT(x, TensorType::ALL())
+    .INPUT(perm, TensorType::IndexNumberType())
+    .OUTPUT(y, TensorType::ALL())
+    .OP_END_FACTORY_REG(Transpose)
+
+/**
+ *@brief Removes dimensions of size 1 from the shape of the input tensor.
+ *@par Inputs:
+ *One input:
+ * x: A Tensor of any type.
+ *
+ *@par Attributes:
+ *axis: A required list int, specifying the dimensions to be removed.
+ *
+ *@par Outputs:
+ *y: A Tensor with the same type as x.
+ *
+ *@par Third-party framework compatibility
+ *Compatible with the TensorFlow operator Squeeze.
+ */
+REG_OP(Squeeze)
+    .INPUT(x, TensorType::ALL())
+    .OUTPUT(y, TensorType::ALL())
+    .ATTR(axis, ListInt, {})
+    .OP_END_FACTORY_REG(Squeeze)
+
+/**
+ *@brief Inserts a dimension of 1 into the shape of the input tensor.
+ *@par Inputs:
+ *One input:
+ * x: A Tensor of any type.
+ *
+ *@par Attributes:
+ *axes: A required list int, specifying the dimensions of the output tensor to be inserted.
+ *
+ *@par Outputs:
+ *y: A Tensor with the same type as x.
+ *
+ *@par Third-party framework compatibility
+ *Compatible with the TensorFlow operator Unsqueeze.
+ */
+REG_OP(Unsqueeze)
+    .INPUT(x, TensorType::ALL())
+    .OUTPUT(y, TensorType::ALL())
+    .ATTR(axes, ListInt, {})
+    .OP_END_FACTORY_REG(Unsqueeze)
 } // namespace ge
