@@ -55,7 +55,7 @@ English | [简体中文](./README.md)
     result = (y_{ceil} - y_{in}) \cdot v_{yfloor} + (y_{in} - y_{floor}) \cdot v_{yceil}
     $$
 
-    When the source coordinates exceed the input image boundaries, the fill value (the default is 0) is used to replace the out-of-bounds pixel values. When the denominator of the transformation matrix is 0 or the result is NaN/Inf, floating-point types output NaN, and integer types output INT_MIN.
+    When the source coordinates exceed the input image boundaries, the fill value (the default is 0) is used to replace the out-of-bounds pixel values. When the denominator of the transformation matrix ($a_6 \cdot x_{out} + a_7 \cdot y_{out} + 1$) is 0, the pixel outputs the fill value 0 (for both floating-point and integer types). When the denominator is non-zero but the mapped coordinate $x_{in}$ or $y_{in}$ is NaN/Inf: in BILINEAR mode, floating-point types output NaN, INT32 outputs INT_MIN, and UINT8 outputs 0; in NEAREST mode, the fill value 0 is output.
 
   - **NEAREST (nearest-neighbor interpolation)**:
 
@@ -89,7 +89,7 @@ English | [简体中文](./README.md)
       <td>images</td>
       <td>Input</td>
       <td>Input image tensor. The shape is (N, H, W, C), where N is the batch size, H is the image height, W is the image width, and C is the number of channels.</td>
-      <td>FLOAT16 / FLOAT / UINT8 / INT32</td>
+      <td>FLOAT16, FLOAT, UINT8, INT32</td>
       <td>NHWC</td>
     </tr>
     <tr>
@@ -108,14 +108,14 @@ English | [简体中文](./README.md)
     </tr>
     <tr>
       <td>interpolation</td>
-      <td>Attr (Required)</td>
+      <td>Attr</td>
       <td>Interpolation mode. The value is "BILINEAR" (bilinear interpolation) or "NEAREST" (nearest-neighbor interpolation).</td>
       <td>String</td>
       <td>-</td>
     </tr>
     <tr>
       <td>fill_mode</td>
-      <td>Attr (Optional)</td>
+      <td>Optional Attr</td>
       <td>Padding mode. "CONSTANT", "NEAREST", "REFLECT", and "WRAP" are supported. The default value is "CONSTANT".</td>
       <td>String</td>
       <td>-</td>
@@ -124,7 +124,7 @@ English | [简体中文](./README.md)
       <td>transformed_images</td>
       <td>Output</td>
       <td>Transformed image tensor. The shape is (N, HOut, WOut, C), and the data type is the same as that of images.</td>
-      <td>FLOAT16 / FLOAT / UINT8 / INT32</td>
+      <td>FLOAT16, FLOAT, UINT8, INT32</td>
       <td>NHWC</td>
     </tr>
   </tbody></table>
@@ -136,12 +136,15 @@ English | [简体中文](./README.md)
 - The input output_shape must be one-dimensional with the shape (2,), and the data type is INT32.
 - The two elements [height, width] of output_shape determine the middle two dimensions (HOut, WOut) of the output transformed_images, that is, transformed_images.shape[1]=output_shape[0] and transformed_images.shape[2]=output_shape[1]. When an element of output_shape is 0, the output is an empty tensor. The operator returns directly and does not perform computation.
 - The known length of output_shape must be exactly 2. The readable constants height and width must be non-negative. 0 is reserved for an empty output, and negative values cause an error.
-- fill_mode is case-sensitive. "CONSTANT" pads out-of-bounds positions with 0, "NEAREST" clamps to the edge coordinates, "REFLECT" mirrors repeatedly at the edges, and "WRAP" remaps periodically. An invalid fill_mode or interpolation causes an error, and an empty output does not bypass the check.
+- fill_mode is case-sensitive. "CONSTANT" pads out-of-bounds positions with 0, "NEAREST" clamps to the edge coordinates, "REFLECT" mirrors repeatedly at the edges, and "WRAP" remaps coordinates with the TensorFlow reference implementation's wrapping semantics (a single-step quotient correction with divisor dim-1, wrapped by the dimension length and clamped to [0, dim-1]; not a mathematical periodic modulo). An invalid fill_mode or interpolation causes an error, and an empty output does not bypass the check.
+- When a floating-point interpolation result is converted to an integer output, it is truncated toward zero: UINT8 results are clamped to [0, 255], and INT32 results output INT_MIN when the value is NaN/Inf or out of range (|value| ≥ 2^31).
 - InferShape allows an unknown rank and partial dynamic dimensions, and retains the known N/C and constant H/W as much as possible. When no readable output_shape constant exists, the output H/W is -1. InferShape infers the NCHW/NHWC dimension positions according to the origin format of images. The actual AI Core kernel still supports only NHWC.
-- Tiling preferentially uses the readable output_shape data, and then uses the non-negative output storage H/W (including 0). When both are unavailable, Tiling falls back to the input H/W. An error is reported when the batch is less than the dynamic sentinel -1 or the spatial product exceeds the int64 range.
+- The Tiling entry requires that all four dimensions of images be concretized and within [0, INT32_MAX]: non-concretized dynamic sentinels (-1), other negative values, or dimensions exceeding INT32_MAX cause an error. An error is reported when the spatial product exceeds the int64 range.
 
 ## Invocation Description
 
-| Invocation Method | Invocation Sample | Description |
+| Invocation Method | Sample Code | Description |
 |--------------|------------------------------------------------------------------------|----------------------------------------------------------------|
-| Graph mode invocation | [test_geir_image_projective_transform](./examples/arch35/test_geir_image_projective_transform.cpp) | Calls the ImageProjectiveTransform operator by constructing a graph in the [operator IR](./op_graph/image_projective_transform_proto.h) mode. |
+| GE graph mode | [test_geir_image_projective_transform](./examples/arch35/test_geir_image_projective_transform.cpp) | Invokes the ImageProjectiveTransform operator by constructing a graph through the [operator IR](./op_graph/image_projective_transform_proto.h). See [Operator Invocation](../../docs/zh/invocation/quick_op_invocation.md) for compilation and verification. The sample is located in `examples/arch35`; compilation and running must explicitly specify `--soc=ascend950` (for example, `bash build.sh --run_example image_projective_transform graph --soc=ascend950`). |
+
+- This operator is registered in GE graph mode. The custom package is built with `ACLNNTYPE aclnn_exclude`, so no `aclnnImageProjectiveTransform` interface is generated in the package. The TensorFlow adapter source is located at `framework/image_projective_transform_tf_plugin.cpp`, which maps the public TensorFlow entry `ImageProjectiveTransformV2` to this operator (that entry has no `fill_value` parameter; fill semantics follow this operator's CONSTANT mode). The TF plugin library is generated by the repository's TF plugin build mechanism in the corresponding package type and is not included in this custom run package.

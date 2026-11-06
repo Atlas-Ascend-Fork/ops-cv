@@ -128,18 +128,11 @@ __simt_callee__ inline float FlushSubnormal(float x)
 
 __simt_callee__ inline float SafeSum3(float x, float y, float z) { return SafeAdd(SafeAdd(x, y), z); }
 
-// ===== Lightweight accurate division (fast-path only) =====
-__simt_callee__ inline float DsDiv(float a, float b)
-{
-    if (b == 0.0f) {
-        return 0.0f;
-    }
-    float q = a / b;
-    float residual = fmaf(q, b, -a);
-    return q - residual / b;
-}
-
-// ===== Safe & accurate division (extends DsDiv with IEEE 754 special cases) =====
+// ===== Safe & accurate division (IEEE 754 special cases + corrective step) =====
+// For ordinary finite operands it equals a/b plus the same corrective step the
+// fast path used; non-finite divisors/quotients follow IEEE 754 (finite/inf == 0)
+// so the caller's non-finite interception sees the same declared semantics on
+// every path.
 __simt_callee__ inline float SafeDiv(float a, float b)
 {
     bool sa = signbit(a);
@@ -164,6 +157,11 @@ __simt_callee__ inline float SafeDiv(float a, float b)
         return MakeInf(neg);
     }
     float q = a / b;
+    // A finite/finite division may overflow to +/-Inf. The Newton correction
+    // would then evaluate Inf - Inf and turn the correct IEEE result into NaN.
+    if (isinf(q) || isnan(q)) {
+        return q;
+    }
     float residual = fmaf(q, b, -a);
     return q - residual / b;
 }
@@ -172,7 +170,9 @@ __simt_callee__ inline float SafeDiv(float a, float b)
 __simt_callee__ inline int32_t SafeFloorToInt32(float f)
 {
     if (f > 2.1474835e9f) {
-        return 2147483646;
+        // INT32_MAX is never a valid index (valid range is [0, len-1] with
+        // len <= INT32_MAX), so it stays OOB even when len == INT32_MAX.
+        return 2147483647;
     }
     if (f < -2.1474835e9f) {
         return -2147483647;
@@ -183,7 +183,9 @@ __simt_callee__ inline int32_t SafeFloorToInt32(float f)
 __simt_callee__ inline int32_t SafeRoundToInt32(float f)
 {
     if (f > 2.1474835e9f) {
-        return 2147483646;
+        // INT32_MAX is never a valid index (valid range is [0, len-1] with
+        // len <= INT32_MAX), so it stays OOB even when len == INT32_MAX.
+        return 2147483647;
     }
     if (f < -2.1474835e9f) {
         return -2147483647;
@@ -203,6 +205,17 @@ __simt_callee__ inline int32_t SafeTruncToInt32(float val)
         return INT32_MIN;
     }
     return static_cast<int32_t>(val);
+}
+
+// TF 2.21 实测：INT64 输出按 float32 插值后向零截断；NaN/Inf 或 |值| >= 2^63
+// （float32 无法表示的 int64 范围外值）输出 INT64_MIN。
+__simt_callee__ inline int64_t SafeTruncToInt64(float val)
+{
+    uint32_t absU = __float_as_uint(val) & 0x7FFFFFFFu;
+    if (absU >= 0x5F000000U) { // |val| >= 2^63（含 Inf/NaN 的指数位）
+        return INT64_MIN;
+    }
+    return static_cast<int64_t>(val);
 }
 
 // ===== Fast-path selector =====

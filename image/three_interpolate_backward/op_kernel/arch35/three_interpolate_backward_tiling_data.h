@@ -18,8 +18,9 @@
  *   - int64_t 字段前置，5 个 int32_t 紧随其后
  *   - 总大小 = 1×8 + 5×4 = 28 bytes，对齐到 8 → 32 bytes（尾部 4B padding）
  *   - static_assert 编译期校验，确保 host/device 结构体大小一致
- *   - totalElements 语义为工作项数 b*c（每线程独占一行 (b,c)，行内串行累加，
- *     任意核数下结果确定，无需确定性单核分支、无 workspace、无原子操作）
+ *   - totalElements 语义为工作项数 b*c（每线程独占一行 (b,c)，行内 fp32 串行累加，
+ *     任意核数下结果确定，无需确定性单核分支、无原子操作；user workspace 为
+ *     b*c*m 个 float 的 fp32 行累加器）
  */
 
 #ifndef THREE_INTERPOLATE_BACKWARD_TILING_DATA_H_
@@ -32,11 +33,12 @@ struct ThreeInterpolateBackwardTilingData {
     int32_t c = 0;             // channel（grad_x.shape[1]）
     int32_t n = 0;             // 点数（grad_x.shape[2]）
     int32_t m = 0;             // 输出点数（属性 m）
+    int32_t mChunk = 0;        // 每线程 fp32 累加槽长度 = min(m, ACC_CHUNK_ELEMS)
 };
 
 // 编译期校验：确保 host 和 device 侧结构体大小一致（32 bytes = 8 × int32）
 // int64_t 字段前置（1×8=8B），int32_t 字段紧随其后（5×4=20B），总 28B，8 字节对齐尾部补 4B
 static_assert(sizeof(ThreeInterpolateBackwardTilingData) == 32,
-              "ThreeInterpolateBackwardTilingData size must be 32 bytes (1 int64 + 5 int32 + tail padding)");
+              "ThreeInterpolateBackwardTilingData size must be 32 bytes (1 int64 + 6 int32)");
 
 #endif // THREE_INTERPOLATE_BACKWARD_TILING_DATA_H_

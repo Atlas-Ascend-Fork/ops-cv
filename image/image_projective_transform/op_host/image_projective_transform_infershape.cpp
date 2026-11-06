@@ -28,6 +28,7 @@ static constexpr int64_t OUTPUT_SHAPE_DIM = 1;
 static constexpr int64_t OUTPUT_SHAPE_SIZE = 2;
 static constexpr int64_t TRANSFORMS_BROADCAST_N = 1;
 // Attr indices, matching the declaration order in image_projective_transform_def.cpp.
+static constexpr size_t IDX_INTERP_ATTR = 0;
 static constexpr size_t IDX_FILL_MODE_ATTR = 1;
 
 static ge::graphStatus ValidateTransforms(gert::InferShapeContext* context, const gert::Shape* imagesShape, int64_t& N)
@@ -89,6 +90,27 @@ static ge::graphStatus ValidateFillMode(gert::InferShapeContext* context)
     }
     OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "fill_mode", fillModeVal.c_str(),
                               "CONSTANT, NEAREST, REFLECT or WRAP");
+    return GRAPH_FAILED;
+}
+
+// v2.0 (SE §5.2-A.5): interpolation value-domain check, dual-site with tiling
+// ParseInterpMode (tiling remains the guaranteed gate). Case-sensitive whitelist;
+// invalid values fail explicitly instead of only at tiling time.
+static ge::graphStatus ValidateInterpolation(gert::InferShapeContext* context)
+{
+    const gert::RuntimeAttrs* attrs = context->GetAttrs();
+    if (attrs == nullptr) {
+        return GRAPH_SUCCESS;
+    }
+    const char* interpStr = attrs->GetStr(IDX_INTERP_ATTR);
+    if (interpStr == nullptr) {
+        return GRAPH_SUCCESS;
+    }
+    std::string interpVal(interpStr);
+    if (interpVal == "BILINEAR" || interpVal == "NEAREST") {
+        return GRAPH_SUCCESS;
+    }
+    OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "interpolation", interpVal.c_str(), "BILINEAR or NEAREST");
     return GRAPH_FAILED;
 }
 
@@ -163,6 +185,9 @@ static ge::graphStatus InferShapeImageProjectiveTransform(gert::InferShapeContex
         return GRAPH_FAILED;
     }
     if (ValidateFillMode(context) != GRAPH_SUCCESS) {
+        return GRAPH_FAILED;
+    }
+    if (ValidateInterpolation(context) != GRAPH_SUCCESS) {
         return GRAPH_FAILED;
     }
     if (ValidateOutputShape(context) != GRAPH_SUCCESS) {

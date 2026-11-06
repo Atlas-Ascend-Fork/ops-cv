@@ -32,7 +32,8 @@ using namespace Ops::Cv::OpTiling;
 
 constexpr uint32_t DCACHE_SIZE = 128 * 1024;
 constexpr uint32_t STATIC_UB_ESTIMATE = 0;
-constexpr int64_t PER_CORE_MIN_NHW = 32;
+// 每核最少处理的元素数（含通道维，与前向算子 PER_CORE_MIN_ELEMENTS 口径一致）
+constexpr int64_t PER_CORE_MIN_ELEMENTS = 1024;
 constexpr uint32_t DEFAULT_BLOCK_DIM = 1;
 
 constexpr size_t DY_DIM_NUM = 4;
@@ -83,6 +84,18 @@ static ge::graphStatus GetWorkspaceSize(gert::TilingContext* context)
 }
 
 // SE "参数约束"小节单参数约束: dy/bboxes dtype ∈ {float32}
+static bool CheckedMultiply(int64_t lhs, int64_t rhs, int64_t& result)
+{
+    constexpr int64_t maxValue = std::numeric_limits<int64_t>::max();
+    constexpr int64_t minValue = std::numeric_limits<int64_t>::min();
+    if ((lhs > 0 && rhs > 0 && lhs > maxValue / rhs) || (lhs > 0 && rhs < 0 && rhs < minValue / lhs) ||
+        (lhs < 0 && rhs > 0 && lhs < minValue / rhs) || (lhs < 0 && rhs < 0 && lhs < maxValue / rhs)) {
+        return false;
+    }
+    result = lhs * rhs;
+    return true;
+}
+
 static ge::graphStatus ValidateDtype(gert::TilingContext* context)
 {
     auto dyDesc = context->GetInputDesc(kDyIdx);
@@ -130,12 +143,24 @@ static ge::graphStatus ValidateShape(gert::TilingContext* context)
                                                   "each dim of dy must not exceed INT32_MAX");
             return ge::GRAPH_FAILED;
         }
+        // 维度必须已具体化且非负：未知维(-1)/负维不是合法的具体形状，参与分块算术前拒绝
+        if (dyS.GetDim(i) < 0) {
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "dy", std::to_string(dyS.GetDim(i)).c_str(),
+                                                  "each dim of dy must be concrete and non-negative");
+            return ge::GRAPH_FAILED;
+        }
     }
     for (size_t i = 0; i < bboxesS.GetDimNum(); i++) {
         if (bboxesS.GetDim(i) > DIM_VALUE_MAX) {
             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "bboxes",
                                                   std::to_string(bboxesS.GetDim(i)).c_str(),
                                                   "each dim of bboxes must not exceed INT32_MAX");
+            return ge::GRAPH_FAILED;
+        }
+        if (bboxesS.GetDim(i) < 0) {
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "bboxes",
+                                                  std::to_string(bboxesS.GetDim(i)).c_str(),
+                                                  "each dim of bboxes must be concrete and non-negative");
             return ge::GRAPH_FAILED;
         }
     }
@@ -152,6 +177,23 @@ static ge::graphStatus ValidateShape(gert::TilingContext* context)
                                                    "dy and bboxes must have the same N, H and W dims");
             return ge::GRAPH_FAILED;
         }
+    }
+    // 元素总数约束：N*H*W 由 FillTilingData 的 CheckedMultiply 保证不溢出 int64，
+    // 此处进一步约束 dy/dx 元素总数 N*H*W*C 与 bboxes 元素总数 N*H*W*5，
+    // 保证 Kernel 侧 int64 地址偏移（inIdx*C、inIdx*5、dxBase=(n*H*W+y*W+x)*C）不溢出。
+    int64_t totalNHW = 1;
+    int64_t totalDy = 0;
+    int64_t totalBboxes = 0;
+    if (!CheckedMultiply(totalNHW, dyS.GetDim(DIM_IDX_N), totalNHW) ||
+        !CheckedMultiply(totalNHW, dyS.GetDim(DIM_IDX_H), totalNHW) ||
+        !CheckedMultiply(totalNHW, dyS.GetDim(DIM_IDX_W), totalNHW) ||
+        !CheckedMultiply(totalNHW, dyS.GetDim(DIM_IDX_C), totalDy) ||
+        !CheckedMultiply(totalNHW, static_cast<int64_t>(BBOXES_LAST_DIM), totalBboxes)) {
+        std::string shapeMsg = Ops::Base::ToString(dyS) + " and " + Ops::Base::ToString(bboxesS);
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+            context->GetNodeName(), "dy and bboxes", shapeMsg.c_str(),
+            "element count N*H*W*C or N*H*W*5 overflows int64 and breaks kernel addressing");
+        return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
 }
@@ -195,18 +237,6 @@ static bool HasZeroDimension(const gert::Shape& s)
     return false;
 }
 
-static bool CheckedMultiply(int64_t lhs, int64_t rhs, int64_t& result)
-{
-    constexpr int64_t maxValue = std::numeric_limits<int64_t>::max();
-    constexpr int64_t minValue = std::numeric_limits<int64_t>::min();
-    if ((lhs > 0 && rhs > 0 && lhs > maxValue / rhs) || (lhs > 0 && rhs < 0 && rhs < minValue / lhs) ||
-        (lhs < 0 && rhs > 0 && lhs < minValue / rhs) || (lhs < 0 && rhs < 0 && lhs < maxValue / rhs)) {
-        return false;
-    }
-    result = lhs * rhs;
-    return true;
-}
-
 static void DumpTilingData(gert::TilingContext* context, const RotatedFeatureAlignGradTilingData* tiling)
 {
     OP_LOGD(context,
@@ -223,9 +253,31 @@ static ge::graphStatus FillTilingData(gert::TilingContext* context, int32_t N, i
         OP_LOGE(context, "RotatedFeatureAlignGrad: N*H*W overflows int64, N=%d H=%d W=%d", N, H, W);
         return ge::GRAPH_FAILED;
     }
+    // Kernel 工作项按 (输入位置, 通道) 扁平化分发，核数须按元素总数 N*H*W*C 推导
+    // （与前向算子 rotated_feature_align 的 totalNum 口径一致），否则 NHW 小而 C 大时
+    // 只启动 1 个核，512 个线程串行处理全部工作项。
+    int64_t totalElements = 0;
+    if (!CheckedMultiply(totalNHW, static_cast<int64_t>(C), totalElements)) {
+        OP_LOGE(context, "RotatedFeatureAlignGrad: N*H*W*C overflows int64, N=%d H=%d W=%d C=%d", N, H, W, C);
+        return ge::GRAPH_FAILED;
+    }
     int32_t needCoreNum = 0;
-    if (totalNHW > 0) {
-        int64_t needCore = (totalNHW + PER_CORE_MIN_NHW - 1) / PER_CORE_MIN_NHW;
+    if (totalElements > 0) {
+        // 溢出安全的向上取整：totalElements 可达 INT64_MAX，先加法会溢出，改为除法+余数判断。
+        int64_t blockFactor = totalElements / maxCoreNum;
+        if (totalElements % maxCoreNum != 0) {
+            blockFactor += 1;
+        }
+        if (blockFactor < PER_CORE_MIN_ELEMENTS) {
+            blockFactor = PER_CORE_MIN_ELEMENTS;
+        }
+        int64_t needCore = totalElements / blockFactor;
+        if (totalElements % blockFactor != 0) {
+            needCore += 1;
+        }
+        if (needCore < 1) {
+            needCore = 1;
+        }
         needCoreNum = static_cast<int32_t>(std::min(needCore, maxCoreNum));
     }
     RotatedFeatureAlignGradTilingData* tiling = context->GetTilingData<RotatedFeatureAlignGradTilingData>();
@@ -264,11 +316,16 @@ static ge::graphStatus RotatedFeatureAlignGradTilingFunc(gert::TilingContext* co
     auto bboxesInput = context->GetInputShape(kBboxesIdx);
     OP_CHECK_NULL_WITH_CONTEXT(context, bboxesInput);
     auto bboxesShape = EnsureNotScalar(bboxesInput->GetStorageShape());
+    // 参数校验前置：零维早退路径同样必须经过 dtype/rank/末维/N-H-W/points 校验，
+    // 避免空维输入绕过拒绝义务（非法 points 曾静默落入 POINTS_5）。
+    if (ValidateInputs(context) != ge::GRAPH_SUCCESS) {
+        return ge::GRAPH_FAILED;
+    }
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
     const int64_t* pointsPtr = attrs->GetInt(ATTR_POINTS);
     int32_t points = static_cast<int32_t>((pointsPtr != nullptr) ? *pointsPtr : 1);
-    // Zero-dimension check BEFORE validation: if dy or bboxes has 0 dim, return zero tiling
+    // Zero-dimension fast path AFTER validation: if dy or bboxes has 0 dim, return zero tiling
     if (HasZeroDimension(dyShape) || HasZeroDimension(bboxesShape)) {
         RotatedFeatureAlignGradTilingData* zeroTiling = context->GetTilingData<RotatedFeatureAlignGradTilingData>();
         if (zeroTiling != nullptr) {
@@ -289,9 +346,6 @@ static ge::graphStatus RotatedFeatureAlignGradTilingFunc(gert::TilingContext* co
                                              GET_TPL_TILING_KEY(ROTATED_FEATURE_ALIGN_GRAD_MODE_POINTS_5);
         context->SetTilingKey(tilingKey);
         return ge::GRAPH_SUCCESS;
-    }
-    if (ValidateInputs(context) != ge::GRAPH_SUCCESS) {
-        return ge::GRAPH_FAILED;
     }
     const float* spatialScalePtr = attrs->GetFloat(ATTR_SPATIAL_SCALE);
     OP_CHECK_NULL_WITH_CONTEXT(context, spatialScalePtr);

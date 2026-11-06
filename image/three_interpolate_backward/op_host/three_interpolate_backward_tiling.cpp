@@ -89,6 +89,12 @@ ge::graphStatus TilingProcess(ThreeInterpolateBackwardTilingData& tiling_host, c
     if (tiling_host.get_bs() >= RATIO_TILING * tiling_host.get_ns() || force_multi_core_mode_1_flag) {
         tiling_host.set_mulit_core_mode(static_cast<uint32_t>(MULTI_CORE_MODE::MOLTI_CORE_MODE_B_AXIS));
         tiling_host.set_used_core_num((tiling_host.get_bs() <= aicore_num) ? tiling_host.get_bs() : aicore_num);
+        // 空 batch（bs==0）保护：used_core_num 为 0 时，后续以它为除数的
+        // bs/used_core_num 与 bs%used_core_num 是整数除零。空输入无工作项，
+        // 钳为单核即可（kernel 侧循环按 0 工作量空转，输出为空/清零语义不变）。
+        if (tiling_host.get_used_core_num() == 0) {
+            tiling_host.set_used_core_num(1);
+        }
         tiling_host.set_each_core_proc_batch_num(tiling_host.get_bs() / tiling_host.get_used_core_num());
         tiling_host.set_core_proc_batch_padding_idx(tiling_host.get_bs() % tiling_host.get_used_core_num());
         tiling_host.set_each_core_proc_num(tiling_host.get_ns());
@@ -96,6 +102,10 @@ ge::graphStatus TilingProcess(ThreeInterpolateBackwardTilingData& tiling_host, c
     } else {
         tiling_host.set_mulit_core_mode(static_cast<uint32_t>(MULTI_CORE_MODE::MOLTI_CORE_MODE_N_AXIS));
         tiling_host.set_used_core_num((tiling_host.get_ns() <= aicore_num) ? tiling_host.get_ns() : aicore_num);
+        // 空 N（ns==0）保护：同上，避免 ns/used_core_num 整数除零。
+        if (tiling_host.get_used_core_num() == 0) {
+            tiling_host.set_used_core_num(1);
+        }
         tiling_host.set_each_core_proc_num(tiling_host.get_ns() / tiling_host.get_used_core_num());
         tiling_host.set_last_core_proc_num(tiling_host.get_ns() - tiling_host.get_each_core_proc_num() *
                                                                       (tiling_host.get_used_core_num() - 1));
@@ -154,7 +164,7 @@ ge::graphStatus TilingGetDimSizeByIndex(gert::TilingContext* context, uint32_t i
     OP_CHECK_NULL_WITH_CONTEXT(context, shape_ptr);
 
     auto shape_val = shape_ptr->GetStorageShape();
-    OP_CHECK_IF(static_cast<size_t>(dim) > shape_val.GetDimNum(), OP_LOGE(context, "shape_val limit error."),
+    OP_CHECK_IF(static_cast<size_t>(dim) >= shape_val.GetDimNum(), OP_LOGE(context, "shape_val limit error."),
                 return ge::GRAPH_FAILED);
 
     int64_t dim_val = shape_val.GetDim(static_cast<size_t>(dim));

@@ -55,6 +55,13 @@
       <td>ND</td>
     </tr>
     <tr>
+      <td>dx</td>
+      <td>输出</td>
+      <td>输入特征的梯度。</td>
+      <td>FLOAT32</td>
+      <td>ND</td>
+    </tr>
+    <tr>
       <td>spatial_scale</td>
       <td>属性</td>
       <td>特征图与原始图像之间的缩放比例，bboxes中y/x/w/h坐标乘以该值后参与采样点计算。</td>
@@ -68,22 +75,16 @@
       <td>INT</td>
       <td>-</td>
     </tr>
-    <tr>
-      <td>dx</td>
-      <td>输出</td>
-      <td>输入特征的梯度。</td>
-      <td>FLOAT32</td>
-      <td>ND</td>
-    </tr>
   </tbody></table>
 
 ## 约束说明
 
 - dy的shape必须为[N, H, W, C]的4维Tensor，bboxes的shape必须为[N, H, W, 5]的4维Tensor，且两者的N、H、W维度必须一致。
+- dy与bboxes的每一维取值范围为[0, 2147483647]，且元素总数N·H·W·C与N·H·W·5均需在int64表示范围内；超出上述范围的输入视为非法，算子将拒绝执行。
 - points属性取值仅支持1或5。
 
 ## 调用说明
 
 | 调用方式   | 样例代码           | 说明                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| 图模式 | [test_geir_rotated_feature_align_grad](examples/test_geir_rotated_feature_align_grad.cpp) | 通过[算子IR](./op_graph/rotated_feature_align_grad_proto.h)接口方式调用RotatedFeatureAlignGrad算子。 |
+| GE图模式 | [test_geir_rotated_feature_align_grad](examples/test_geir_rotated_feature_align_grad.cpp) | 通过[算子IR](./op_graph/rotated_feature_align_grad_proto.h)接口方式调用RotatedFeatureAlignGrad算子。 |

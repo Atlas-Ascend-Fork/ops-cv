@@ -27,4 +27,3 @@ set(three_interpolate_backward_tiling_files
 # param4：该算子依赖的所有tiling源码文件
 if (UT_TEST_ALL OR FAST_OP_UT)
 endif()
-

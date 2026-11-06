@@ -39,7 +39,7 @@
 // Disable FMA (fused multiply-add) contraction for all float arithmetic.
 //
 // Rationale (verified by pixel-level analysis against TF 2.21.0 golden):
-//   TF's ImageProjectiveTransformV3 computes coordinates and bilinear interpolation
+//   TF's ImageProjectiveTransformV2 computes coordinates and bilinear interpolation
 //   using plain float32 arithmetic (separate multiply + add, each individually rounded).
 //   When the AI Core compiler contracts a*b+c into fma(a,b,c) (single rounding),
 //   the result differs by up to 1 ULP from TF's separate-round behavior.
@@ -76,6 +76,105 @@ template <>
 __simt_callee__ inline float ReadAsFloat<half>(half val)
 {
     return __half2float(val);
+}
+
+// ===== DOUBLE 位级支撑（AI Core 无 fp64 硬件） =====
+// TF 参考语义下 DOUBLE 仅承载 float32 插值结果（实测 TF 2.21：BILINEAR 读入即转
+// float32），DOUBLE 元素统一以 uint64 位模式读出/写入；float32<->float64 转换按
+// 整数位运算实现，与 x86 cvtsd2ss/cvtss2sd 行为一致（60 万组含边界用例逐位验证：
+// RNE 就近偶数舍入、溢出->+/-Inf、NaN->quiet NaN 传播 payload 高位、次正规全路径）。
+__simt_callee__ inline uint64_t F32ToF64Bits(float f)
+{
+    uint32_t u = __float_as_uint(f);
+    uint32_t sign = u >> 31;
+    uint32_t exp = (u >> 23) & 0xFFu;
+    uint32_t frac = u & 0x7FFFFFu;
+    if (exp == 0xFFu) {
+        if (frac == 0) {
+            return static_cast<uint64_t>(sign) << 63 | 0x7FF0000000000000ULL; // +/-Inf
+        }
+        // NaN：置 quiet 位并携带 float32 payload 高位（与 x86 cvtss2sd 一致）
+        return static_cast<uint64_t>(sign) << 63 | 0x7FF8000000000000ULL | static_cast<uint64_t>(frac) << 29;
+    }
+    if (exp == 0) {
+        if (frac == 0) {
+            return static_cast<uint64_t>(sign) << 63; // +/-0
+        }
+        // float32 次正规 -> float64 正规（双精度指数范围更大，精确）
+        uint32_t m = frac;
+        uint32_t shift = 0;
+        while ((m & 0x800000u) == 0) {
+            m <<= 1;
+            shift++;
+        }
+        return static_cast<uint64_t>(sign) << 63 | static_cast<uint64_t>(897 - shift) << 52 |
+               static_cast<uint64_t>(m & 0x7FFFFFu) << 29;
+    }
+    return static_cast<uint64_t>(sign) << 63 | static_cast<uint64_t>(exp + 896) << 52 |
+           static_cast<uint64_t>(frac) << 29;
+}
+
+__simt_callee__ inline float F64ToF32RNE(uint64_t bits)
+{
+    uint32_t sign = static_cast<uint32_t>(bits >> 63);
+    uint32_t e = static_cast<uint32_t>((bits >> 52) & 0x7FFu);
+    uint64_t m = bits & 0xFFFFFFFFFFFFFULL;
+    if (e == 0x7FFu) {
+        if (m == 0) {
+            return __uint_as_float(sign << 31 | 0x7F800000u); // +/-Inf
+        }
+        return __uint_as_float(sign << 31 | 0x7FC00000u | static_cast<uint32_t>(m >> 29)); // quiet NaN
+    }
+    if (e == 0) {
+        // double 次正规（< 2^-1022）远小于 float32 最小次正规的一半（2^-150），RNE 一律归 +/-0
+        return __uint_as_float(sign << 31);
+    }
+    // float32 偏置指数（未含舍入进位）。必须用有符号类型：e<896 时 e-896 为负
+    // （结果落入 float32 次正规域），无符号回绕会误判为溢出并错误返回 +/-Inf。
+    int32_t e32 = static_cast<int32_t>(e) - 896;
+    if (e32 >= 255) {
+        return __uint_as_float(sign << 31 | 0x7F800000u); // 溢出 -> +/-Inf
+    }
+    if (e32 <= 0) {
+        // 结果落入 float32 次正规区间或 0：值 = (2^52+m) * 2^(e-1075)
+        // 次正规整数 N = RNE((2^52+m) / 2^(926-e))。
+        // drop >= 64 时 num(< 2^53) 与 half(2^(drop-1) >= 2^63) 的比较可知无进位且
+        // 商为 0，结果恒为 +/-0；同时 C++ 对移位量 >= 位宽的移位是未定义行为，
+        // 必须在此提前返回，不能落到下方移位。
+        uint32_t drop = 926 - e;
+        if (drop >= 64) {
+            return __uint_as_float(sign << 31);
+        }
+        uint64_t num = (1ULL << 52) + m;
+        uint64_t q = num >> drop;
+        uint64_t rem = num & ((1ULL << drop) - 1);
+        uint64_t half = 1ULL << (drop - 1);
+        if (rem > half || (rem == half && (q & 1) != 0)) {
+            q += 1;
+        }
+        if (q == 0) {
+            return __uint_as_float(sign << 31);
+        }
+        if (q < (1ULL << 23)) {
+            return __uint_as_float(sign << 31 | static_cast<uint32_t>(q)); // 次正规
+        }
+        return __uint_as_float(sign << 31 | (1u << 23) | static_cast<uint32_t>(q - (1ULL << 23))); // 进位最小正规
+    }
+    // 正规无溢出：尾数取 m 高 23 位，round 位 + sticky 位做 RNE
+    uint32_t frac = static_cast<uint32_t>(m >> 29);
+    uint32_t roundBit = static_cast<uint32_t>((m >> 28) & 1u);
+    bool sticky = (m & ((1ULL << 28) - 1)) != 0;
+    if (roundBit != 0 && (sticky || (frac & 1u) != 0)) {
+        frac += 1;
+        if (frac == (1u << 23)) {
+            frac = 0;
+            e32 += 1;
+            if (e32 >= 255) {
+                return __uint_as_float(sign << 31 | 0x7F800000u);
+            }
+        }
+    }
+    return __uint_as_float(sign << 31 | (e32 << 23) | frac);
 }
 
 // Truncate a float towards zero then clamp to [0, 255], returning uint8_t.
@@ -151,13 +250,52 @@ __simt_callee__ inline int32_t CastResult<int32_t>(float val)
     return SafeTruncToInt32(val);
 }
 
+template <>
+__simt_callee__ inline int64_t CastResult<int64_t>(float val)
+{
+    // TF 2.21 实测：截断，NaN/Inf/越界输出 INT64_MIN（与 int32 的 INT_MIN 模式一致）
+    return SafeTruncToInt64(val);
+}
+
+// GM 元素读写层：DOUBLE 以 uint64 位模式承载，其余类型走原生转换
+template <typename T>
+__simt_callee__ inline float LoadElemF32(const __gm__ T* p, int64_t idx)
+{
+    return ReadAsFloat<T>(p[idx]);
+}
+
+template <>
+__simt_callee__ inline float LoadElemF32<double>(const __gm__ double* p, int64_t idx)
+{
+    return F64ToF32RNE(reinterpret_cast<const __gm__ uint64_t*>(p)[idx]);
+}
+
+template <typename T>
+__simt_callee__ inline void StoreResultF32(__gm__ T* p, int64_t idx, float v)
+{
+    p[idx] = CastResult<T>(v);
+}
+
+template <>
+__simt_callee__ inline void StoreResultF32<double>(__gm__ double* p, int64_t idx, float v)
+{
+    reinterpret_cast<__gm__ uint64_t*>(p)[idx] = F32ToF64Bits(v);
+}
+
 // ===== Fill output with 0 (CONSTANT mode default) =====
 template <typename T>
 __simt_callee__ inline void FillOutput(__gm__ T* output, int64_t outBase, int32_t channels)
 {
-    T fv = CastFillValue<T>(0.0f);
-    for (int32_t c = 0; c < channels; c++) {
-        output[outBase + c] = fv;
+    if constexpr (std::is_same_v<T, double>) {
+        // 0.0 的 float64 位模式（AI Core 无 fp64，按位写入）
+        for (int32_t c = 0; c < channels; c++) {
+            reinterpret_cast<__gm__ uint64_t*>(output)[outBase + c] = 0ULL;
+        }
+    } else {
+        T fv = CastFillValue<T>(0.0f);
+        for (int32_t c = 0; c < channels; c++) {
+            output[outBase + c] = fv;
+        }
     }
 }
 
@@ -166,28 +304,47 @@ __simt_callee__ inline void FillOutput(__gm__ T* output, int64_t outBase, int32_
 template <typename T>
 __simt_callee__ inline void FillOutputNaN(__gm__ T* output, int64_t outBase, int32_t channels)
 {
-    T nanVal;
-    if constexpr (std::is_same_v<T, half>) {
+    if constexpr (std::is_same_v<T, double>) {
+        // quiet NaN 的 float64 位模式（AI Core 无 fp64，按位写入）
+        for (int32_t c = 0; c < channels; c++) {
+            reinterpret_cast<__gm__ uint64_t*>(output)[outBase + c] = 0x7FF8000000000000ULL;
+        }
+    } else if constexpr (std::is_same_v<T, half>) {
         union {
             float f;
             uint32_t u;
         } nanConv;
         nanConv.u = 0x7FC00000U;
-        nanVal = __float2half(nanConv.f);
+        half nanVal = __float2half(nanConv.f);
+        for (int32_t c = 0; c < channels; c++) {
+            output[outBase + c] = nanVal;
+        }
     } else if constexpr (std::is_same_v<T, int32_t>) {
-        nanVal = static_cast<int32_t>(0x80000000U);
+        int32_t nanVal = static_cast<int32_t>(0x80000000U);
+        for (int32_t c = 0; c < channels; c++) {
+            output[outBase + c] = nanVal;
+        }
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+        // TF 2.21 实测：INT64 在 NaN/Inf 变换下输出 INT64_MIN
+        int64_t nanVal = static_cast<int64_t>(0x8000000000000000ULL);
+        for (int32_t c = 0; c < channels; c++) {
+            output[outBase + c] = nanVal;
+        }
     } else if constexpr (std::is_same_v<T, uint8_t>) {
-        nanVal = 0;
+        uint8_t nanVal = 0;
+        for (int32_t c = 0; c < channels; c++) {
+            output[outBase + c] = nanVal;
+        }
     } else {
         union {
             float f;
             uint32_t u;
         } nanConv;
         nanConv.u = 0x7FC00000U;
-        nanVal = nanConv.f;
-    }
-    for (int32_t c = 0; c < channels; c++) {
-        output[outBase + c] = nanVal;
+        float nanVal = nanConv.f;
+        for (int32_t c = 0; c < channels; c++) {
+            output[outBase + c] = nanVal;
+        }
     }
 }
 
@@ -199,6 +356,20 @@ __simt_callee__ inline void FillOutputNaN(__gm__ T* output, int64_t outBase, int
 // only; FMA contraction is disabled file-wide so every mul/add/sub keeps TF's
 // separate rounding.
 __simt_callee__ inline float ClampCoord(float v, float lo, float hi) { return fminf(fmaxf(v, lo), hi); }
+
+// Positive int64 multiply with saturation, used for the TF-compatible period
+// products below. Both operands are non-negative in these call sites.
+__simt_callee__ inline int64_t SafePositiveMul(int64_t a, int64_t b)
+{
+    if (a == 0 || b == 0) {
+        return 0;
+    }
+    constexpr int64_t kInt64Max = 0x7FFFFFFFFFFFFFFFLL;
+    if (a > kInt64Max / b) {
+        return kInt64Max;
+    }
+    return a * b;
+}
 
 // One-dimensional coordinate remap. Called only for fillMode in
 // {NEAREST, REFLECT, WRAP}; CONSTANT skips this entirely (coordinates pass
@@ -212,56 +383,55 @@ __simt_callee__ inline float RemapCoord(float x, int32_t len, int32_t fillMode)
         return 0.0f;
     }
 
-    const float lenF = static_cast<float>(len);
-    const float last = lenF - 1.0f;
+    const int64_t len64 = static_cast<int64_t>(len);
+    const float lenF = static_cast<float>(len64);
+    // Compute the integer last index before the float conversion; casting len
+    // first loses integer information for len > 2^24 and shifts the clamp bound.
+    const float last = static_cast<float>(len64 - 1);
+
+    // Keep the float quotient inside the int64 range. Such coordinates are far
+    // outside any representable image and only need a bounded edge result.
+    constexpr float kCoordLimit = 9.0e18f;
+    if (x > kCoordLimit || x < -kCoordLimit) {
+        return (x > 0.0f) ? last : 0.0f;
+    }
 
     if (fillMode == FILL_NEAREST) {
         return ClampCoord(x, 0.0f, last);
     }
 
     if (fillMode == FILL_REFLECT) {
-        // Bit-exact transcription of TF Eigen MapCoordinate<FILL_REFLECT>
-        // (tensorflow/core/kernels/image/image_ops.h): signed branches with a
-        // trunc-toward-zero quotient and an exact sz2*k product.
-        //
-        // v68 B-class root cause: the closed-form floor fold
-        //   m = x - 2len*floor(x/(2len)); t = m<len ? m : 2len-1-m
-        // is mathematically identical but NOT bit-exact for negative x with
-        // |x| < 2len: TF mirrors via (-v - 1) from the exact |x| (single
-        // rounding), while the floor fold rounds twice through an intermediate
-        // of magnitude ~2len (m = fl(x + sz2), then fl((sz2-1) - m)), diverging
-        // by 1 ULP of ~2len on ~4% of negative coordinates. The ULP error
-        // feeds the bilinear weights directly (amplified by |x| magnitude),
-        // which failed REFLECTxBILINEAR cases (e.g. len=10000: weight error
-        // ~1.2e-3). Verified bit-exact vs TF 2.21.0 golden by float32
-        // simulation over broad/targeted coordinate sweeps.
-        const float sz2 = 2.0f * lenF;
+        // TF Eigen MapCoordinate<FILL_REFLECT> uses DenseIndex(int64) for the
+        // period. Keep sz2 and sz2*quotient in int64 so len > 2^24 does not
+        // lose integer precision before the single float conversion.
+        const int64_t sz2 = 2 * len64;
+        const float sz2F = static_cast<float>(sz2);
         float v = x;
         if (x < 0.0f) {
-            const float k = truncf((-x) / sz2);
-            v = sz2 * k + v;
-            v = (v < -lenF) ? (v + sz2) : (-v - 1.0f);
+            const int64_t k = static_cast<int64_t>((-x) / sz2F);
+            v = static_cast<float>(SafePositiveMul(sz2, k)) + v;
+            v = (v < -lenF) ? (v + sz2F) : (-v - 1.0f);
         } else if (x > last) {
-            const float k = truncf(x / sz2);
-            v = x - sz2 * k;
+            const int64_t k = static_cast<int64_t>(x / sz2F);
+            v = x - static_cast<float>(SafePositiveMul(sz2, k));
             if (v >= lenF) {
-                v = sz2 - v - 1.0f;
+                v = sz2F - v - 1.0f;
             }
         }
         return ClampCoord(v, 0.0f, last);
     }
 
-    // FILL_WRAP: TF/TBE single-step correction (NOT an ideal modulo):
-    //   q = trunc(x / (len-1)); divisor is len-1, multiplier is len.
-    //   x > len-1: t = x - len*q;  x < 0: t = x - len*q + len;  else t = x.
-    const float q = truncf(x / last);
-    float t;
+    // FILL_WRAP: TF uses len-1 as the integer divisor and len as the integer
+    // multiplier; both products stay int64 and are converted to float once.
+    const int64_t sz = len64 - 1;
+    const float szF = static_cast<float>(sz);
+    float t = x;
     if (x > last) {
-        t = x - lenF * q;
+        const int64_t q = static_cast<int64_t>(x / szF);
+        t = x - static_cast<float>(SafePositiveMul(len64, q));
     } else if (x < 0.0f) {
-        t = x - lenF * q + lenF;
-    } else {
-        t = x;
+        const int64_t q = static_cast<int64_t>((-x) / szF);
+        t = x + static_cast<float>(SafePositiveMul(len64, q + 1));
     }
     return ClampCoord(t, 0.0f, last);
 }
@@ -293,27 +463,22 @@ __simt_callee__ inline float FlushBilinearSubnormal(float value)
 template <typename T>
 __simt_callee__ inline float BilinearMultiply(float a, float b)
 {
-    if constexpr (std::is_same_v<T, float>) {
-        a = FlushBilinearSubnormal(a);
-        b = FlushBilinearSubnormal(b);
-        volatile float product = a * b;
-        return FlushBilinearSubnormal(product);
-    } else {
-        volatile float product = a * b;
-        return product;
-    }
+    // TF interpolates every input dtype through float32 and enables FTZ/DAZ,
+    // so the flush applies to float16/int32/int64/double sources as well.
+    (void)sizeof(T);
+    a = FlushBilinearSubnormal(a);
+    b = FlushBilinearSubnormal(b);
+    volatile float product = a * b;
+    return FlushBilinearSubnormal(product);
 }
 
 template <typename T>
 __simt_callee__ inline float BilinearAdd(float a, float b)
 {
-    if constexpr (std::is_same_v<T, float>) {
-        a = FlushBilinearSubnormal(a);
-        b = FlushBilinearSubnormal(b);
-        return FlushBilinearSubnormal(a + b);
-    } else {
-        return a + b;
-    }
+    (void)sizeof(T);
+    a = FlushBilinearSubnormal(a);
+    b = FlushBilinearSubnormal(b);
+    return FlushBilinearSubnormal(a + b);
 }
 
 // ===== Bilinear interpolation =====
@@ -328,10 +493,9 @@ __simt_callee__ inline float BilinearAdd(float a, float b)
 // TF's CPU code uses separate multiply+add (each individually rounded).
 // The AI Core compiler must NOT contract a*b+c into fma(a,b,c), because FMA
 // uses a single rounding and produces different results from TF's two-rounding behavior.
-// FastPath=true:  plain static_cast (xIn/yIn finite & in int32 range for normal
-//                  transforms — zero overhead vs. original code).
-// FastPath=false: SafeFloorToInt32 clamps huge finite coordinates to OOB int32
-//                  so they fail the in-bounds check -> fill_value, matching TF.
+// SafeFloorToInt32 clamps huge finite coordinates to an OOB int32 so they fail
+// the in-bounds check -> fill_value, matching TF. For normal in-range transforms
+// it is identical to a plain static_cast<int32_t>(floorf(...)).
 template <typename T, bool FastPath>
 __simt_callee__ inline void BilinearInterpolateFloat(__gm__ T* images, __gm__ T* output, int64_t outBase, float xIn,
                                                      float yIn, int32_t hIn, int32_t wIn, int32_t channels, int64_t b)
@@ -342,16 +506,11 @@ __simt_callee__ inline void BilinearInterpolateFloat(__gm__ T* images, __gm__ T*
     float xCeil = xFloor + 1.0f;
     float yCeil = yFloor + 1.0f;
 
-    int32_t x0, y0;
-    if constexpr (FastPath) {
-        x0 = static_cast<int32_t>(xFloor);
-        y0 = static_cast<int32_t>(yFloor);
-    } else {
-        x0 = SafeFloorToInt32(xIn);
-        y0 = SafeFloorToInt32(yIn);
-    }
-    int32_t x1 = x0 + 1;
-    int32_t y1 = y0 + 1;
+    int32_t x0 = SafeFloorToInt32(xIn);
+    int32_t y0 = SafeFloorToInt32(yIn);
+    // Avoid signed overflow when the OOB sentinel is INT32_MAX.
+    int32_t x1 = (x0 >= wIn) ? x0 : x0 + 1;
+    int32_t y1 = (y0 >= hIn) ? y0 : y0 + 1;
 
     // Interpolation weights — FMA disabled, matching TF's separate mul+add
     float wx0 = xCeil - xIn;  // = x_ceil - x
@@ -365,17 +524,22 @@ __simt_callee__ inline void BilinearInterpolateFloat(__gm__ T* images, __gm__ T*
     bool valid01 = (x0 >= 0 && x0 < wIn && y1 >= 0 && y1 < hIn);
     bool valid11 = (x1 >= 0 && x1 < wIn && y1 >= 0 && y1 < hIn);
 
+    // Compute an OOB neighbor's offset only after the validity check. The
+    // sentinel coordinates can be near +/-2^31; evaluating (y*wIn + x)*channels
+    // for them unconditionally can overflow int64 even when the valid tensor
+    // element count fits. Valid offsets are bounded by the host-checked
+    // N*HIn*WIn*C, so the conditional branch is overflow-safe.
     int64_t batchOff = b * static_cast<int64_t>(hIn) * wIn * channels;
-    int64_t off00 = batchOff + (static_cast<int64_t>(y0) * wIn + x0) * channels;
-    int64_t off10 = batchOff + (static_cast<int64_t>(y0) * wIn + x1) * channels;
-    int64_t off01 = batchOff + (static_cast<int64_t>(y1) * wIn + x0) * channels;
-    int64_t off11 = batchOff + (static_cast<int64_t>(y1) * wIn + x1) * channels;
+    int64_t off00 = valid00 ? batchOff + (static_cast<int64_t>(y0) * wIn + x0) * channels : 0;
+    int64_t off10 = valid10 ? batchOff + (static_cast<int64_t>(y0) * wIn + x1) * channels : 0;
+    int64_t off01 = valid01 ? batchOff + (static_cast<int64_t>(y1) * wIn + x0) * channels : 0;
+    int64_t off11 = valid11 ? batchOff + (static_cast<int64_t>(y1) * wIn + x1) * channels : 0;
 
     for (int32_t c = 0; c < channels; c++) {
-        float p00 = valid00 ? ReadAsFloat<T>(images[off00 + c]) : fillValue;
-        float p10 = valid10 ? ReadAsFloat<T>(images[off10 + c]) : fillValue;
-        float p01 = valid01 ? ReadAsFloat<T>(images[off01 + c]) : fillValue;
-        float p11 = valid11 ? ReadAsFloat<T>(images[off11 + c]) : fillValue;
+        float p00 = valid00 ? LoadElemF32<T>(images, off00 + c) : fillValue;
+        float p10 = valid10 ? LoadElemF32<T>(images, off10 + c) : fillValue;
+        float p01 = valid01 ? LoadElemF32<T>(images, off01 + c) : fillValue;
+        float p11 = valid11 ? LoadElemF32<T>(images, off11 + c) : fillValue;
         // Separate rounding plus FP32-local DAZ/FTZ at each arithmetic step.
         // Flushing only the final result is insufficient: two subnormal
         // products can otherwise add back to a normal FLT_MIN value.
@@ -390,27 +554,21 @@ __simt_callee__ inline void BilinearInterpolateFloat(__gm__ T* images, __gm__ T*
         volatile float mYf = BilinearMultiply<T>(wy0, vYf);
         volatile float mYc = BilinearMultiply<T>(wy1, vYc);
         float result = BilinearAdd<T>(mYf, mYc);
-        output[outBase + c] = CastResult<T>(result);
+        StoreResultF32<T>(output, outBase + c, result);
     }
 }
 
 // ===== Nearest interpolation =====
 // xIn/yIn are guaranteed finite on entry (inf/nan intercepted in ProcessPixel).
-// FastPath=true:  plain static_cast<int32_t>(roundf) — zero overhead.
-// FastPath=false: SafeRoundToInt32 clamps huge finite coordinates to OOB int32
-//                  so they map to fill_value, matching TF.
+// SafeRoundToInt32 clamps huge finite coordinates to OOB int32 so they map to
+// fill_value, matching TF. For normal in-range transforms it is identical to a
+// plain static_cast<int32_t>(roundf(...)).
 template <typename T, bool FastPath>
 __simt_callee__ inline void NearestInterpolate(__gm__ T* images, __gm__ T* output, int64_t outBase, float xIn,
                                                float yIn, int32_t hIn, int32_t wIn, int32_t channels, int64_t b)
 {
-    int32_t xi, yi;
-    if constexpr (FastPath) {
-        xi = static_cast<int32_t>(roundf(xIn));
-        yi = static_cast<int32_t>(roundf(yIn));
-    } else {
-        xi = SafeRoundToInt32(xIn);
-        yi = SafeRoundToInt32(yIn);
-    }
+    int32_t xi = SafeRoundToInt32(xIn);
+    int32_t yi = SafeRoundToInt32(yIn);
 
     if (xi < 0 || xi >= wIn || yi < 0 || yi >= hIn) {
         FillOutput<T>(output, outBase, channels);
@@ -419,7 +577,13 @@ __simt_callee__ inline void NearestInterpolate(__gm__ T* images, __gm__ T* outpu
 
     int64_t inOffset = (b * static_cast<int64_t>(hIn) * wIn + static_cast<int64_t>(yi) * wIn + xi) * channels;
     for (int32_t c = 0; c < channels; c++) {
-        output[outBase + c] = images[inOffset + c];
+        if constexpr (std::is_same_v<T, double>) {
+            // NEAREST 全精度位复制（TF 实测：double 0.1 / int64 2^40+1 均保真，不经过 float32）
+            reinterpret_cast<__gm__ uint64_t*>(output)[outBase + c] = reinterpret_cast<const __gm__ uint64_t*>(
+                images)[inOffset + c];
+        } else {
+            output[outBase + c] = images[inOffset + c];
+        }
     }
 }
 
@@ -439,19 +603,22 @@ __simt_callee__ inline void NearestInterpolate(__gm__ T* images, __gm__ T* outpu
 //       images). uint32_t path is used when totalPixels <= INT32_MAX, giving
 //       higher arithmetic throughput.
 //
-// FastPath=true (normal transforms, |a|<=1e30):
+// FastPath=true (normal transforms, all |a|<=1e30 and a2/a5 finite):
 //   - volatile multiplies (no FMA contraction, matches TF)
-//   - DsDiv (lightweight accurate division)
-//   - skip notFinite check (xIn/yIn guaranteed finite: 1e30*maxCoord<<FLT_MAX,
-//     finite/finite with denom!=0 → finite result)
-//   - static_cast<int32_t>(floorf/roundf) (no SafeFloor/SafeRound overhead)
-//   Zero overhead vs. original code.
+//   - SafeDiv + FlushSubnormal (IEEE-correct for non-finite divisors)
+//   - notFinite check (inf/nan xIn/yIn → NaN/fill)
+//   - SafeFloorToInt32/SafeRoundToInt32 (clamps huge finite to OOB)
 //
-// FastPath=false (extreme transforms, |a|>1e30 or inf/nan):
+// FastPath=false (extreme transforms, some |a|>1e30 or inf/nan):
 //   - SafeMul/SafeSum3 (never traps, returns signed inf for overflow)
 //   - SafeDiv + FlushSubnormal (handles inf/nan, matches TF FTZ)
 //   - notFinite check (inf/nan xIn/yIn → NaN/fill)
 //   - SafeFloorToInt32/SafeRoundToInt32 (clamps huge finite to OOB)
+//
+// Both paths apply the same special-value handling and range-protected casts;
+// FastPath only selects the multiply form used in ComputeProjection. Because a
+// coefficient up to 1e30 times a coordinate up to 2^31-1 can overflow float32,
+// the fast path must not rely on coordinates being finite a priori.
 // ===== Compute projection (extracted from ProcessPixelImpl) =====
 // Reads transform coefficients and computes denom/numX/numY. FastPath selects
 // volatile multiplies (TF-matching) vs SafeMul (trap-free). Inlined by the
@@ -520,30 +687,30 @@ __simt_callee__ inline void ProcessPixelImpl(IDX_T xOut, IDX_T yOut, IDX_T b, in
     }
 
     float xIn, yIn;
-    if constexpr (FastPath) {
-        xIn = DsDiv(numX, denom);
-        yIn = DsDiv(numY, denom);
-        // FastPath guarantees finite xIn/yIn (IsFastPath bounds + denom != 0).
-        RemapCoordsXY(xIn, yIn, wIn, hIn, fillMode);
-        DispatchInterpolate<T, interpMode, true>(images, output, outBase, xIn, yIn, hIn, wIn, channels,
-                                                 static_cast<int64_t>(b));
-    } else {
-        xIn = FlushSubnormal(SafeDiv(numX, denom));
-        yIn = FlushSubnormal(SafeDiv(numY, denom));
-        bool notFinite = isinf(xIn) || isnan(xIn) || isinf(yIn) || isnan(yIn);
-        if (notFinite) {
-            if constexpr (interpMode == IPT_TPL_BILINEAR) {
-                FillOutputNaN<T>(output, outBase, channels);
-            } else {
-                FillOutput<T>(output, outBase, channels);
-            }
-            return;
+    xIn = FlushSubnormal(SafeDiv(numX, denom));
+    yIn = FlushSubnormal(SafeDiv(numY, denom));
+    // Both paths intercept non-finite coordinates with the same declared
+    // semantics. SafeDiv (rather than the lightweight fast-path division)
+    // preserves IEEE behavior for non-finite divisors (finite/inf == 0), so a
+    // coefficient whose product overflows denom to +inf still yields a finite
+    // coordinate instead of NaN. FastPath only changes the multiply form used
+    // by ComputeProjection; it must not weaken the special-value handling.
+    bool notFinite = isinf(xIn) || isnan(xIn) || isinf(yIn) || isnan(yIn);
+    bool hasNaN = isnan(xIn) || isnan(yIn);
+    // TF's MapCoordinate<FILL_NEAREST> clamps +/-Inf to [0, len-1] before
+    // interpolation, but NaN keeps the declared special-value semantics.
+    if (notFinite && (hasNaN || fillMode != FILL_NEAREST)) {
+        if constexpr (interpMode == IPT_TPL_BILINEAR) {
+            FillOutputNaN<T>(output, outBase, channels);
+        } else {
+            FillOutput<T>(output, outBase, channels);
         }
-        // Remap runs AFTER the non-finite interception (MDE §5.2 Step 3).
-        RemapCoordsXY(xIn, yIn, wIn, hIn, fillMode);
-        DispatchInterpolate<T, interpMode, false>(images, output, outBase, xIn, yIn, hIn, wIn, channels,
-                                                  static_cast<int64_t>(b));
+        return;
     }
+    // Remap runs AFTER the non-finite interception (MDE §5.2 Step 3).
+    RemapCoordsXY(xIn, yIn, wIn, hIn, fillMode);
+    DispatchInterpolate<T, interpMode, FastPath>(images, output, outBase, xIn, yIn, hIn, wIn, channels,
+                                                 static_cast<int64_t>(b));
 }
 
 // ===== Per-pixel projective transform (mixed-batch runtime dispatch, R001) =====

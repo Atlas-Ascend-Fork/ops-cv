@@ -57,6 +57,13 @@ English | [简体中文](./README.md)
       <td>ND</td>
     </tr>
     <tr>
+      <td>dx</td>
+      <td>Output</td>
+      <td>Gradient of the input feature.</td>
+      <td>FLOAT32</td>
+      <td>ND</td>
+    </tr>
+    <tr>
       <td>spatial_scale</td>
       <td>Attr</td>
       <td>Scaling ratio between the feature map and the original image. The y/x/w/h coordinates in bboxes are multiplied by this value before participating in the sampling point computation.</td>
@@ -70,22 +77,16 @@ English | [简体中文](./README.md)
       <td>INT</td>
       <td>-</td>
     </tr>
-    <tr>
-      <td>dx</td>
-      <td>Output</td>
-      <td>Gradient of the input feature.</td>
-      <td>FLOAT32</td>
-      <td>ND</td>
-    </tr>
   </tbody></table>
 
 ## Constraints
 
 - The shape of dy must be a 4D tensor [N, H, W, C], and the shape of bboxes must be a 4D tensor [N, H, W, 5]. In addition, the N, H, and W dimensions of the two must be the same.
+- Each dimension of dy and bboxes must be within [0, 2147483647], and the total element counts N·H·W·C and N·H·W·5 must fit within the int64 range. Inputs exceeding these ranges are considered invalid and will be rejected by the operator.
 - The value of the points attribute supports only 1 or 5.
 
 ## Invocation
 
 | Invocation Method   | Sample Code           | Description                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| Graph mode | [test_geir_rotated_feature_align_grad](examples/test_geir_rotated_feature_align_grad.cpp) | Invokes the RotatedFeatureAlignGrad operator through the [operator IR](./op_graph/rotated_feature_align_grad_proto.h) API. |
+| GE graph mode | [test_geir_rotated_feature_align_grad](examples/test_geir_rotated_feature_align_grad.cpp) | Invokes the RotatedFeatureAlignGrad operator through the [operator IR](./op_graph/rotated_feature_align_grad_proto.h) API. |

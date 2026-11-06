@@ -355,9 +355,9 @@ TEST_F(ImageProjectiveTransformTiling, one_trans_s2_with_reflect_combined)
 
 namespace {
 gert::TilingContextPara MakePortTiling(int64_t batch, int64_t transformsBatch, int32_t* sizeData, int64_t hOut,
-                                       int64_t wOut)
+                                       int64_t wOut, int64_t c = 3)
 {
-    auto para = MakeTilingPara(batch, transformsBatch, "NEAREST", "WRAP", ge::DT_FLOAT, 4, 4, 3, hOut, wOut);
+    auto para = MakeTilingPara(batch, transformsBatch, "NEAREST", "WRAP", ge::DT_FLOAT, 4, 4, c, hOut, wOut);
     para.inputTensorDesc_[2].isConst_ = sizeData != nullptr;
     para.inputTensorDesc_[2].constValue_ = sizeData;
     return para;
@@ -450,9 +450,9 @@ TEST_F(ImageProjectiveTransformTiling, interpolation_whitelist_is_case_sensitive
 
 TEST_F(ImageProjectiveTransformTiling, batches_below_dynamic_sentinel_are_rejected)
 {
-    // The source and port contract reject values below -1, not the dynamic
-    // sentinel itself. Tightening the handling of -1 is outside this port.
-    for (auto batch : {-2, -3, -4}) {
+    // Tiling consumes concrete dimensions: the dynamic sentinel -1 and any other
+    // negative batch value are rejected here (they are not narrowed into the plan).
+    for (auto batch : {-1, -2, -3, -4}) {
         SCOPED_TRACE(batch);
         auto images = MakePortTiling(batch, 1, nullptr, 4, 4);
         ExecuteTestCase(images, ge::GRAPH_FAILED);
@@ -490,16 +490,78 @@ TEST_F(ImageProjectiveTransformTiling, int32_max_single_dimension_is_valid)
     EXPECT_GT(info.blockNum, 0U);
 }
 
-TEST_F(ImageProjectiveTransformTiling, two_maximal_spatial_batches_fit_int64)
+TEST_F(ImageProjectiveTransformTiling, two_maximal_spatial_batches_with_channels_overflow_int64)
 {
     int32_t size[] = {std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max()};
     auto para = MakePortTiling(2, 1, size, size[0], size[1]);
+    ExecuteTestCase(para, ge::GRAPH_FAILED);
+}
+
+TEST_F(ImageProjectiveTransformTiling, two_maximal_spatial_batches_fit_int64_single_channel)
+{
+    int32_t size[] = {std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max()};
+    auto para = MakePortTiling(2, 1, size, size[0], size[1], 1);
     TilingInfo info;
     ASSERT_TRUE(ExecuteTiling(para, info));
     ASSERT_GE(info.tilingDataSize, sizeof(ImageProjectiveTransformTilingData));
     EXPECT_EQ(CastTilingData(info)->spatialSize, 4611686014132420609LL);
     EXPECT_EQ(CastTilingData(info)->totalPixels, 9223372028264841218LL);
     EXPECT_GT(info.blockNum, 0U);
+}
+
+TEST_F(ImageProjectiveTransformTiling, single_core_total_pixels_near_int64_max_fits)
+{
+    // Regression for ComputeNeedCoreNum alignment overflow: with one core,
+    // perCorePixels equals totalPixels, and N=8/HOut=1073741823/WOut=1073741825
+    // yields 9223372036854775800 (INT64_MAX - 7). The old (x + 31) / 32 * 32
+    // addition overflows; the overflow-safe alignment must clamp and use one block.
+    auto format = gert::StorageFormat(ge::FORMAT_NHWC, ge::FORMAT_NHWC, gert::ExpandDimsType());
+    auto nd = gert::StorageFormat(ge::FORMAT_ND, ge::FORMAT_ND, gert::ExpandDimsType());
+    gert::Tensor images(gert::StorageShape({8, 1, 1, 1}, {8, 1, 1, 1}), format, gert::TensorPlacement::kOnHost,
+                        ge::DT_FLOAT, nullptr);
+    gert::Tensor transforms(gert::StorageShape({8, 8}, {8, 8}), nd, gert::TensorPlacement::kOnHost, ge::DT_FLOAT,
+                            nullptr);
+    gert::Tensor size(gert::StorageShape({2}, {2}), nd, gert::TensorPlacement::kOnHost, ge::DT_INT32, nullptr);
+    gert::Tensor output(gert::StorageShape({8, 1073741823, 1073741825, 1}, {8, 1073741823, 1073741825, 1}), format,
+                        gert::TensorPlacement::kOnHost, ge::DT_FLOAT, nullptr);
+    fe::PlatFormInfos platform;
+    platform.Init();
+    std::map<std::string, std::string> soc = {{"ai_core_cnt", "1"}, {"core_type_list", "AICore"}};
+    std::map<std::string, std::string> spec = {{"ub_size", "262144"}};
+    std::map<std::string, std::string> version = {{"NpuArch", "3510"},
+                                                  {"Short_SoC_version", IMAGE_PROJECTIVE_TRANSFORM_UT_SOC}};
+    platform.SetPlatformRes("SoCInfo", soc);
+    platform.SetPlatformRes("AICoreSpec", spec);
+    platform.SetCoreNumByCoreType("AICore");
+    platform.SetPlatformRes("version", version);
+    auto raw = gert::TilingData::CreateCap(4096);
+    auto workspace = gert::ContinuousVector::Create<size_t>(1);
+    ImageProjectiveTransformCompileInfo compileInfo;
+    auto faker = gert::TilingContextFaker();
+    auto holder = faker.SetOpType("ImageProjectiveTransform")
+                      .NodeIoNum(3, 1)
+                      .InputTensors({&images, &transforms, &size})
+                      .OutputTensors({&output})
+                      .Attr("interpolation", ge::AscendString("BILINEAR"))
+                      .Attr("fill_mode", ge::AscendString("CONSTANT"))
+                      .CompileInfo(&compileInfo)
+                      .PlatformInfo(&platform)
+                      .TilingData(raw.get())
+                      .Workspace(reinterpret_cast<gert::ContinuousVector*>(workspace.get()))
+                      .Build();
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    auto impl = registry->GetOpImpl("ImageProjectiveTransform");
+    ASSERT_NE(impl, nullptr);
+    ASSERT_NE(impl->tiling, nullptr);
+    auto* context = holder.GetContext();
+    ASSERT_EQ(impl->tiling(context), ge::GRAPH_SUCCESS);
+    EXPECT_EQ(context->GetBlockDim(), 1U);
+    ASSERT_EQ(context->GetRawTilingData()->GetDataSize(), sizeof(ImageProjectiveTransformTilingData));
+    const auto* data = reinterpret_cast<const ImageProjectiveTransformTilingData*>(
+        context->GetRawTilingData()->GetData());
+    EXPECT_EQ(data->needCoreNum, 1);
+    EXPECT_EQ(data->totalPixels, 9223372036854775800LL);
 }
 
 TEST_F(ImageProjectiveTransformTiling, three_maximal_spatial_batches_overflow_int64)
@@ -607,12 +669,12 @@ gert::TilingContextPara MakeOutputShapeContractCase(const std::vector<int32_t>& 
         &compileInfo, IMAGE_PROJECTIVE_TRANSFORM_UT_SOC);
 }
 
-gert::TilingContextPara MakeLargeOutputShapeProbe(std::vector<int32_t>& outputShapeData, int64_t batchSize)
+gert::TilingContextPara MakeLargeOutputShapeProbe(std::vector<int32_t>& outputShapeData, int64_t batchSize,
+                                                  int64_t channels = 3)
 {
     static ImageProjectiveTransformCompileInfo compileInfo = {};
     constexpr int64_t hIn = 4;
     constexpr int64_t wIn = 4;
-    constexpr int64_t channels = 3;
     return gert::TilingContextPara(
         "ImageProjectiveTransform",
         {{{{batchSize, hIn, wIn, channels}, {batchSize, hIn, wIn, channels}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
@@ -671,7 +733,7 @@ TEST_F(ImageProjectiveTransformTiling, output_shape_width_zero_preserves_empty_o
 TEST_F(ImageProjectiveTransformTiling, output_shape_negative_is_rejected)
 {
     std::vector<int32_t> outputShapeData = {-1, 3};
-    auto para = MakeOutputShapeContractCase(outputShapeData, {1, -1, 3, 3});
+    auto para = MakeOutputShapeContractCase(outputShapeData, {1, 3, 3, 3});
     ExecuteTestCase(para, ge::GRAPH_FAILED);
 }
 
@@ -702,19 +764,12 @@ TEST_F(ImageProjectiveTransformTiling, output_shape_int32_max_product_is_rejecte
     EXPECT_FALSE(ExecuteTiling(context, info));
 }
 
-TEST_F(ImageProjectiveTransformTiling, output_shape_int32_max_product_with_two_batches_fits_int64)
+TEST_F(ImageProjectiveTransformTiling, output_shape_int32_max_product_with_two_batches_and_channels_is_rejected)
 {
     constexpr int64_t batchSize = 2;
     constexpr int32_t maxDim = std::numeric_limits<int32_t>::max();
     std::vector<int32_t> outputShapeData = {maxDim, maxDim};
     auto context = MakeLargeOutputShapeProbe(outputShapeData, batchSize);
     TilingInfo info;
-    ASSERT_TRUE(ExecuteTiling(context, info));
-    PrintLargeOutputShapeTiling("output_shape=[INT32_MAX,INT32_MAX],batch=2", info);
-    ASSERT_NE(info.tilingData, nullptr);
-    const auto* data = reinterpret_cast<const ImageProjectiveTransformTilingData*>(info.tilingData.get());
-    const int64_t expectedTotal = static_cast<int64_t>(batchSize) * maxDim * maxDim;
-    EXPECT_EQ(data->totalPixels, expectedTotal);
-    EXPECT_GT(data->totalPixels, 0);
-    EXPECT_GT(info.blockNum, 0U);
+    EXPECT_FALSE(ExecuteTiling(context, info));
 }

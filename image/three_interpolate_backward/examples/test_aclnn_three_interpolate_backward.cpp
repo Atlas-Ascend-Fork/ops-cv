@@ -11,6 +11,7 @@
 #include <vector>
 #include "acl/acl.h"
 #include "aclnn/aclnn_base.h"
+#include "aclnn/acl_meta.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -130,6 +131,7 @@ int main()
     void* idxDeviceAddr = nullptr;
     void* weightDeviceAddr = nullptr;
     void* gradYDeviceAddr = nullptr;
+    void* workspaceAddr = nullptr;
 
     aclTensor* gradX = nullptr;
     aclTensor* idx = nullptr;
@@ -143,62 +145,86 @@ int main()
                                          4.2976365,  -7.019285,   -8.4070425, 1.0159919, -0.78814566};
     std::vector<float> gradYHostData(bs * cs * ms, 0.0f);
 
+    aclOpExecutor* executor = nullptr;
+
+    // 统一资源回收：失败路径与正常路径共用，避免中途返回泄漏已申请的
+    // aclTensor、device 内存、workspace、aclOpExecutor、stream 与 aclInit 上下文
+    auto cleanup = [&]() {
+        if (gradX != nullptr) {
+            aclDestroyTensor(gradX);
+        }
+        if (idx != nullptr) {
+            aclDestroyTensor(idx);
+        }
+        if (weight != nullptr) {
+            aclDestroyTensor(weight);
+        }
+        if (gradY != nullptr) {
+            aclDestroyTensor(gradY);
+        }
+        if (gradXDeviceAddr != nullptr) {
+            aclrtFree(gradXDeviceAddr);
+        }
+        if (idxDeviceAddr != nullptr) {
+            aclrtFree(idxDeviceAddr);
+        }
+        if (weightDeviceAddr != nullptr) {
+            aclrtFree(weightDeviceAddr);
+        }
+        if (gradYDeviceAddr != nullptr) {
+            aclrtFree(gradYDeviceAddr);
+        }
+        if (workspaceAddr != nullptr) {
+            aclrtFree(workspaceAddr);
+        }
+        if (executor != nullptr) {
+            aclDestroyAclOpExecutor(executor);
+        }
+        aclrtDestroyStream(stream);
+        aclrtResetDevice(deviceId);
+        aclFinalize();
+    };
+
     ret = CreateAclTensor(gradXHostData, gradXShape, &gradXDeviceAddr, aclDataType::ACL_FLOAT, &gradX,
                           aclFormat::ACL_FORMAT_ND);
-    CHECK_RET(ret == ACL_SUCCESS, return ret);
+    CHECK_RET(ret == ACL_SUCCESS, cleanup(); return ret);
     ret = CreateAclTensor(idxHostData, idxShape, &idxDeviceAddr, aclDataType::ACL_INT32, &idx,
                           aclFormat::ACL_FORMAT_ND);
-    CHECK_RET(ret == ACL_SUCCESS, return ret);
+    CHECK_RET(ret == ACL_SUCCESS, cleanup(); return ret);
     ret = CreateAclTensor(weightHostData, weightShape, &weightDeviceAddr, aclDataType::ACL_FLOAT, &weight,
                           aclFormat::ACL_FORMAT_ND);
-    CHECK_RET(ret == ACL_SUCCESS, return ret);
+    CHECK_RET(ret == ACL_SUCCESS, cleanup(); return ret);
     ret = CreateAclTensor(gradYHostData, gradYShape, &gradYDeviceAddr, aclDataType::ACL_FLOAT, &gradY,
                           aclFormat::ACL_FORMAT_ND);
-    CHECK_RET(ret == ACL_SUCCESS, return ret);
+    CHECK_RET(ret == ACL_SUCCESS, cleanup(); return ret);
 
     // 3. 调用CANN算子库API，需要修改为具体的Api名称
     uint64_t workspaceSize = 0;
-    aclOpExecutor* executor;
 
-    // 调用aclnnThreeInterpolateBackward第一段接口
+    // 调用aclnnThreeInterpolateBackward第一段接口（executor 已在上方声明并纳入 cleanup）
     ret = aclnnThreeInterpolateBackwardGetWorkspaceSize(gradX, idx, weight, ms, gradY, &workspaceSize, &executor);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnThreeInterpolateBackwardGetWorkspaceSize failed. ERROR: %d\n", ret);
-              return ret);
+              cleanup(); return ret);
 
     // 根据第一段接口计算出的workspaceSize申请device内存
-    void* workspaceAddr = nullptr;
     if (workspaceSize > 0) {
         ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
-        CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret);
+        CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); cleanup(); return ret);
     }
 
     // 调用aclnnThreeInterpolateBackward第二段接口
     ret = aclnnThreeInterpolateBackward(workspaceAddr, workspaceSize, executor, stream);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnThreeInterpolateBackward failed. ERROR: %d\n", ret); return ret);
+    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnThreeInterpolateBackward failed. ERROR: %d\n", ret); cleanup();
+              return ret);
 
     // 4. （固定写法）同步等待任务执行结束
     ret = aclrtSynchronizeStream(stream);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret); return ret);
+    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret); cleanup(); return ret);
 
     // 5. 获取输出的值，将device侧内存上的结果拷贝至host侧，需要根据具体API的接口定义修改
     PrintOutResult(gradYShape, &gradYDeviceAddr);
 
-    // 6. 释放aclTensor和aclScalar，需要根据具体API的接口定义修改
-    aclDestroyTensor(gradX);
-    aclDestroyTensor(idx);
-    aclDestroyTensor(weight);
-    aclDestroyTensor(gradY);
-
-    // 7. 释放device资源，需要根据具体API的接口定义修改
-    aclrtFree(gradXDeviceAddr);
-    aclrtFree(idxDeviceAddr);
-    aclrtFree(weightDeviceAddr);
-    aclrtFree(gradYDeviceAddr);
-    if (workspaceSize > 0) {
-        aclrtFree(workspaceAddr);
-    }
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(deviceId);
-    aclFinalize();
+    // 6/7. 释放aclTensor与device资源
+    cleanup();
     return 0;
 }

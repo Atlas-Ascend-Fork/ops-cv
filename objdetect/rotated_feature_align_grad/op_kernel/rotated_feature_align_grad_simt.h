@@ -15,8 +15,13 @@
  * \brief SIMT kernel implementation for rotated_feature_align_grad operator
  *
  * Design features:
- *   - Output-parallel Gather with deterministic accumulation (no atomicAdd)
- *   - Per-channel register accumulation (C loop outermost, single write per channel)
+ *   - Input-parallel Scatter (与 MMCV 参考实现同构)：每个输入像素把 5 个采样点的四角
+ *     权重贡献通过 asc_atomic_add 累加到 dx，复杂度 O(N*H*W*points*C) 线性。
+ *     （此前的输出并行 gather 为 O(N*(H*W)^2*C*points)，大特征图不可执行。）
+ *   - 两阶段启动：InitDxKernel 先写 dx=dy（自梯度基线），SyncAll 后 ScatterKernel
+ *     原子累加各采样点贡献，避免初始化与累加竞争
+ *   - 累加顺序由原子操作调度决定（非确定）；浮点比较按 mix_tolerance 容差进行，
+ *     顺序差异在最后一个 ULP 量级，由容差吸收
  *   - POINTS as template int32_t, if constexpr eliminates runtime branches
  *   - Simt::UintDiv for NHW index decomposition (chained fast division)
  *   - Unified 512 threads (MDE design: 64 registers/thread)
@@ -30,8 +35,15 @@
 #include "kernel_tiling/kernel_tiling.h"
 #include "simt_api/common_functions.h"
 #include "simt_api/math_functions.h"
+#include "simt_api/device_atomic_functions.h"
+#include "simt_api/device_sync_functions.h"
 #include "rotated_feature_align_grad_tiling_data.h"
 #include "rotated_feature_align_grad_tiling_key.h"
+
+// 与同族插值算子（rotated_feature_align/deformable_roi_pool/grid_sampler2_d 等）一致：
+// 关闭乘加收缩，防止坐标表达式 roi_x+wx+hx 被融合为 FMA 改变舍入，使 floor 结果
+// 在整数边界处与 golden（分离运算）发生离散偏移。
+#pragma clang fp contract(off)
 
 namespace NsRotatedFeatureAlignGrad {
 
@@ -58,130 +70,171 @@ static constexpr int32_t SAMPLE_SLOT_CORNER_3 = 4;
 static constexpr float BILINEAR_OOB_LOW_BOUND = -1.0f;
 static constexpr float HALF_FACTOR = 0.5f;
 
-// Compute bilinear weight for output (y,x) from sampling point (fy,fx)
-// Matches golden: when y_low >= H-1, clamp y_low AND y_high to H-1 (not just y_high)
-__simt_callee__ __aicore__ inline float ComputeBilinearWeight(float fy, float fx, int32_t y, int32_t x, int32_t H,
-                                                              int32_t W)
+// 一个采样点的四角目标像素与权重（与 golden _mmcv_bilinear_terms 逐项对应：
+// 越界/非有限坐标整点跳过；fy/fx 下限钳 0 后取整；y_low>=H-1 时 y_low=y_high=H-1）
+struct ScatterCorners {
+    int32_t yLow;
+    int32_t xLow;
+    int32_t yHigh;
+    int32_t xHigh;
+    float w1; // (yLow,  xLow)
+    float w2; // (yLow,  xHigh)
+    float w3; // (yHigh, xLow)
+    float w4; // (yHigh, xHigh)
+};
+
+__simt_callee__ __aicore__ inline bool GetScatterCorners(float fy, float fx, int32_t H, int32_t W,
+                                                         ScatterCorners& corners)
 {
+    // 非有限坐标（NaN 来自 inf/nan bboxes 或 cos/sin 溢出）按越界处理：
+    // IEEE fmaxf(NaN, 0) 会把 NaN 静默钳为 0 并把权重堆到像素 (0,0)，须显式拒绝。
+    if (isnan(fy) || isnan(fx)) {
+        return false;
+    }
     if (fy < BILINEAR_OOB_LOW_BOUND || fy > static_cast<float>(H) || fx < BILINEAR_OOB_LOW_BOUND ||
         fx > static_cast<float>(W)) {
-        return 0.0f;
+        return false;
     }
     fy = fmaxf(fy, 0.0f);
     fx = fmaxf(fx, 0.0f);
-    int32_t y_low = static_cast<int32_t>(floorf(fy));
-    int32_t x_low = static_cast<int32_t>(floorf(fx));
-    int32_t y_high;
-    int32_t x_high;
-    if (y_low >= H - 1) {
-        y_low = H - 1;
-        y_high = H - 1;
+    // H/W 可达 INT32_MAX，(float)H 舍入到 2^31 后坐标 floor 可达 2^31，直接转 int32 会回绕。
+    // 先按 2^31 阈值预判（floor >= 2^31 时必然 >= H-1，与 golden 的 int64 取整后 y_low>=H-1
+    // 钳位语义一致）；其余区间 floor < 2^31 转 int32 安全，再用精确整数比较做边界钳位，
+    // 避免 (float)(H-1) 舍入引入的边界分歧。
+    constexpr float INT32_OVERFLOW_THRESHOLD = 2147483648.0f; // 2^31，float 可精确表示
+    float yLowF = floorf(fy);
+    float xLowF = floorf(fx);
+    int32_t yLow;
+    int32_t yHigh;
+    if (yLowF >= INT32_OVERFLOW_THRESHOLD) {
+        yLow = H - 1;
+        yHigh = H - 1;
     } else {
-        y_high = y_low + 1;
-    }
-    if (x_low >= W - 1) {
-        x_low = W - 1;
-        x_high = W - 1;
-    } else {
-        x_high = x_low + 1;
-    }
-    float ly = fy - static_cast<float>(y_low);
-    float lx = fx - static_cast<float>(x_low);
-    float hy_w = 1.0f - ly;
-    float hx_w = 1.0f - lx;
-    float weight = 0.0f;
-    if (y_low == y && x_low == x) {
-        weight += hy_w * hx_w;
-    }
-    if (y_low == y && x_high == x) {
-        weight += hy_w * lx;
-    }
-    if (y_high == y && x_low == x) {
-        weight += ly * hx_w;
-    }
-    if (y_high == y && x_high == x) {
-        weight += ly * lx;
-    }
-    return weight;
-}
-
-// Accumulate gradient contributions of one input position (h,w) into acc for output (n,y,x)
-// channel c. Single-level accumulation: each term (self gradient, per-point bilinear
-// contribution) is added to acc directly. Do NOT pre-aggregate per input position —
-// inner sums of extreme dy values can overflow to +Inf/-Inf and cancel to NaN in the
-// outer stream, diverging from golden/canndev scatter semantics (which yield ±Inf).
-template <typename T, int32_t POINTS>
-__simt_callee__ __aicore__ inline void AccumulateOneInputPos(float& acc, int32_t n, int32_t y, int32_t x, int32_t c,
-                                                             int32_t h, int32_t w, int32_t H, int32_t W, int32_t C,
-                                                             float spatial_scale, __gm__ T* dy, __gm__ T* bboxes)
-{
-    int64_t inIdx = (static_cast<int64_t>(n) * H + h) * W + w;
-    int64_t bboxBase = inIdx * BBOX_LAST_DIM;
-    int64_t dyOffset = inIdx * C + c;
-    float roi_y = static_cast<float>(bboxes[bboxBase + BBOX_IDX_Y]) * spatial_scale;
-    float roi_x = static_cast<float>(bboxes[bboxBase + BBOX_IDX_X]) * spatial_scale;
-    float dyVal = static_cast<float>(dy[dyOffset]);
-    if (h == y && w == x) {
-        acc += dyVal;
-    }
-    float px[MAX_SAMPLE_POINTS] = {roi_x, 0, 0, 0, 0};
-    float py[MAX_SAMPLE_POINTS] = {roi_y, 0, 0, 0, 0};
-    if constexpr (POINTS > 1) {
-        float roi_w = static_cast<float>(bboxes[bboxBase + BBOX_IDX_W]) * spatial_scale;
-        float roi_h = static_cast<float>(bboxes[bboxBase + BBOX_IDX_H]) * spatial_scale;
-        float roi_a = static_cast<float>(bboxes[bboxBase + BBOX_IDX_A]);
-        float w_2 = roi_w * HALF_FACTOR;
-        float h_2 = roi_h * HALF_FACTOR;
-        float cosa = cosf(roi_a);
-        float sina = sinf(roi_a);
-        float wx = cosa * w_2, wy = sina * w_2;
-        float hx = -sina * h_2, hy = cosa * h_2;
-        px[SAMPLE_SLOT_CORNER_0] = roi_x + wx + hx;
-        py[SAMPLE_SLOT_CORNER_0] = roi_y + wy + hy;
-        px[SAMPLE_SLOT_CORNER_1] = roi_x - wx + hx;
-        py[SAMPLE_SLOT_CORNER_1] = roi_y - wy + hy;
-        px[SAMPLE_SLOT_CORNER_2] = roi_x - wx - hx;
-        py[SAMPLE_SLOT_CORNER_2] = roi_y - wy - hy;
-        px[SAMPLE_SLOT_CORNER_3] = roi_x + wx - hx;
-        py[SAMPLE_SLOT_CORNER_3] = roi_y + wy - hy;
-    }
-    for (int32_t p = 0; p < POINTS; p++) {
-        float w = ComputeBilinearWeight(py[p], px[p], y, x, H, W);
-        if (w != 0.0f) {
-            acc += dyVal * w;
+        yLow = static_cast<int32_t>(yLowF);
+        if (yLow >= H - 1) {
+            yLow = H - 1;
+            yHigh = H - 1;
+        } else {
+            yHigh = yLow + 1;
         }
     }
+    int32_t xLow;
+    int32_t xHigh;
+    if (xLowF >= INT32_OVERFLOW_THRESHOLD) {
+        xLow = W - 1;
+        xHigh = W - 1;
+    } else {
+        xLow = static_cast<int32_t>(xLowF);
+        if (xLow >= W - 1) {
+            xLow = W - 1;
+            xHigh = W - 1;
+        } else {
+            xHigh = xLow + 1;
+        }
+    }
+    float ly = fy - static_cast<float>(yLow);
+    float lx = fx - static_cast<float>(xLow);
+    float hy = 1.0f - ly;
+    float hx = 1.0f - lx;
+    corners.yLow = yLow;
+    corners.xLow = xLow;
+    corners.yHigh = yHigh;
+    corners.xHigh = xHigh;
+    corners.w1 = hy * hx;
+    corners.w2 = hy * lx;
+    corners.w3 = ly * hx;
+    corners.w4 = ly * lx;
+    return true;
 }
 
-// VF Kernel: output-parallel Gather with deterministic accumulation
-template <typename T, int32_t POINTS>
-__simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpRotatedFeatureAlignGradSimtKernel(
-    int64_t totalNHW, int32_t H, int32_t W, int32_t C, float spatial_scale, uint64_t magicW, uint64_t shiftW,
-    uint64_t magicH, uint64_t shiftH, __gm__ T* dy, __gm__ T* bboxes, __gm__ T* dx)
+// 阶段 1：dx = dy（自梯度基线）。与阶段 2 之间由 Host 侧 SyncAll 分隔。
+template <typename T>
+__simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void InitDxKernel(int64_t totalElements, __gm__ T* dy,
+                                                                              __gm__ T* dx)
 {
     int64_t gridStride = static_cast<int64_t>(blockDim.x) * static_cast<int64_t>(gridDim.x);
-    for (int64_t outIdx = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; outIdx < totalNHW;
-         outIdx += gridStride) {
-        uint64_t uOut = static_cast<uint64_t>(outIdx);
-        uint64_t afterW = Simt::UintDiv(uOut, magicW, shiftW);
-        int32_t x = static_cast<int32_t>(uOut - afterW * static_cast<uint64_t>(W));
+    for (int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < totalElements; i += gridStride) {
+        dx[i] = dy[i];
+    }
+}
+
+// 阶段 2：输入并行 scatter。工作项扁平化为 (输入位置, 通道) 二元组：totalNHW 与 C
+// 可能极不对称（如 NHW=2、C=1e7 的通道边界用例），仅按输入并行会让极少数线程
+// 串行处理全部通道；扁平化后向 (inIdx, c) 均匀分发。每个输入位置把其 5 个采样点
+// 的四角权重贡献原子累加到 dx 对应像素；零权重跳过（避免 inf dy × 0 = NaN）。
+template <typename T, int32_t POINTS>
+__simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpRotatedFeatureAlignGradScatterKernel(
+    int64_t totalNHW, int32_t H, int32_t W, int32_t C, float spatial_scale, uint64_t magicW, uint64_t shiftW,
+    uint64_t magicH, uint64_t shiftH, uint64_t magicC, uint64_t shiftC, __gm__ T* dy, __gm__ T* bboxes, __gm__ T* dx)
+{
+    int64_t totalWork = totalNHW * static_cast<int64_t>(C);
+    int64_t gridStride = static_cast<int64_t>(blockDim.x) * static_cast<int64_t>(gridDim.x);
+    for (int64_t workIdx = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; workIdx < totalWork;
+         workIdx += gridStride) {
+        uint64_t uWork = static_cast<uint64_t>(workIdx);
+        uint64_t inIdxU = Simt::UintDiv(uWork, magicC, shiftC);
+        int32_t c = static_cast<int32_t>(uWork - inIdxU * static_cast<uint64_t>(C));
+        int64_t inIdx = static_cast<int64_t>(inIdxU);
+        uint64_t uIn = inIdxU;
+        uint64_t afterW = Simt::UintDiv(uIn, magicW, shiftW);
+        int32_t w = static_cast<int32_t>(uIn - afterW * static_cast<uint64_t>(W));
         uint64_t n_u64 = Simt::UintDiv(afterW, magicH, shiftH);
-        int32_t y = static_cast<int32_t>(afterW - n_u64 * static_cast<uint64_t>(H));
+        int32_t h = static_cast<int32_t>(afterW - n_u64 * static_cast<uint64_t>(H));
         int32_t n = static_cast<int32_t>(n_u64);
-        int64_t dxBase = (static_cast<int64_t>(n) * H * W + static_cast<int64_t>(y) * W + x) * C;
-        for (int32_t c = 0; c < C; c++) {
-            float acc = 0.0f;
-            for (int32_t h = 0; h < H; h++) {
-                for (int32_t w = 0; w < W; w++) {
-                    AccumulateOneInputPos<T, POINTS>(acc, n, y, x, c, h, w, H, W, C, spatial_scale, dy, bboxes);
-                }
+        int64_t bboxBase = inIdx * BBOX_LAST_DIM;
+        float roi_y = static_cast<float>(bboxes[bboxBase + BBOX_IDX_Y]) * spatial_scale;
+        float roi_x = static_cast<float>(bboxes[bboxBase + BBOX_IDX_X]) * spatial_scale;
+        float px[MAX_SAMPLE_POINTS] = {roi_x, 0, 0, 0, 0};
+        float py[MAX_SAMPLE_POINTS] = {roi_y, 0, 0, 0, 0};
+        if constexpr (POINTS > 1) {
+            float roi_w = static_cast<float>(bboxes[bboxBase + BBOX_IDX_W]) * spatial_scale;
+            float roi_h = static_cast<float>(bboxes[bboxBase + BBOX_IDX_H]) * spatial_scale;
+            float roi_a = static_cast<float>(bboxes[bboxBase + BBOX_IDX_A]);
+            float w_2 = roi_w * HALF_FACTOR;
+            float h_2 = roi_h * HALF_FACTOR;
+            float cosa = cosf(roi_a);
+            float sina = sinf(roi_a);
+            // volatile 防止编译器把角点分量融合进后续加减的 FMA 收缩（同族算子惯例）
+            volatile float wx = cosa * w_2, wy = sina * w_2;
+            volatile float hx = -sina * h_2, hy = cosa * h_2;
+            px[SAMPLE_SLOT_CORNER_0] = roi_x + wx + hx;
+            py[SAMPLE_SLOT_CORNER_0] = roi_y + wy + hy;
+            px[SAMPLE_SLOT_CORNER_1] = roi_x - wx + hx;
+            py[SAMPLE_SLOT_CORNER_1] = roi_y - wy + hy;
+            px[SAMPLE_SLOT_CORNER_2] = roi_x - wx - hx;
+            py[SAMPLE_SLOT_CORNER_2] = roi_y - wy - hy;
+            px[SAMPLE_SLOT_CORNER_3] = roi_x + wx - hx;
+            py[SAMPLE_SLOT_CORNER_3] = roi_y + wy - hy;
+        }
+        int64_t dyBase = inIdx * static_cast<int64_t>(C);
+        int64_t nBase = static_cast<int64_t>(n) * H * W;
+        float dyVal = static_cast<float>(dy[dyBase + c]);
+        for (int32_t p = 0; p < POINTS; p++) {
+            ScatterCorners corners;
+            if (!GetScatterCorners(py[p], px[p], H, W, corners)) {
+                continue;
             }
-            dx[dxBase + c] = static_cast<T>(acc);
+            if (corners.w1 != 0.0f) {
+                asc_atomic_add(dx + (nBase + static_cast<int64_t>(corners.yLow) * W + corners.xLow) * C + c,
+                               dyVal * corners.w1);
+            }
+            if (corners.w2 != 0.0f) {
+                asc_atomic_add(dx + (nBase + static_cast<int64_t>(corners.yLow) * W + corners.xHigh) * C + c,
+                               dyVal * corners.w2);
+            }
+            if (corners.w3 != 0.0f) {
+                asc_atomic_add(dx + (nBase + static_cast<int64_t>(corners.yHigh) * W + corners.xLow) * C + c,
+                               dyVal * corners.w3);
+            }
+            if (corners.w4 != 0.0f) {
+                asc_atomic_add(dx + (nBase + static_cast<int64_t>(corners.yHigh) * W + corners.xHigh) * C + c,
+                               dyVal * corners.w4);
+            }
         }
     }
 }
 
-// Process entry: compute UintDiv params and launch VF kernel
+// Process entry: compute UintDiv params and launch the two-phase scatter pipeline
 template <typename T, int32_t POINTS>
 __aicore__ inline void Process(GM_ADDR dy, GM_ADDR bboxes, GM_ADDR dx,
                                const RotatedFeatureAlignGradTilingData* tilingData)
@@ -198,12 +251,17 @@ __aicore__ inline void Process(GM_ADDR dy, GM_ADDR bboxes, GM_ADDR dx,
         }
         return;
     }
-    uint64_t magicW = 0, shiftW = 0, magicH = 0, shiftH = 0;
+    uint64_t magicW = 0, shiftW = 0, magicH = 0, shiftH = 0, magicC = 0, shiftC = 0;
     GetUintDivMagicAndShift(magicW, shiftW, static_cast<uint64_t>(tilingData->W));
     GetUintDivMagicAndShift(magicH, shiftH, static_cast<uint64_t>(tilingData->H));
-    asc_vf_call<OpRotatedFeatureAlignGradSimtKernel<T, POINTS>>(
+    GetUintDivMagicAndShift(magicC, shiftC, static_cast<uint64_t>(tilingData->C));
+    int64_t totalElements = totalNHW * static_cast<int64_t>(tilingData->C);
+    // 阶段 1：自梯度基线 dx = dy；阶段 2：原子累加采样点贡献（工作项按 (输入,通道) 扁平分发）
+    asc_vf_call<InitDxKernel<T>>(dim3(THREAD_NUM), totalElements, dy_gm, dx_gm);
+    SyncAll();
+    asc_vf_call<OpRotatedFeatureAlignGradScatterKernel<T, POINTS>>(
         dim3(THREAD_NUM), totalNHW, tilingData->H, tilingData->W, tilingData->C, tilingData->spatial_scale, magicW,
-        shiftW, magicH, shiftH, dy_gm, bboxes_gm, dx_gm);
+        shiftW, magicH, shiftH, magicC, shiftC, dy_gm, bboxes_gm, dx_gm);
 }
 
 } // namespace NsRotatedFeatureAlignGrad

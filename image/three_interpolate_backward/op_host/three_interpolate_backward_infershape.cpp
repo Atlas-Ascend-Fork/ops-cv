@@ -113,19 +113,77 @@ static graphStatus InferShape4ThreeInterpolateBackward(gert::InferShapeContext* 
         return GRAPH_SUCCESS;
     }
 
+    // grad_x rank 校验：仅支持 ND(3D) 与 5HD(5D) 两种形状。其余 rank 若继续进入 5HD
+    // 分支，会读取不存在的 DIM_4 并构造 5D 输出，故在此显式拒绝（与 ND 分支同等约束）。
+    OP_CHECK_IF(grad_x_shape->GetDimNum() != DIM_NUM_5HD,
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "grad_x",
+                                             std::to_string(grad_x_shape->GetDimNum()).c_str(), "3 or 5"),
+                return GRAPH_FAILED);
+
     // 910b/910_93 5HD 路径：grad_x (B, C1, N, 1, C0) -> grad_y (B, C1, M, 1, C0)
-    auto attr_pointer = attrs->GetAttrPointer<uint32_t>(0);
-    OP_CHECK_NULL_WITH_CONTEXT(context, attr_pointer);
-    auto ms = *attr_pointer;
-    // -1 维直接透传，避免 uint32_t 截断为巨大正值
+    // 属性 m 在 def.cpp 注册为 Int（int64_t），必须按 int64_t 读取；以 uint32_t 读取会截断
+    // 低 32 位（m=-1 变 4294967295），绕过 m>0 校验并污染 grad_y 的 DIM_2。
+    auto attr_m = attrs->GetAttrPointer<int64_t>(0);
+    OP_CHECK_NULL_WITH_CONTEXT(context, attr_m);
+    OP_CHECK_IF(*attr_m <= 0,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "m", std::to_string(*attr_m).c_str(),
+                                                      "attr m must be > 0"),
+                return GRAPH_FAILED);
+    int64_t ms = *attr_m;
     int64_t bs = grad_x_shape->GetDim(static_cast<size_t>(DIM::DIM_0));
     int64_t c1 = grad_x_shape->GetDim(static_cast<size_t>(DIM::DIM_1));
     int64_t c0 = grad_x_shape->GetDim(static_cast<size_t>(DIM::DIM_4));
 
+    // idx/weight 形状校验（与 ND 分支同等约束）：dimNum==3、idx shape == weight shape、
+    // idx == (B, N, 3)，其中 N 取 grad_x 的 DIM_2。
+    const gert::Shape* idx_shape_5hd = context->GetInputShape(static_cast<size_t>(DIM::DIM_1));
+    OP_CHECK_NULL_WITH_CONTEXT(context, idx_shape_5hd);
+    const gert::Shape* weight_shape_5hd = context->GetInputShape(static_cast<size_t>(DIM::DIM_2));
+    OP_CHECK_NULL_WITH_CONTEXT(context, weight_shape_5hd);
+    const bool idxKnownRank5hd = !Ops::Base::IsUnknownRank(*idx_shape_5hd);
+    const bool weightKnownRank5hd = !Ops::Base::IsUnknownRank(*weight_shape_5hd);
+    if (idxKnownRank5hd) {
+        OP_CHECK_IF(idx_shape_5hd->GetDimNum() != DIM_NUM_ND,
+                    OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "idx",
+                                                 std::to_string(idx_shape_5hd->GetDimNum()).c_str(), "3"),
+                    return GRAPH_FAILED);
+        int64_t dimB = grad_x_shape->GetDim(static_cast<size_t>(DIM::DIM_0));
+        int64_t dimN = grad_x_shape->GetDim(static_cast<size_t>(DIM::DIM_2));
+        int64_t idxDim0 = idx_shape_5hd->GetDim(static_cast<size_t>(DIM::DIM_0));
+        int64_t idxDim1 = idx_shape_5hd->GetDim(static_cast<size_t>(DIM::DIM_1));
+        int64_t idxDim2 = idx_shape_5hd->GetDim(static_cast<size_t>(DIM::DIM_2));
+        OP_CHECK_IF(
+            (idxDim0 != UNKNOW_DIM && dimB != UNKNOW_DIM && idxDim0 != dimB) ||
+                (idxDim1 != UNKNOW_DIM && dimN != UNKNOW_DIM && idxDim1 != dimN) ||
+                (idxDim2 != UNKNOW_DIM && idxDim2 != 3),
+            OP_LOGE_FOR_INVALID_SHAPE(context->GetNodeName(), "idx", Ops::Base::ToString(*idx_shape_5hd).c_str(),
+                                      ("[" + std::to_string(dimB) + "," + std::to_string(dimN) + ",3]").c_str()),
+            return GRAPH_FAILED);
+    }
+    if (weightKnownRank5hd) {
+        OP_CHECK_IF(weight_shape_5hd->GetDimNum() != DIM_NUM_ND,
+                    OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "weight",
+                                                 std::to_string(weight_shape_5hd->GetDimNum()).c_str(), "3"),
+                    return GRAPH_FAILED);
+    }
+    if (idxKnownRank5hd && weightKnownRank5hd) {
+        for (size_t i = 0; i < DIM_NUM_ND; i++) {
+            int64_t idxDim = idx_shape_5hd->GetDim(i);
+            int64_t weightDim = weight_shape_5hd->GetDim(i);
+            OP_CHECK_IF(
+                idxDim != UNKNOW_DIM && weightDim != UNKNOW_DIM && idxDim != weightDim,
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "idx, weight",
+                    (Ops::Base::ToString(*idx_shape_5hd) + " vs " + Ops::Base::ToString(*weight_shape_5hd)).c_str(),
+                    "idx shape must equal weight shape"),
+                return GRAPH_FAILED);
+        }
+    }
+
     grad_y_shape->SetDimNum(DIM_NUM_5HD);
     grad_y_shape->SetDim(static_cast<size_t>(DIM::DIM_0), bs);
     grad_y_shape->SetDim(static_cast<size_t>(DIM::DIM_1), c1);
-    grad_y_shape->SetDim(static_cast<size_t>(DIM::DIM_2), static_cast<int64_t>(ms));
+    grad_y_shape->SetDim(static_cast<size_t>(DIM::DIM_2), ms);
     grad_y_shape->SetDim(static_cast<size_t>(DIM::DIM_3), 1);
     grad_y_shape->SetDim(static_cast<size_t>(DIM::DIM_4), c0);
 

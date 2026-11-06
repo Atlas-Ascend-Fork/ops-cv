@@ -32,6 +32,7 @@ public:
 
         this->Input("output_shape")
             .ParamType(REQUIRED)
+            .ValueDepend(REQUIRED) // 值依赖输入：InferShape/Tiling 读取其常量值
             .DataType({ge::DT_INT32, ge::DT_INT32, ge::DT_INT32, ge::DT_INT32})
             .Format({ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND})
             .UnknownShapeFormat({ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND})

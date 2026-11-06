@@ -57,12 +57,58 @@ static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST = {op::DataT
 static const std::initializer_list<op::DataType> IDX_DTYPE_SUPPORT_LIST = {op::DataType::DT_INT32,
                                                                            op::DataType::DT_INT64};
 
-static bool CheckDtypeValid(const aclTensor* grad_x, const aclTensor* idx, const aclTensor* weight)
+static bool CheckDtypeValid(const aclTensor* grad_x, const aclTensor* idx, const aclTensor* weight,
+                            const aclTensor* grad_y)
 {
-    // 检查gradOutput和self数据类型是否在ThresholdBackward算子的支持列表内
+    // 检查grad_x/idx/weight/grad_y数据类型是否在支持列表内
     OP_CHECK_DTYPE_NOT_SUPPORT(grad_x, DTYPE_SUPPORT_LIST, return false);
     OP_CHECK_DTYPE_NOT_SUPPORT(idx, IDX_DTYPE_SUPPORT_LIST, return false);
     OP_CHECK_DTYPE_NOT_SUPPORT(weight, DTYPE_SUPPORT_LIST, return false);
+    OP_CHECK_DTYPE_NOT_SUPPORT(grad_y, DTYPE_SUPPORT_LIST, return false);
+    // weight 与 grad_x、grad_y 与 grad_x 必须同 dtype（文档约束）
+    OP_CHECK_DTYPE_NOT_MATCH(weight, grad_x->GetDataType(), return false);
+    OP_CHECK_DTYPE_NOT_MATCH(grad_y, grad_x->GetDataType(), return false);
+    return true;
+}
+static bool CheckFormat(const aclTensor* grad_x, const aclTensor* idx, const aclTensor* weight, const aclTensor* grad_y)
+{
+    // 文档：Ascend 950 仅支持 ND（3D）；910b/910_93 支持 ND、NCHW；idx/weight 仅支持 ND。
+    // 950 路径 kernel 原生 ND 且 aclnn 直连，NCHW 等格式组合不在 950 支持范围内，
+    // 必须在首段接口拒绝，避免落入后续 TransData/ViewCopy 的内部错误路径。
+    const auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
+    const auto gradXFormat = grad_x->GetStorageFormat();
+    const auto gradYFormat = grad_y->GetStorageFormat();
+    if (curArch == NpuArch::DAV_3510) {
+        if (gradXFormat != op::Format::FORMAT_ND) {
+            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "grad_x format must be ND on Ascend950.");
+            return false;
+        }
+        if (gradYFormat != op::Format::FORMAT_ND) {
+            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "grad_y format must be ND on Ascend950.");
+            return false;
+        }
+    } else {
+        if (gradXFormat != op::Format::FORMAT_ND && gradXFormat != op::Format::FORMAT_NCHW) {
+            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "grad_x format is not supported, only ND or NCHW is allowed.");
+            return false;
+        }
+        if (gradYFormat != op::Format::FORMAT_ND && gradYFormat != op::Format::FORMAT_NCHW) {
+            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "grad_y format is not supported, only ND or NCHW is allowed.");
+            return false;
+        }
+    }
+    if (gradXFormat != gradYFormat) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "grad_x and grad_y must have the same format.");
+        return false;
+    }
+    if (idx->GetStorageFormat() != op::Format::FORMAT_ND) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "idx format must be ND.");
+        return false;
+    }
+    if (weight->GetStorageFormat() != op::Format::FORMAT_ND) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "weight format must be ND.");
+        return false;
+    }
     return true;
 }
 
@@ -127,16 +173,19 @@ static aclnnStatus CheckParams(const aclTensor* grad_x, const aclTensor* idx, co
     // 1. 检查参数是否为空指针
     CHECK_RET(CheckNotNull(grad_x, idx, weight, grad_y), ACLNN_ERR_PARAM_NULLPTR);
 
-    // 2. 检查数据类型是否正确
-    CHECK_RET(CheckDtypeValid(grad_x, idx, weight), ACLNN_ERR_PARAM_INVALID);
+    // 2. 检查数据类型是否正确（含跨 Tensor dtype 一致性）
+    CHECK_RET(CheckDtypeValid(grad_x, idx, weight, grad_y), ACLNN_ERR_PARAM_INVALID);
 
-    // 3. 属性 m 必须大于 0。910B/910_93 不在此处拦截时，m=0 会进入 TransData 并以内部错误返回。
+    // 3. 检查数据格式是否在支持范围内
+    CHECK_RET(CheckFormat(grad_x, idx, weight, grad_y), ACLNN_ERR_PARAM_INVALID);
+
+    // 4. 属性 m 必须大于 0。910B/910_93 不在此处拦截时，m=0 会进入 TransData 并以内部错误返回。
     if (m <= 0) {
         OP_LOGE(ACLNN_ERR_PARAM_INVALID, "attr m must be > 0.");
         return ACLNN_ERR_PARAM_INVALID;
     }
 
-    // 4. 检查 grad_x/idx/weight/grad_y 之间的形状一致性（b/c/n/m 维）
+    // 5. 检查 grad_x/idx/weight/grad_y 之间的形状一致性（b/c/n/m 维）
     if (!CheckShapeConsistent(grad_x, idx, weight, grad_y, m)) {
         OP_LOGE(ACLNN_ERR_PARAM_INVALID,
                 "shapes of grad_x/idx/weight/grad_y must be consistent: grad_x and grad_y should both be "

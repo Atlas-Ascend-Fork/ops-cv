@@ -78,8 +78,8 @@ constexpr uint32_t UINTDIV_UB_ELEMS = 8;
  */
 template <typename T, typename IDX_T>
 __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpolateBackwardSimtDet(
-    int32_t b, int32_t c, int32_t n, int32_t m, __gm__ T* grad_x_gm, __gm__ IDX_T* idx_gm, __gm__ T* weight_gm,
-    __gm__ T* grad_y_gm, __gm__ float* acc_gm, __ubuf__ uint32_t* uintdivUb)
+    int32_t b, int32_t c, int32_t n, int32_t m, int32_t mChunk, __gm__ T* grad_x_gm, __gm__ IDX_T* idx_gm,
+    __gm__ T* weight_gm, __gm__ T* grad_y_gm, __gm__ float* acc_gm, __ubuf__ uint32_t* uintdivUb)
 {
     // 1. 从 UB 读取 UintDiv 参数（仅需 magicC/shiftC，用于 bcIdx → (b,c) 解码）
     const uint32_t magicC = uintdivUb[0];
@@ -87,12 +87,19 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpol
     const uint32_t cU32 = static_cast<uint32_t>(c);
 
     // 2. Grid-Stride 循环：工作项为 (b,c) 行，共 b*c 个
-    //    本函数为 MODE_DEFAULT 路径：tiling 保证 b*c-1 <= UINT32_MAX 且 m <= INT32_MAX，
-    //    bcIdx 可安全窄化为 uint32 并用 Simt::UintDiv<uint32_t> magic 快除解码；
-    //    超界场景由 MODE_LARGE 路径（64 位解码）承接
+    //    本函数为 MODE_DEFAULT 路径：tiling 保证 b*c <= 2^31 且 m <= INT32_MAX。
+    //    注意 32 位 magic 快除的安全上界并非 2^32：Simt::UintDiv<uint32_t> 的
+    //    q=__umulhi(d,magic)、sum=d+q 为 32 位，非 2 的幂除数 c 在 dividend+q 达到
+    //    2^32 时会回绕（c=3 时门限约 3.22e9）。故 tiling 以 2^31 作为保守上界，
+    //    超界由 MODE_LARGE（64 位解码）承接
     int64_t bcSize = static_cast<int64_t>(b) * c;
     uint64_t tid = static_cast<uint64_t>(blockIdx.x * blockDim.x + threadIdx.x);
     uint64_t stride = static_cast<uint64_t>(blockDim.x * gridDim.x);
+
+    // 每线程私有 fp32 累加槽：长度 mChunk = min(m, ACC_CHUNK_ELEMS)。
+    // workspace 大小 = 线程数 * mChunk * 4B，与 b*c 无关、上界固定（百 MB 量级）；
+    // 线程在自己的槽内按行复用（行内清零→累加→写回），无任何跨线程同步。
+    __gm__ float* acc = acc_gm + tid * static_cast<uint64_t>(mChunk);
 
     for (uint64_t bcIdx = tid; bcIdx < static_cast<uint64_t>(bcSize); bcIdx += stride) {
         // 2.1 解码 (bIdx, cIdx)
@@ -100,39 +107,43 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpol
         uint32_t bIdx = Simt::UintDiv<uint32_t>(bcU32, magicC, shiftC);
         uint32_t cIdx = bcU32 - bIdx * cU32;
 
-        // 2.2 行基址：acc/grad_y 均为 (bIdx*c + cIdx)*m = bcIdx*m（本线程独占该行）
+        // 2.2 行基址：grad_y 为 (bIdx*c + cIdx)*m = bcIdx*m（本线程独占该行）
         uint64_t rowBase = bcIdx * static_cast<uint64_t>(m);
 
-        // 2.3 行私有清零 fp32 累加器（同行内程序序保证后续累加可见，无需屏障/刷缓存/跨核同步）
-        for (int32_t j = 0; j < m; j++) {
-            acc_gm[rowBase + static_cast<uint64_t>(j)] = 0.0f;
-        }
-
-        // 2.4 fp32 串行累加：k 外层（i=0,1,2）、n 内层升序
-        //     与 golden 的 scatter_add_ 按 i=0,1,2 三次散射、每次 n 升序的顺序完全一致
-        //     ⚠️ grad_x[bIdx,cIdx,ni] 在 k 外层循环下会被读 3 次，依赖 DCache 吸收（已知性能取舍）
-        for (int32_t k = 0; k < 3; k++) {
-            for (int32_t ni = 0; ni < n; ni++) {
-                // idx 布局 (B,N,3)，偏移 bIdx*n*3 + ni*3 + k；取值范围 [0, m)
-                uint64_t idxWeightOffset = static_cast<uint64_t>(bIdx) * n * 3 + static_cast<uint64_t>(ni) * 3 + k;
-                IDX_T jRaw = idx_gm[idxWeightOffset];
-                // int32 索引显式转 int64_t 再转 uint64_t，避免编译器差异
-                uint64_t j = static_cast<uint64_t>(static_cast<int64_t>(jRaw));
-                float w = static_cast<float>(weight_gm[idxWeightOffset]);
-
-                uint64_t gradXOffset = static_cast<uint64_t>(bIdx) * c * n + static_cast<uint64_t>(cIdx) * n + ni;
-                float g = static_cast<float>(grad_x_gm[gradXOffset]);
-
-                // ⚠️ 乘法保留 fp32 中间舍入（volatile 防 FMA 收缩）：golden 为 fp32 mul-then-add
-                // 两次舍入；若被 ccec 收缩为 fma(g,w,acc)，乘积舍入点消失，与 golden 产生 ULP 级偏差
-                volatile float prod = g * w;
-                acc_gm[rowBase + j] = acc_gm[rowBase + j] + prod;
+        // 2.3 行内按 [j0, j0+len) 分块处理：分块只切分输出维度，不改变任何元素的
+        //     k 外 n 内累加顺序（与 golden 逐位一致）
+        // j0/len/t 用 int64 表示：m 可达 INT32_MAX，int32 的 j0 += mChunk 会溢出
+        for (int64_t j0 = 0; j0 < static_cast<int64_t>(m); j0 += static_cast<int64_t>(mChunk)) {
+            const int64_t mL = static_cast<int64_t>(m);
+            const int64_t len = ((mL - j0) < static_cast<int64_t>(mChunk)) ? (mL - j0) : static_cast<int64_t>(mChunk);
+            const uint64_t j0U = static_cast<uint64_t>(j0);
+            const uint64_t j1U = j0U + static_cast<uint64_t>(len);
+            for (int64_t t = 0; t < len; t++) {
+                acc[t] = 0.0f;
             }
-        }
-
-        // 2.5 末次舍入：fp32 累加结果一次性 cast 回 T 写 grad_y（与 golden 的唯一舍入点一致）
-        for (int32_t j = 0; j < m; j++) {
-            grad_y_gm[rowBase + static_cast<uint64_t>(j)] = static_cast<T>(acc_gm[rowBase + static_cast<uint64_t>(j)]);
+            // 2.3.1 fp32 串行累加：k 外层（i=0,1,2）、n 内层升序
+            //       与 golden 的 scatter_add_ 按 i=0,1,2 三次散射、每次 n 升序的顺序完全一致
+            for (int32_t k = 0; k < 3; k++) {
+                for (int32_t ni = 0; ni < n; ni++) {
+                    uint64_t idxWeightOffset = static_cast<uint64_t>(bIdx) * n * 3 + static_cast<uint64_t>(ni) * 3 + k;
+                    IDX_T jRaw = idx_gm[idxWeightOffset];
+                    uint64_t j = static_cast<uint64_t>(static_cast<int64_t>(jRaw));
+                    if (j < j0U || j >= j1U) {
+                        continue;
+                    }
+                    float w = static_cast<float>(weight_gm[idxWeightOffset]);
+                    uint64_t gradXOffset = static_cast<uint64_t>(bIdx) * c * n + static_cast<uint64_t>(cIdx) * n + ni;
+                    float g = static_cast<float>(grad_x_gm[gradXOffset]);
+                    // 乘法保留 fp32 中间舍入（volatile 防 FMA 收缩）
+                    volatile float prod = g * w;
+                    uint64_t t = j - j0U;
+                    acc[t] = acc[t] + prod;
+                }
+            }
+            // 2.3.2 末次舍入：fp32 累加结果一次性 cast 回 T 写 grad_y
+            for (int64_t t = 0; t < len; t++) {
+                grad_y_gm[rowBase + j0U + static_cast<uint64_t>(t)] = static_cast<T>(acc[t]);
+            }
         }
     }
 }
@@ -140,16 +151,16 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpol
 /*!
  * \brief SIMT VF 函数（MODE_LARGE）：超大范围场景的确定性行私有累加
  *
- * 与 OpThreeInterpolateBackwardSimtDet 算法完全一致（行私有清零 + k 外 n 内串行累加 +
- * 两步舍入），差异仅在 bcIdx 解码位宽：
- *   - bcIdx 用 64 位原生除法解码（b*c 可超过 2^32），不依赖 32 位 magic/shift 快除
- * 性能说明：64 位除法为软件模拟，逐行一次；该路径仅极端大 shape 命中，
+ * 与 OpThreeInterpolateBackwardSimtDet 算法完全一致（行私有 fp32 workspace 累加 +
+ * 行末一次性舍入），差异仅在 bcIdx 解码位宽：
+ *   - bcIdx 用 64 位原生除法解码（b*c 可超过 2^31），不依赖 32 位 magic/shift 快除
+ * 性能说明：64 位除法为软件模拟，逐行一次；该路径仅大 shape 命中，
  * 常规 shape 仍走 MODE_DEFAULT 的 magic 快除路径，性能不受影响。
  */
 template <typename T, typename IDX_T>
 __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpolateBackwardSimtDetLarge(
-    int32_t b, int32_t c, int32_t n, int32_t m, __gm__ T* grad_x_gm, __gm__ IDX_T* idx_gm, __gm__ T* weight_gm,
-    __gm__ T* grad_y_gm)
+    int32_t b, int32_t c, int32_t n, int32_t m, int32_t mChunk, __gm__ T* grad_x_gm, __gm__ IDX_T* idx_gm,
+    __gm__ T* weight_gm, __gm__ T* grad_y_gm, __gm__ float* acc_gm)
 {
     const uint64_t cU64 = static_cast<uint64_t>(static_cast<uint32_t>(c));
     const uint64_t mU64 = static_cast<uint64_t>(static_cast<uint32_t>(m));
@@ -160,36 +171,47 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpThreeInterpol
     uint64_t tid = static_cast<uint64_t>(blockIdx.x * blockDim.x + threadIdx.x);
     uint64_t stride = static_cast<uint64_t>(blockDim.x * gridDim.x);
 
+    // 每线程私有 fp32 累加槽（长度 mChunk），与 MODE_DEFAULT 相同的分块策略
+    __gm__ float* acc = acc_gm + tid * static_cast<uint64_t>(mChunk);
+
     for (uint64_t bcIdx = tid; bcIdx < static_cast<uint64_t>(bcSize); bcIdx += stride) {
         // 64 位解码 (bIdx, cIdx)：bcIdx = bIdx * c + cIdx
         uint64_t bIdx = bcIdx / cU64;
         uint64_t cIdx = bcIdx - bIdx * cU64;
 
-        // 行基址：grad_y[bIdx, cIdx, :]（本线程独占该行）
-        uint64_t gradYBase = (bIdx * cU64 + cIdx) * mU64;
+        // 行基址：grad_y 为 (bIdx*c + cIdx)*m = bcIdx*m（本线程独占该行）
+        uint64_t rowBase = bcIdx * mU64;
 
-        // 行私有清零（同行内程序序保证后续累加可见）
-        for (int32_t j = 0; j < m; j++) {
-            grad_y_gm[gradYBase + static_cast<uint64_t>(j)] = static_cast<T>(0);
-        }
-
-        // 串行累加：k 外层（i=0,1,2）、n 内层升序（顺序与 MODE_DEFAULT 一致）
-        for (int32_t k = 0; k < 3; k++) {
-            for (int32_t ni = 0; ni < n; ni++) {
-                uint64_t idxWeightOffset = bIdx * nU64 * 3 + static_cast<uint64_t>(ni) * 3 + k;
-                IDX_T jRaw = idx_gm[idxWeightOffset];
-                uint64_t j = static_cast<uint64_t>(static_cast<int64_t>(jRaw));
-                T w = weight_gm[idxWeightOffset];
-
-                uint64_t gradXOffset = (bIdx * cU64 + cIdx) * nU64 + static_cast<uint64_t>(ni);
-                T g = grad_x_gm[gradXOffset];
-
-                // 两步舍入（与 golden 原生 dtype 运算逐位一致，禁止合并成一步 float FMA，
-                // volatile 防止编译器 FMA 收缩，原因同 MODE_DEFAULT 路径）
-                volatile T prod = static_cast<T>(static_cast<float>(g) * static_cast<float>(w));
-                uint64_t gradYOffset = gradYBase + j;
-                grad_y_gm[gradYOffset] = static_cast<T>(static_cast<float>(grad_y_gm[gradYOffset]) +
-                                                        static_cast<float>(prod));
+        // 行内按 [j0, j0+len) 分块处理：分块只切分输出维度，不改变元素的 k 外 n 内累加顺序
+        // j0/len/t 用 int64 表示：m 可达 INT32_MAX，int32 的 j0 += mChunk 会溢出
+        for (int64_t j0 = 0; j0 < static_cast<int64_t>(m); j0 += static_cast<int64_t>(mChunk)) {
+            const int64_t mL = static_cast<int64_t>(m);
+            const int64_t len = ((mL - j0) < static_cast<int64_t>(mChunk)) ? (mL - j0) : static_cast<int64_t>(mChunk);
+            const uint64_t j0U = static_cast<uint64_t>(j0);
+            const uint64_t j1U = j0U + static_cast<uint64_t>(len);
+            for (int64_t t = 0; t < len; t++) {
+                acc[t] = 0.0f;
+            }
+            // fp32 串行累加：k 外层（i=0,1,2）、n 内层升序（顺序与 MODE_DEFAULT 一致）
+            for (int32_t k = 0; k < 3; k++) {
+                for (int32_t ni = 0; ni < n; ni++) {
+                    uint64_t idxWeightOffset = bIdx * nU64 * 3 + static_cast<uint64_t>(ni) * 3 + k;
+                    IDX_T jRaw = idx_gm[idxWeightOffset];
+                    uint64_t j = static_cast<uint64_t>(static_cast<int64_t>(jRaw));
+                    if (j < j0U || j >= j1U) {
+                        continue;
+                    }
+                    float w = static_cast<float>(weight_gm[idxWeightOffset]);
+                    uint64_t gradXOffset = (bIdx * cU64 + cIdx) * nU64 + static_cast<uint64_t>(ni);
+                    float g = static_cast<float>(grad_x_gm[gradXOffset]);
+                    volatile float prod = g * w;
+                    uint64_t t = j - j0U;
+                    acc[t] = acc[t] + prod;
+                }
+            }
+            // 末次舍入：fp32 累加结果一次性 cast 回 T 写 grad_y
+            for (int64_t t = 0; t < len; t++) {
+                grad_y_gm[rowBase + j0U + static_cast<uint64_t>(t)] = static_cast<T>(acc[t]);
             }
         }
     }
@@ -219,11 +241,19 @@ __aicore__ inline void Process(GM_ADDR grad_x, GM_ADDR idx, GM_ADDR weight, GM_A
     int32_t c = tilingData->c;
     int32_t n = tilingData->n;
     int32_t m = tilingData->m;
+    int32_t mChunk = tilingData->mChunk;
+
+    // 合法空 tensor 保护：b==0 或 c==0 时工作项数 b*c==0，kernel 没有任何工作项可做。
+    // 必须在 UintDiv magic 预计算之前返回：MODE_DEFAULT 分支会以 c 为除数调用
+    // GetUintDivMagicAndShift<uint32_t>（c==0 即整数除零，release 无断言保护）。
+    if (b <= 0 || c <= 0) {
+        return;
+    }
 
     if constexpr (schMode == THREE_INTERPOLATE_BACKWARD_MODE_LARGE) {
-        // MODE_LARGE：b*c > 2^32，64 位解码，无需 magic/shift 预计算
-        asc_vf_call<OpThreeInterpolateBackwardSimtDetLarge<T, IDX_T>>(dim3(THREAD_NUM), b, c, n, m, grad_x_gm, idx_gm,
-                                                                      weight_gm, grad_y_gm);
+        // MODE_LARGE：b*c > 2^31，64 位解码，无需 magic/shift 预计算
+        asc_vf_call<OpThreeInterpolateBackwardSimtDetLarge<T, IDX_T>>(dim3(THREAD_NUM), b, c, n, m, mChunk, grad_x_gm,
+                                                                      idx_gm, weight_gm, grad_y_gm, acc_gm);
         return;
     }
 
@@ -244,8 +274,8 @@ __aicore__ inline void Process(GM_ADDR grad_x, GM_ADDR idx, GM_ADDR weight, GM_A
     __ubuf__ uint32_t* uintdivUb = (__ubuf__ uint32_t*)(uintdivTensor.GetPhyAddr());
 
     // 2. 统一确定性 kernel：行私有 fp32 串行累加（单次发射，无清零 VF、无跨核同步）
-    asc_vf_call<OpThreeInterpolateBackwardSimtDet<T, IDX_T>>(dim3(THREAD_NUM), b, c, n, m, grad_x_gm, idx_gm, weight_gm,
-                                                             grad_y_gm, acc_gm, uintdivUb);
+    asc_vf_call<OpThreeInterpolateBackwardSimtDet<T, IDX_T>>(dim3(THREAD_NUM), b, c, n, m, mChunk, grad_x_gm, idx_gm,
+                                                             weight_gm, grad_y_gm, acc_gm, uintdivUb);
 }
 
 } // namespace NsThreeInterpolateBackward

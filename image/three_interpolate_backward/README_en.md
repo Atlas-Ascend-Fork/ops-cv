@@ -65,7 +65,7 @@ English | [简体中文](./README.md)
     <tr>
       <td>m</td>
       <td>Attr</td>
-      <td>Size of the lowest dimension of the input features, used to guide the inference of the shape of `grad_y` during infershape.</td>
+      <td>Size of the lowest dimension (M) of the output `grad_y` (that is, the number of points of the input feature of the forward three_interpolate), used to guide the inference of the shape of `grad_y` during infershape.</td>
       <td>INT32</td>
       <td>-</td>
     </tr>
@@ -84,14 +84,18 @@ English | [简体中文](./README.md)
 - The shape of `grad_x` is (B, C, N), the shape of `idx`/`weight` is (B, N, 3), and the shape of `grad_y` is (B, C, M). In addition, the B/N dimensions of `idx`/`weight` must be consistent with those of `grad_x`; the B/C dimensions of `grad_y` must be consistent with those of `grad_x`, and M must equal the attribute `m`. If the shapes are inconsistent, the API verification fails.
 - The attribute `m` must be greater than 0.
 - `grad_x`/`weight`/`grad_y` are FLOAT32 or FLOAT16, and `idx` is INT32 or INT64.
+- The data type of `weight` must be the same as that of `grad_x` and `grad_y`.
+- Dimension upper bounds: each axis of `grad_x` (B, C, N) and the attribute `m` must be within [0, INT32_MAX], and the total element counts `B*C*N` and `B*C*M` must not exceed INT64_MAX/8. The operator returns a failure when the range is exceeded.
+- `grad_y` is a pure output: its initial content is overwritten row by row (zeroed first and then accumulated), so the caller does not need to preset an initial value.
 - <term>Atlas A2 products</term> and <term>Atlas A3 products</term>: the data format of `grad_x` and `grad_y` is 5HD (that is, NC1HWC0, consistent with `FORMAT_NC1HWC0` defined in the operator IR).
 - <term>Ascend 950PR&950DT products</term>: the data format of `grad_x` and `grad_y` is ND.
+- <term>Atlas A2 products</term> and <term>Atlas A3 products</term>: at the aclnn calling layer, `grad_x` and `grad_y` are passed in as NCHW 4D tensors ((b, c, n, 1) and (b, c, m, 1) respectively), and are then converted to 5HD (NC1HWC0) at the IR layer.
+- <term>Ascend 950PR&950DT products</term>: at the aclnn calling layer, `grad_x` and `grad_y` are passed in as ND 3D tensors ((b, c, n) and (b, c, m) respectively).
+- <term>Ascend 950PR&950DT products</term>: dynamic shapes are supported (`-1` indicates an unknown dimension and `-2` indicates an unknown rank); shapes must be concretized at actual execution.
 
 ## Invocation Description
 
 | Invocation Method   | Sample Code           | Description                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| aclnn interface  | [test_aclnn_three_interpolate_backward](examples/test_aclnn_three_interpolate_backward.cpp) | Call the ThreeInterpolateBackward operator through the [aclnnThreeInterpolateBackward](docs/aclnnThreeInterpolateBackward_en.md) interface. |
-<!--
-| Graph mode | [test_geir_three_interpolate_backward](examples/test_geir_three_interpolate_backward.cpp)  | Call the ThreeInterpolateBackward operator by building a graph through [operator IR](op_graph/three_interpolate_backward_proto.h).         |
--->
+| aclnn API  | [test_aclnn_three_interpolate_backward](examples/test_aclnn_three_interpolate_backward.cpp) | Call the ThreeInterpolateBackward operator through the [aclnnThreeInterpolateBackward](docs/aclnnThreeInterpolateBackward_en.md) interface. |
+| GE graph mode | [test_geir_three_interpolate_backward](examples/test_geir_three_interpolate_backward.cpp)  | Call the ThreeInterpolateBackward operator by building a graph through [operator IR](op_graph/three_interpolate_backward_proto.h). Sample compilation and running: `bash build.sh --run_example three_interpolate_backward graph --soc=ascend950`. |

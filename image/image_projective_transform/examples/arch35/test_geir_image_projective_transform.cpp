@@ -100,6 +100,7 @@ int32_t GenDataFloat(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& i
     }
     uint32_t data_len = size * sizeof(float);
     input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
+    delete[] pData;
     return SUCCESS;
 }
 
@@ -119,6 +120,7 @@ int32_t GenDataInt32(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& i
     }
     uint32_t data_len = size * sizeof(int32_t);
     input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
+    delete[] pData;
     return SUCCESS;
 }
 
@@ -235,6 +237,7 @@ int main(int argc, char* argv[])
     ret = CreateOppInGraph(inDtype, input, inputs, outputs, graph);
     if (ret != SUCCESS) {
         printf("%s - ERROR - [XIR]: Create ir session using build options failed\n", GetTime().c_str());
+        ge::GEFinalize();
         return FAILED;
     }
 

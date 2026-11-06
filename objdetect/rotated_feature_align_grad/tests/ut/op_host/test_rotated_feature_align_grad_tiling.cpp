@@ -203,3 +203,39 @@ TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_fail_
     TilingInfo tilingInfo;
     EXPECT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
 }
+
+// N*H*W 可表示为 int64，但元素总数 N*H*W*C / N*H*W*5 超过 int64：Kernel 侧
+// int64 地址偏移（inIdx*C、inIdx*5、dxBase）会溢出，tiling 必须拒绝。
+TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_fail_total_elements_overflow)
+{
+    struct RotatedFeatureAlignGradCompileInfo {
+    } compileInfo;
+    constexpr int64_t kMaxDim = 2147483647LL;
+    gert::TilingContextPara tilingContextPara(
+        "RotatedFeatureAlignGrad",
+        {{{{kMaxDim, kMaxDim, 1, 3}, {kMaxDim, kMaxDim, 1, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+         {{{kMaxDim, kMaxDim, 1, 5}, {kMaxDim, kMaxDim, 1, 5}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{{{kMaxDim, kMaxDim, 1, 3}, {kMaxDim, kMaxDim, 1, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("spatial_scale", Ops::Cv::AnyValue::CreateFrom<float>(0.25f)),
+         gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(1))},
+        {1, 1}, {1}, &compileInfo, "Ascend950", 64, 262144, 4096);
+    TilingInfo tilingInfo;
+    EXPECT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}
+
+// 维度为负（如未知维哨兵 -1）：不是合法的具体形状，参与分块算术前 tiling 必须拒绝。
+TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_fail_negative_dim)
+{
+    struct RotatedFeatureAlignGradCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RotatedFeatureAlignGrad",
+        {{{{-1, 4, 4, 3}, {-1, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+         {{{-1, 4, 4, 5}, {-1, 4, 4, 5}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{{{-1, 4, 4, 3}, {-1, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("spatial_scale", Ops::Cv::AnyValue::CreateFrom<float>(0.25f)),
+         gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(1))},
+        {1, 1}, {1}, &compileInfo, "Ascend950", 64, 262144, 4096);
+    TilingInfo tilingInfo;
+    EXPECT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}

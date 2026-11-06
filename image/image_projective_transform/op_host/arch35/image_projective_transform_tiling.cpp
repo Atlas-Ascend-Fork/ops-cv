@@ -80,12 +80,8 @@ static ge::graphStatus CheckInputDtypes(gert::TilingContext* context)
 // that would silently skip the batch check via int32_t overflow.
 static ge::graphStatus CheckInputShapes(gert::TilingContext* context, int64_t imagesN)
 {
-    if (imagesN < ge::UNKNOWN_DIM) {
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "images.shape[0]",
-                                              std::to_string(imagesN).c_str(),
-                                              "batch dimension must be -1 or a non-negative value");
-        return ge::GRAPH_FAILED;
-    }
+    // imagesN is already validated to be a concretized non-negative value by the
+    // caller before this point.
     auto transformsInput = context->GetInputShape(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, transformsInput);
     auto transformsShape = transformsInput->GetStorageShape();
@@ -100,15 +96,18 @@ static ge::graphStatus CheckInputShapes(gert::TilingContext* context, int64_t im
         return ge::GRAPH_FAILED;
     }
     int64_t transformsN = transformsShape.GetDim(0);
-    if (transformsN < ge::UNKNOWN_DIM) {
+    // Tiling consumes concretized dimensions: the dynamic sentinel -1 must be
+    // rejected here too, otherwise oneTransFlag would silently become 0 and the
+    // kernel would index transforms[b*8] beyond a broadcasted single-row tensor.
+    if (transformsN < 0) {
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "transforms.shape[0]",
                                               std::to_string(transformsN).c_str(),
-                                              "batch dimension must be -1 or a non-negative value");
+                                              "transforms batch dimension must be a concretized non-negative value");
         return ge::GRAPH_FAILED;
     }
     // SE v2.0 §5.2-B.2 S5a/S5b/S5c: transformsN must be 1 (broadcast) or imagesN.
     // Runs before the empty-tensor early return, so S5c (M>1, M!=N, N==0) fails here.
-    if (imagesN >= 0 && transformsN >= 0 && transformsN != 1 && transformsN != imagesN) {
+    if (transformsN != 1 && transformsN != imagesN) {
         OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(context->GetNodeName(), "transforms, images",
                                                (std::to_string(transformsN) + ", " + std::to_string(imagesN)).c_str(),
                                                "Input transform should be num_images x 8 or 1 x 8");
@@ -179,6 +178,13 @@ static ge::graphStatus ResolveOutputShape(gert::TilingContext* context, int32_t 
         if (outStorageShape.GetDimNum() >= 3) {
             int64_t dim1 = outStorageShape.GetDim(1);
             int64_t dim2 = outStorageShape.GetDim(2);
+            const int64_t int32Max = std::numeric_limits<int32_t>::max();
+            OP_CHECK_IF(dim1 > int32Max || dim2 > int32Max,
+                        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                            context->GetNodeName(), "output_shape",
+                            ("[" + std::to_string(dim1) + ", " + std::to_string(dim2) + "]").c_str(),
+                            "output spatial dimensions must not exceed INT32_MAX"),
+                        return ge::GRAPH_FAILED);
             if (dim1 >= 0 && dim2 >= 0) {
                 HOut = static_cast<int32_t>(dim1);
                 WOut = static_cast<int32_t>(dim2);
@@ -251,7 +257,9 @@ static int32_t ComputeNeedCoreNum(int64_t totalPixels, int64_t coreNum)
         perCorePixels = PER_CORE_MIN_PIXELS;
     }
     if (perCorePixels > 0) {
-        perCorePixels = (perCorePixels + 31) / 32 * 32;
+        // Overflow-safe alignment: (perCorePixels + 31) can overflow int64 when a
+        // single core receives pixels near INT64_MAX. CeilAlign clamps on overflow.
+        perCorePixels = Ops::Base::CeilAlign(perCorePixels, static_cast<int64_t>(32));
     }
     return (totalPixels > 0) ? static_cast<int32_t>(Ops::Base::CeilDiv(totalPixels, perCorePixels)) : 0;
 }
@@ -344,12 +352,28 @@ static ge::graphStatus ImageProjectiveTransformTilingFunc(gert::TilingContext* c
         return ge::GRAPH_FAILED;
     }
 
-    int32_t N = static_cast<int32_t>(imagesShape.GetDim(0));
-    int32_t HIn = static_cast<int32_t>(imagesShape.GetDim(1));
-    int32_t WIn = static_cast<int32_t>(imagesShape.GetDim(2));
-    int32_t C = static_cast<int32_t>(imagesShape.GetDim(3));
+    // Tiling consumes concrete, int32-representable dimensions. Unknown dynamic
+    // sentinels (-1) and dims above INT32_MAX must be rejected here rather than
+    // narrowed into TilingData, which would corrupt the block plan (e.g. a
+    // negative batch yields a zero blockDim) and the kernel address math.
+    const int64_t imageN = imagesShape.GetDim(0);
+    const int64_t imageH = imagesShape.GetDim(1);
+    const int64_t imageW = imagesShape.GetDim(2);
+    const int64_t imageC = imagesShape.GetDim(3);
+    const int64_t int32Max = std::numeric_limits<int32_t>::max();
+    OP_CHECK_IF(imageN < 0 || imageN > int32Max || imageH < 0 || imageH > int32Max || imageW < 0 || imageW > int32Max ||
+                    imageC < 0 || imageC > int32Max,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                    context->GetNodeName(), "images", Ops::Base::ToString(imagesShape).c_str(),
+                    "each image dimension must be a concretized value in [0, INT32_MAX]"),
+                return ge::GRAPH_FAILED);
 
-    if (CheckInputShapes(context, imagesShape.GetDim(0)) != ge::GRAPH_SUCCESS) {
+    int32_t N = static_cast<int32_t>(imageN);
+    int32_t HIn = static_cast<int32_t>(imageH);
+    int32_t WIn = static_cast<int32_t>(imageW);
+    int32_t C = static_cast<int32_t>(imageC);
+
+    if (CheckInputShapes(context, imageN) != ge::GRAPH_SUCCESS) {
         return ge::GRAPH_FAILED;
     }
 
@@ -386,6 +410,20 @@ static ge::graphStatus ImageProjectiveTransformTilingFunc(gert::TilingContext* c
     if (!CheckedMultiply(static_cast<int64_t>(N), spatialSize, totalPixels)) {
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "output_shape", "product overflow",
                                               "N * HOut * WOut must fit in int64_t");
+        return ge::GRAPH_FAILED;
+    }
+    int64_t inputElements = 0;
+    if (!CheckedMultiply(static_cast<int64_t>(N), static_cast<int64_t>(HIn), inputElements) ||
+        !CheckedMultiply(inputElements, static_cast<int64_t>(WIn), inputElements) ||
+        !CheckedMultiply(inputElements, static_cast<int64_t>(C), inputElements)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "images", "element count overflow",
+                                              "N * HIn * WIn * C must fit in int64_t");
+        return ge::GRAPH_FAILED;
+    }
+    int64_t outputElements = 0;
+    if (!CheckedMultiply(totalPixels, static_cast<int64_t>(C), outputElements)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "output_shape", "element count overflow",
+                                              "N * HOut * WOut * C must fit in int64_t");
         return ge::GRAPH_FAILED;
     }
 

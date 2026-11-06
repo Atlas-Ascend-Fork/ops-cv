@@ -234,25 +234,33 @@ aclnnStatus aclnnThreeInterpolateBackward(
 
 - The values in idx are within the range [0, m) (non-negative and less than m). The correctness of computation results is not guaranteed for out-of-range values (negative values or values greater than or equal to m).
 - grad_x, idx, weight, and grad_y must satisfy the dimension correspondence: idx and weight have the same shape of (b, n, 3), and their b and n dimensions are consistent with the b and n dimensions of grad_x; the b and c dimensions of grad_y are consistent with those of grad_x, and its m dimension equals the attribute m. If the shapes are inconsistent, the API returns ACLNN_ERR_PARAM_INVALID.
+- The dtypes of weight, grad_x and grad_y must be identical.
+- Dimension bounds: each axis of grad_x (B, C, N) and attribute m must be within [0, INT32_MAX], and the element counts B*C*N and B*C*M must not exceed INT64_MAX/8; out-of-range inputs are rejected.
+- grad_y is a pure output: each row is fully overwritten (zeroed then accumulated); callers need not pre-fill it.
+- The attribute m must be greater than 0.
+- Empty tensor support: when grad_x is an empty tensor (b==0 or c==0), grad_y is the corresponding empty tensor; when grad_x is non-empty but n==0 (idx/weight are empty and grad_y is non-empty), grad_y is filled with zeros.
+<!-- npu="950" id7 -->
+- <term>Ascend 950PR/Ascend 950DT</term> support dynamic shapes (-1 for an unknown dimension and -2 for an unknown rank); shapes must be concretized before execution.
+<!-- end id7 -->
 - Deterministic computation:
-  <!-- npu="A3,910b" id7 -->
+  <!-- npu="A3,910b" id8 -->
   - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>: aclnnThreeInterpolateBackward defaults to a non-deterministic implementation and does not support enabling via configuration.
-  <!-- end id7 -->
-  <!-- npu="950" id8 -->
-  - <term>Ascend 950PR&950DT products</term>: aclnnThreeInterpolateBackward defaults to a deterministic implementation.
   <!-- end id8 -->
-<!-- npu="A3,910b" id9 -->
+  <!-- npu="950" id9 -->
+  - <term>Ascend 950PR&950DT products</term>: aclnnThreeInterpolateBackward defaults to a deterministic implementation.
+  <!-- end id9 -->
+<!-- npu="A3,910b" id10 -->
 - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>: grad_x and grad_y are passed in NCHW format with 4D shape, namely (b, c, n, 1) and (b, c, m, 1) respectively.
-<!-- end id9 -->
-<!-- npu="950" id10 -->
-- <term>Ascend 950PR&950DT products</term>: grad_x and grad_y are passed in ND format with 3D shape, namely (b, c, n) and (b, c, m) respectively.
 <!-- end id10 -->
+<!-- npu="950" id11 -->
+- <term>Ascend 950PR&950DT products</term>: grad_x and grad_y are passed in ND format with 3D shape, namely (b, c, n) and (b, c, m) respectively.
+<!-- end id11 -->
 
 ## Example
 
 The sample code is for reference only. For the specific compilation and execution process, see [Compile and Run Samples](../../../docs/en/context/compile_and_run_sample.md).
 
-<!-- npu="A3,910b" id11 -->
+<!-- npu="A3,910b" id12 -->
 - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>:
 
   > Note:
@@ -445,9 +453,9 @@ int main() {
 }
 ```
 
-<!-- end id11 -->
+<!-- end id12 -->
 
-<!-- npu="950" id12 -->
+<!-- npu="950" id13 -->
 - <term>Ascend 950PR&950DT products</term>：
 
   > Note:
@@ -640,4 +648,4 @@ int main() {
 }
 ```
 
-<!-- end id12 -->
+<!-- end id13 -->

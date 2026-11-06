@@ -109,7 +109,7 @@ TEST_F(ThreeInterpolateBackwardTilingArch35, m_normal_accepted)
     EXPECT_EQ(tilingData->totalElements, 6);
 }
 
-// issue #1126 边界：b*c = 2^32，bcIdx 最大 2^32-1，仍走 MODE_DEFAULT，应接受
+// 边界：b*c = 2^32（> 2^31 安全上界），应接受并由 MODE_LARGE（64 位解码）承接，totalElements 不截断
 TEST_F(ThreeInterpolateBackwardTilingArch35, bc_max_uint32_accepted)
 {
     TilingInfo tilingInfo;
@@ -118,11 +118,26 @@ TEST_F(ThreeInterpolateBackwardTilingArch35, bc_max_uint32_accepted)
     EXPECT_EQ(tilingData->totalElements, 4294967296LL);
 }
 
-// issue #1126：b*c > 2^32 由 MODE_LARGE（64 位解码）承接，应接受且不截断
+// b*c > 2^32 由 MODE_LARGE（64 位解码）承接，应接受且不截断
 TEST_F(ThreeInterpolateBackwardTilingArch35, bc_over_uint32_accepted_large_mode)
 {
     TilingInfo tilingInfo;
     ASSERT_TRUE(RunTilingWithShape(65537LL, 65537LL, 1LL, 1LL, tilingInfo));
     const auto* tilingData = reinterpret_cast<const ThreeInterpolateBackwardTilingData*>(tilingInfo.tilingData.get());
     EXPECT_EQ(tilingData->totalElements, 4295098369LL);
+}
+
+// LR-02 门限：32 位 UintDiv magic 快除的安全上界是 2^31（非 2^32）。
+// b*c == 2^31 仍走 MODE_DEFAULT，b*c == 2^31+2^16 必须切到 MODE_LARGE（tilingKey 不同）。
+TEST_F(ThreeInterpolateBackwardTilingArch35, bc_mode_switch_at_2p31_boundary)
+{
+    TilingInfo atBound;
+    TilingInfo overBound;
+    ASSERT_TRUE(RunTilingWithShape(65536LL, 32768LL, 1LL, 1LL, atBound));   // b*c == 2^31
+    ASSERT_TRUE(RunTilingWithShape(65536LL, 32769LL, 1LL, 1LL, overBound)); // b*c == 2^31 + 2^16
+    const auto* atData = reinterpret_cast<const ThreeInterpolateBackwardTilingData*>(atBound.tilingData.get());
+    const auto* overData = reinterpret_cast<const ThreeInterpolateBackwardTilingData*>(overBound.tilingData.get());
+    EXPECT_EQ(atData->totalElements, 2147483648LL);
+    EXPECT_EQ(overData->totalElements, 2147549184LL);
+    EXPECT_NE(atBound.tilingKey, overBound.tilingKey);
 }

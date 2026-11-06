@@ -100,9 +100,24 @@ ge::graphStatus Tiling4ThreeInterpolateBackwardRegbase(gert::TilingContext* cont
                                              std::to_string(grad_x_shape.GetDimNum()).c_str(), "3"),
                 return ge::GRAPH_FAILED);
 
-    int32_t b = static_cast<int32_t>(grad_x_shape.GetDim(IDX_DIM0));
-    int32_t c = static_cast<int32_t>(grad_x_shape.GetDim(IDX_DIM1));
-    int32_t n = static_cast<int32_t>(grad_x_shape.GetDim(IDX_DIM2));
+    // 形状维窄化范围校验：GetDim 返回 int64，窄化为 int32 前必须校验（参照属性 m 的守卫），
+    // 否则超过 INT32_MAX 的维值按模回绕后 b/c/n 及其派生量（totalElements/schMode/needCoreNum、
+    // 写入 TilingData 的值）均偏离真实值。tiling 在执行期运行，形状应已具体化；
+    // 未知维哨兵 -1 若到达此处说明形状未解析，同样拒绝——负维进入 totalElements 后
+    // 会被按 uint64 解码成巨大值并造成 kernel 越界访问。
+    const int64_t bRaw = grad_x_shape.GetDim(IDX_DIM0);
+    const int64_t cRaw = grad_x_shape.GetDim(IDX_DIM1);
+    const int64_t nRaw = grad_x_shape.GetDim(IDX_DIM2);
+    OP_CHECK_IF(
+        bRaw < 0 || bRaw > INT32_MAX || cRaw < 0 || cRaw > INT32_MAX || nRaw < 0 || nRaw > INT32_MAX,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+            context->GetNodeName(), "grad_x shape",
+            ("(" + std::to_string(bRaw) + "," + std::to_string(cRaw) + "," + std::to_string(nRaw) + ")").c_str(),
+            "each grad_x dim must be a concrete value in [0, INT32_MAX]"),
+        return ge::GRAPH_FAILED);
+    int32_t b = static_cast<int32_t>(bRaw);
+    int32_t c = static_cast<int32_t>(cRaw);
+    int32_t n = static_cast<int32_t>(nRaw);
 
     // 3. 获取属性 m 并校验 m 范围（必须在 int64 -> int32 窄化前校验，
     //    否则 m = 2^32+1 等值会回绕为 1 等正数，绕过 m<=0 检查）
@@ -114,6 +129,22 @@ ge::graphStatus Tiling4ThreeInterpolateBackwardRegbase(gert::TilingContext* cont
                                                       "attr m must be in (0, INT32_MAX]"),
                 return ge::GRAPH_FAILED);
     int32_t m = static_cast<int32_t>(mRaw);
+
+    // 元素总数上界保护：kernel 以 uint64 计算量级为 b*c*n（grad_x/idx/weight 偏移）
+    // 与 b*c*m（grad_y 偏移）的元素偏移，单维 ≤ INT32_MAX 时三维修积仍可达 2^93，
+    // 回绕后越界写。实际可执行的输入受设备内存约束（元素总数 ≤ 内存/2B），
+    // 远小于该上界，超出即属于不可执行输入，直接拒绝。
+    constexpr int64_t MAX_TOTAL_ELEMS = INT64_MAX / 8; // 为 ×3、+n 等派生项留余量
+    if (bRaw > 0 && cRaw > 0) {
+        OP_CHECK_IF(
+            (nRaw > 0 && bRaw > MAX_TOTAL_ELEMS / cRaw / nRaw) || (mRaw > 0 && bRaw > MAX_TOTAL_ELEMS / cRaw / mRaw),
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "grad_x shape",
+                                                  ("(" + std::to_string(bRaw) + "," + std::to_string(cRaw) + "," +
+                                                   std::to_string(nRaw) + ") m=" + std::to_string(mRaw))
+                                                      .c_str(),
+                                                  "b*c*n and b*c*m must not exceed INT64_MAX/8"),
+            return ge::GRAPH_FAILED);
+    }
 
     // 4. 校验 idx/weight shape：dimNum==3、idx shape == weight shape、idx == (B, N, 3)
     auto idx_shape_input = context->GetInputShape(1);
@@ -147,6 +178,28 @@ ge::graphStatus Tiling4ThreeInterpolateBackwardRegbase(gert::TilingContext* cont
                                               .c_str()),
                 return ge::GRAPH_FAILED);
 
+    // 4.5 输出 grad_y 形状校验：kernel 以 tilingData 的 b/c/m 直接按 (b,c,m) 写 grad_y，
+    //     若 grad_y 的实际 rank/shape 与该契约不一致会写出边界（安全资源越界写）。
+    //     与 grad_x 同理，形状在 tiling 阶段必须已具体化；rank 未知（dimNum==0）时跳过校验。
+    auto grad_y_shape_ptr = context->GetOutputShape(0);
+    OP_CHECK_NULL_WITH_CONTEXT(context, grad_y_shape_ptr);
+    const auto& grad_y_shape = grad_y_shape_ptr->GetStorageShape();
+    const size_t gradYDimNum = grad_y_shape.GetDimNum();
+    OP_CHECK_IF(
+        gradYDimNum != 0 && gradYDimNum != DIM_NUM_ND,
+        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "grad_y", std::to_string(gradYDimNum).c_str(), "3"),
+        return ge::GRAPH_FAILED);
+    if (gradYDimNum == DIM_NUM_ND) {
+        const int64_t gyB = grad_y_shape.GetDim(IDX_DIM0);
+        const int64_t gyC = grad_y_shape.GetDim(IDX_DIM1);
+        const int64_t gyM = grad_y_shape.GetDim(IDX_DIM2);
+        OP_CHECK_IF(gyB != static_cast<int64_t>(b) || gyC != static_cast<int64_t>(c) || gyM != static_cast<int64_t>(m),
+                    OP_LOGE_FOR_INVALID_SHAPE(
+                        context->GetNodeName(), "grad_y", Ops::Base::ToString(grad_y_shape).c_str(),
+                        ("[" + std::to_string(b) + "," + std::to_string(c) + "," + std::to_string(m) + "]").c_str()),
+                    return ge::GRAPH_FAILED);
+    }
+
     // 5. 计算总工作项数和核数
     //    确定性行私有方案：工作项为 (b,c) 行，totalElements = b*c。
     //    每线程独占一行 (b,c)，行内串行累加，任意核数下结果确定，
@@ -155,19 +208,43 @@ ge::graphStatus Tiling4ThreeInterpolateBackwardRegbase(gert::TilingContext* cont
     //    避免 CeilDiv(0,0) 除零，needCoreNum=1 早退（kernel 无工作项直接返回）。
     //    注意：b,c>0 且 n==0 时 totalElements=b*c>0 走正常路径（行清零仍须执行，grad_y 全零正确）
     int64_t totalElements = static_cast<int64_t>(b) * c;
-    // MODE_LARGE 场景判定：b*c-1 > UINT32_MAX 时 bcIdx 超出 uint32 快除解码范围，
-    // 切到 64 位解码的 MODE_LARGE kernel
-    uint64_t schMode = (totalElements - 1 > static_cast<int64_t>(UINT32_MAX)) ? THREE_INTERPOLATE_BACKWARD_MODE_LARGE :
-                                                                                THREE_INTERPOLATE_BACKWARD_MODE_DEFAULT;
+    // MODE_LARGE 场景判定：b*c > 2^31 时切到 64 位解码的 MODE_LARGE kernel。
+    // 注意 32 位 magic 快除的安全上界并非 2^32：Simt::UintDiv<uint32_t> 的
+    // q=__umulhi(d,magic)、sum=d+q 为 32 位，非 2 的幂除数在 bcIdx 接近 2^32 时
+    // 会因求和回绕（c=3 时门限约 3.22e9，其他 c 的门限落在 2^31~2^32 之间），
+    // 故以 2^31 作为对任意 c 都安全的保守上界。
+    constexpr int64_t MODE_DEFAULT_MAX_TOTAL = static_cast<int64_t>(1) << 31;
+    uint64_t schMode = (totalElements > MODE_DEFAULT_MAX_TOTAL) ? THREE_INTERPOLATE_BACKWARD_MODE_LARGE :
+                                                                  THREE_INTERPOLATE_BACKWARD_MODE_DEFAULT;
     int32_t needCoreNum = 1;
     if (totalElements > 0) {
         int64_t perCoreElements = Ops::Base::CeilDiv(totalElements, coreNum);
         needCoreNum = static_cast<int32_t>(Ops::Base::CeilDiv(totalElements, perCoreElements));
     }
 
-    // 6. 填充 TilingData（确定性行私有方案，user workspace 为 fp32 行累加器）
-    //    userWorkspaceSize = b*c*m*sizeof(float)，按 int64 计算防溢出
-    int64_t userWorkspaceSize = totalElements * static_cast<int64_t>(m) * static_cast<int64_t>(sizeof(float));
+    // 6. 填充 TilingData（确定性行私有方案，user workspace 为每线程私有 fp32 累加槽）
+    //    kernel 的并发线程数受行数限制：slots = min(实际线程数, b*c)。
+    //    默认给每个并发线程一个长度 m 的 fp32 槽（不做行内分块，避免 m 大时
+    //    "块数 × 3n 扫描"放大工作量）；仅当 slots*m*4 超过 workspace 上限时才把
+    //    槽长截断为 mChunk 并分块（逐元素累加顺序不变，与 golden 仍逐位一致）。
+    //    workspace = slots * mChunk * 4B，恒定有界（≤ USER_WS_CAP_BYTES），
+    //    不随 b*c 无界增长，也不需要按 shape 拒绝。
+    constexpr int64_t SIMT_THREAD_NUM = 512;                                       // 与 kernel 的 THREAD_NUM 一致
+    constexpr int64_t USER_WS_CAP_BYTES = static_cast<int64_t>(512) * 1024 * 1024; // 512 MiB
+    int64_t totalThreads = static_cast<int64_t>(needCoreNum) * SIMT_THREAD_NUM;
+    int64_t slots = (totalElements < totalThreads) ? totalElements : totalThreads;
+    int64_t mChunk64 = static_cast<int64_t>(m);
+    if (slots > 0 && mChunk64 * slots * static_cast<int64_t>(sizeof(float)) > USER_WS_CAP_BYTES) {
+        mChunk64 = USER_WS_CAP_BYTES / (slots * static_cast<int64_t>(sizeof(float)));
+        if (mChunk64 < 1) {
+            mChunk64 = 1;
+        }
+    }
+    int32_t mChunk = static_cast<int32_t>(mChunk64);
+    int64_t userWorkspaceSize = 0;
+    if (slots > 0) {
+        userWorkspaceSize = slots * mChunk64 * static_cast<int64_t>(sizeof(float));
+    }
 
     ThreeInterpolateBackwardTilingData* tiling = context->GetTilingData<ThreeInterpolateBackwardTilingData>();
     OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
@@ -180,6 +257,7 @@ ge::graphStatus Tiling4ThreeInterpolateBackwardRegbase(gert::TilingContext* cont
     tiling->n = n;
     tiling->m = m;
     tiling->totalElements = totalElements;
+    tiling->mChunk = mChunk;
 
     // 7. Workspace 分配（sysWorkspaceSize + userWorkspaceSize=fp32 行累加器）
     uint64_t sysWorkspaceSize = 0;

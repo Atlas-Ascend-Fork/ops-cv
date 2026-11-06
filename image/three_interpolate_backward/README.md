@@ -63,7 +63,7 @@
     <tr>
       <td>m</td>
       <td>属性</td>
-      <td>输入特征最低维度的大小，用于指导infershape时推导`grad_y`的形状。</td>
+      <td>输出`grad_y`最低维（M）的大小（即前向three_interpolate输入特征的点数），用于指导infershape时推导`grad_y`的形状。</td>
       <td>INT32</td>
       <td>-</td>
     </tr>
@@ -82,14 +82,18 @@
 - `grad_x` shape为(B, C, N)，`idx`/`weight` shape为(B, N, 3)，`grad_y` shape为(B, C, M)；且`idx`/`weight`的B/N维与`grad_x`一致，`grad_y`的B/C维与`grad_x`一致、M等于属性`m`，shape不一致时接口校验失败。
 - 属性`m`必须大于0。
 - `grad_x`/`weight`/`grad_y`为FLOAT32或FLOAT16，`idx`为INT32或INT64。
+- `weight`与`grad_x`、`grad_y`的数据类型必须一致。
+- 维度上界：`grad_x`各轴（B、C、N）与属性`m`须在`[0, INT32_MAX]`范围内，且`B*C*N`、`B*C*M`的元素总数须不超过`INT64_MAX/8`；超出范围时算子返回失败。
+- `grad_y`为纯输出：其初始内容会被整行覆盖（先清零再累加），调用方无需预置初值。
 - <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：`grad_x`、`grad_y`的数据格式为5HD（即NC1HWC0，与算子IR定义`FORMAT_NC1HWC0`一致）。
 - <term>Ascend 950PR&950DT系列产品</term>：`grad_x`、`grad_y`的数据格式为ND。
+- <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：aclnn调用层`grad_x`、`grad_y`以NCHW 4D格式传入（分别为(b, c, n, 1)、(b, c, m, 1)），IR层再转为5HD（NC1HWC0）。
+- <term>Ascend 950PR&950DT系列产品</term>：aclnn调用层`grad_x`、`grad_y`以ND 3D格式传入（分别为(b, c, n)、(b, c, m)）。
+- <term>Ascend 950PR&950DT系列产品</term>：支持动态shape（`-1`表示未知维度、`-2`表示未知秩），实际执行时形状须已具体化。
 
 ## 调用说明
 
 | 调用方式   | 样例代码           | 说明                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| aclnn接口  | [test_aclnn_three_interpolate_backward](examples/test_aclnn_three_interpolate_backward.cpp) | 通过[aclnnThreeInterpolateBackward](docs/aclnnThreeInterpolateBackward.md)接口方式调用ThreeInterpolateBackward算子。 |
-<!--
-| 图模式 | [test_geir_three_interpolate_backward](examples/test_geir_three_interpolate_backward.cpp)  | 通过[算子IR](op_graph/three_interpolate_backward_proto.h)构图方式调用ThreeInterpolateBackward算子。         |
--->
+| aclnn API  | [test_aclnn_three_interpolate_backward](examples/test_aclnn_three_interpolate_backward.cpp) | 通过[aclnnThreeInterpolateBackward](docs/aclnnThreeInterpolateBackward.md)接口方式调用ThreeInterpolateBackward算子。 |
+| GE图模式 | [test_geir_three_interpolate_backward](examples/test_geir_three_interpolate_backward.cpp) | 通过[算子IR](op_graph/three_interpolate_backward_proto.h)构图方式调用ThreeInterpolateBackward算子；样例编译与运行：`bash build.sh --run_example three_interpolate_backward graph --soc=ascend950`。 |

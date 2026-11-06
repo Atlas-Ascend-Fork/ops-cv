@@ -234,25 +234,33 @@ aclnnStatus aclnnThreeInterpolateBackward(
 
 - idx中的取值范围为[0, m)（非负且小于m），越界取值（负数或大于等于m）不保证计算结果的正确性。
 - grad_x、idx、weight、grad_y之间需满足维度对应关系：idx与weight的shape一致且为（b, n, 3），其b、n维分别与grad_x的b、n维一致；grad_y的b、c维与grad_x一致且m维等于属性m。shape不一致时接口返回ACLNN_ERR_PARAM_INVALID。
+- `weight`与`grad_x`、`grad_y`的数据类型必须一致。
+- 维度上界：`grad_x`各轴（B、C、N）与属性`m`须在`[0, INT32_MAX]`范围内，且`B*C*N`、`B*C*M`的元素总数须不超过`INT64_MAX/8`；超出范围时算子返回失败。
+- `grad_y`为纯输出：其初始内容会被整行覆盖（先清零再累加），调用方无需预置初值。
+- 属性m必须大于0。
+- 空Tensor支持：当`grad_x`为空Tensor（b==0或c==0）时，`grad_y`为对应的空Tensor；当`grad_x`非空但n==0（`idx`/`weight`为空、`grad_y`非空）时，`grad_y`全部置0。
+<!-- npu="950" id7 -->
+- <term>Ascend 950PR&950DT系列产品</term>：支持动态shape（`-1`表示未知维度、`-2`表示未知秩），实际执行时形状须已具体化。
+<!-- end id7 -->
 - 确定性计算：
-  <!-- npu="A3,910b" id7 -->
+  <!-- npu="A3,910b" id8 -->
   - <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：aclnnThreeInterpolateBackward默认非确定性实现，不支持配置开启。
-  <!-- end id7 -->
-  <!-- npu="950" id8 -->
-  - <term>Ascend 950PR&950DT系列产品</term>：aclnnThreeInterpolateBackward默认确定性实现。
   <!-- end id8 -->
-<!-- npu="A3,910b" id9 -->
+  <!-- npu="950" id9 -->
+  - <term>Ascend 950PR&950DT系列产品</term>：aclnnThreeInterpolateBackward默认确定性实现。
+  <!-- end id9 -->
+<!-- npu="A3,910b" id10 -->
 - <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：grad_x、grad_y以NCHW格式、4D shape传入，分别为（b, c, n, 1）、（b, c, m, 1）。
-<!-- end id9 -->
-<!-- npu="950" id10 -->
-- <term>Ascend 950PR&950DT系列产品</term>：grad_x、grad_y以ND格式、3D shape传入，分别为（b, c, n）、（b, c, m）。
 <!-- end id10 -->
+<!-- npu="950" id11 -->
+- <term>Ascend 950PR&950DT系列产品</term>：grad_x、grad_y以ND格式、3D shape传入，分别为（b, c, n）、（b, c, m）。
+<!-- end id11 -->
 
 ## 调用示例
 
 示例代码如下，仅供参考，具体编译和执行过程请参考[编译与运行样例](../../../docs/zh/context/compile_and_run_sample.md)。
 
-<!-- npu="A3,910b" id11 -->
+<!-- npu="A3,910b" id12 -->
 - <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>:
 
   > 说明：
@@ -444,9 +452,9 @@ int main() {
   return 0;
 }
 ```
-<!-- end id11 -->
+<!-- end id12 -->
 
-<!-- npu="950" id12 -->
+<!-- npu="950" id13 -->
 - <term>Ascend 950PR&950DT系列产品</term>：
 
   > 说明：
@@ -638,4 +646,4 @@ int main() {
   return 0;
 }
 ```
-<!-- end id12 -->
+<!-- end id13 -->
