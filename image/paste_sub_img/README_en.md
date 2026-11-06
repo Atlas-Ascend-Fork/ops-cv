@@ -118,4 +118,6 @@ In the formula, $\Delta h = s_{cy2} - s_{cy1}$ and $\Delta w = s_{cx2} - s_{cx1}
 
 | Invocation Method | Sample Code | Description |
 | --- | --- | --- |
-| GE graph mode | - | Build a graph and call the operator through [operator IR](op_graph/paste_sub_img_proto.h). |
+| GE graph mode | [test_geir_paste_sub_img.cpp](examples/arch35/test_geir_paste_sub_img.cpp) | Build a graph and call the operator through [operator IR](op_graph/paste_sub_img_proto.h), and dumps the input/output as .bin files. |
+
+The sample depends on the public header libraries of the CANN GE graph mode (graph.h, ge_api.h, array_ops.h, experiment_ops.h, nn_other.h, etc.). In an environment with the CANN development package installed, build the operator using the root `build.sh`, then compile, link, and run this sample executable. The sample only performs data dumping and does not include precision comparison.

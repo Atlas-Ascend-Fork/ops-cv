@@ -116,4 +116,6 @@ $$
 
 | 调用方式 | 样例代码 | 说明 |
 | --- | --- | --- |
-| GE图模式 | - | 通过 [算子IR](op_graph/paste_sub_img_proto.h) 构图调用。 |
+| GE图模式 | [test_geir_paste_sub_img.cpp](examples/arch35/test_geir_paste_sub_img.cpp) | 通过 [算子IR](op_graph/paste_sub_img_proto.h) 构图调用，并将输入/输出 dump 为 .bin 文件。 |
+
+样例依赖 CANN GE 图模式的公开头库（graph.h、ge_api.h、array_ops.h、experiment_ops.h、nn_other.h 等），需在已安装 CANN 开发包的环境中，使用仓库根目录 `build.sh` 完成算子构建后，编译链接该样例可执行文件并运行；样例只做数据 dump，不包含精度比对。

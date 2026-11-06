@@ -34,7 +34,7 @@ static constexpr int64_t DIM_C = 2;
 static constexpr int64_t PHYS_NODES = 2;
 static constexpr int64_t DOUBLE_BUFFER = 2;
 static constexpr uint64_t MAX_BUFFER_SIZE = 64 * 1024;
-static constexpr int64_t RANK_MERGED = 2;
+static constexpr int64_t RANK_MERGED = 3;
 static constexpr float SCALE_MIN = 0.0f;
 static constexpr float SCALE_MAX = 256.0f;
 static constexpr uint64_t ATTR_IDX_SCALE = 0;
@@ -80,19 +80,17 @@ static bool ComputeCoordBudget(int64_t px1, int64_t py1, int64_t cx1, int64_t cy
                                float scale, int64_t patchH, int64_t patchW, int64_t patchC, int64_t combineH,
                                int64_t combineW, CoordBudget& out)
 {
-    int64_t sCy1 = static_cast<int64_t>(static_cast<float>(cy1) * scale);
-    int64_t sCy2 = static_cast<int64_t>(static_cast<float>(cy2) * scale);
-    int64_t sCx1 = static_cast<int64_t>(static_cast<float>(cx1) * scale);
-    int64_t sCx2 = static_cast<int64_t>(static_cast<float>(cx2) * scale);
-    int64_t dCy1 = static_cast<int64_t>(static_cast<float>(cy1 + py1) * scale);
-    int64_t dCx1 = static_cast<int64_t>(static_cast<float>(cx1 + px1) * scale);
+    double scaleD = static_cast<double>(scale);
+    int64_t sCy1 = static_cast<int64_t>(static_cast<double>(cy1) * scaleD);
+    int64_t sCy2 = static_cast<int64_t>(static_cast<double>(cy2) * scaleD);
+    int64_t sCx1 = static_cast<int64_t>(static_cast<double>(cx1) * scaleD);
+    int64_t sCx2 = static_cast<int64_t>(static_cast<double>(cx2) * scaleD);
+    int64_t dCy1 = static_cast<int64_t>(static_cast<double>(cy1 + py1) * scaleD);
+    int64_t dCx1 = static_cast<int64_t>(static_cast<double>(cx1 + px1) * scaleD);
 
     int64_t activeH = sCy2 - sCy1;
     int64_t activeW = sCx2 - sCx1;
     int64_t activeC = patchC;
-
-    activeH = std::max(std::min({activeH, patchH - sCy1, combineH - dCy1}), static_cast<int64_t>(0));
-    activeW = std::max(std::min({activeW, patchW - sCx1, combineW - dCx1}), static_cast<int64_t>(0));
 
     int64_t patchStrideH = patchW * activeC;
     int64_t combineStrideH = combineW * activeC;
@@ -128,13 +126,12 @@ static void ComputeBuffer(uint64_t ubSize, uint32_t ubBlockSize, uint32_t cacheL
 static bool FindSplitAxis(int64_t activeH, int64_t activeW, int64_t activeC, const BufferResult& buf, uint32_t coreNum,
                           SplitAxisResult& result)
 {
-    int64_t wcElemCount = activeW * activeC;
-    int64_t outShape[RANK_MERGED] = {activeH, wcElemCount};
-    int64_t alignedWC = CeilAlign(wcElemCount, static_cast<int64_t>(buf.ubBlockElements));
+    int64_t outShape[RANK_MERGED] = {activeH, activeW, activeC};
+    int64_t alignedLast = CeilAlign(outShape[RANK_MERGED - 1], static_cast<int64_t>(buf.ubBlockElements));
 
     int64_t startAxis = RANK_MERGED - 1, innerElemCount = 1;
     for (int64_t ax = RANK_MERGED - 1; ax >= 0; ax--) {
-        int64_t dimSize = (ax == RANK_MERGED - 1) ? alignedWC : outShape[ax];
+        int64_t dimSize = (ax == RANK_MERGED - 1) ? alignedLast : outShape[ax];
         if (dimSize * innerElemCount >= static_cast<int64_t>(buf.cacheLineElements)) {
             startAxis = ax;
             break;
@@ -150,23 +147,14 @@ static bool FindSplitAxis(int64_t activeH, int64_t activeW, int64_t activeC, con
     for (int64_t ax = 0; ax < startAxis; ax++)
         outerCount *= outShape[ax];
 
-    int64_t dtypeBytes = (buf.bufferSizeElements > 0) ?
-                             static_cast<int64_t>(buf.bufferSize) / static_cast<int64_t>(buf.bufferSizeElements) :
-                             1;
-    int64_t rowBytes = wcElemCount * dtypeBytes;
-    int64_t rowAlignedBytes = CeilAlign(rowBytes, static_cast<int64_t>(buf.ubBlockSize));
-    int64_t maxHByRowAlign = static_cast<int64_t>(buf.bufferSize) / rowAlignedBytes;
-
     int64_t cumInnerCount = innerElemCount;
     int64_t bestAxis = 0, bestFactor = 1, bestTotalCount = 1, bestRealCore = 0;
     for (int64_t ax = startAxis; ax >= 0; ax--) {
-        int64_t dimSize = (ax == RANK_MERGED - 1) ? alignedWC : outShape[ax];
+        int64_t dimSize = (ax == RANK_MERGED - 1) ? alignedLast : outShape[ax];
         int64_t axStep = (ax == RANK_MERGED - 1) ? static_cast<int64_t>(buf.ubBlockElements) : 1;
         for (int64_t factor = (ax == startAxis ? minUbFactor : axStep); factor <= dimSize; factor += axStep) {
             int64_t blockSize = factor * cumInnerCount;
             if (blockSize > static_cast<int64_t>(buf.bufferSizeElements))
-                break;
-            if (ax == 0 && factor > maxHByRowAlign)
                 break;
             int64_t totalCount = outerCount * CeilDiv(dimSize, factor);
             int64_t realCoreNum = CeilDiv(totalCount, CeilDiv(totalCount, static_cast<int64_t>(coreNum)));
@@ -307,20 +295,15 @@ static ge::graphStatus PasteSubImgTilingFunc(gert::TilingContext* context)
         tdNoop->bufferSize = 32;
         tdNoop->dtypeBytes = static_cast<uint8_t>(GetSizeByDataType(patchDtype));
         context->SetBlockDim(1);
-        context->SetTilingKey(GET_TPL_TILING_KEY(static_cast<uint64_t>(PASTE_SUB_IMG_KEY_UBAXIS_WC)));
+        context->SetTilingKey(GET_TPL_TILING_KEY(static_cast<uint64_t>(PASTE_SUB_IMG_KEY_UBAXIS_C)));
         size_t* workspacesNoop = context->GetWorkspaceSizes(1);
         OP_CHECK_NULL_WITH_CONTEXT(context, workspacesNoop);
         workspacesNoop[0] = 0;
         return ge::GRAPH_SUCCESS;
     }
 
-    OP_CHECK_IF(coord.activeW > INT32_MAX / coord.activeC,
-                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "core_area_coord",
-                                          std::to_string(coord.activeW).c_str(), "activeW * activeC <= INT32_MAX"),
-                return ge::GRAPH_FAILED);
-
-    int64_t sCy2Pre = static_cast<int64_t>(static_cast<float>(cy2) * scale);
-    int64_t sCx2Pre = static_cast<int64_t>(static_cast<float>(cx2) * scale);
+    int64_t sCy2Pre = static_cast<int64_t>(static_cast<double>(cy2) * static_cast<double>(scale));
+    int64_t sCx2Pre = static_cast<int64_t>(static_cast<double>(cx2) * static_cast<double>(scale));
     OP_CHECK_IF(sCy2Pre > patchH || sCx2Pre > patchW, OP_LOGE(context, "coord*scale out of patch_img bounds"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(coord.dCy1 + coord.activeH > combineH || coord.dCx1 + coord.activeW > combineW,
@@ -345,9 +328,11 @@ static ge::graphStatus PasteSubImgTilingFunc(gert::TilingContext* context)
 
     td->rank = RANK_MERGED;
     td->inShape[0] = coord.activeH;
-    td->inShape[1] = coord.activeW * coord.activeC;
+    td->inShape[1] = coord.activeW;
+    td->inShape[2] = coord.activeC;
     td->outShape[0] = coord.activeH;
-    td->outShape[1] = coord.activeW * coord.activeC;
+    td->outShape[1] = coord.activeW;
+    td->outShape[2] = coord.activeC;
     td->totalCount = split.totalCount;
     td->perCoreCount = mc.perCoreCount;
     td->ubAxis = split.ubAxis;

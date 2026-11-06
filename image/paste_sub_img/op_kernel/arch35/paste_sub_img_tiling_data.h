@@ -17,7 +17,7 @@
 
 #include <cstdint>
 
-static constexpr int64_t PASTE_SUB_IMG_AXIS_COUNT = 2;
+static constexpr int64_t PASTE_SUB_IMG_AXIS_COUNT = 3;
 
 struct PasteSubImgTilingData {
     uint8_t rank;

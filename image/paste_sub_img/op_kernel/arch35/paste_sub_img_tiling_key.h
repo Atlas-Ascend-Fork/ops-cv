@@ -14,21 +14,23 @@
  *
  * Single template parameter:
  *   KEY (UINT): tiling key = mergedRank - ubAxis
- *     PASTE_SUB_IMG_KEY_UBAXIS_WC = 1  -> split WC axis
- *     PASTE_SUB_IMG_KEY_UBAXIS_H  = 2  -> split H axis
+ *     PASTE_SUB_IMG_KEY_UBAXIS_C = 1  -> split C axis
+ *     PASTE_SUB_IMG_KEY_UBAXIS_W = 2  -> split W axis
+ *     PASTE_SUB_IMG_KEY_UBAXIS_H = 3  -> split H axis
  */
 #ifndef PASTE_SUB_IMG_TILING_KEY_H_
 #define PASTE_SUB_IMG_TILING_KEY_H_
 
 #include "ascendc/host_api/tiling/template_argument.h"
 
-#define PASTE_SUB_IMG_KEY_UBAXIS_WC 1
-#define PASTE_SUB_IMG_KEY_UBAXIS_H 2
+#define PASTE_SUB_IMG_KEY_UBAXIS_C 1
+#define PASTE_SUB_IMG_KEY_UBAXIS_W 2
+#define PASTE_SUB_IMG_KEY_UBAXIS_H 3
 
-ASCENDC_TPL_ARGS_DECL(PasteSubImg, ASCENDC_TPL_UINT_DECL(KEY, 2, ASCENDC_TPL_UI_RANGE, 1, 1, 2));
+ASCENDC_TPL_ARGS_DECL(PasteSubImg, ASCENDC_TPL_UINT_DECL(KEY, 3, ASCENDC_TPL_UI_RANGE, 1, 1, 3));
 
 ASCENDC_TPL_SEL(ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_KERNEL_TYPE_SEL(ASCENDC_TPL_AIV_ONLY),
-                                     ASCENDC_TPL_UINT_SEL(KEY, ASCENDC_TPL_UI_RANGE, 1, 1, 2),
+                                     ASCENDC_TPL_UINT_SEL(KEY, ASCENDC_TPL_UI_RANGE, 1, 1, 3),
                                      ASCENDC_TPL_TILING_STRUCT_SEL(PasteSubImgTilingData)));
 
 #endif // PASTE_SUB_IMG_TILING_KEY_H_

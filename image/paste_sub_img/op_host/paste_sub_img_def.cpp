@@ -23,7 +23,8 @@ public:
         this->Input("patch_img")
             .ParamType(REQUIRED)
             .DataType({ge::DT_UINT8, ge::DT_FLOAT16, ge::DT_FLOAT})
-            .Format({ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND});
+            .Format({ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND})
+            .AutoContiguous();
 
         this->Input("patch_coord")
             .ParamType(REQUIRED)
@@ -40,7 +41,8 @@ public:
         this->Input("combine_img")
             .ParamType(REQUIRED)
             .DataType({ge::DT_UINT8, ge::DT_FLOAT16, ge::DT_FLOAT})
-            .Format({ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND});
+            .Format({ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND})
+            .AutoContiguous();
 
         this->Output("combine_img")
             .ParamType(REQUIRED)

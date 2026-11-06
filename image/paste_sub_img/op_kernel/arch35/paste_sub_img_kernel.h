@@ -19,7 +19,7 @@
 #include "paste_sub_img_tiling_data.h"
 #include "paste_sub_img_tiling_key.h"
 
-constexpr int64_t kAxisCount = 2;
+constexpr int64_t kAxisCount = 3;
 
 static constexpr AscendC::Reg::CastTrait kCastU8ToHalf = {AscendC::Reg::RegLayout::ZERO, AscendC::Reg::SatMode::UNKNOWN,
                                                           AscendC::Reg::MaskMergeMode::ZEROING,
@@ -105,8 +105,10 @@ __aicore__ inline void PasteSubImgKernel<T, KEY>::Init(GM_ADDR patch_img, GM_ADD
 
     layout_.axes[0].inStride = td_->patchStrideH;
     layout_.axes[0].outStride = td_->combineStrideH;
-    layout_.axes[1].inStride = 1;
-    layout_.axes[1].outStride = 1;
+    layout_.axes[1].inStride = td_->patchStrideW;
+    layout_.axes[1].outStride = td_->combineStrideW;
+    layout_.axes[2].inStride = 1;
+    layout_.axes[2].outStride = 1;
 }
 
 template <typename T, int KEY>
@@ -124,30 +126,50 @@ __aicore__ inline void PasteSubImgKernel<T, KEY>::Process()
         return (remain >= ubF) ? ubF : remain;
     };
 
+    auto ceilDiv = [](int64_t a, int64_t b) -> int64_t { return (a + b - 1) / b; };
+
     for (int64_t tileIdx = start; tileIdx < end; ++tileIdx) {
         int64_t ubOff = (tileIdx & 1) * perBufElems_;
+        int64_t ubFactor = static_cast<int64_t>(td_->ubFactor);
 
         if constexpr (KEY == 1) {
-            int64_t wcElemCount = td_->activeW * td_->activeC;
-            int64_t wcChunkCount = AscendC::CeilDivision(static_cast<int32_t>(wcElemCount),
-                                                         static_cast<int32_t>(td_->ubFactor));
-            int64_t wc_o = static_cast<int64_t>(tileIdx % static_cast<uint64_t>(wcChunkCount));
-            int64_t hIdx = static_cast<int64_t>(tileIdx) / wcChunkCount;
+            // split-C: tileIdx = ((h * activeW) + w) * cChunkCount + c_o
+            int64_t cChunkCount = ceilDiv(td_->activeC, ubFactor);
+            int64_t c_o = tileIdx % cChunkCount;
+            int64_t wIdx = (tileIdx / cChunkCount) % td_->activeW;
+            int64_t hIdx = tileIdx / (cChunkCount * td_->activeW);
             layout_.axes[0].outStart = hIdx;
             layout_.axes[0].length = 1;
-            layout_.axes[1].outStart = wc_o * static_cast<int64_t>(td_->ubFactor);
-            layout_.axes[1].length = calcLen(wcElemCount, static_cast<int64_t>(td_->ubFactor), wc_o);
-            layout_.inOffset = td_->patchBaseOffset + hIdx * td_->patchStrideH + layout_.axes[1].outStart;
-            layout_.outOffset = td_->combineBaseOffset + hIdx * td_->combineStrideH + layout_.axes[1].outStart;
+            layout_.axes[1].outStart = wIdx;
+            layout_.axes[1].length = 1;
+            layout_.axes[2].outStart = c_o * ubFactor;
+            layout_.axes[2].length = calcLen(td_->activeC, ubFactor, c_o);
+        } else if constexpr (KEY == 2) {
+            // split-W: tileIdx = h * wChunkCount + w_o
+            int64_t wChunkCount = ceilDiv(td_->activeW, ubFactor);
+            int64_t w_o = tileIdx % wChunkCount;
+            int64_t hIdx = tileIdx / wChunkCount;
+            layout_.axes[0].outStart = hIdx;
+            layout_.axes[0].length = 1;
+            layout_.axes[1].outStart = w_o * ubFactor;
+            layout_.axes[1].length = calcLen(td_->activeW, ubFactor, w_o);
+            layout_.axes[2].outStart = 0;
+            layout_.axes[2].length = td_->activeC;
         } else {
-            int64_t h_o = static_cast<int64_t>(tileIdx);
-            layout_.axes[0].outStart = h_o * static_cast<int64_t>(td_->ubFactor);
-            layout_.axes[0].length = calcLen(td_->activeH, static_cast<int64_t>(td_->ubFactor), h_o);
+            // split-H (KEY == 3): tileIdx = h_o
+            int64_t h_o = tileIdx;
+            layout_.axes[0].outStart = h_o * ubFactor;
+            layout_.axes[0].length = calcLen(td_->activeH, ubFactor, h_o);
             layout_.axes[1].outStart = 0;
-            layout_.axes[1].length = td_->activeW * td_->activeC;
-            layout_.inOffset = td_->patchBaseOffset + layout_.axes[0].outStart * td_->patchStrideH;
-            layout_.outOffset = td_->combineBaseOffset + layout_.axes[0].outStart * td_->combineStrideH;
+            layout_.axes[1].length = td_->activeW;
+            layout_.axes[2].outStart = 0;
+            layout_.axes[2].length = td_->activeC;
         }
+
+        layout_.inOffset = td_->patchBaseOffset + layout_.axes[0].outStart * td_->patchStrideH +
+                           layout_.axes[1].outStart * td_->patchStrideW + layout_.axes[2].outStart;
+        layout_.outOffset = td_->combineBaseOffset + layout_.axes[0].outStart * td_->combineStrideH +
+                            layout_.axes[1].outStart * td_->combineStrideW + layout_.axes[2].outStart;
 
         if (tileIdx > (start + 1)) {
             if (tileIdx & 1) {
@@ -160,28 +182,10 @@ __aicore__ inline void PasteSubImgKernel<T, KEY>::Process()
         AscendC::PipeBarrier<PIPE_ALL>();
 
         AscendC::DataCopyPadExtParams<T> padParams;
-        if constexpr (KEY == 1) {
-            int64_t curWC = layout_.axes[1].length;
-            uint32_t blockLen = static_cast<uint32_t>(curWC * static_cast<int64_t>(sizeof(T)));
-            auto b0 = bufPatch_.Get<T>(ubOff);
-            auto b1 = bufCombine_.Get<T>(ubOff);
-
-            AscendC::DataCopyExtParams copyPatch;
-            copyPatch.blockCount = 1;
-            copyPatch.blockLen = blockLen;
-            copyPatch.srcStride = 0;
-            copyPatch.dstStride = 0;
-            AscendC::DataCopyPad(b0, gmPatch_[layout_.inOffset], copyPatch, padParams);
-
-            AscendC::DataCopyExtParams copyCombine;
-            copyCombine.blockCount = 1;
-            copyCombine.blockLen = blockLen;
-            copyCombine.srcStride = 0;
-            copyCombine.dstStride = 0;
-            AscendC::DataCopyPad(b1, gmCombine_[layout_.outOffset], copyCombine, padParams);
-        } else {
+        if constexpr (KEY == 3) {
+            // split-H：逐行搬运（每行 = activeW × activeC 连续元素）
             int64_t curH = layout_.axes[0].length;
-            int64_t rowElems = td_->activeW * td_->activeC;
+            int64_t rowElems = layout_.axes[1].length * layout_.axes[2].length;
             uint32_t rowBytes = static_cast<uint32_t>(rowElems * static_cast<int64_t>(sizeof(T)));
             int64_t rowAlignedBytes = static_cast<int64_t>(AscendC::AlignUp(rowBytes, AscendC::ONE_BLK_SIZE));
             int64_t rowUbElems = rowAlignedBytes / static_cast<int64_t>(sizeof(T));
@@ -211,6 +215,26 @@ __aicore__ inline void PasteSubImgKernel<T, KEY>::Process()
                 copyCombine.dstStride = 0;
                 AscendC::DataCopyPad(b1, gmCombine_[combineGmOff], copyCombine, padParams);
             }
+        } else {
+            // split-C (KEY == 1) / split-W (KEY == 2)：单块连续搬运
+            int64_t elemCount = layout_.axes[0].length * layout_.axes[1].length * layout_.axes[2].length;
+            uint32_t blockLen = static_cast<uint32_t>(elemCount * static_cast<int64_t>(sizeof(T)));
+            auto b0 = bufPatch_.Get<T>(ubOff);
+            auto b1 = bufCombine_.Get<T>(ubOff);
+
+            AscendC::DataCopyExtParams copyPatch;
+            copyPatch.blockCount = 1;
+            copyPatch.blockLen = blockLen;
+            copyPatch.srcStride = 0;
+            copyPatch.dstStride = 0;
+            AscendC::DataCopyPad(b0, gmPatch_[layout_.inOffset], copyPatch, padParams);
+
+            AscendC::DataCopyExtParams copyCombine;
+            copyCombine.blockCount = 1;
+            copyCombine.blockLen = blockLen;
+            copyCombine.srcStride = 0;
+            copyCombine.dstStride = 0;
+            AscendC::DataCopyPad(b1, gmCombine_[layout_.outOffset], copyCombine, padParams);
         }
 
         if (tileIdx & 1) {
@@ -221,9 +245,9 @@ __aicore__ inline void PasteSubImgKernel<T, KEY>::Process()
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         }
 
-        if constexpr (KEY == 2) {
+        if constexpr (KEY == 3) {
             int64_t curH = layout_.axes[0].length;
-            int64_t rowElems = layout_.axes[1].length;
+            int64_t rowElems = layout_.axes[1].length * layout_.axes[2].length;
             uint32_t rowBytes = static_cast<uint32_t>(rowElems * static_cast<int64_t>(sizeof(T)));
             int64_t rowAlignedBytes = static_cast<int64_t>(AscendC::AlignUp(rowBytes, AscendC::ONE_BLK_SIZE));
             int64_t rowUbElems = rowAlignedBytes / static_cast<int64_t>(sizeof(T));
@@ -244,7 +268,7 @@ __aicore__ inline void PasteSubImgKernel<T, KEY>::Process()
         } else {
             auto b0Patch = bufPatch_.Get<T>(ubOff);
             auto b1Combine = bufCombine_.Get<T>(ubOff);
-            int64_t elemCount = layout_.axes[1].length;
+            int64_t elemCount = layout_.axes[0].length * layout_.axes[1].length * layout_.axes[2].length;
             if constexpr (std::is_same_v<T, uint8_t>) {
                 asc_vf_call<SaturatedAddU8VF>((__ubuf__ uint8_t*)b1Combine.GetPhyAddr(),
                                               (__ubuf__ uint8_t*)b0Patch.GetPhyAddr(),
@@ -262,19 +286,9 @@ __aicore__ inline void PasteSubImgKernel<T, KEY>::Process()
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
         }
 
-        if constexpr (KEY == 1) {
-            auto b1 = bufCombine_.Get<T>(ubOff);
-            int64_t elemCount = layout_.axes[1].length;
-            uint32_t blockLen = static_cast<uint32_t>(elemCount * static_cast<int64_t>(sizeof(T)));
-            AscendC::DataCopyExtParams out;
-            out.blockCount = 1;
-            out.blockLen = blockLen;
-            out.srcStride = 0;
-            out.dstStride = 0;
-            AscendC::DataCopyPad(gmCombineOut_[layout_.outOffset], b1, out);
-        } else {
+        if constexpr (KEY == 3) {
             int64_t curH = layout_.axes[0].length;
-            int64_t rowElems = layout_.axes[1].length;
+            int64_t rowElems = layout_.axes[1].length * layout_.axes[2].length;
             uint32_t rowBytes = static_cast<uint32_t>(rowElems * static_cast<int64_t>(sizeof(T)));
             int64_t rowAlignedBytes = static_cast<int64_t>(AscendC::AlignUp(rowBytes, AscendC::ONE_BLK_SIZE));
             int64_t rowUbElems = rowAlignedBytes / static_cast<int64_t>(sizeof(T));
@@ -292,6 +306,17 @@ __aicore__ inline void PasteSubImgKernel<T, KEY>::Process()
                 out.dstStride = 0;
                 AscendC::DataCopyPad(gmCombineOut_[combineGmOff], b1, out);
             }
+        } else {
+            int64_t elemCount = layout_.axes[0].length * layout_.axes[1].length * layout_.axes[2].length;
+            uint32_t blockLen = static_cast<uint32_t>(elemCount * static_cast<int64_t>(sizeof(T)));
+            auto b1 = bufCombine_.Get<T>(ubOff);
+
+            AscendC::DataCopyExtParams out;
+            out.blockCount = 1;
+            out.blockLen = blockLen;
+            out.srcStride = 0;
+            out.dstStride = 0;
+            AscendC::DataCopyPad(gmCombineOut_[layout_.outOffset], b1, out);
         }
 
         if (tileIdx & 1) {

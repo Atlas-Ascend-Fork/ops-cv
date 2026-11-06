@@ -17,6 +17,7 @@ __spec__ = {"paste_sub_img": "PasteSubImgTestSpec"}
 
 
 class PasteSubImgTestSpec:
+    @staticmethod
     def golden(
         patch_img, patch_coord, core_area_coord, combine_img, *, scale=1.0, **kwargs
     ):
