@@ -35,6 +35,7 @@
   $$
 
   其中input、grid、output中的N是一致的，input和output中的C是一致的，grid和output中的$H_{out}$、$W_{out}$是一致的，grid最后一维大小为2，表示input像素位置信息为(x, y)，会将x和y的取值范围归一化到[-1, 1]之间，(-1, -1)表示左上角坐标，(1, 1)表示右下角坐标。
+
   - 反归一化的计算公式：
     - alignCorners=true，表示特征值位于像素中心。
 

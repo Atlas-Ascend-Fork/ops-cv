@@ -48,6 +48,7 @@
   $$
 
   其中：
+
   - alignCorners为true，表示输入和输出张量的角像素点对齐；alignCorners为false，表示输入和输出张量的边像素点对齐。
   - $r$和$s$是gradOutput的H、W坐标；$h$和$w$是gradInput的H、W坐标。$gradInput_H$和$gradInput_W$分别表示gradInput的H、W长度。
   - 对方向$D\in\{H,W\}$、gradOutput坐标$q$，中心坐标为：
@@ -338,6 +339,7 @@ aclnnStatus aclnnUpsampleBicubic2dAAGrad(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
+
   - N \* C \* gradOutput_H < 2^31
 
 <!-- npu="A3,910b" id7 -->

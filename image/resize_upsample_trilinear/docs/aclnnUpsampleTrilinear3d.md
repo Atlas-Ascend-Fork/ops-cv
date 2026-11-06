@@ -381,6 +381,7 @@ aclnnStatus aclnnUpsampleTrilinear3d(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
+
   - N \* C \* self_D \* self_H < 2^31
   - out_W * out_H < 2^31
 - 当输入scalesD、scalesH、scalesW取值均大于0时，参数self、outputSize、scalesD、scalesH、scalesW需要满足如下约束：

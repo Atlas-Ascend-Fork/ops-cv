@@ -127,7 +127,7 @@ aclnnStatus aclnnUpsampleBilinear2dAABackward(
     <tr>
       <td>gradOutput（aclTensor*）</td>
       <td>输入</td>
-      <td>表示反向计算的梯度Tensor，对应公式描述中的`gradOutput`。</td>
+      <td>表示反向计算的梯度Tensor，对应公式中的`gradOutput`。</td>
       <td><ul><li>不支持空Tensor。</li><li>当数据格式为ND时，默认按照NCHW格式处理。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16</td>
       <td>NCHW、ND</td>
@@ -188,7 +188,7 @@ aclnnStatus aclnnUpsampleBilinear2dAABackward(
       <td>out（aclTensor*）</td>
       <td>输出</td>
       <td>表示反向计算的输出张量，对应公式中的`gradInput`。</td>
-      <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式与入参`gradOutput`的数据类型和数据格式保持一致。</li></ul></td>
+      <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式与入参`gradOutput`保持一致。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16</td>
       <td>NCHW、ND</td>
       <td>4</td>

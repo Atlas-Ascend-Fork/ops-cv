@@ -254,6 +254,7 @@ aclnnStatus aclnnUpsampleNearest2d(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
+
 - 确定性计算：
   - aclnnUpsampleNearest2d默认确定性实现。
 

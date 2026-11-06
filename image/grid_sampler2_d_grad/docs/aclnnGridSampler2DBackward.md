@@ -127,7 +127,7 @@
            dx(N, C, \text{round}(iy), \text{round}(ix)) \mathrel{+}= grad(N, C, H_{out}, W_{out})
            $$
 
-         - dgrid：最邻近插值对坐标不可导，因此 **dgrid = 0**。
+         - dgrid：最近邻插值对坐标不可导，因此 **dgrid = 0**。
 
        - Bicubic（双三次插值）
          - dx：

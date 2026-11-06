@@ -287,7 +287,7 @@ aclnnStatus aclnnNonMaxSuppression(
 
 - 参数maxOutputBoxesPerClass必须大于0，上限为700。输入参数boxes和scores的数据类型要求保持一致。
 - 每个batch的框数量（boxes的spatial_dimension / scores的spatial_dimension）上限为50000。
-- 在FLOAT16场景下，算子进行排序和计算对比标杆可能会引入计算误差。
+- 在FLOAT16场景下，算子进行排序和计算对比可能会引入计算误差。
 - 确定性计算：
   - aclnnNonMaxSuppression默认确定性实现。
 

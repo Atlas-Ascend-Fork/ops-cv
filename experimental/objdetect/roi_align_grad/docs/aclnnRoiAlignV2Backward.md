@@ -105,7 +105,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">INT32、INT64</td>
       <td class="tg-0lax">-</td>
-      <td class="tg-0lax">size大小为4，值为（B, C, inputHeight, inputWidth）<br>表示正向RoiAlign的输入张量一个batch内有B张图像，每个图像有C个尺寸为inputHeight * inputWidth的特征图。</td>
+      <td class="tg-0lax">size为4，值为（B, C, inputHeight, inputWidth）<br>表示正向RoiAlign的输入张量一个batch内有B张图像，每个图像有C个尺寸为inputHeight * inputWidth的特征图。</td>
       <td class="tg-0lax">-</td>
     </tr>
     <tr>

@@ -360,6 +360,7 @@ aclnnStatus aclnnUpsampleBilinear2dBackwardV2(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
+
   - N \* C \* gradOut_H < 2^31
 - 参数inputSize、outputSize、scalesH、scalesW需要满足如下约束：
 

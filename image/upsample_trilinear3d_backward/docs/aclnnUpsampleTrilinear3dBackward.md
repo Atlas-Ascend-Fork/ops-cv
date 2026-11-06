@@ -384,6 +384,7 @@ aclnnStatus aclnnUpsampleTrilinear3dBackward(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
+
   - N \* C \* gradOut_D \* gradOut_H < 2^31
   - gradInput_W * gradInput_H < 2^31
 - 当输入scalesD、scalesH、scalesW的取值均大于0时，参数inputSize、outputSize、scalesD、scalesH、scalesW需要满足如下约束：

@@ -47,6 +47,7 @@
   $$
 
   其中：
+
   - alignCorners为true，表示输入和输出张量的角像素点对齐；alignCorners为false，表示输入和输出张量的边像素点对齐。
   - i和j是$W(i, j)$的索引变量。
   - $f(h_i, w_j)$是原图像在$(h_i, w_j)$的像素值。
@@ -327,6 +328,7 @@ aclnnStatus aclnnUpsampleBicubic2d(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
+
   - N \* C \* self_H < 2^31
 - 当输入scalesH取值大于0时，参数self、outputSize、scalesH需要满足如下约束：
 

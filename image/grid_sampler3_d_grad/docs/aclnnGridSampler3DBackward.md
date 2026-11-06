@@ -27,7 +27,7 @@
 
 - 计算流程：
   1. 根据grid存储的(x, y, z)值，计算出映射到input上的坐标，这些坐标和alignCorners、paddingMode有关。
-  2. 坐标根据输入的interpolationMode，选择使用bilinear、nearest不同插值模式计算输出值。
+  2. 根据输入的interpolationMode，选择使用bilinear、nearest不同插值模式计算输出值。
   3. 根据grad存储的梯度值乘上对应点的权重值，计算出最终dx、dgrid的结果。
 
 - 计算公式：
@@ -306,7 +306,7 @@ aclnnStatus aclnnGridSampler3DBackward(
       <td>inputGrad（aclTensor*）</td>
       <td>输出</td>
       <td>表示反向传播的输出梯度，对应公式描述中的`dx`。</td>
-      <td><ul><li>支持空Tensor。</li><li>数据类型、数据格式和shape与`input`的数据类型、数据格式和shape保持一致。</li><li>当数据类型DOUBLE时，数据格式不支持NDHWC。</li></ul></td>
+      <td><ul><li>支持空Tensor。</li><li>数据类型、数据格式和shape与`input`的数据类型、数据格式和shape保持一致。</li><li>当数据类型为DOUBLE时，数据格式不支持NDHWC。</li></ul></td>
       <td>BFLOAT16、FLOAT16、FLOAT32、DOUBLE</td>
       <td>NCDHW、NDHWC</td>
       <td>5</td>

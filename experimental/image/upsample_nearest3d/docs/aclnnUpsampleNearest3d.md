@@ -148,7 +148,7 @@ aclnnStatus aclnnUpsampleNearest3d(
     <tr>
       <td>out（aclTensor*）</td>
       <td>输出</td>
-      <td>表示采样后的输出张量，对应公式中`out`的点p坐标。</td>
+      <td>表示采样后的输出张量，对应公式中的`out`。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式需与入参self的数据类型和数据格式保持一致。</li><li>输入和输出shape的N、C轴必须相同。</li><li>out的所有维度取值均小于等于(2^31-1)。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16、DOUBLE、UINT8</td>
       <td>NCDHW、NDHWC、ND</td>

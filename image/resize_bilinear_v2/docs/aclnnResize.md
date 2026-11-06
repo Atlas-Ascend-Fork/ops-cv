@@ -32,6 +32,7 @@
   $$
 
   其中：
+
   - $self\_dimension$为输入self shape的H轴和W轴的值。
   - $out\_dimension$为输出out shape的H轴和W轴的值。
   - $scales$为输入self调整的倍数。

@@ -9,7 +9,7 @@
   调用算子API时，需引用依赖的头文件和库文件，一般头文件默认在`${INSTALL_DIR}/include/aclnnop`，库文件默认在`${INSTALL_DIR}/lib64`，具体文件如下：
 
   - 头文件：方式1（推荐）：引用算子仓总头文件aclnn\_ops\_\$\{ops\_project\}.h。方式2：引用单个算子API的头文件aclnn\_\*.h。
-  - 库文件：引用算子仓对应的库文件libopapi_${ops_project}.so。注意，原所有算子仓总库文件libopapi.so后续会废弃，不推荐使用，也不支持与单个算子仓库文件同时使用。
+  - 库文件：引用算子仓对应的库文件libopapi_${ops_project}.so。注意，原所有算子仓总库文件libopapi.so后续会废弃，不推荐使用，也不支持与单个算子库文件同时使用。
 
   ${INSTALL_DIR}表示CANN安装后文件路径；\$\{ops\_project\}表示算子仓名（如math、nn、cv、transformer），请改为实际算子仓名。
 
@@ -73,4 +73,4 @@
 | [aclnnRoiAlignV2Backward](../../objdetect/roi_align_grad/docs/aclnnRoiAlignV2Backward.md) |[aclnnRoiAlignV2](../../objdetect/roi_align/docs/aclnnRoiAlignV2.md)的反向传播。 |默认非确定性实现，支持配置开启|默认确定性实现|
 | [aclnnRoiPoolingWithArgMax](../../objdetect/roi_pooling_with_arg_max/docs/aclnnRoiPoolingWithArgMax.md) | 对输入特征图按ROI（感兴趣区域）进行池化，在每个ROI内按空间划分为pooled_h × pooled_w个格子，对每个格子做最大池化，并输出池化结果及最大值在通道内的一维索引（argmax）。| - |默认确定性实现|
 | [aclnnRoiPoolingGradWithArgMax](../../objdetect/roi_pooling_grad_with_arg_max/docs/aclnnRoiPoolingGradWithArgMax.md) | [aclnnRoiPoolingWithArgMax](../../objdetect/roi_pooling_with_arg_max/docs/aclnnRoiPoolingWithArgMax.md)的反向传播。 | - |默认非确定性实现，不支持配置开启|
-| [aclnnIm2colBackward](../../image/col2im/docs/aclnnIm2colBackward.md) | 将梯度张量还原为原始输入张量的梯度分布，完成反向传播计算。 |默认确定性实现|默认确定性实现|
+| [aclnnIm2colBackward](../../image/col2im/docs/aclnnIm2colBackward.md) | 将梯度张量还原为原始输入张量的梯度，完成反向传播计算。 |默认确定性实现|默认确定性实现|

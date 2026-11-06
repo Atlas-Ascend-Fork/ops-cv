@@ -337,6 +337,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
+
   - N \* C \* gradOut_D \* gradOut_H < 2^31
   - gradInput_W * gradInput_H < 2^31
 - 参数gradOut、gradInput的数据格式不为NCDHW或NDHWC时，输入其他数据格式默认按NCDHW处理。

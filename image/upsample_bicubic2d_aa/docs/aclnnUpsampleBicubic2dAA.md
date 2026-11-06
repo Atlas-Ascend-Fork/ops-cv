@@ -48,6 +48,7 @@
   $$
 
   其中：
+
   - alignCorners为true，表示输入和输出张量的角像素点对齐；alignCorners为false，表示输入和输出张量的边像素点对齐。
   - i和j是$W(i, j)$的索引变量。
   - 如果$scaleH >= 1$，则$kH = 1/scaleH$，否则$kH = 4$
@@ -300,6 +301,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
+
   - N \* C \* x_H < 2^31
 
 <!-- npu="A3,910b" id7 -->

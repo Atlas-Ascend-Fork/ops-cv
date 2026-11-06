@@ -48,6 +48,7 @@
   $$
 
   其中：
+
   - alignCorners为true，表示输入和输出张量的角像素点对齐；alignCorners为false，表示输入和输出张量的边像素点对齐。
   - i和j是$W(i, j)$的索引变量。
   - $f(h_i, w_j)$是gradOut在$(h_i, w_j)$的像素值。
