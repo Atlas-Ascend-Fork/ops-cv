@@ -72,7 +72,7 @@ __simt_callee__ __aicore__ __attribute__((always_inline)) inline void SimtComput
             float deltaX = origWidth - static_cast<float>(leftX);
             float val = static_cast<float>(inputGm[yGmIdx]);
             float val2 = val * deltaX;
-            float val1 = val - val2; // val * (1.0f - deltaX);
+            float val1 = val * (1.0f - deltaX);
             asc_atomic_add(outputGm + origBaseIdx + leftX, static_cast<T1>(val1));
             asc_atomic_add(outputGm + origBaseIdx + leftX + RightX, static_cast<T1>(val2));
         }
