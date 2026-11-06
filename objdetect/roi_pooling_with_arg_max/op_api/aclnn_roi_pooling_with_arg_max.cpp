@@ -9,6 +9,9 @@
  */
 #include "aclnn_roi_pooling_with_arg_max.h"
 #include "roi_pooling_with_arg_max.h"
+#include <string>
+#include <vector>
+#include "base/err_msg.h"
 #include "aclnn_kernels/contiguous.h"
 #include "aclnn_kernels/common/op_error_check.h"
 #include "level0/fill.h"
@@ -28,7 +31,14 @@ static aclnnStatus CheckSocValid()
 {
     SocVersion socVersion = GetCurrentPlatformInfo().GetSocVersion();
     if (!IsRegBase()) {
-        OP_LOGE(ACLNN_ERR_RUNTIME_ERROR, "support for %s is not implemented", op::ToString(socVersion).GetString());
+        const std::string soc = op::ToString(socVersion).GetString();
+        const std::string reason = "SoC " + soc +
+                                   " is not supported. Supported SoC is regbase (Ascend950). "
+                                   "Kernel is RoiPoolingWithArgMax, dtype is FLOAT or FLOAT16, format is ND.";
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_RUNTIME_ERROR, "%s", reason.c_str());
+        const std::vector<const char*> keys = {"opName", "reason"};
+        const std::vector<const char*> values = {"aclnnRoiPoolingWithArgMax", reason.c_str()};
+        REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
         return ACLNN_ERR_RUNTIME_ERROR;
     }
     return ACLNN_SUCCESS;

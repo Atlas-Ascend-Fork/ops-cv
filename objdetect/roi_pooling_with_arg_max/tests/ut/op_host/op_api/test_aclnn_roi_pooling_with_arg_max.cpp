@@ -497,3 +497,24 @@ TEST_F(l2_roi_pooling_with_arg_max_test, case_invalid_format_rois_not_nd)
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
+
+// Non-regbase SoC: CheckSocValid must fail with ACLNN_ERR_RUNTIME_ERROR and report EZ1009
+// (not the internal EZ9903 path from OP_LOGE(ACLNN_ERR_RUNTIME_ERROR, ...)).
+TEST_F(l2_roi_pooling_with_arg_max_test, case_soc_not_supported_910b)
+{
+    auto x_desc = TensorDesc({2, 16, 25, 42}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto rois_desc = TensorDesc({2, 5}, ACL_FLOAT, ACL_FORMAT_ND);
+    int64_t pooled_h = 3;
+    int64_t pooled_w = 3;
+    float spatial_scale_h = 1.0f;
+    float spatial_scale_w = 1.0f;
+    auto y_desc = TensorDesc({2, 16, 3, 3}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto argmax_desc = TensorDesc({2, 16, 3, 3}, ACL_INT32, ACL_FORMAT_ND);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
+    auto ut = OP_API_UT(aclnnRoiPoolingWithArgMax,
+                        INPUT(x_desc, rois_desc, pooled_h, pooled_w, spatial_scale_h, spatial_scale_w),
+                        OUTPUT(y_desc, argmax_desc));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_RUNTIME_ERROR);
+}
