@@ -28,9 +28,7 @@
 #include "array_ops.h"
 #include "ge_ir_build.h"
 
-#include "experiment_ops.h"
-#include "nn_other.h"
-#include "rotated_box_decode_proto.h"
+#include "../../op_graph/rotated_box_decode_proto.h"
 
 #define FAILED -1
 #define SUCCESS 0
