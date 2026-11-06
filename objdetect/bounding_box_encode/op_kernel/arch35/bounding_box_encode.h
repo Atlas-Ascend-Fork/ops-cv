@@ -21,98 +21,168 @@ namespace NsBoundingBoxEncode {
 
 using namespace AscendC;
 
-// 公共坐标转换逻辑：消除 FP16/FP32 路径的重复代码（问题1）。
-// 计算锚框/真实框的中心点、宽高及编码偏移量 dx/dy、宽高比 rw/rh。
-// 注意：必须加 __aicore__ 修饰，否则在 device 侧引用参数行为异常。
-struct BoxDeltaCalc {
-    __aicore__ static inline void Run(float px1, float py1, float px2, float py2, float gx1, float gy1, float gx2,
-                                      float gy2, float& dx, float& dy, float& rw, float& rh)
-    {
-        float pcx = (px1 + px2) * 0.5f;
-        float pcy = (py1 + py2) * 0.5f;
-        float pw = px2 - px1 + 1.0f;
-        float ph = py2 - py1 + 1.0f;
-        float gcx = (gx1 + gx2) * 0.5f;
-        float gcy = (gy1 + gy2) * 0.5f;
-        float gw = gx2 - gx1 + 1.0f;
-        float gh = gy2 - gy1 + 1.0f;
-        dx = (gcx - pcx) / pw;
-        dy = (gcy - pcy) / ph;
-        rw = gw / pw;
-        rh = gh / ph;
-    }
+constexpr uint32_t BOX_DIM = 4;
+constexpr int32_t DOUBLE_BUFFER_NUM = 2;
+constexpr float CENTER_SCALE = 0.5f;
+constexpr float WIDTH_BIAS = 1.0f;
+constexpr int16_t INDEX_START = 0;
+constexpr float FLOAT_ZERO = 0.0f;
+constexpr uint16_t SINGLE_BLOCK_COUNT = 1;
 
-    __aicore__ static inline float FixLnResult(float origInput, float npuLnResult)
-    {
-        if (origInput != origInput) {
-            return MakeNan();
-        }
-        if (origInput == 0.0f) {
-            return MakeNegInf();
-        }
-        if (origInput < 0.0f) {
-            return MakeNan();
-        }
-        if (npuLnResult != npuLnResult) {
-            return MakeNan();
-        }
-        float negInf = MakeNegInf();
-        if (npuLnResult == negInf && origInput > 0.0f) {
-            return SoftLnPositive(origInput);
-        }
-        return npuLnResult;
-    }
+constexpr AscendC::MicroAPI::CastTrait kCastB16ToB32 = {
+    AscendC::MicroAPI::RegLayout::ZERO, AscendC::MicroAPI::SatMode::UNKNOWN, AscendC::MicroAPI::MaskMergeMode::ZEROING,
+    AscendC::RoundMode::UNKNOWN};
+constexpr AscendC::MicroAPI::CastTrait kCastB32ToB16 = {
+    AscendC::MicroAPI::RegLayout::ZERO, AscendC::MicroAPI::SatMode::NO_SAT, AscendC::MicroAPI::MaskMergeMode::ZEROING,
+    AscendC::RoundMode::CAST_ROUND};
+static constexpr AscendC::Reg::DivSpecificMode kDivFtzFalse = {AscendC::Reg::MaskMergeMode::ZEROING, false,
+                                                               AscendC::DivAlgo::PRECISION_1ULP_FTZ_FALSE};
+static constexpr AscendC::Reg::LnSpecificMode kLnFtzFalse = {AscendC::Reg::MaskMergeMode::ZEROING,
+                                                             AscendC::LnAlgo::PRECISION_1ULP_FTZ_FALSE};
 
-    __aicore__ static inline float SoftLnPositive(float x)
-    {
-        if (x <= 0.0f) {
-            return MakeNegInf();
-        }
-        float m = x;
-        int e = 0;
-        if (m >= 2.0f) {
-            while (m >= 2.0f) {
-                m *= 0.5f;
-                e++;
-            }
-        } else if (m < 1.0f) {
-            while (m < 1.0f) {
-                m *= 2.0f;
-                e--;
-            }
-        }
-        float z = (m - 1.0f) / (m + 1.0f);
-        float z2 = z * z;
-        float z4 = z2 * z2;
-        float z6 = z4 * z2;
-        float z8 = z4 * z4;
-        float z10 = z6 * z4;
-        float poly = 1.0f + z2 * 0.33333334f + z4 * 0.2f + z6 * 0.14285715f + z8 * 0.11111111f + z10 * 0.09090909f;
-        float artanh_z = z * poly;
-        float ln_m = 2.0f * artanh_z;
-        return ln_m + static_cast<float>(e) * 0.69314718f;
+template <bool SubnormalSafe>
+__simd_callee__ inline void EncodeGroup(AscendC::Reg::RegTensor<float>& dx, AscendC::Reg::RegTensor<float>& dw,
+                                        AscendC::Reg::RegTensor<float>& ax1, AscendC::Reg::RegTensor<float>& ax2,
+                                        AscendC::Reg::RegTensor<float>& gx1, AscendC::Reg::RegTensor<float>& gx2,
+                                        float meanC, float stdC, float meanW, float stdW, AscendC::Reg::MaskReg& mask)
+{
+    AscendC::Reg::RegTensor<float> pcx, pw, gcx, gw, rw;
+    AscendC::Reg::Add(pcx, ax1, ax2, mask);
+    AscendC::Reg::Muls(pcx, pcx, CENTER_SCALE, mask);
+    AscendC::Reg::Sub(pw, ax2, ax1, mask);
+    AscendC::Reg::Adds(pw, pw, WIDTH_BIAS, mask);
+    AscendC::Reg::Add(gcx, gx1, gx2, mask);
+    AscendC::Reg::Muls(gcx, gcx, CENTER_SCALE, mask);
+    AscendC::Reg::Sub(gw, gx2, gx1, mask);
+    AscendC::Reg::Adds(gw, gw, WIDTH_BIAS, mask);
+    AscendC::Reg::Sub(dx, gcx, pcx, mask);
+    if constexpr (SubnormalSafe) {
+        AscendC::Reg::Div<float, &kDivFtzFalse>(dx, dx, pw, mask);
+    } else {
+        AscendC::Reg::Div(dx, dx, pw, mask);
     }
+    AscendC::Reg::Adds(dx, dx, -meanC, mask);
+    AscendC::Reg::Muls(dx, dx, stdC, mask);
+    if constexpr (SubnormalSafe) {
+        AscendC::Reg::Div<float, &kDivFtzFalse>(rw, gw, pw, mask);
+        AscendC::Reg::Ln<float, &kLnFtzFalse>(dw, rw, mask);
+    } else {
+        AscendC::Reg::Div(rw, gw, pw, mask);
+        AscendC::Reg::Ln(dw, rw, mask);
+    }
+    AscendC::Reg::Adds(dw, dw, -meanW, mask);
+    AscendC::Reg::Muls(dw, dw, stdW, mask);
+}
 
-    __aicore__ static inline float MakeNegInf()
-    {
-        union {
-            uint32_t u;
-            float f;
-        } cvt;
-        cvt.u = 0xFF800000u;
-        return cvt.f;
-    }
+__simd_callee__ inline void GatherHalfToF32x2(AscendC::Reg::RegTensor<float>& lo, AscendC::Reg::RegTensor<float>& hi,
+                                              __ubuf__ half* base, AscendC::Reg::RegTensor<uint16_t>& idx,
+                                              AscendC::Reg::MaskReg& gatherMask, AscendC::Reg::RegTensor<half>& zero,
+                                              AscendC::Reg::MaskReg& castMask)
+{
+    AscendC::Reg::RegTensor<half> gathered, left, right;
+    AscendC::Reg::Gather(gathered, base, idx, gatherMask);
+    AscendC::Reg::Interleave(left, right, gathered, zero);
+    AscendC::Reg::Cast<float, half, kCastB16ToB32>(lo, left, castMask);
+    AscendC::Reg::Cast<float, half, kCastB16ToB32>(hi, right, castMask);
+}
 
-    __aicore__ static inline float MakeNan()
-    {
-        union {
-            uint32_t u;
-            float f;
-        } cvt;
-        cvt.u = 0x7FC00000u;
-        return cvt.f;
+__simd_callee__ inline void ScatterHalf(__ubuf__ half* out, AscendC::Reg::RegTensor<float>& v0,
+                                        AscendC::Reg::RegTensor<float>& v1, AscendC::Reg::RegTensor<uint16_t>& idx,
+                                        AscendC::Reg::MaskReg& outMask, AscendC::Reg::MaskReg& castMask)
+{
+    AscendC::Reg::RegTensor<half> oL, oR, oP, zeroOut;
+    AscendC::Reg::Cast<half, float, kCastB32ToB16>(oL, v0, castMask);
+    AscendC::Reg::Cast<half, float, kCastB32ToB16>(oR, v1, castMask);
+    AscendC::Reg::DeInterleave(oP, zeroOut, oL, oR);
+    AscendC::Reg::Scatter(out, oP, idx, outMask);
+}
+
+__simd_vf__ inline void EncodeBoxFp16VF(__ubuf__ half* out, __ubuf__ half* anchor, __ubuf__ half* gt, uint32_t boxCount,
+                                        uint32_t repeat, float m0, float m1, float m2, float m3, float s0, float s1,
+                                        float s2, float s3)
+{
+    constexpr uint32_t kVL = AscendC::GetVecLen() / sizeof(half);
+    uint32_t remaining = boxCount;
+
+    AscendC::Reg::RegTensor<uint16_t> idx;
+    AscendC::Reg::Arange((AscendC::Reg::RegTensor<int16_t>&)idx, INDEX_START);
+    AscendC::Reg::MaskReg maskAllB16 = AscendC::Reg::CreateMask<uint16_t, AscendC::Reg::MaskPattern::ALL>();
+    AscendC::Reg::Muls((AscendC::Reg::RegTensor<int16_t>&)idx, (AscendC::Reg::RegTensor<int16_t>&)idx,
+                       static_cast<int16_t>(BOX_DIM), maskAllB16);
+    AscendC::Reg::MaskReg castMask = AscendC::Reg::CreateMask<float, AscendC::Reg::MaskPattern::ALL>();
+    AscendC::Reg::RegTensor<half> zero;
+    AscendC::Reg::Duplicate(zero, static_cast<half>(FLOAT_ZERO));
+
+    for (uint32_t i = 0; i < repeat; ++i) {
+        uint32_t off = i * kVL * BOX_DIM;
+        AscendC::Reg::MaskReg mask = AscendC::Reg::UpdateMask<uint16_t>(remaining);
+
+        AscendC::Reg::RegTensor<float> ax1_0, ax1_1, ax2_0, ax2_1;
+        AscendC::Reg::RegTensor<float> gx1_0, gx1_1, gx2_0, gx2_1;
+        GatherHalfToF32x2(ax1_0, ax1_1, anchor + off + 0, idx, mask, zero, castMask);
+        GatherHalfToF32x2(ax2_0, ax2_1, anchor + off + 2, idx, mask, zero, castMask);
+        GatherHalfToF32x2(gx1_0, gx1_1, gt + off + 0, idx, mask, zero, castMask);
+        GatherHalfToF32x2(gx2_0, gx2_1, gt + off + 2, idx, mask, zero, castMask);
+
+        AscendC::Reg::RegTensor<float> dx_0, dx_1, dw_0, dw_1;
+        EncodeGroup<false>(dx_0, dw_0, ax1_0, ax2_0, gx1_0, gx2_0, m0, s0, m2, s2, castMask);
+        EncodeGroup<false>(dx_1, dw_1, ax1_1, ax2_1, gx1_1, gx2_1, m0, s0, m2, s2, castMask);
+        ScatterHalf(out + off + 0, dx_0, dx_1, idx, mask, castMask);
+        ScatterHalf(out + off + 2, dw_0, dw_1, idx, mask, castMask);
+
+        AscendC::Reg::RegTensor<float> ay1_0, ay1_1, ay2_0, ay2_1;
+        AscendC::Reg::RegTensor<float> gy1_0, gy1_1, gy2_0, gy2_1;
+        GatherHalfToF32x2(ay1_0, ay1_1, anchor + off + 1, idx, mask, zero, castMask);
+        GatherHalfToF32x2(ay2_0, ay2_1, anchor + off + 3, idx, mask, zero, castMask);
+        GatherHalfToF32x2(gy1_0, gy1_1, gt + off + 1, idx, mask, zero, castMask);
+        GatherHalfToF32x2(gy2_0, gy2_1, gt + off + 3, idx, mask, zero, castMask);
+
+        AscendC::Reg::RegTensor<float> dy_0, dy_1, dh_0, dh_1;
+        EncodeGroup<false>(dy_0, dh_0, ay1_0, ay2_0, gy1_0, gy2_0, m1, s1, m3, s3, castMask);
+        EncodeGroup<false>(dy_1, dh_1, ay1_1, ay2_1, gy1_1, gy2_1, m1, s1, m3, s3, castMask);
+        ScatterHalf(out + off + 1, dy_0, dy_1, idx, mask, castMask);
+        ScatterHalf(out + off + 3, dh_0, dh_1, idx, mask, castMask);
     }
-};
+}
+
+__simd_vf__ inline void EncodeBoxFp32VF(__ubuf__ float* out, __ubuf__ float* anchor, __ubuf__ float* gt,
+                                        uint32_t boxCount, uint32_t repeat, float m0, float m1, float m2, float m3,
+                                        float s0, float s1, float s2, float s3)
+{
+    constexpr uint32_t kVL = AscendC::GetVecLen() / sizeof(float);
+    uint32_t remaining = boxCount;
+
+    AscendC::Reg::RegTensor<uint32_t> idx;
+    AscendC::Reg::Arange((AscendC::Reg::RegTensor<int32_t>&)idx, static_cast<int32_t>(INDEX_START));
+    AscendC::Reg::MaskReg maskAll = AscendC::Reg::CreateMask<float, AscendC::Reg::MaskPattern::ALL>();
+    AscendC::Reg::Muls((AscendC::Reg::RegTensor<int32_t>&)idx, (AscendC::Reg::RegTensor<int32_t>&)idx,
+                       static_cast<int32_t>(BOX_DIM), maskAll);
+
+    for (uint32_t i = 0; i < repeat; ++i) {
+        uint32_t off = i * kVL * BOX_DIM;
+        AscendC::Reg::MaskReg mask = AscendC::Reg::UpdateMask<float>(remaining);
+
+        AscendC::Reg::RegTensor<float> ax1, ax2, gx1, gx2;
+        AscendC::Reg::Gather(ax1, anchor + off + 0, idx, mask);
+        AscendC::Reg::Gather(ax2, anchor + off + 2, idx, mask);
+        AscendC::Reg::Gather(gx1, gt + off + 0, idx, mask);
+        AscendC::Reg::Gather(gx2, gt + off + 2, idx, mask);
+        AscendC::Reg::RegTensor<float> dx, dw;
+        EncodeGroup<true>(dx, dw, ax1, ax2, gx1, gx2, m0, s0, m2, s2, mask);
+        AscendC::Reg::Scatter(out + off + 0, dx, idx, mask);
+        AscendC::Reg::Scatter(out + off + 2, dw, idx, mask);
+
+        AscendC::Reg::RegTensor<float> ay1, ay2, gy1, gy2;
+        AscendC::Reg::Gather(ay1, anchor + off + 1, idx, mask);
+        AscendC::Reg::Gather(ay2, anchor + off + 3, idx, mask);
+        AscendC::Reg::Gather(gy1, gt + off + 1, idx, mask);
+        AscendC::Reg::Gather(gy2, gt + off + 3, idx, mask);
+        AscendC::Reg::RegTensor<float> dy, dh;
+        EncodeGroup<true>(dy, dh, ay1, ay2, gy1, gy2, m1, s1, m3, s3, mask);
+        AscendC::Reg::Scatter(out + off + 1, dy, idx, mask);
+        AscendC::Reg::Scatter(out + off + 3, dh, idx, mask);
+    }
+}
 
 template <typename T>
 class BoundingBoxEncode {
@@ -123,29 +193,22 @@ public:
     __aicore__ inline void Process();
 
 private:
-    __aicore__ inline void CopyIn(int64_t progress, int64_t currentNum);
-    __aicore__ inline void CopyOut(int64_t progress, int64_t currentNum);
-    __aicore__ inline void Compute(int64_t currentNum);
-    // 拆分 Compute（问题3）：FP16/FP32 各自独立路径，主函数仅做分发。
-    __aicore__ inline void ComputeFp16Path(AscendC::LocalTensor<T> anchorLocal, AscendC::LocalTensor<T> gtLocal,
-                                           AscendC::LocalTensor<T> outLocal, int64_t currentNum, int64_t n);
-    __aicore__ inline void ComputeFp32Path(AscendC::LocalTensor<T> anchorLocal, AscendC::LocalTensor<T> gtLocal,
-                                           AscendC::LocalTensor<T> outLocal, int64_t currentNum, int64_t n);
+    __aicore__ inline void CopyIn(int64_t progress, int64_t boxCount);
+    __aicore__ inline void CopyOut(int64_t progress, int64_t boxCount);
+    __aicore__ inline void Compute(int64_t boxCount);
 
 private:
     TPipe pipe;
-    TQue<QuePosition::VECIN, 1> anchorQueue;
-    TQue<QuePosition::VECIN, 1> gtQueue;
-    TQue<QuePosition::VECOUT, 1> outputQueue;
-    TBuf<QuePosition::VECCALC> calcBuf1;
-    TBuf<QuePosition::VECCALC> calcBuf2;
+    TQue<QuePosition::VECIN, DOUBLE_BUFFER_NUM> anchorQueue;
+    TQue<QuePosition::VECIN, DOUBLE_BUFFER_NUM> gtQueue;
+    TQue<QuePosition::VECOUT, DOUBLE_BUFFER_NUM> outputQueue;
 
     GlobalTensor<T> anchorGM;
     GlobalTensor<T> gtGM;
     GlobalTensor<T> deltasGM;
 
-    int64_t blockLength_ = 0;
-    int64_t ubLength_ = 0;
+    int64_t blockBoxLength_ = 0;
+    int64_t ubBoxLength_ = 0;
     float means0_ = 0.0f, means1_ = 0.0f, means2_ = 0.0f, means3_ = 0.0f;
     float invStds0_ = 0.0f, invStds1_ = 0.0f, invStds2_ = 0.0f, invStds3_ = 0.0f;
 };
@@ -154,13 +217,27 @@ template <typename T>
 __aicore__ inline void BoundingBoxEncode<T>::Init(GM_ADDR anchorBox, GM_ADDR gtBox, GM_ADDR deltas, GM_ADDR workspace,
                                                   const BoundingBoxEncodeTilingData* tilingData)
 {
-    int64_t remainderLength = tilingData->dim0 - tilingData->blockFactor * AscendC::GetBlockIdx();
-    blockLength_ = (remainderLength > tilingData->blockFactor) ? tilingData->blockFactor : remainderLength;
-    if (blockLength_ <= 0) {
-        blockLength_ = 0;
+    blockBoxLength_ = 0;
+    if (tilingData->boxNum <= 0 || tilingData->blockBoxFactor <= 0) {
         return;
     }
-    ubLength_ = tilingData->ubFactor;
+
+    int64_t usedCoreNum = tilingData->boxNum / tilingData->blockBoxFactor;
+    if (tilingData->boxNum % tilingData->blockBoxFactor != 0) {
+        ++usedCoreNum;
+    }
+
+    int64_t blockIdx = AscendC::GetBlockIdx();
+    if (blockIdx < usedCoreNum - 1) {
+        blockBoxLength_ = tilingData->blockBoxFactor;
+    } else if (blockIdx == usedCoreNum - 1) {
+        blockBoxLength_ = tilingData->boxNum - (usedCoreNum - 1) * tilingData->blockBoxFactor;
+    }
+
+    if (blockBoxLength_ <= 0) {
+        return;
+    }
+    ubBoxLength_ = tilingData->ubBoxFactor;
 
     // Read means and stds from TilingData (passed as attributes)
     means0_ = tilingData->means0;
@@ -172,68 +249,69 @@ __aicore__ inline void BoundingBoxEncode<T>::Init(GM_ADDR anchorBox, GM_ADDR gtB
     invStds2_ = tilingData->invStds2;
     invStds3_ = tilingData->invStds3;
 
-    int64_t offset = tilingData->blockFactor * AscendC::GetBlockIdx();
-    anchorGM.SetGlobalBuffer((__gm__ T*)anchorBox + offset, blockLength_);
-    gtGM.SetGlobalBuffer((__gm__ T*)gtBox + offset, blockLength_);
-    deltasGM.SetGlobalBuffer((__gm__ T*)deltas + offset, blockLength_);
+    int64_t offset = tilingData->blockBoxFactor * blockIdx * BOX_DIM;
+    anchorGM.SetGlobalBuffer((__gm__ T*)anchorBox + offset);
+    gtGM.SetGlobalBuffer((__gm__ T*)gtBox + offset);
+    deltasGM.SetGlobalBuffer((__gm__ T*)deltas + offset);
 
-    constexpr int64_t fpSize = static_cast<int64_t>(sizeof(float));
-    if constexpr (std::is_same_v<T, half>) {
-        pipe.InitBuffer(anchorQueue, 1, ubLength_ * static_cast<int64_t>(sizeof(half)));
-        pipe.InitBuffer(gtQueue, 1, ubLength_ * static_cast<int64_t>(sizeof(half)));
-        pipe.InitBuffer(outputQueue, 1, ubLength_ * static_cast<int64_t>(sizeof(half)));
-        pipe.InitBuffer(calcBuf1, ubLength_ * fpSize);
-        pipe.InitBuffer(calcBuf2, ubLength_ * fpSize);
-    } else {
-        pipe.InitBuffer(anchorQueue, 1, ubLength_ * fpSize);
-        pipe.InitBuffer(gtQueue, 1, ubLength_ * fpSize);
-        pipe.InitBuffer(outputQueue, 1, ubLength_ * fpSize);
-        pipe.InitBuffer(calcBuf1, ubLength_ * fpSize);
-        pipe.InitBuffer(calcBuf2, ubLength_ * fpSize);
-    }
+    constexpr int64_t elemSize = static_cast<int64_t>(sizeof(T));
+    int64_t bufferBytes = ubBoxLength_ * BOX_DIM * elemSize;
+    pipe.InitBuffer(anchorQueue, DOUBLE_BUFFER_NUM, bufferBytes);
+    pipe.InitBuffer(gtQueue, DOUBLE_BUFFER_NUM, bufferBytes);
+    pipe.InitBuffer(outputQueue, DOUBLE_BUFFER_NUM, bufferBytes);
 }
 
 template <typename T>
-__aicore__ inline void BoundingBoxEncode<T>::CopyIn(int64_t progress, int64_t currentNum)
+__aicore__ inline void BoundingBoxEncode<T>::CopyIn(int64_t progress, int64_t boxCount)
 {
     AscendC::LocalTensor<T> anchorLocal = anchorQueue.template AllocTensor<T>();
     AscendC::LocalTensor<T> gtLocal = gtQueue.template AllocTensor<T>();
-    // Use DataCopyExtParams (uint32_t blockLen) instead of DataCopyParams (uint16_t blockLen)
-    // to avoid silent truncation when currentNum * sizeof(T) > 65535 (SEC-1.1 / SEC-2.2).
-    AscendC::DataCopyExtParams copyParams{1, static_cast<uint32_t>(currentNum * static_cast<int64_t>(sizeof(T))), 0, 0,
-                                          0};
-    AscendC::DataCopyPad(anchorLocal, anchorGM[progress * ubLength_], copyParams,
+    // Use DataCopyExtParams (uint32_t blockLen) instead of DataCopyParams (uint16_t blockLen).
+    AscendC::DataCopyExtParams copyParams{
+        SINGLE_BLOCK_COUNT, static_cast<uint32_t>(boxCount * BOX_DIM * static_cast<int64_t>(sizeof(T))), 0, 0, 0};
+    AscendC::DataCopyPad(anchorLocal, anchorGM[progress * ubBoxLength_ * BOX_DIM], copyParams,
                          AscendC::DataCopyPadExtParams<T>{false, 0, 0, 0});
-    AscendC::DataCopyPad(gtLocal, gtGM[progress * ubLength_], copyParams,
+    AscendC::DataCopyPad(gtLocal, gtGM[progress * ubBoxLength_ * BOX_DIM], copyParams,
                          AscendC::DataCopyPadExtParams<T>{false, 0, 0, 0});
     anchorQueue.EnQue(anchorLocal);
     gtQueue.EnQue(gtLocal);
 }
 
 template <typename T>
-__aicore__ inline void BoundingBoxEncode<T>::CopyOut(int64_t progress, int64_t currentNum)
+__aicore__ inline void BoundingBoxEncode<T>::CopyOut(int64_t progress, int64_t boxCount)
 {
     AscendC::LocalTensor<T> outLocal = outputQueue.template DeQue<T>();
-    // Use DataCopyExtParams (uint32_t blockLen) instead of DataCopyParams (uint16_t blockLen)
-    // to avoid silent truncation when currentNum * sizeof(T) > 65535 (SEC-1.1 / SEC-2.2).
-    AscendC::DataCopyExtParams copyParams{1, static_cast<uint32_t>(currentNum * static_cast<int64_t>(sizeof(T))), 0, 0,
-                                          0};
-    AscendC::DataCopyPad(deltasGM[progress * ubLength_], outLocal, copyParams);
+    // Use DataCopyExtParams (uint32_t blockLen) instead of DataCopyParams (uint16_t blockLen).
+    AscendC::DataCopyExtParams copyParams{
+        SINGLE_BLOCK_COUNT, static_cast<uint32_t>(boxCount * BOX_DIM * static_cast<int64_t>(sizeof(T))), 0, 0, 0};
+    AscendC::DataCopyPad(deltasGM[progress * ubBoxLength_ * BOX_DIM], outLocal, copyParams);
     outputQueue.FreeTensor(outLocal);
 }
 
 template <typename T>
-__aicore__ inline void BoundingBoxEncode<T>::Compute(int64_t currentNum)
+__aicore__ inline void BoundingBoxEncode<T>::Compute(int64_t boxCount)
 {
     AscendC::LocalTensor<T> anchorLocal = anchorQueue.template DeQue<T>();
     AscendC::LocalTensor<T> gtLocal = gtQueue.template DeQue<T>();
     AscendC::LocalTensor<T> outLocal = outputQueue.template AllocTensor<T>();
-    int64_t n = currentNum / 4;
+    uint32_t n = static_cast<uint32_t>(boxCount);
 
     if constexpr (std::is_same_v<T, half>) {
-        ComputeFp16Path(anchorLocal, gtLocal, outLocal, currentNum, n);
+        constexpr uint32_t kVL = AscendC::GetVecLen() / sizeof(half);
+        uint32_t repeat = (n + kVL - 1) / kVL;
+        __ubuf__ half* anchorPtr = (__ubuf__ half*)anchorLocal.GetPhyAddr();
+        __ubuf__ half* gtPtr = (__ubuf__ half*)gtLocal.GetPhyAddr();
+        __ubuf__ half* outPtr = (__ubuf__ half*)outLocal.GetPhyAddr();
+        asc_vf_call<EncodeBoxFp16VF>(outPtr, anchorPtr, gtPtr, n, repeat, means0_, means1_, means2_, means3_, invStds0_,
+                                     invStds1_, invStds2_, invStds3_);
     } else {
-        ComputeFp32Path(anchorLocal, gtLocal, outLocal, currentNum, n);
+        constexpr uint32_t kVL = AscendC::GetVecLen() / sizeof(float);
+        uint32_t repeat = (n + kVL - 1) / kVL;
+        __ubuf__ float* anchorPtr = (__ubuf__ float*)anchorLocal.GetPhyAddr();
+        __ubuf__ float* gtPtr = (__ubuf__ float*)gtLocal.GetPhyAddr();
+        __ubuf__ float* outPtr = (__ubuf__ float*)outLocal.GetPhyAddr();
+        asc_vf_call<EncodeBoxFp32VF>(outPtr, anchorPtr, gtPtr, n, repeat, means0_, means1_, means2_, means3_, invStds0_,
+                                     invStds1_, invStds2_, invStds3_);
     }
 
     outputQueue.template EnQue<T>(outLocal);
@@ -242,162 +320,22 @@ __aicore__ inline void BoundingBoxEncode<T>::Compute(int64_t currentNum)
 }
 
 template <typename T>
-__aicore__ inline void BoundingBoxEncode<T>::ComputeFp16Path(AscendC::LocalTensor<T> anchorLocal,
-                                                             AscendC::LocalTensor<T> gtLocal,
-                                                             AscendC::LocalTensor<T> outLocal, int64_t currentNum,
-                                                             int64_t n)
-{
-    AscendC::LocalTensor<float> buf1 = calcBuf1.Get<float>();
-    AscendC::LocalTensor<float> buf2 = calcBuf2.Get<float>();
-
-    // Fetch cross-pipeline event IDs for Scalar<->Vector synchronization.
-    int32_t evtSV = static_cast<int32_t>(GetTPipePtr()->FetchEventID(AscendC::HardEvent::S_V));
-    int32_t evtVS = static_cast<int32_t>(GetTPipePtr()->FetchEventID(AscendC::HardEvent::V_S));
-
-    // --- Vector: Cast FP16 inputs to FP32 ---
-    AscendC::Cast(buf1, anchorLocal, AscendC::RoundMode::CAST_NONE, currentNum);
-    AscendC::Cast(buf2, gtLocal, AscendC::RoundMode::CAST_NONE, currentNum);
-
-    // Vector -> Scalar sync
-    AscendC::SetFlag<AscendC::HardEvent::V_S>(evtVS);
-    AscendC::WaitFlag<AscendC::HardEvent::V_S>(evtVS);
-
-    AscendC::LocalTensor<float> outFloat = outLocal.template ReinterpretCast<float>();
-
-    // --- Scalar loop: coordinate conversion + offset encoding (partial) ---
-    for (int64_t b = 0; b < n; ++b) {
-        int64_t base = b * 4;
-        float dx, dy, rw, rh;
-        BoxDeltaCalc::Run(buf1.GetValue(base + 0), buf1.GetValue(base + 1), buf1.GetValue(base + 2),
-                          buf1.GetValue(base + 3), buf2.GetValue(base + 0), buf2.GetValue(base + 1),
-                          buf2.GetValue(base + 2), buf2.GetValue(base + 3), dx, dy, rw, rh);
-
-        outFloat.SetValue(b * 2, dx);
-        outFloat.SetValue(b * 2 + 1, dy);
-
-        buf1.SetValue(base + 0, 1.0f);
-        buf1.SetValue(base + 1, 1.0f);
-        buf1.SetValue(base + 2, rw);
-        buf1.SetValue(base + 3, rh);
-    }
-
-    // Scalar -> Vector sync
-    AscendC::SetFlag<AscendC::HardEvent::S_V>(evtSV);
-    AscendC::WaitFlag<AscendC::HardEvent::S_V>(evtSV);
-
-    // --- Vector: Ln ---
-    AscendC::Ln(buf2, buf1, currentNum);
-
-    // Vector -> Scalar sync
-    AscendC::SetFlag<AscendC::HardEvent::V_S>(evtVS);
-    AscendC::WaitFlag<AscendC::HardEvent::V_S>(evtVS);
-
-    // --- Scalar loop: normalization ---
-    for (int64_t b = 0; b < n; ++b) {
-        int64_t base = b * 4;
-        float v0 = (outFloat.GetValue(b * 2) - means0_) * invStds0_;
-        float v1 = (outFloat.GetValue(b * 2 + 1) - means1_) * invStds1_;
-        float origRw = buf1.GetValue(base + 2);
-        float origRh = buf1.GetValue(base + 3);
-        float lnRw = BoxDeltaCalc::FixLnResult(origRw, buf2.GetValue(base + 2));
-        float lnRh = BoxDeltaCalc::FixLnResult(origRh, buf2.GetValue(base + 3));
-        float v2 = (lnRw - means2_) * invStds2_;
-        float v3 = (lnRh - means3_) * invStds3_;
-        buf2.SetValue(base + 0, v0);
-        buf2.SetValue(base + 1, v1);
-        buf2.SetValue(base + 2, v2);
-        buf2.SetValue(base + 3, v3);
-    }
-
-    // Scalar -> Vector sync
-    AscendC::SetFlag<AscendC::HardEvent::S_V>(evtSV);
-    AscendC::WaitFlag<AscendC::HardEvent::S_V>(evtSV);
-
-    // --- Vector: Cast FP32 results back to FP16 ---
-    AscendC::Cast(outLocal, buf2, AscendC::RoundMode::CAST_ROUND, currentNum);
-}
-
-template <typename T>
-__aicore__ inline void BoundingBoxEncode<T>::ComputeFp32Path(AscendC::LocalTensor<T> anchorLocal,
-                                                             AscendC::LocalTensor<T> gtLocal,
-                                                             AscendC::LocalTensor<T> outLocal, int64_t currentNum,
-                                                             int64_t n)
-{
-    AscendC::LocalTensor<float> buf1 = calcBuf1.Get<float>();
-    AscendC::LocalTensor<float> buf2 = calcBuf2.Get<float>();
-
-    // Fetch cross-pipeline event IDs for Scalar<->Vector synchronization.
-    int32_t evtSV = static_cast<int32_t>(GetTPipePtr()->FetchEventID(AscendC::HardEvent::S_V));
-    int32_t evtVS = static_cast<int32_t>(GetTPipePtr()->FetchEventID(AscendC::HardEvent::V_S));
-
-    AscendC::LocalTensor<float> aFp32 = anchorLocal.template ReinterpretCast<float>();
-    AscendC::LocalTensor<float> gFp32 = gtLocal.template ReinterpretCast<float>();
-    AscendC::LocalTensor<float> oFp32 = outLocal.template ReinterpretCast<float>();
-
-    // --- Scalar loop: coordinate conversion + offset encoding (partial) ---
-    for (int64_t b = 0; b < n; ++b) {
-        int64_t base = b * 4;
-        float dx, dy, rw, rh;
-        BoxDeltaCalc::Run(aFp32.GetValue(base + 0), aFp32.GetValue(base + 1), aFp32.GetValue(base + 2),
-                          aFp32.GetValue(base + 3), gFp32.GetValue(base + 0), gFp32.GetValue(base + 1),
-                          gFp32.GetValue(base + 2), gFp32.GetValue(base + 3), dx, dy, rw, rh);
-
-        buf1.SetValue(b * 2, dx);
-        buf1.SetValue(b * 2 + 1, dy);
-
-        aFp32.SetValue(base + 0, 1.0f);
-        aFp32.SetValue(base + 1, 1.0f);
-        aFp32.SetValue(base + 2, rw);
-        aFp32.SetValue(base + 3, rh);
-    }
-
-    // Scalar -> Vector sync
-    AscendC::SetFlag<AscendC::HardEvent::S_V>(evtSV);
-    AscendC::WaitFlag<AscendC::HardEvent::S_V>(evtSV);
-
-    // --- Vector: Ln ---
-    AscendC::Ln(buf2, aFp32, currentNum);
-
-    // Vector -> Scalar sync
-    AscendC::SetFlag<AscendC::HardEvent::V_S>(evtVS);
-    AscendC::WaitFlag<AscendC::HardEvent::V_S>(evtVS);
-
-    // --- Scalar loop: normalization ---
-    for (int64_t b = 0; b < n; ++b) {
-        int64_t base = b * 4;
-        float v0 = (buf1.GetValue(b * 2) - means0_) * invStds0_;
-        float v1 = (buf1.GetValue(b * 2 + 1) - means1_) * invStds1_;
-        float origRw = aFp32.GetValue(base + 2);
-        float origRh = aFp32.GetValue(base + 3);
-        float lnRw = BoxDeltaCalc::FixLnResult(origRw, buf2.GetValue(base + 2));
-        float lnRh = BoxDeltaCalc::FixLnResult(origRh, buf2.GetValue(base + 3));
-        float v2 = (lnRw - means2_) * invStds2_;
-        float v3 = (lnRh - means3_) * invStds3_;
-        aFp32.SetValue(base + 0, v0);
-        aFp32.SetValue(base + 1, v1);
-        aFp32.SetValue(base + 2, v2);
-        aFp32.SetValue(base + 3, v3);
-    }
-
-    // Scalar -> Vector sync
-    AscendC::SetFlag<AscendC::HardEvent::S_V>(evtSV);
-    AscendC::WaitFlag<AscendC::HardEvent::S_V>(evtSV);
-
-    // Vector copy to output buffer for correct EnQue -> MTE3 sync
-    AscendC::Adds(oFp32, aFp32, 0.0f, currentNum);
-}
-
-template <typename T>
 __aicore__ inline void BoundingBoxEncode<T>::Process()
 {
-    if (blockLength_ <= 0)
+    if (blockBoxLength_ <= 0)
         return;
-    int64_t loopCount = (blockLength_ + ubLength_ - 1) / ubLength_;
-    for (int64_t i = 0; i < loopCount; i++) {
-        int64_t currentNum = (i == (loopCount - 1)) ? (blockLength_ - ubLength_ * i) : ubLength_;
-        CopyIn(i, currentNum);
-        Compute(currentNum);
-        CopyOut(i, currentNum);
+    int64_t loopCount = (blockBoxLength_ + ubBoxLength_ - 1) / ubBoxLength_;
+    int64_t currentBoxCount = (loopCount == 1) ? blockBoxLength_ : ubBoxLength_;
+    CopyIn(0, currentBoxCount);
+    for (int64_t i = 0; i < loopCount; ++i) {
+        int64_t nextBoxCount = 0;
+        if (i + 1 < loopCount) {
+            nextBoxCount = (i + 2 == loopCount) ? (blockBoxLength_ - ubBoxLength_ * (i + 1)) : ubBoxLength_;
+            CopyIn(i + 1, nextBoxCount);
+        }
+        Compute(currentBoxCount);
+        CopyOut(i, currentBoxCount);
+        currentBoxCount = nextBoxCount;
     }
 }
 

@@ -14,9 +14,9 @@
 #define _BOUNDING_BOX_ENCODE_TILING_DATA_H_
 
 struct BoundingBoxEncodeTilingData {
-    int64_t dim0 = 0;
-    int64_t blockFactor = 0;
-    int64_t ubFactor = 0;
+    int64_t boxNum = 0;
+    int64_t blockBoxFactor = 0;
+    int64_t ubBoxFactor = 0;
     float means0 = 0.0f;
     float means1 = 0.0f;
     float means2 = 0.0f;
