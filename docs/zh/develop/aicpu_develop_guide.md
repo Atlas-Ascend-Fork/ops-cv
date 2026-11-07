@@ -239,10 +239,10 @@ REGISTER_CPU_KERNEL(kAddExample, AddExampleCpuKernel);
 
 4. **（可选）卸载自定义算子包。**
 
-    自定义算子包安装后在```${ASCEND_HOME_PATH}/opp/vendors/custom_cv/scripts```目录会生成`uninstall.sh`，通过该脚本可卸载自定义算子包，命令如下：
+    自定义算子包安装后在```${ASCEND_HOME_PATH}/opp/vendors/${vendor_name:-custom}_cv/scripts```目录会生成`uninstall.sh`。`vendor_name`须与构建算子包时的取值一致，未设置时使用默认值`custom`。通过该脚本可卸载对应的自定义算子包，命令如下：
 
     ```bash
-    bash ${ASCEND_HOME_PATH}/opp/vendors/custom_cv/scripts/uninstall.sh
+    bash "${ASCEND_HOME_PATH}/opp/vendors/${vendor_name:-custom}_cv/scripts/uninstall.sh"
     ```
 
 ## 算子验证
