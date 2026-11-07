@@ -50,6 +50,7 @@
   其中：
 
   - alignCorners为true，表示输入和输出张量的角像素点对齐；alignCorners为false，表示输入和输出张量的边像素点对齐。
+  - 当alignCorners为true且outputSize[0]（或outputSize[1]）等于1时，上式分母outputSize-1为0，此时scaleH（或scaleW）取0.0。
   - i和j是$W(i, j)$的索引变量。
   - 如果$scaleH >= 1$，则$kH = 1/scaleH$，否则$kH = 4$
   - 如果$scaleW >= 1$，则$kW = 1/scaleW$，否则$kW = 4$
@@ -124,7 +125,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
       <td>x（aclTensor*）</td>
       <td>输入</td>
       <td>表示进行上采样的输入张量，对应公式中的`x`。</td>
-      <td><ul><li>支持空Tensor。</li><li>当数据格式为ND时，默认按照NCHW格式处理。</li></ul></td>
+      <td><ul><li>支持N轴为0的空Tensor，此时第一段接口返回成功、workspaceSize为0且不执行计算。</li><li>C轴、H轴、W轴的取值必须大于0，任一为0时第一段接口返回161002。</li><li>当数据格式为ND时，默认按照NCHW格式处理。</li><li>数据格式需与出参`out`保持一致。</li></ul></td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
       <td>NCHW、ND</td>
       <td>4</td>
@@ -134,7 +135,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
       <td>outputSize（aclIntArray*）</td>
       <td>输入</td>
       <td>表示指定`out`在H和W维度上的空间大小。对应公式中的`outputSize`。</td>
-      <td>size为2，且各元素均大于0。</td>
+      <td><ul><li>size为2，且各元素均大于0，即各元素取值范围为[1, 2^20]，上界由调用者保证、算子不做校验。</li><li>典型合法取值示例：[5, 5]，参见“调用示例”。</li></ul></td>
       <td>INT64</td>
       <td>-</td>
       <td>-</td>
@@ -174,7 +175,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
       <td>out（aclTensor*）</td>
       <td>输出</td>
       <td>表示采样后的输出张量，对应公式中的`out`。</td>
-      <td><ul><li>支持空Tensor。</li><li>数据类型与入参`x`保持一致。</li></ul></td>
+      <td><ul><li>支持N轴为0的空Tensor，此时第一段接口返回成功、workspaceSize为0且不执行计算。</li><li>数据类型与入参`x`保持一致。</li><li>N轴与入参`x`保持一致，H轴、W轴与`outputSize`保持一致。</li><li>数据格式需与入参`x`保持一致。</li></ul></td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
       <td>NCHW、ND</td>
       <td>4</td>
@@ -223,13 +224,16 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
   </thead>
   <tbody>
     <tr>
-      <td>ACLNN_ERR_PARAM_NULLPTR</td>
-      <td>161001</td>
+      <td rowspan="2">ACLNN_ERR_PARAM_NULLPTR</td>
+      <td rowspan="2">161001</td>
       <td>传入的x、outputSize或out是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="4">161002</td>
+      <td>传入的workspaceSize或executor是空指针。</td>
+    </tr>
+    <tr>
+      <td rowspan="9">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="9">161002</td>
       <td>x或out的数据类型不在支持的范围之内。</td>
     </tr>
     <tr>
@@ -239,9 +243,28 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
       <td>x的shape不是4维。</td>
     </tr>
     <tr>
+      <td>outputSize的size不等于2。</td>
+    </tr>
+    <tr>
       <td>outputSize的元素取值不大于0。</td>
     </tr>
+    <tr>
+      <td>x的H轴或W轴取值不大于0。</td>
+    </tr>
+    <tr>
+      <td>x的C轴取值不大于0。</td>
+    </tr>
+    <tr>
+      <td>out的H轴或W轴与outputSize不一致。</td>
+    </tr>
+    <tr>
+      <td>x或out的存储格式不是ND或NCHW。</td>
+    </tr>
   </tbody></table>
+
+<!-- npu="A3,910b" id7 -->
+- <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>：x的各维取值或outputSize的元素取值大于INT32_MAX，或输入数据缩放场景的缩小倍数大于50时，第一段接口返回161002。
+<!-- end id7 -->
 
 ## aclnnUpsampleBicubic2dAA
 
@@ -289,8 +312,11 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
 ## 约束说明
 
 - 参数`x`、`out`的shape约束：
-  - 每个维度的取值小于等于2^20。
   - 参数`out`的N轴和C轴与`x`保持一致，且C轴、H轴、W轴大于0。
+  - 参数`x`与`out`的数据格式必须一致（同为`ND`或同为`NCHW`）。两者不一致时，算子在tiling阶段校验失败，第一段接口返回内部异常错误码（非入参校验错误码161002）。
+  - 空Tensor：支持N轴为0的空Tensor，此时第一段接口返回成功、workspaceSize为0且不执行计算；参数`x`的C轴、H轴、W轴任一为0时，第一段接口返回161002。
+- 以下上界由调用者保证，算子不做校验，超出时行为未定义：
+  - 每个维度的取值小于等于2^20。
   - 内存占用需小于60GB。内存占用的计算公式如下：
 
     $$
@@ -304,7 +330,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
 
   - N \* C \* x_H < 2^31
 
-<!-- npu="A3,910b" id7 -->
+<!-- npu="A3,910b" id8 -->
 - <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>：
 
   输入数据缩放场景缩小倍数必须小于等于50，即：
@@ -316,17 +342,32 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
   $$
   输入shape的宽度W/outputSize\_W <=50
   $$
-<!-- end id7 -->
+<!-- end id8 -->
 
 - 参数x、outputSize、scalesH、scalesW需要满足如下约束：
+
+  当scalesH取值大于0时：
 
   $$
   outputSize\_H = floor(x\_H * scalesH)
   $$
 
+  当scalesW取值大于0时：
+
   $$
   outputSize\_W = floor(x\_W * scalesW)
   $$
+
+  scalesH、scalesW取默认值0.0时上述约束不适用，此时缩放比由`x`与`outputSize`的比值决定。
+
+- 动态shape：
+  - 本接口的shape由aclTensor携带，必须为确定的4维取值，不支持-1/-2动态占位。
+  <!-- npu="950" id9 -->
+  - 本算子在<term>Ascend 950PR&950DT系列产品</term>上声明支持动态shape与动态rank；GE图模式当前不可用，-1/-2动态占位场景不支持。
+  <!-- end id9 -->
+
+- 数值范围：
+  - 输入含±inf、NaN或接近数据类型表示上限（如FLOAT32的±3.4e38、FLOAT16的±65504）的极值时，抗锯齿加权累加可能溢出为±inf或产生NaN，输出不保证与CPU参考逐元素一致，此类输入不在精度保证范围内。
 
 - 确定性计算：
   - aclnnUpsampleBicubic2dAA默认确定性实现。

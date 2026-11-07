@@ -126,10 +126,40 @@
 
 ## 约束说明
 
-无
+- 形状约束：
+  - `x`与`y`均为4维，按NCHW语义解释。
+  - `y`的N轴、C轴与`x`保持一致；`y`的H轴、W轴与`output_size`保持一致。
+  - `x`的C轴、H轴、W轴取值均需大于0。
+- 格式约束：`x`与`y`的数据格式必须一致（同为`ND`或同为`NCHW`），否则算子校验失败。
+- 空Tensor：通过aclnn接口调用时，支持N轴为0的空Tensor，此时第一段接口返回成功且不执行计算；`x`的C轴、H轴、W轴任一为0时返回161002。
+- 以下上界由调用者保证，算子不做校验，超出时行为未定义：
+  - `x`、`y`每个维度的取值小于等于2^20。
+  - N \* C \* x_H < 2^31。
+  - 内存占用小于60GB，计算公式为：
+
+    $$
+    (x\_H * x\_W + y\_H * y\_W + x\_H * y\_W) * N * C * sizeof(dtype) < 60 * 1024 * 1024 * 1024
+    $$
+
+- <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>：输入数据缩放场景的缩小倍数必须小于等于50，即`x`的H轴/`output_size[0]` <= 50且`x`的W轴/`output_size[1]` <= 50。
+- 属性约束：
+  - `output_size`的size为2，各元素取值范围为[1, 2^20]（上界由调用者保证，算子不做校验）。
+  - 当`scales_h`大于0时，满足`output_size[0]` = floor(x_H \* `scales_h`)；当`scales_w`大于0时，满足`output_size[1]` = floor(x_W \* `scales_w`)。`scales_h`、`scales_w`取默认值0.0时该约束不适用，此时缩放比由`x`与`output_size`的比值决定。
+- 动态shape：
+  - aclnn接口的shape由aclTensor携带，必须为确定的4维取值，不支持-1/-2动态占位。
+  - 本算子在`Ascend 950PR&950DT系列产品`、`Kirin X90处理器系列产品`、`Kirin 9030处理器系列产品`上声明支持动态shape与动态rank；GE图模式当前不可用，-1/-2动态占位场景不支持。
+- 数值约束：输入含±inf、NaN或接近数据类型表示上限（如FLOAT32的±3.4e38、FLOAT16的±65504）的极值时，抗锯齿加权累加可能溢出为±inf或产生NaN，输出不保证与CPU参考逐元素一致，此类输入不在精度保证范围内。
+- 确定性计算：本算子默认确定性实现。
 
 ## 调用说明
 
 | 调用方式   | 样例代码           | 说明                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| aclnn接口  | [test_aclnn_upsample_bicubic2d_aa](examples/test_aclnn_upsample_bicubic2d_aa.cpp) | 通过[aclnnUpsampleBicubic2dAA](docs/aclnnUpsampleBicubic2dAA.md)接口方式调用UpsampleBicubic2dAA算子。 |
+| aclnn API  | [test_aclnn_upsample_bicubic2d_aa](examples/test_aclnn_upsample_bicubic2d_aa.cpp) | 通过[aclnnUpsampleBicubic2dAA](docs/aclnnUpsampleBicubic2dAA.md)接口方式调用UpsampleBicubic2dAA算子。 |
+
+通路支持现状：
+
+- aclnn直调：支持，见上表。
+- GE图模式：当前不支持，算子未注册图模式的shape与dtype推导。
+- PyTorch图模式：torchair无`aten._upsample_bicubic2d_aa.default`的转换器，const/dynamic图模式不可执行，仅aclgraph模式可执行。
+- TensorFlow：本算子未提供TensorFlow接口与绑定。

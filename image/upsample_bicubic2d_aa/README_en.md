@@ -128,10 +128,40 @@ English | [简体中文](./README.md)
 
 ## Constraints
 
-None
+- Shape constraints:
+  - Both `x` and `y` are 4-dimensional and are interpreted using NCHW semantics.
+  - The N and C axes of `y` are the same as those of `x`; the H and W axes of `y` are the same as `output_size`.
+  - The C, H, and W axes of `x` must all be greater than 0.
+- Format constraint: The data formats of `x` and `y` must be the same (both `ND` or both `NCHW`); otherwise, the operator fails validation.
+- Empty tensor: When invoked through the aclnn API, an empty tensor whose N axis is 0 is supported. In this case, the first-phase API returns success and no computation is performed. If any of the C, H, or W axes of `x` is 0, 161002 is returned.
+- The following upper bounds must be guaranteed by the caller. The operator does not validate them, and the behavior is undefined when they are exceeded:
+  - The value of each dimension of `x` and `y` is less than or equal to 2^20.
+  - N \* C \* x_H < 2^31.
+  - The memory usage must be less than 60 GB. The formula for memory usage is as follows:
+
+    $$
+    (x\_H * x\_W + y\_H * y\_W + x\_H * y\_W) * N * C * sizeof(dtype) < 60 * 1024 * 1024 * 1024
+    $$
+
+- <term>Atlas A3 products</term>, <term>Atlas A2 products</term>: In the input data scaling scenario, the downscaling factor must be less than or equal to 50, that is, the H axis of `x` / `output_size[0]` <= 50 and the W axis of `x` / `output_size[1]` <= 50.
+- Attribute constraints:
+  - The size of `output_size` is 2, and each element is in the range [1, 2^20] (the upper bound must be guaranteed by the caller and is not validated by the operator).
+  - When `scales_h` is greater than 0, `output_size[0]` = floor(x_H \* `scales_h`) must hold; when `scales_w` is greater than 0, `output_size[1]` = floor(x_W \* `scales_w`) must hold. When `scales_h` and `scales_w` take the default value 0.0, the constraints above do not apply. In this case, the scaling ratio is determined by the ratio between `x` and `output_size`.
+- Dynamic shape:
+  - The shape of the aclnn API is carried by aclTensor and must be a concrete 4-dimensional value. The -1/-2 dynamic placeholders are not supported.
+  - This operator declares dynamic shape and dynamic rank support on <term>Ascend 950PR&950DT products</term>, <term>Kirin X90 processor series products</term>, and <term>Kirin 9030 processor series products</term>. The GE graph mode is currently unavailable, so the -1/-2 dynamic placeholder scenarios are not supported.
+- Numerical constraints: When the input contains ±inf, NaN, or extreme values close to the representable upper bound of the data type (for example, ±3.4e38 for FLOAT32 and ±65504 for FLOAT16), the anti-aliasing weighted accumulation may overflow to ±inf or produce NaN. The output is not guaranteed to match the CPU reference element-wise, and such inputs are outside the precision guarantee.
+- Deterministic computation: This operator defaults to a deterministic implementation.
 
 ## Invocation Description
 
 | Invocation Method   | Sample Code           | Description                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
 | aclnn interface  | [test_aclnn_upsample_bicubic2d_aa](examples/test_aclnn_upsample_bicubic2d_aa.cpp) | Call the UpsampleBicubic2dAA operator through the [aclnnUpsampleBicubic2dAA](docs/aclnnUpsampleBicubic2dAA_en.md) interface. |
+
+Current pathway support:
+
+- aclnn direct invocation: Supported. See the table above.
+- GE graph mode: Currently not supported. The operator does not register shape and dtype inference for graph mode.
+- PyTorch graph mode: torchair has no converter for `aten._upsample_bicubic2d_aa.default`; the const/dynamic graph modes cannot be executed, and only the aclgraph mode can be executed.
+- TensorFlow: This operator does not provide a TensorFlow interface or binding.

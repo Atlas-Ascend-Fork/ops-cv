@@ -49,6 +49,7 @@
 
   where:
   - alignCorners = true means the corner pixels of the input and output tensors are aligned; alignCorners = false means the edge pixels of the input and output tensors are aligned.
+  - When alignCorners is true and outputSize[0] (or outputSize[1]) equals 1, the denominator outputSize-1 in the formula above is 0. In this case, scaleH (or scaleW) takes the value 0.0.
   - i and j are the index variables of $W(i, j)$.
   - If $scaleH >= 1$, then $kH = 1/scaleH$; otherwise $kH = 4$
   - If $scaleW >= 1$, then $kW = 1/scaleW$; otherwise $kW = 4$
@@ -123,7 +124,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
       <td>x(aclTensor*)</td>
       <td>Input</td>
       <td>Indicates the input tensor for upsampling, corresponding to `x` in the formula.</td>
-      <td><ul><li>Empty tensors are supported.</li><li>When the data format is ND, it is processed in NCHW format by default.</li></ul></td>
+      <td><ul><li>An empty tensor whose N axis is 0 is supported. In this case, the first-phase API returns success with workspaceSize 0 and no computation is performed.</li><li>The C, H, and W axes must be greater than 0. If any of them is 0, the first-phase API returns 161002.</li><li>When the data format is ND, it is processed in NCHW format by default.</li><li>The data format must be the same as that of the output parameter `out`.</li></ul></td>
       <td>FLOAT16, FLOAT32, BFLOAT16</td>
       <td>NCHW, ND</td>
       <td>4</td>
@@ -133,7 +134,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
       <td>outputSize(aclIntArray*)</td>
       <td>Input</td>
       <td>Indicates the spatial size of `out` in the H and W dimensions. Corresponds to `outputSize` in the formula.</td>
-      <td>size is 2, and all elements are greater than 0.</td>
+      <td><ul><li>size is 2, and all elements are greater than 0, that is, each element is in the range [1, 2^20]. The upper bound must be guaranteed by the caller and is not validated by the operator.</li><li>A typical valid value is [5, 5]. See "Example".</li></ul></td>
       <td>INT64</td>
       <td>-</td>
       <td>-</td>
@@ -173,7 +174,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
       <td>out(aclTensor*)</td>
       <td>Output</td>
       <td>Indicates the sampled output tensor, corresponding to `out` in the formula.</td>
-      <td><ul><li>Empty tensors are supported.</li><li>The data type is the same as that of input `x`.</li></ul></td>
+      <td><ul><li>An empty tensor whose N axis is 0 is supported. In this case, the first-phase API returns success with workspaceSize 0 and no computation is performed.</li><li>The data type is the same as that of input `x`.</li><li>The N axis is the same as that of input `x`, and the H and W axes are the same as `outputSize`.</li><li>The data format must be the same as that of input `x`.</li></ul></td>
       <td>FLOAT16, FLOAT32, BFLOAT16</td>
       <td>NCHW, ND</td>
       <td>4</td>
@@ -222,13 +223,16 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
   </thead>
   <tbody>
     <tr>
-      <td>ACLNN_ERR_PARAM_NULLPTR</td>
-      <td>161001</td>
+      <td rowspan="2">ACLNN_ERR_PARAM_NULLPTR</td>
+      <td rowspan="2">161001</td>
       <td>The input x, outputSize, or out is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="4">161002</td>
+      <td>The input workspaceSize or executor is a null pointer.</td>
+    </tr>
+    <tr>
+      <td rowspan="9">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="9">161002</td>
       <td>The data type of x or out is not within the supported range.</td>
     </tr>
     <tr>
@@ -238,9 +242,28 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
       <td>The shape of x is not 4-dimensional.</td>
     </tr>
     <tr>
+      <td>The size of outputSize is not equal to 2.</td>
+    </tr>
+    <tr>
       <td>The element value of outputSize is not greater than 0.</td>
     </tr>
+    <tr>
+      <td>The H or W axis of x is not greater than 0.</td>
+    </tr>
+    <tr>
+      <td>The C axis of x is not greater than 0.</td>
+    </tr>
+    <tr>
+      <td>The H or W axis of out is inconsistent with outputSize.</td>
+    </tr>
+    <tr>
+      <td>The storage format of x or out is neither ND nor NCHW.</td>
+    </tr>
   </tbody></table>
+
+<!-- npu="A3,910b" id7 -->
+- <term>Atlas A3 products</term>, <term>Atlas A2 products</term>: when any dimension of x or any element of outputSize is greater than INT32_MAX, or the downscaling factor in the input data scaling scenario is greater than 50, the first-phase API returns 161002.
+<!-- end id7 -->
 
 ## aclnnUpsampleBicubic2dAA
 
@@ -288,8 +311,11 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
 ## Constraints
 
 - Shape constraints for parameters `x` and `out`:
-  - The value of each dimension is less than or equal to 2^20.
   - The N and C axes of parameter `out` are the same as those of `x`, and the C, H, and W axes are greater than 0.
+  - The data formats of parameters `x` and `out` must be the same (both `ND` or both `NCHW`). If they differ, the operator fails validation in the tiling phase and the first-phase API returns an internal exception code (not the parameter validation code 161002).
+  - Empty tensor: an empty tensor whose N axis is 0 is supported. In this case, the first-phase API returns success with workspaceSize 0 and no computation is performed. If the C, H, or W axis of parameter `x` is 0, the first-phase API returns 161002.
+- The following upper bounds must be guaranteed by the caller. The operator does not validate them, and the behavior is undefined when they are exceeded:
+  - The value of each dimension is less than or equal to 2^20.
   - The memory usage must be less than 60 GB. The formula for memory usage is as follows:
 
     $$
@@ -302,7 +328,7 @@ aclnnStatus aclnnUpsampleBicubic2dAA(
     - dtype represents the data type of the input tensor.
   - N \* C \* x_H < 2^31
 
-<!-- npu="A3,910b" id7 -->
+<!-- npu="A3,910b" id8 -->
 - <term>Atlas A3 products</term>, <term>Atlas A2 products</term>:
 
 In the input data scaling scenario, the downscaling factor must be less than or equal to 50, i.e.:
@@ -314,17 +340,32 @@ $$
   $$
   Input shape width W/outputSize\_W <=50
   $$
-<!-- end id7 -->
+<!-- end id8 -->
 
 - Parameters x, outputSize, scalesH, and scalesW must satisfy the following constraints:
+
+  When scalesH is greater than 0:
 
   $$
   outputSize\_H = floor(x\_H * scalesH)
   $$
 
+  When scalesW is greater than 0:
+
   $$
   outputSize\_W = floor(x\_W * scalesW)
   $$
+
+  When scalesH and scalesW take the default value 0.0, the constraints above do not apply. In this case, the scaling ratio is determined by the ratio between `x` and `outputSize`.
+
+- Dynamic shape:
+  - The shapes of this API are carried by aclTensor and must be concrete 4-dimensional values. The -1/-2 dynamic placeholders are not supported.
+  <!-- npu="950" id9 -->
+  - This operator declares dynamic shape and dynamic rank support on <term>Ascend 950PR&950DT products</term>. The GE graph mode is currently unavailable, so the -1/-2 dynamic placeholder scenarios are not supported.
+  <!-- end id9 -->
+
+- Numerical range:
+  - When the input contains ±inf, NaN, or extreme values close to the representable upper bound of the data type (for example, ±3.4e38 for FLOAT32 and ±65504 for FLOAT16), the antialiasing weighted accumulation may overflow to ±inf or produce NaN. The output is not guaranteed to match the CPU reference element-wise, and such inputs are outside the precision guarantee.
 
 - Deterministic computation:
   - aclnnUpsampleBicubic2dAA defaults to a deterministic implementation.
