@@ -40,7 +40,7 @@ bash build.sh --help
 | -O${n}          | 可选     | 指定编译优化级别，支持O0/O1/O2/O3（如：-O3），${n}为优化级别标识。                                      |
 | -u              | 可选     | 启用单元测试（UT）编译模式，编译所有UT目标。                                                        |
 | --help,-h      | 可选     | 打印脚本使用帮助信息。                                                                     |
-| --ops           | 可选     | 指定待编译的算子，如：grid_sample,iou_v2，多个算子用英文逗号“,”分隔，不可与--ophost、--opapi、--opgraph同时使用。 |
+| --ops           | 可选     | 指定待编译的算子，如：grid_sample,iou_v2，多个算子用英文逗号“,”分隔。非UT构建时不可与--ophost、--opapi、--opgraph同时使用；UT模式下可配合-u和上述目标按算子筛选测试。 |
 | --soc           | 可选     | 指定NPU型号，每次编译只支持1个NPU型号。                                                         |
 | --jit           | 可选     | 静态图场景下，编译`cann-${soc_name}-ops-cv_${cann_version}_linux-${arch}.run`整包时不需要编译算子二进制文件（图的运行态会在线编译），可以配置该选项，以提升编译速度。 |
 | --static        | 可选     | 配置后，表示生成静态库文件，包含libcann_cv_static.a和aclnn接口头文件，搭配--pkg参数，生成静态库压缩包。              |
@@ -53,9 +53,9 @@ bash build.sh --help
 | --asan          | 可选     | 开启host侧ASAN（AddressSanitizer）内存检测功能。                                            |
 | --valgrind      | 可选     | 使用valgrind运行单元测试进行内存检测（需配合-u使用），启用后会禁用ASAN和--noexec。                                                                 |
 | --make_clean    | 可选     | 执行基础清理操作（清理编译产物），执行后脚本退出。                                                       |
-| --ophost        | 可选     | 编译libophost_cv.so库，不可与--pkg、--ops同时使用。                                          |
-| --opapi         | 可选     | 编译libopapi_cv.so库，不可与--pkg、--ops同时使用。                                           |
-| --opgraph       | 可选     | 编译libopgraph_cv.so库，不可与--pkg、--ops同时使用。                                         |
+| --ophost        | 可选     | 编译libophost_cv.so库，不可与--pkg同时使用；非UT构建时不可与--ops同时使用，配合-u运行UT时允许--ops筛选。                                          |
+| --opapi         | 可选     | 编译libopapi_cv.so库，不可与--pkg同时使用；非UT构建时不可与--ops同时使用，配合-u运行UT时允许--ops筛选。                                           |
+| --opgraph       | 可选     | 编译libopgraph_cv.so库，不可与--pkg同时使用；非UT构建时不可与--ops同时使用，配合-u运行UT时允许--ops筛选。                                         |
 | --ophost_test   | 可选     | 编译ophost相关单元测试，与-u --ophost组合等效。                                                |
 | --opapi_test    | 可选     | 编译opapi相关单元测试，与-u --opapi组合等效。                                                  |
 | --opgraph_test  | 可选     | 预留参数，开发者暂不需要关注。                                                                 |
