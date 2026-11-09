@@ -24,7 +24,6 @@
 #include <string>
 #include <vector>
 
-#include "acl/acl.h"
 #include "graph.h"
 #include "types.h"
 #include "tensor.h"
@@ -112,6 +111,22 @@ string GetTime()
     return tmp;
 }
 
+static uint16_t FloatToFp16Bits(float val)
+{
+    uint32_t bits = 0;
+    memcpy(&bits, &val, sizeof(bits));
+    uint32_t sign = (bits >> 16) & 0x8000U;
+    int32_t exp = static_cast<int32_t>((bits >> 23) & 0xFFU) - 127 + 15;
+    uint32_t mant = bits & 0x7FFFFFU;
+    if (exp <= 0) {
+        return static_cast<uint16_t>(sign);
+    }
+    if (exp >= 31) {
+        return static_cast<uint16_t>(sign | 0x7C00U);
+    }
+    return static_cast<uint16_t>(sign | (static_cast<uint32_t>(exp) << 10) | (mant >> 13));
+}
+
 int32_t GenOnesData(const vector<int64_t>& shapes, Tensor& input_tensor, TensorDesc& input_tensor_desc,
                     DataType data_type, int value)
 {
@@ -142,18 +157,18 @@ int32_t GenOnesData(const vector<int64_t>& shapes, Tensor& input_tensor, TensorD
     }
 
     if (data_type == ge::DT_FLOAT16) {
-        if (size > std::numeric_limits<uint32_t>::max() / sizeof(aclFloat16)) {
+        if (size > std::numeric_limits<uint32_t>::max() / sizeof(uint16_t)) {
             return FAILED;
         }
-        aclFloat16* data = new (std::nothrow) aclFloat16[size];
+        uint16_t* data = new (std::nothrow) uint16_t[size];
         if (data == nullptr) {
             return FAILED;
         }
-        const aclFloat16 halfValue = aclFloatToFloat16(static_cast<float>(value));
+        const uint16_t halfValue = FloatToFp16Bits(static_cast<float>(value));
         for (size_t i = 0; i < size; ++i) {
             data[i] = halfValue;
         }
-        const uint32_t dataLen = static_cast<uint32_t>(size * sizeof(aclFloat16));
+        const uint32_t dataLen = static_cast<uint32_t>(size * sizeof(uint16_t));
         input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(data), dataLen);
         delete[] data;
         return SUCCESS;
