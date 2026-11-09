@@ -97,9 +97,9 @@ class SortedNmsTestSpec:
         boxes_num = boxes.shape[0]
         if sorted_scores.size > 1 and np.any(sorted_scores[:-1] < sorted_scores[1:]):
             raise ValueError("sorted_scores must be sorted in non-increasing order")
-        max_out = min(max(int(max_output_size[0]), 0), boxes_num)
-        iou_thr = float(iou_threshold[0])
-        score_thr = float(score_threshold[0])
+        max_out = min(max(int(max_output_size.reshape(-1)[0]), 0), boxes_num)
+        iou_thr = float(iou_threshold.reshape(-1)[0])
+        score_thr = float(score_threshold.reshape(-1)[0])
         boxes_f32 = boxes.astype(np.float32)
         suppressed = np.zeros(boxes_num, dtype=np.bool_)
         selected = []
