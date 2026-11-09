@@ -85,12 +85,21 @@ $$
 ## 约束说明
 
 - anchor_box、gt_box、y 三者数据类型必须一致，且仅支持 FLOAT16 或 FLOAT。
-- anchor_box 与 gt_box 的 shape 必须完全一致（无广播），秩为 3，且第 1 维必须为 5。
-- weight 若提供，长度必须为 5；不提供时使用默认值 `[1.0, 1.0, 1.0, 1.0, 1.0]`。
+- anchor_box 与 gt_box 的 shape 必须完全一致（无广播），秩为 3，且第 1 维必须为 5。5 通道顺序固定为 `(x0, y0, x1, y1, θ_deg)`。
+- `-1` 表示动态维、`-2` 表示动态秩，仅用于构图期；InferShape 会传播未知维/未知秩。上板执行时所有维度必须是具体的非负值，负维会被 Tiling 拒绝。
+- weight 若提供，长度必须为 5，元素应为有限值；非有限 weight 的行为未定义。不提供时使用默认值 `[1.0, 1.0, 1.0, 1.0, 1.0]`。
+- 角度 `θ_deg` 的有效计算范围受硬件三角函数限制（约 ±65504 rad，即约 ±3.75e6 度）。角度超出该范围时，`dθ` 可能输出 NaN；调用方应保证输入角度在有效范围内。
 - 空Tensor（B=0 或 N=0）直接短路返回空输出，不报错。
+- 数据类型、格式、秩、维度、两输入同形或 weight 长度不满足上述约束时，构图或 Tiling 阶段返回失败。具体错误码由框架统一映射，本文档不单独定义错误码表。
 
 ## 调用说明
 
 | 调用方式 | 样例代码 | 说明 |
 | :--- | :--- | :--- |
 | 图模式 | [test_geir_rotated_box_encode](./examples/arch35/test_geir_rotated_box_encode.cpp) | 通过[算子IR](./op_graph/rotated_box_encode_proto.h)构图方式调用RotatedBoxEncode算子。 |
+
+图模式样例需显式指定 SoC，例如：
+
+```bash
+bash build.sh --run_example rotated_box_encode graph --soc=ascend950
+```

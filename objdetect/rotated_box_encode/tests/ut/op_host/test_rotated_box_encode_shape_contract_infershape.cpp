@@ -129,3 +129,53 @@ TEST_F(RotatedBoxEncodeShapeContract, invalid_channel_shape_should_fail)
     PrintResult("invalid_channel_shape", result);
     EXPECT_EQ(result.status, ge::GRAPH_FAILED);
 }
+
+TEST_F(RotatedBoxEncodeShapeContract, dynamic_rank_is_propagated)
+{
+    const auto result = RunInfer({-2}, {-2});
+    PrintResult("dynamic_rank", result);
+    EXPECT_EQ(result.status, ge::GRAPH_SUCCESS);
+    EXPECT_EQ(result.outputShape, (std::vector<int64_t>{-2}));
+}
+
+// One side is unknown-rank: the statically known side must still satisfy the
+// (B, 5, N) contract, otherwise the shape is rejected at compile time.
+TEST_F(RotatedBoxEncodeShapeContract, dynamic_rank_with_valid_known_side_succeeds)
+{
+    const auto result = RunInfer({-2}, {2, 5, 8});
+    PrintResult("dynamic_rank_known_side_valid", result);
+    EXPECT_EQ(result.status, ge::GRAPH_SUCCESS);
+    EXPECT_EQ(result.outputShape, (std::vector<int64_t>{-2}));
+
+    const auto symmetric = RunInfer({2, 5, 8}, {-2});
+    PrintResult("dynamic_rank_known_side_valid_symmetric", symmetric);
+    EXPECT_EQ(symmetric.status, ge::GRAPH_SUCCESS);
+    EXPECT_EQ(symmetric.outputShape, (std::vector<int64_t>{-2}));
+}
+
+TEST_F(RotatedBoxEncodeShapeContract, dynamic_rank_with_invalid_known_side_should_fail)
+{
+    const auto badRank = RunInfer({-2}, {2, 5});
+    PrintResult("dynamic_rank_known_side_bad_rank", badRank);
+    EXPECT_EQ(badRank.status, ge::GRAPH_FAILED);
+
+    const auto badChannel = RunInfer({2, 4, 8}, {-2});
+    PrintResult("dynamic_rank_known_side_bad_channel", badChannel);
+    EXPECT_EQ(badChannel.status, ge::GRAPH_FAILED);
+}
+
+TEST_F(RotatedBoxEncodeShapeContract, dynamic_dim_is_propagated)
+{
+    const auto result = RunInfer({-1, 5, 4}, {-1, 5, 4});
+    PrintResult("dynamic_dim", result);
+    EXPECT_EQ(result.status, ge::GRAPH_SUCCESS);
+    EXPECT_EQ(result.outputShape, (std::vector<int64_t>{-1, 5, 4}));
+}
+
+TEST_F(RotatedBoxEncodeShapeContract, dynamic_dim_uses_known_side)
+{
+    const auto result = RunInfer({-1, 5, 4}, {2, 5, 4});
+    PrintResult("dynamic_dim_known_side", result);
+    EXPECT_EQ(result.status, ge::GRAPH_SUCCESS);
+    EXPECT_EQ(result.outputShape, (std::vector<int64_t>{2, 5, 4}));
+}

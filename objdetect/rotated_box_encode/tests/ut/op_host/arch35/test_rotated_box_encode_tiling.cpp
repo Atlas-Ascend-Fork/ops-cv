@@ -49,7 +49,7 @@ gert::StorageShape MakeStorageShape(const std::vector<int64_t>& dims)
 }
 
 gert::TilingContextPara MakeContext(const std::vector<int64_t>& shape, ge::DataType dtype,
-                                    const std::vector<float>& weight)
+                                    const std::vector<float>& weight, uint64_t ubSize = 253952)
 {
     const gert::StorageShape storageShape = MakeStorageShape(shape);
     std::vector<TensorDesc> inputs = {
@@ -60,13 +60,13 @@ gert::TilingContextPara MakeContext(const std::vector<int64_t>& shape, ge::DataT
         {storageShape, dtype, ge::FORMAT_ND},
     };
     if (weight.empty()) {
-        return gert::TilingContextPara("RotatedBoxEncode", inputs, outputs, {}, &g_compileInfo, "Ascend950", 48, 253952,
+        return gert::TilingContextPara("RotatedBoxEncode", inputs, outputs, {}, &g_compileInfo, "Ascend950", 48, ubSize,
                                        4096);
     }
     std::vector<OpAttr> attrs = {
         OpAttr("weight", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>(weight)),
     };
-    return gert::TilingContextPara("RotatedBoxEncode", inputs, outputs, attrs, &g_compileInfo, "Ascend950", 48, 253952,
+    return gert::TilingContextPara("RotatedBoxEncode", inputs, outputs, attrs, &g_compileInfo, "Ascend950", 48, ubSize,
                                    4096);
 }
 
@@ -217,4 +217,51 @@ TEST_F(RotatedBoxEncodeTiling, tiling_case6_fp16_default_weight)
     EXPECT_FLOAT_EQ(td.weight[2], 1.0f);
     EXPECT_FLOAT_EQ(td.weight[3], 1.0f);
     EXPECT_FLOAT_EQ(td.weight[4], 1.0f);
+}
+
+// Negative dimensions are unknown-shape markers and must be rejected before
+// dim0 enters the tiling formulas (F-01).
+TEST_F(RotatedBoxEncodeTiling, tiling_case7_negative_batch_should_fail)
+{
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(MakeContext({-1, 5, 8}, ge::DT_FLOAT, {1.0f, 1.0f, 1.0f, 1.0f, 1.0f}), info));
+}
+
+TEST_F(RotatedBoxEncodeTiling, tiling_case8_negative_box_count_should_fail)
+{
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(MakeContext({2, 5, -1}, ge::DT_FLOAT, {1.0f, 1.0f, 1.0f, 1.0f, 1.0f}), info));
+}
+
+// dim0 = 2^60 previously overflowed dim0*160 in int64 before the core cap.
+TEST_F(RotatedBoxEncodeTiling, tiling_case9_huge_dim0_does_not_overflow)
+{
+    TilingInfo info;
+    RotatedBoxEncodeTilingData td{};
+    ASSERT_TRUE(RunTiling(MakeContext({1 << 30, 5, 1 << 30}, ge::DT_FLOAT, {1.0f, 1.0f, 1.0f, 1.0f, 1.0f}), info, td));
+    EXPECT_EQ(td.dim0, static_cast<int64_t>(1) << 60);
+    EXPECT_EQ(td.coreNum, 48);
+    EXPECT_GT(td.ubLoopOfFormerBlock, 1);
+}
+
+TEST_F(RotatedBoxEncodeTiling, tiling_case10_weight_length_must_be_five)
+{
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(MakeContext({2, 5, 8}, ge::DT_FLOAT, {1.0f, 1.0f, 1.0f, 1.0f}), info));
+}
+
+// Branch tiling failure must be propagated: a UB too small to hold one
+// aligned box tile makes ComputeBranch0/1Tiling return GRAPH_FAILED, and
+// TilingRotatedBoxEncode must report the failure instead of returning a
+// zeroed tiling plan as success.
+TEST_F(RotatedBoxEncodeTiling, tiling_case11_fp16_ub_too_small_should_fail)
+{
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(MakeContext({2, 5, 8}, ge::DT_FLOAT16, {1.0f, 1.0f, 1.0f, 1.0f, 1.0f}, 1024), info));
+}
+
+TEST_F(RotatedBoxEncodeTiling, tiling_case12_fp32_ub_too_small_should_fail)
+{
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(MakeContext({2, 5, 8}, ge::DT_FLOAT, {1.0f, 1.0f, 1.0f, 1.0f, 1.0f}, 1024), info));
 }

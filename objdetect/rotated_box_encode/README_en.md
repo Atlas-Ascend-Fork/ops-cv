@@ -87,12 +87,21 @@ In the formula, `max(·, 1.0)` prevents division by zero and `log(0)` caused by 
 ## Constraints
 
 - anchor_box, gt_box, and y must have the same data type, and only FLOAT16 or FLOAT is supported.
-- The shapes of anchor_box and gt_box must be exactly the same (no broadcast), the rank must be 3, and dimension 1 must be 5.
-- If weight is provided, its length must be 5. If it is not provided, the default value `[1.0, 1.0, 1.0, 1.0, 1.0]` is used.
+- The shapes of anchor_box and gt_box must be exactly the same (no broadcast), the rank must be 3, and dimension 1 must be 5. The five channels are fixed as `(x0, y0, x1, y1, θ_deg)`.
+- `-1` denotes a dynamic dimension and `-2` denotes dynamic rank; these markers are only used during graph construction. InferShape propagates unknown dimensions and unknown rank. At execution time every dimension must be a concrete non-negative value; Tiling rejects negative dimensions.
+- If weight is provided, its length must be 5 and its elements must be finite. The behavior for non-finite weights is undefined. If it is not provided, the default value `[1.0, 1.0, 1.0, 1.0, 1.0]` is used.
+- The valid angle range for `θ_deg` is limited by the hardware trigonometric functions (about ±65504 rad, i.e. about ±3.75e6 degrees). When the angle is outside this range, `dθ` may be NaN; callers must keep input angles within the valid range.
 - For an empty tensor (B=0 or N=0), the operator short-circuits and directly returns an empty output without reporting an error.
+- If the data type, format, rank, dimensions, input-shape equality, or weight length violates the constraints above, graph construction or Tiling fails. The concrete error code is mapped by the framework; this document does not define a separate error-code table.
 
 ## Invocation
 
 | Invocation Method | Sample Code | Description |
 | :--- | :--- | :--- |
 | Graph mode | [test_geir_rotated_box_encode](./examples/arch35/test_geir_rotated_box_encode.cpp) | Invokes the RotatedBoxEncode operator by constructing a graph through the [operator IR](./op_graph/rotated_box_encode_proto.h). |
+
+The graph-mode sample requires an explicit SoC, for example:
+
+```bash
+bash build.sh --run_example rotated_box_encode graph --soc=ascend950
+```

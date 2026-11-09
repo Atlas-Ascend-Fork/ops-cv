@@ -14,7 +14,6 @@
 #include <cstdint>
 #include "graph/ge_error_codes.h"
 #include "exe_graph/runtime/tiling_context.h"
-#include "exe_graph/runtime/tiling_parse_context.h"
 #include "../../op_kernel/arch35/rotated_box_encode_tiling_data.h"
 
 namespace optiling {
@@ -23,15 +22,12 @@ namespace optiling {
 // Design constants (DESIGN §9.4 / §9.5 / §9.1 + DESIGN-BRANCH-0/1.md §2).
 // ===========================================================================
 constexpr int64_t BOX_CHANNELS = 5;        // spec.yaml shape[1]==5
-constexpr int64_t ALIGN_256_BYTES = 256;   // §2.3 UB byte alignment
 constexpr int64_t MIN_TILING_BITS = 32768; // §2.2 4KB/core (bits)
-constexpr int64_t ELEM_ALIGN_FACTOR = 512; // §2.4 multi-core box alignment
 constexpr int64_t MAX_RANK = 3;            // §9.3.2 rank==3
 
 // Branch-0 (fp16-upcast): perBoxBytes=70, elemStride=10, alignFactor=128
 constexpr int64_t BRANCH0_BOX_CHANNELS = 5;
 constexpr int64_t BRANCH0_ALIGN_256_BYTES = 256;
-constexpr int64_t BRANCH0_MIN_TILING_BITS = 32768;
 constexpr int64_t BRANCH0_ELEM_ALIGN_FACTOR = 512;
 constexpr int64_t BRANCH0_PER_BOX_BYTES = 70;
 constexpr int64_t BRANCH0_ELEM_BYTES = 2;
@@ -41,21 +37,11 @@ constexpr int64_t BRANCH0_ALIGN_FACTOR = 128;
 // Branch-1 (fp32-direct): perBoxBytes=60, elemStride=20, alignFactor=64
 constexpr int64_t BRANCH1_BOX_CHANNELS = 5;
 constexpr int64_t BRANCH1_ALIGN_256_BYTES = 256;
-constexpr int64_t BRANCH1_MIN_TILING_BITS = 32768;
 constexpr int64_t BRANCH1_ELEM_ALIGN_FACTOR = 512;
 constexpr int64_t BRANCH1_PER_BOX_BYTES = 60;
 constexpr int64_t BRANCH1_ELEM_BYTES = 4;
 constexpr int64_t BRANCH1_ELEM_STRIDE = BRANCH1_BOX_CHANNELS * BRANCH1_ELEM_BYTES; // 20
 constexpr int64_t BRANCH1_ALIGN_FACTOR = 64;
-
-// ===========================================================================
-// RotatedBoxEncodeCompileInfo: compile-time platform info parsed by
-// TilingParse<RotatedBoxEncodeCompileInfo> (DESIGN §9.8) from gert::PlatformInfo.
-// ===========================================================================
-struct RotatedBoxEncodeCompileInfo {
-    uint32_t coreNumAiv;
-    uint64_t ubSize;
-};
 
 // ===========================================================================
 // Branch input structs: parsed inputs for the branch tiling formulas.
@@ -86,11 +72,9 @@ ge::graphStatus ComputeBranch1Tiling(const RotatedBoxEncodeBranch1Inputs& in, Ro
 
 // ===========================================================================
 // TilingRotatedBoxEncode: runtime tiling entry (DESIGN §9.9).
-// TilingPrepareForRotatedBoxEncode: compile-time platform-info parser (§9.8).
+// Platform parameters are resolved at runtime; no compile-time parser is used.
 // ===========================================================================
 ge::graphStatus TilingRotatedBoxEncode(gert::TilingContext* ctx);
-
-ge::graphStatus TilingPrepareForRotatedBoxEncode(gert::TilingParseContext* context);
 
 } // namespace optiling
 
