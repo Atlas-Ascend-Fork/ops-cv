@@ -169,10 +169,6 @@ int CreateOppInGraph(DataType inDtype, std::vector<ge::Tensor>& input, std::vect
 
 int main(int argc, char* argv[])
 {
-    if (argc < 2) {
-        printf("Usage: %s <soc_version>\n", argv[0]);
-        return FAILED;
-    }
     const char* graph_name = "tc_ge_irrun_test";
     Graph graph(graph_name);
     std::vector<ge::Tensor> input;
@@ -189,8 +185,9 @@ int main(int argc, char* argv[])
     std::vector<Operator> inputs{};
     std::vector<Operator> outputs{};
 
-    std::cout << argv[1] << std::endl;
-    char* endptr;
+    if (argc >= 2) {
+        std::cout << argv[1] << std::endl;
+    }
 
     DataType inDtype = DT_FLOAT16;
 
