@@ -4,7 +4,7 @@
 
 | 产品 | 是否支持 |
 | ---- | :------: |
-| Atlas 950 系列产品 | √ |
+| Ascend 950PR&950DT系列产品 | √ |
 
 ## 功能说明
 
@@ -71,7 +71,7 @@ aclnnStatus aclnnGaussianBlur(
 
 ## 约束说明
 
-- 仅支持 Atlas 950 系列产品。
+- 仅支持 Ascend 950PR&950DT系列产品。
 - `src` 和 `dst` 仅支持 FLOAT32、ND 格式。
 - `src` rank 必须为 2 或 3，所有维度必须大于 0。
 - `dst` 必须与 `src` 具有相同的 shape、数据类型和格式。

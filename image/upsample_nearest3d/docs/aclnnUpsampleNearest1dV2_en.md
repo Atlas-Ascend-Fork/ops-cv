@@ -181,10 +181,8 @@ aclnnStatus aclnnUpsampleNearest1dV2(
       <td>The input parameter is a required input, output, or required attribute, and is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="5">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="5">161002</td>
-    </tr>
-    <tr>
+      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="4">161002</td>
       <td>The data type of self or out is not within the supported range.</td>
     </tr>
     <tr>

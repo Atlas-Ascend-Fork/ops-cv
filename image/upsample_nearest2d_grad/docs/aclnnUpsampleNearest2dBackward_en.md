@@ -229,10 +229,8 @@ aclnnStatus aclnnUpsampleNearest2dBackward(
       <td>The input parameter is a required input, output, or required attribute, and is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="10">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="10">161002</td>
-    </tr>
-    <tr>
+      <td rowspan="9">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="9">161002</td>
       <td>The data type of gradOut is not within the supported range.</td>
     </tr>
     <tr><td>The data types of gradOut and gradInput are inconsistent.</td>

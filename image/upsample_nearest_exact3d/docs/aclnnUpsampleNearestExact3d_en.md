@@ -227,8 +227,8 @@ aclnnStatus aclnnUpsampleNearestExact3d(
       <td>The passed self, outputSize, or out is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="7">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="7">161002</td>
+      <td rowspan="6">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="6">161002</td>
       <td>The data type of self is not within the supported range, or the data type of self differs from that of out.</td>
     </tr>
     <tr>

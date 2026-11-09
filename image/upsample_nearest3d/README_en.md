@@ -15,7 +15,7 @@ English | [简体中文](./README.md)
 |  <term>Kirin X90 processor series products</term> | √ |
 |  <term>Kirin 9030 processor series products</term> | √ |
 
-- GEIR is not supported on <term>Ascend 950PR/Ascend 950DT (A5)</term>.
+- GEIR is not supported on <term>Ascend 950PR&950DT products</term>.
 
 ## Function Description
 
@@ -99,7 +99,7 @@ English | [简体中文](./README.md)
 
 ## Constraints
 
-- GEIR is not supported on <term>Ascend 950PR/Ascend 950DT (A5)</term>, and this operator cannot be called by constructing a graph in the [operator IR](op_graph/upsample_nearest3d_proto.h) mode.
+- GEIR is not supported on <term>Ascend 950PR&950DT products</term>, and this operator cannot be called by constructing a graph in the [operator IR](op_graph/upsample_nearest3d_proto.h) mode.
 
 ## Invocation Description
 
@@ -108,4 +108,4 @@ English | [简体中文](./README.md)
 | aclnn interface  | [test_aclnn_upsample_nearest1d_v2](examples/test_aclnn_upsample_nearest1d_v2.cpp) | Call the UpsampleNearest3d operator through the [aclnnUpsampleNearest1dV2](docs/aclnnUpsampleNearest1dV2_en.md) interface. |
 | aclnn interface  | [test_aclnn_upsample_nearest2d_v2](examples/test_aclnn_upsample_nearest2d_v2.cpp) | Call the UpsampleNearest3d operator through the [aclnnUpsampleNearest2dV2](docs/aclnnUpsampleNearest2dV2_en.md) interface. |
 | aclnn interface  | [test_aclnn_upsample_nearest3d](examples/test_aclnn_upsample_nearest3d.cpp) | Call the UpsampleNearest3d operator through the [aclnnUpsampleNearest3d](docs/aclnnUpsampleNearest3d_en.md) interface. |
-| Graph mode | - | Call the UpsampleNearest3d operator by constructing a graph in the [operator IR](op_graph/upsample_nearest3d_proto.h) mode. GEIR is not supported on <term>Ascend 950PR/Ascend 950DT (A5)</term>, so this invocation method is not applicable. |
+| Graph mode | - | Call the UpsampleNearest3d operator by constructing a graph in the [operator IR](op_graph/upsample_nearest3d_proto.h) mode. |

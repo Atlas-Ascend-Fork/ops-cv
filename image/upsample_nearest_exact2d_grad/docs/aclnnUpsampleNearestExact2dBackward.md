@@ -216,8 +216,8 @@ aclnnStatus aclnnUpsampleNearestExact2dBackward(
       <td>传入的gradOutput、inputSize或out是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="7">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="7">161002</td>
+      <td rowspan="6">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="6">161002</td>
       <td>gradOutput或out的数据类型不在支持的范围之内。</td>
     </tr>
     <tr>

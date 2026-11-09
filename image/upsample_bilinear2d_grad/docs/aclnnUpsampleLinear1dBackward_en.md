@@ -238,10 +238,8 @@ The first segment of the API performs input parameter validation and reports an 
       <td>A required input, output, or required attribute is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="14">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="14">161002</td>
-    </tr>
-    <tr>
+      <td rowspan="11">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="11">161002</td>
       <td>The data type of gradOut is not within the supported range.</td>
     </tr>
     <tr><td>The data types of gradOut and out are inconsistent.</td>

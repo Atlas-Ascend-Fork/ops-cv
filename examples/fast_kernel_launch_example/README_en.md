@@ -26,13 +26,13 @@ This document describes how to develop a custom NPU operator using Ascend C and 
 
 2. Install dependencies:
 
-    ```sh
+    ```python
     python3 -m pip install -r requirements.txt
     ```
 
 3. Build the Wheel:
 
-    ```sh
+    ```python
     # NPU_SOC_VERSION sets the soc version for compilation. Use "ascend910b" (default) for Atlas A2 products, "ascend910_93" for Atlas A3 products, and "ascend950" for Ascend 950PR&950DT products
     export NPU_SOC_VERSION=ascend910b
     # -n: non-isolated build (uses existing environment)
@@ -43,13 +43,13 @@ This document describes how to develop a custom NPU operator using Ascend C and 
 
 4. Install the Wheel package:
 
-    ```sh
+    ```python
     python3 -m pip install dist/*.whl --force-reinstall --no-deps
     ```
 
 5. (Optional) Before building again, run the following command to clear the compilation cache:
 
-   ```sh
+   ```python
     python setup.py clean
    ```
 

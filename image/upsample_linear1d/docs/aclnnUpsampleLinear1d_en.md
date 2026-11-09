@@ -215,10 +215,9 @@ aclnnStatus aclnnUpsampleLinear1d(
       <td>If the passed parameter is a required input, output, or required attribute, and is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="8">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="8">161002</td>
-    </tr>
-    <tr><td>The data type of self is not within the supported range.</td>
+      <td rowspan="7">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="7">161002</td>
+      <td>The data type of self is not within the supported range.</td>
     </tr>
     <tr><td>The data types of self and out are inconsistent.</td>
     </tr>

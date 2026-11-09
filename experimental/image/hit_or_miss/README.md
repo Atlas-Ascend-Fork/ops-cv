@@ -4,13 +4,12 @@
 
 | 产品 | 是否支持 |
 |---|---|
-| Ascend 950PR/Ascend 950DT | × |
-| Atlas A3 训练系列产品/Atlas A3 推理系列产品 | √ |
-| Atlas A2 训练系列产品/Atlas A2 推理系列产品 | √ |
-| Atlas 200I/500 A2 推理产品 | × |
-| Atlas 推理系列产品 | × |
-| Atlas 训练系列产品 | × |
-
+| Ascend 950PR&950DT系列产品 | × |
+| Atlas A3系列产品 | √ |
+| Atlas A2系列产品 | √ |
+| Atlas 200I/500 A2推理产品 | × |
+| Atlas推理系列产品 | × |
+| Atlas训练系列产品 | × |
 
 ## 功能说明
 
@@ -30,7 +29,6 @@
   当 kernel 全部为 0 时，输出等于 input 的二值化结果（input != 0）。
   当约束映射到 input 范围外时，该约束的匹配结果直接取 border_value；kernel 为 1 或 -1 时规则相同，kernel 为 -1 时不对 border_value 取反。
 
-
 ## 参数说明
 
 | 参数名 | 输入/输出/属性 | 描述 | 数据类型 |
@@ -42,7 +40,6 @@
 | border_value | 属性 | 越界位置的约束匹配值 | BOOL |
 | output | 输出 | 匹配结果 | BOOL |
 
-
 ## 约束说明
 
 - input 支持 rank 2~8
@@ -50,7 +47,6 @@
 - kernel 高宽范围 1~63
 - kernel 元素值仅支持 -1、0、1，其他取值不在支持范围内
 - output shape 与 input 一致
-
 
 ## 调用说明
 

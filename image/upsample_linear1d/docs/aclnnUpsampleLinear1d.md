@@ -218,10 +218,9 @@ aclnnStatus aclnnUpsampleLinear1d(
       <td>如果传入参数是必选输入，输出或者必选属性，且是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="8">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="8">161002</td>
-    </tr>
-    <tr><td>self的数据类型不在支持的范围之内。</td>
+      <td rowspan="7">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="7">161002</td>
+      <td>self的数据类型不在支持的范围之内。</td>
     </tr>
     <tr><td>self和out的数据类型不一致。</td>
     </tr>

@@ -410,11 +410,11 @@ aclnnStatus aclnnGridSampler2D(
 - 当grid的输入值*图片（长或宽）大于24位的二进制数（16777216）时，采样点可能存在误差，精度可能产生偏差。
 - 如果grid含有大量超过[-1, 1]范围的数据，使用zeros或者border的填充策略时，计算结果中的值会大量重复。
 
-<!-- npu="A3,910b" id11 -->
+<!-- npu="A3,910b" id13 -->
 - <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：
   - 如果grid存在超出[-1, 1]范围的数据，使用bicubic插值时，小值域数据计算可能存在误差，精度可能产生偏差。
   - 使用bilinear或者bicubic插值时，针对FLOAT16数据类型，需要使用workspace内存。
-<!-- end id11 -->
+<!-- end id13 -->
 <!-- npu="910" id12 -->
 - <term>Atlas训练系列产品</term>：使用bilinear插值时，针对FLOAT16数据类型，需要使用workspace内存。
 <!-- end id12 -->

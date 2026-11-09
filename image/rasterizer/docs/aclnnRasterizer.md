@@ -312,8 +312,8 @@ aclnnStatus aclnnRasterizer(
         <td>v、f、findicesOut或barycentricOut的数据类型不在支持范围之内。</td>
       </tr>
       <tr>
-        <td rowspan="11">ACLNN_ERR_INNER_TILING_ERROR</td>
-        <td rowspan="11">561002</td>
+        <td rowspan="2">ACLNN_ERR_INNER_TILING_ERROR</td>
+        <td rowspan="2">561002</td>
         <td>v、f、findicesOut或barycentricOut的shape不在支持范围之内。</td>
       </tr>
       <tr>

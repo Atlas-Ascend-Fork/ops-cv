@@ -229,10 +229,8 @@ aclnnStatus aclnnUpsampleNearest2dBackward(
       <td>如果传入参数是必选输入，输出或者必选属性，且是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="10">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="10">161002</td>
-    </tr>
-    <tr>
+      <td rowspan="9">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="9">161002</td>
       <td>gradOut的数据类型不在支持的范围之内。</td>
     </tr>
     <tr><td>gradOut和gradInput的数据类型不一致。</td>

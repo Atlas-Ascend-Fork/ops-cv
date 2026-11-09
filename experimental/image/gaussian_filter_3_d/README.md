@@ -56,7 +56,7 @@ experimental/image/gaussian_filter_3_d/
 
 ## 支持的型号
 
-- Atlas A2 训练系列产品（ascend910b）
+- Atlas A2系列产品
 
 ## 约束说明
 

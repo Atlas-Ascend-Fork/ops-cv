@@ -1,6 +1,6 @@
 # HOGDescriptor
 
-在 Ascend 910B 上计算图像的方向梯度直方图描述子。支持 float16、float32 输入，输出始终为 float32。
+在Atlas A2系列产品上计算图像的方向梯度直方图描述子。支持 float16、float32 输入，输出始终为 float32。
 
 ## 输入与输出
 

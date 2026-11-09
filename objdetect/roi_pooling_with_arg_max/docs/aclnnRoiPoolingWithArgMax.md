@@ -268,10 +268,8 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>如果传入参数是必选输入、输出或必选属性，且是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="5">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="5">161002</td>
-    </tr>
-    <tr>
+      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="4">161002</td>
       <td>x、rois、y、argmax的数据类型或格式不在支持范围内。</td>
     </tr>
     <tr><td>x的shape不是4维（NCHW）。</td>

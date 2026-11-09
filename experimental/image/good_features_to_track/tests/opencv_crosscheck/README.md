@@ -52,7 +52,7 @@ python3 tests/opencv_crosscheck/run_crosscheck.py --write-golden
 
 ## 实测结果（2026-10-15，Ascend 910B4 + OpenCV 5.0.0）
 
-```
+```output
 === fp32 方块 blockSize=3  (h=64, w=64, maxCorners=1000) ===
   角点数：算子 = 16   OpenCV = 16   几何真值 = 16
   真值覆盖[算子]：精确命中 16/16

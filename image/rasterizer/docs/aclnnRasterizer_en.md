@@ -312,8 +312,8 @@ aclnnStatus aclnnRasterizer(
         <td>The data type of v, f, findicesOut, or barycentricOut is not within the supported range.</td>
       </tr>
       <tr>
-        <td rowspan="11">ACLNN_ERR_INNER_TILING_ERROR</td>
-        <td rowspan="11">561002</td>
+        <td rowspan="2">ACLNN_ERR_INNER_TILING_ERROR</td>
+        <td rowspan="2">561002</td>
         <td>The shape of v, f, findicesOut, or barycentricOut is not within the supported range.</td>
       </tr>
       <tr>

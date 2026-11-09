@@ -24,14 +24,14 @@
 
 2. 安装依赖 | Install Dependencies：
 
-    ```sh
+    ```python
     python3 -m pip install -r requirements.txt
     ```
 
 3. 构建Wheel包 | Build the Wheel：
 
-    ```sh
-    # NPU_SOC_VERSION设置编译款型, Atlas A2系列产品使用"ascend910b"（默认），Atlas A3系列产品使用"ascend910_93"，Ascend 950PR&950DT系列产品产品使用"ascend950"
+    ```python
+    # NPU_SOC_VERSION设置编译款型, Atlas A2系列产品使用"ascend910b"（默认），Atlas A3系列产品使用"ascend910_93"，Ascend 950PR&950DT系列产品使用"ascend950"
     export NPU_SOC_VERSION=ascend910b
     # -n: non-isolated build (uses existing environment)
     python3 -m build --wheel -n
@@ -41,13 +41,13 @@
 
 4. 安装Wheel包 | Install Package：
 
-    ```sh
+    ```python
     python3 -m pip install dist/*.whl --force-reinstall --no-deps
     ```
 
 5. （可选）再次构建前建议先执行以下命令清理编译缓存
 
-   ```sh
+   ```python
     python setup.py clean
     ```
 

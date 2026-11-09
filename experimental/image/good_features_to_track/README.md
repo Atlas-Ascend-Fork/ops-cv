@@ -4,11 +4,10 @@
 
 | 产品 | 是否支持 |
 | :--- | :---: |
-| <term>Ascend 910B 系列产品</term> | √ |
-| <term>Atlas A2 训练系列产品/Atlas A2 推理系列产品</term> | √ |
-| <term>Atlas A3 训练系列产品/Atlas A3 推理系列产品</term> | √ |
-| <term>Atlas 推理系列产品</term> | × |
-| <term>Atlas 训练系列产品</term> | × |
+| <term>Atlas A2系列产品</term> | √ |
+| <term>Atlas A3系列产品</term> | √ |
+| <term>Atlas推理系列产品</term> | × |
+| <term>Atlas训练系列产品</term> | × |
 
 算子注册的 AICore 配置为 `ascend910b` 与 `ascend910_93`。
 
@@ -18,27 +17,27 @@
 
 - 计算公式：
 
-1) Sobel 梯度（3×3），$g_x,\ g_y$；
+1. Sobel 梯度（3×3），$g_x,\ g_y$；
 
-2) 结构张量的 `block_size` × `block_size` 窗口和：
+2. 结构张量的 `block_size` × `block_size` 窗口和：
 
-$$
-S_{xx}=\sum g_x^2,\qquad S_{yy}=\sum g_y^2,\qquad S_{xy}=\sum g_x g_y
-$$
+   $$
+   S_{xx}=\sum g_x^2,\qquad S_{yy}=\sum g_y^2,\qquad S_{xy}=\sum g_x g_y
+   $$
 
-3) Shi-Tomasi 响应取结构张量的最小特征值（闭式解）：
+3. Shi-Tomasi 响应取结构张量的最小特征值（闭式解）：
 
-$$
-\lambda_{\min}=\frac{S_{xx}+S_{yy}-\sqrt{(S_{xx}+S_{yy})^2-4\,(S_{xx}S_{yy}-S_{xy}^2)}}{2}
-$$
+   $$
+   \lambda_{\min}=\frac{S_{xx}+S_{yy}-\sqrt{(S_{xx}+S_{yy})^2-4\,(S_{xx}S_{yy}-S_{xy}^2)}}{2}
+   $$
 
-`use_harris_detector=true` 时改用 Harris 响应：
+   `use_harris_detector=true` 时改用 Harris 响应：
 
-$$
-R=S_{xx}S_{yy}-S_{xy}^2-k\,(S_{xx}+S_{yy})^2
-$$
+   $$
+   R=S_{xx}S_{yy}-S_{xy}^2-k\,(S_{xx}+S_{yy})^2
+   $$
 
-4) 阈值与抑制：保留 $R>\text{quality\_level}\times R_{\max}$ 的像素，再按响应从大到小做贪心非极大值抑制——已选角点与新角点的欧氏距离小于 `min_distance` 时丢弃新角点；最多输出 `max_corners` 个。
+4. 阈值与抑制：保留 $R>\text{quality\_level}\times R_{\max}$ 的像素，再按响应从大到小做贪心非极大值抑制——已选角点与新角点的欧氏距离小于 `min_distance` 时丢弃新角点；最多输出 `max_corners` 个。
 
 ## 参数说明
 
@@ -136,7 +135,7 @@ $$
   - `H*W` 需满足 `H*W <= 2^24`（16,777,216）：阶段 2b 的键直方图用 fp32 累加计数，fp32 只能精确表示 `<= 2^24` 的整数，超出后单桶计数与跨核求和会舍入、`b*/b**` 边界桶选取偏移（结果仍确定，但会偏离精确 Top-K）；超出时 Tiling 阶段返回失败。如需更大分辨率，需改用 int32/int64 计数路径。
   - `W` 需满足 `4*W <= 65535`（即 `W <= 16383`）：内核行搬运用 `DataCopyParams.blockLen`（字节单位、上限 65535），response 缓冲恒为 float、单行占 `4*W` 字节；超出时 blockLen 会被截断，且该宽度域会回退到无宽度防护的回退路径，因此 Tiling 阶段直接返回失败。
   - `mask` 传入时必须与 `image` 形状完全一致，dtype 为 uint8。
-- 属性需满足：`quality_level ∈ (0, 1]`、`min_distance ≥ 0`、`block_size ≥ 1` 且为奇数、`k ≥ 0`；不满足时 Tiling 阶段返回失败。
+  - 属性需满足：`quality_level ∈ (0, 1]`、`min_distance ≥ 0`、`block_size ≥ 1` 且为奇数、`k ≥ 0`；不满足时 Tiling 阶段返回失败。
   - 输出 `corners` 固定为 `[N, max_corners, 2]` 的上界形状（`max_corners=0` 时为 `[N, H*W, 2]`），有效个数以 `num_corners` 为准；未填充位置的哨兵值实测为 `(-1,-1)` 或 `(0,0)`（取决于容量/对齐路径），**不能靠哨兵值判断有效个数**。
   - **判定有效性必须依据 `num_corners`**：`x=0` 或 `y=0` 是合法角点坐标（图像边缘），不能以坐标是否为 0 判断，也不能只看单个分量是否为 -1。
   - 角点选取（阈值 + 非极大值抑制）由单个核串行完成，保证结果与调度无关、逐次可复现；并列响应的取舍同样是确定性的。

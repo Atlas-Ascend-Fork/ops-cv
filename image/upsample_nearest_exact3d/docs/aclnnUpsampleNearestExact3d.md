@@ -227,8 +227,8 @@ aclnnStatus aclnnUpsampleNearestExact3d(
       <td>传入的self、outputSize或out是空指针时。</td>
     </tr>
     <tr>
-      <td rowspan="7">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="7">161002</td>
+      <td rowspan="6">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="6">161002</td>
       <td>self的数据类型不在支持的范围之内或self与out数据类型不同。</td>
     </tr>
     <tr>

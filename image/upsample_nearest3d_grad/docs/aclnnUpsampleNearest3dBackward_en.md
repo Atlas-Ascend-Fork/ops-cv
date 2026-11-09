@@ -246,8 +246,8 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
       <td>If the input parameter is a mandatory input, output, or mandatory attribute, and is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="11">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="11">161002</td>
+      <td rowspan="10">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="10">161002</td>
       <td>The data type of gradOut is not within the supported range.</td>
     </tr>
     <tr>
