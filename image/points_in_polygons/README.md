@@ -34,6 +34,8 @@ PointsInPolygons是一个点-四边形从属关系判定算子：给定N个二�
 - 边界优先：点落在四边形任一边或任一顶点上时视为在边界上，输出直接取 `0.0`，不再按交点数的奇偶判定。
 - 跨越条件：仅对两端 y 坐标跨过 py 的边（即满足 `(y_k > py) ≠ (y_{k+1} > py)` 的边）计算 `x_intersect_k` 并计入交点数；水平边（`y_{k+1} = y_k`）不满足跨越条件，跳过交点计算，不会出现除以零。
 
+边界比较采用float32精确相等判断，不引入epsilon。近边界输入可能因坐标差值、除法、乘法与加法的float32舍入，与float64几何参考产生差异；射线交点的除法使用正确舍入的float32实现，次正规路径同样适用。
+
 ## 参数说明
 
 - **参数说明**：
@@ -82,14 +84,14 @@ PointsInPolygons是一个点-四边形从属关系判定算子：给定N个二�
 
 ## 约束说明
 
-- points与polygons的数据类型必须均为FLOAT，不支持其他数据类型。
-- points、polygons与output的数据格式必须均为ND。
-- points与polygons的rank必须均为2；非空Tensor时points第1维必须固定为2，polygons第0维必须固定为8。
-- output的shape必须为(N,M)，其中N=points.shape[0]、M=polygons.shape[1]，N与M独立，无broadcast关系。
-- 支持空Tensor：当N=0或M=0时，output为空Tensor（元素数为0），接口不报错，直接返回。
+- 输入输出仅支持FLOAT（float32），格式均为ND。
+- points与polygons均须为二维Tensor，实际输入各维度必须非负。
+- output.shape=(N,M)，其中N=points.shape[0]、M=polygons.shape[1]。
+- N与M均非0时，points.shape[1]必须为2、polygons.shape[0]必须为8；N=0或M=0时返回空输出，并豁免这两个固定轴检查。
+- 参与计算的polygons须为连续(8,M)布局，每列一个四边形；(M,8)布局须先转置并连续化。
 
 ## 调用说明
 
 | 调用方式   | 样例代码           | 说明                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| 图模式 | [test_geir_points_in_polygons](examples/arch35/test_geir_points_in_polygons.cpp)  | 通过[算子IR](op_graph/points_in_polygons_proto.h)构图方式调用PointsInPolygons算子。         |
+| GE图模式 | [test_geir_points_in_polygons](examples/arch35/test_geir_points_in_polygons.cpp)  | 通过[算子IR](op_graph/points_in_polygons_proto.h)构图方式调用PointsInPolygons算子。         |

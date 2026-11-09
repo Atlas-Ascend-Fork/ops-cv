@@ -14,10 +14,11 @@
  * \file test_points_in_polygons_tiling.cpp
  * \brief PointsInPolygons tiling UT: 覆盖 EMPTY(KEY=0) / NORMAL(KEY=1) / N_VEC(KEY=2) 三分支
  *        平台参数: coreNum=48, ubSize=253952(ascend950 arch35)
- *        输入契约: points=(N,2), polygons=(8,M)；NORMAL 分支 UB 反推 tileM=32, tileN=240
+ *        输入契约: points=(N,2), polygons=(8,M)；NORMAL 按 VL=64 与核数均衡分块，分配量按实际 UB 校验
  */
 
 #include <iostream>
+#include <limits>
 #include <gtest/gtest.h>
 #include "tiling_context_faker.h"
 #include "tiling_case_executor.h"
@@ -119,9 +120,9 @@ TEST_F(PointsInPolygonsTiling, tiling_case2_normal_small)
         tilingInfo.tilingData.get());
     EXPECT_EQ(td->outN, 4);
     EXPECT_EQ(td->outM, 2);
-    // UB 反推: tileM=32, tileN=240
-    EXPECT_EQ(td->tileN, 240);
-    EXPECT_EQ(td->tileM, 32);
+    // A small input needs one aligned tile, rather than a full-UB allocation.
+    EXPECT_EQ(td->tileN, 8);
+    EXPECT_EQ(td->tileM, 8);
     EXPECT_EQ(td->tileNTail, 4);
     EXPECT_EQ(td->tileMTail, 2);
     EXPECT_EQ(td->numTilesN, 1);
@@ -129,7 +130,7 @@ TEST_F(PointsInPolygonsTiling, tiling_case2_normal_small)
     EXPECT_EQ(td->totalTiles, 1u);
     EXPECT_EQ(td->perCoreCount, 1u);
     EXPECT_EQ(td->realCoreNum, 1u);
-    EXPECT_EQ(td->bufferSize, 30720u);
+    EXPECT_EQ(td->bufferSize, 256u);
 }
 
 // Branch-1 (NORMAL): N=1024, M=64 → tilingKey=1，多 tile 多核
@@ -157,16 +158,16 @@ TEST_F(PointsInPolygonsTiling, tiling_case3_normal_large)
         tilingInfo.tilingData.get());
     EXPECT_EQ(td->outN, 1024);
     EXPECT_EQ(td->outM, 64);
-    EXPECT_EQ(td->tileN, 240);
-    EXPECT_EQ(td->tileM, 32);
-    EXPECT_EQ(td->tileNTail, 64);
+    EXPECT_EQ(td->tileN, 24);
+    EXPECT_EQ(td->tileM, 64);
+    EXPECT_EQ(td->tileNTail, 16);
     EXPECT_EQ(td->tileMTail, 0);
-    EXPECT_EQ(td->numTilesN, 5);
-    EXPECT_EQ(td->numTilesM, 2);
-    EXPECT_EQ(td->totalTiles, 10u);
+    EXPECT_EQ(td->numTilesN, 43);
+    EXPECT_EQ(td->numTilesM, 1);
+    EXPECT_EQ(td->totalTiles, 43u);
     EXPECT_EQ(td->perCoreCount, 1u);
-    EXPECT_EQ(td->realCoreNum, 10u);
-    EXPECT_EQ(td->bufferSize, 30720u);
+    EXPECT_EQ(td->realCoreNum, 43u);
+    EXPECT_EQ(td->bufferSize, 6144u);
 }
 
 // Branch-2 (N_VEC): N=256, M=2 → tilingKey=2 (M<=16 且 N>=256)
@@ -196,10 +197,187 @@ TEST_F(PointsInPolygonsTiling, tiling_case4_nvec)
     EXPECT_EQ(td->outM, 2);
     EXPECT_EQ(td->tileN, 0);
     EXPECT_EQ(td->tileM, 0);
-    EXPECT_EQ(td->tileNVec, 7928);
-    EXPECT_EQ(td->numTilesNVec, 1);
-    EXPECT_EQ(td->totalTiles, 1u);
+    EXPECT_EQ(td->tileNVec, 64);
+    EXPECT_EQ(td->numTilesNVec, 4);
+    EXPECT_EQ(td->totalTiles, 4u);
     EXPECT_EQ(td->perCoreCount, 1u);
+    EXPECT_EQ(td->realCoreNum, 4u);
+    EXPECT_EQ(td->bufferSize, 512u);
+}
+
+// Match the kernel's actual InitBuffer allocations, including 32B alignment.
+TEST_F(PointsInPolygonsTiling, nvec_all_polygon_counts_fit_ub)
+{
+    for (int64_t m = 1; m <= 32; ++m) {
+        SCOPED_TRACE(m);
+        struct CompileInfo {
+        } compileInfo;
+        gert::TilingContextPara para("PointsInPolygons",
+                                     {{{{100000, 2}, {100000, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                      {{{8, m}, {8, m}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+                                     {{{{100000, m}, {100000, m}}, ge::DT_FLOAT, ge::FORMAT_ND}}, {}, &compileInfo,
+                                     "Ascend950", 48, 253952, 4096);
+        TilingInfo info;
+        ASSERT_TRUE(ExecuteTiling(para, info));
+        ASSERT_EQ(info.tilingKey, 2);
+        ASSERT_GE(info.tilingDataSize, sizeof(PointsInPolygonsTilingData));
+        const auto* td = reinterpret_cast<const PointsInPolygonsTilingData*>(info.tilingData.get());
+        ASSERT_GT(td->tileNVec, 0);
+        EXPECT_EQ(td->tileNVec % 8, 0);
+        auto align32 = [](uint64_t bytes) { return (bytes + 31) / 32 * 32; };
+        uint64_t used = align32(2 * td->tileNVec * 2 * sizeof(float)) + align32(8 * m * 2 * sizeof(float)) +
+                        align32(m * td->tileNVec * 2 * sizeof(float)) + 4 * align32(8);
+        EXPECT_LE(used, 253952u);
+        EXPECT_EQ(td->numTilesNVec, 100000 / td->tileNVec + (100000 % td->tileNVec != 0));
+        EXPECT_GE(td->totalTiles, td->realCoreNum);
+    }
+}
+
+TEST_F(PointsInPolygonsTiling, reject_negative_runtime_dimensions)
+{
+    for (int64_t bad : {-1, -2, -3}) {
+        for (int axis = 0; axis < 4; ++axis) {
+            SCOPED_TRACE(bad);
+            SCOPED_TRACE(axis);
+            const int64_t n = axis == 0 ? bad : 256;
+            const int64_t p = axis == 1 ? bad : 2;
+            const int64_t q = axis == 2 ? bad : 8;
+            const int64_t m = axis == 3 ? bad : 3;
+            struct CompileInfo {
+            } compileInfo;
+            gert::TilingContextPara para(
+                "PointsInPolygons",
+                {{{{n, p}, {n, p}}, ge::DT_FLOAT, ge::FORMAT_ND}, {{{q, m}, {q, m}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+                {{{{256, 3}, {256, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}}, {}, &compileInfo, "Ascend950", 48, 253952, 4096);
+            TilingInfo info;
+            EXPECT_FALSE(ExecuteTiling(para, info));
+        }
+    }
+}
+
+TEST_F(PointsInPolygonsTiling, reject_overflowing_tensor_sizes_and_dma_stride)
+{
+    constexpr int64_t maxElements = std::numeric_limits<int64_t>::max() / sizeof(float);
+    const int64_t shapes[][2] = {
+        {std::numeric_limits<int64_t>::max(), 3},
+        {256, std::numeric_limits<int64_t>::max()},
+        {maxElements / 3 + 1, 3}, // output bytes overflow while both inputs fit
+        {1, (1LL << 40) / sizeof(float)},
+    };
+    for (const auto& shape : shapes) {
+        SCOPED_TRACE(shape[0]);
+        SCOPED_TRACE(shape[1]);
+        struct CompileInfo {
+        } compileInfo;
+        gert::TilingContextPara para("PointsInPolygons",
+                                     {{{{shape[0], 2}, {shape[0], 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                      {{{8, shape[1]}, {8, shape[1]}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+                                     {{{{shape[0], shape[1]}, {shape[0], shape[1]}}, ge::DT_FLOAT, ge::FORMAT_ND}}, {},
+                                     &compileInfo, "Ascend950", 48, 253952, 4096);
+        TilingInfo info;
+        EXPECT_FALSE(ExecuteTiling(para, info));
+    }
+}
+
+TEST_F(PointsInPolygonsTiling, reject_insufficient_ub)
+{
+    for (int64_t n : {4, 256}) {
+        struct CompileInfo {
+        } compileInfo;
+        gert::TilingContextPara para(
+            "PointsInPolygons",
+            {{{{n, 2}, {n, 2}}, ge::DT_FLOAT, ge::FORMAT_ND}, {{{8, 3}, {8, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+            {{{{n, 3}, {n, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}}, {}, &compileInfo, "Ascend950", 48, 256, 4096);
+        TilingInfo info;
+        EXPECT_FALSE(ExecuteTiling(para, info));
+    }
+}
+
+// Check coverage and the kernel's aligned allocations across routing, VL and core-count boundaries.
+TEST_F(PointsInPolygonsTiling, balanced_tiles_cover_output_within_ub)
+{
+    for (uint32_t cores : {1u, 7u, 48u}) {
+        for (uint64_t ubSize : {16384u, 253952u}) {
+            for (int64_t n : {1, 7, 8, 9, 63, 64, 65, 255, 256, 257, 4095, 4096, 4097, 65536, 100000}) {
+                for (int64_t m : {1, 3, 8, 16, 17, 24, 31, 32, 33, 63, 64, 65, 257}) {
+                    SCOPED_TRACE(::testing::Message()
+                                 << "N=" << n << ", M=" << m << ", cores=" << cores << ", UB=" << ubSize);
+                    struct CompileInfo {
+                    } compileInfo;
+                    gert::TilingContextPara para("PointsInPolygons",
+                                                 {{{{n, 2}, {n, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{8, m}, {8, m}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+                                                 {{{{n, m}, {n, m}}, ge::DT_FLOAT, ge::FORMAT_ND}}, {}, &compileInfo,
+                                                 "Ascend950", cores, ubSize, 4096);
+                    TilingInfo info;
+                    ASSERT_TRUE(ExecuteTiling(para, info));
+                    ASSERT_GE(info.tilingDataSize, sizeof(PointsInPolygonsTilingData));
+                    const auto* td = reinterpret_cast<const PointsInPolygonsTilingData*>(info.tilingData.get());
+                    EXPECT_GT(td->realCoreNum, 0u);
+                    EXPECT_LE(td->realCoreNum, cores);
+                    EXPECT_GE(td->perCoreCount * td->realCoreNum, td->totalTiles);
+                    uint64_t used = 0;
+                    if ((m <= 16 && n >= 256) || (m <= 32 && n >= 4096)) {
+                        ASSERT_EQ(info.tilingKey, 2);
+                        ASSERT_GT(td->tileNVec, 0);
+                        EXPECT_EQ(td->tileNVec % 8, 0);
+                        EXPECT_GE(td->numTilesNVec * td->tileNVec, n);
+                        EXPECT_LT((td->numTilesNVec - 1) * td->tileNVec, n);
+                        used = 16 * td->tileNVec + 64 * m + 8 * m * td->tileNVec + 128;
+                    } else {
+                        ASSERT_EQ(info.tilingKey, 1);
+                        ASSERT_GT(td->tileN, 0);
+                        ASSERT_GT(td->tileM, 0);
+                        EXPECT_EQ(td->tileN % 8, 0);
+                        EXPECT_EQ(td->tileM % 8, 0);
+                        EXPECT_LE(td->tileM, 64);
+                        EXPECT_LE(td->tileN, 65535);
+                        EXPECT_GE(td->numTilesN * td->tileN, n);
+                        EXPECT_LT((td->numTilesN - 1) * td->tileN, n);
+                        EXPECT_GE(td->numTilesM * td->tileM, m);
+                        EXPECT_LT((td->numTilesM - 1) * td->tileM, m);
+                        used = 16 * td->tileN + 64 * td->tileM + 8 * td->tileN * td->tileM + 24 * 64 + 32;
+                    }
+                    EXPECT_LE(used, ubSize);
+                }
+            }
+        }
+    }
+}
+
+TEST_F(PointsInPolygonsTiling, nvec_balances_multiple_waves)
+{
+    struct CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara para(
+        "PointsInPolygons",
+        {{{{131072, 2}, {131072, 2}}, ge::DT_FLOAT, ge::FORMAT_ND}, {{{8, 16}, {8, 16}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{{{131072, 16}, {131072, 16}}, ge::DT_FLOAT, ge::FORMAT_ND}}, {}, &compileInfo, "Ascend950", 48, 253952, 4096);
+    TilingInfo info;
+    ASSERT_TRUE(ExecuteTiling(para, info));
+    ASSERT_GE(info.tilingDataSize, sizeof(PointsInPolygonsTilingData));
+    const auto* td = reinterpret_cast<const PointsInPolygonsTilingData*>(info.tilingData.get());
+    EXPECT_EQ(info.tilingKey, 2);
+    EXPECT_EQ(td->tileNVec, 1408);
+    EXPECT_EQ(td->numTilesNVec, 94);
+    EXPECT_EQ(td->perCoreCount, 2u);
+    EXPECT_EQ(td->realCoreNum, 47u);
+}
+
+TEST_F(PointsInPolygonsTiling, nvec_one_polygon_avoids_tiny_parallel_tiles)
+{
+    struct CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara para(
+        "PointsInPolygons",
+        {{{{256, 2}, {256, 2}}, ge::DT_FLOAT, ge::FORMAT_ND}, {{{8, 1}, {8, 1}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{{{256, 1}, {256, 1}}, ge::DT_FLOAT, ge::FORMAT_ND}}, {}, &compileInfo, "Ascend950", 48, 253952, 4096);
+    TilingInfo info;
+    ASSERT_TRUE(ExecuteTiling(para, info));
+    ASSERT_GE(info.tilingDataSize, sizeof(PointsInPolygonsTilingData));
+    const auto* td = reinterpret_cast<const PointsInPolygonsTilingData*>(info.tilingData.get());
+    EXPECT_EQ(info.tilingKey, 2);
+    EXPECT_EQ(td->tileNVec, 256);
+    EXPECT_EQ(td->totalTiles, 1u);
     EXPECT_EQ(td->realCoreNum, 1u);
-    EXPECT_EQ(td->bufferSize, 63424u);
 }

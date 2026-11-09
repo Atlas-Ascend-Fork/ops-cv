@@ -13,6 +13,8 @@
  * \brief PointsInPolygons host-side tiling for arch35 (Ascend 950)
  */
 
+#include <limits>
+
 #include "register/op_def_registry.h"
 #include "op_common/log/log.h"
 #include "op_common/op_host/util/platform_util.h"
@@ -76,12 +78,20 @@ static ge::graphStatus TilingFuncPointsInPolygons(gert::TilingContext* context)
     int64_t N = ptsDims.GetDim(0);
     int64_t M = plyDims.GetDim(1);
 
+    // Tiling consumes concrete runtime shapes; dynamic placeholders belong to InferShape.
+    if (N < 0 || M < 0 || ptsDims.GetDim(1) < 0 || plyDims.GetDim(0) < 0) {
+        OP_LOGE(opName, "runtime dimensions must be nonnegative");
+        return ge::GRAPH_FAILED;
+    }
     bool isEmpty = (N == 0 || M == 0);
 
     // N-vec 分支：M 较小且 N 足够大时沿 N 轴向量化，避免沿 M 向量化时 VL lane 浪费
     constexpr int64_t N_VEC_M_THRESHOLD = 16;
     constexpr int64_t N_VEC_N_THRESHOLD = 256;
-    bool useNVec = !isEmpty && (M <= N_VEC_M_THRESHOLD) && (N >= N_VEC_N_THRESHOLD);
+    constexpr int64_t N_VEC_WIDE_M_THRESHOLD = 32;
+    constexpr int64_t N_VEC_WIDE_N_THRESHOLD = 4096;
+    bool useNVec = !isEmpty && ((M <= N_VEC_M_THRESHOLD && N >= N_VEC_N_THRESHOLD) ||
+                                (M <= N_VEC_WIDE_M_THRESHOLD && N >= N_VEC_WIDE_N_THRESHOLD));
 
     if (!isEmpty) {
         if (ptsDims.GetDim(1) != 2) {
@@ -90,6 +100,22 @@ static ge::graphStatus TilingFuncPointsInPolygons(gert::TilingContext* context)
         }
         if (plyDims.GetDim(0) != 8) {
             OP_LOGE(opName, "shape_mismatch: polygons.shape[0] must be 8, got %ld", plyDims.GetDim(0));
+            return ge::GRAPH_FAILED;
+        }
+    }
+
+    if (!isEmpty) {
+        // All GM byte offsets must fit int64_t. Divide before multiplying so
+        // malformed metadata cannot overflow while checking its own size.
+        constexpr int64_t maxElements = std::numeric_limits<int64_t>::max() / sizeof(float);
+        // arch35 GM DMA row strides are encoded in 40 bits (in bytes).
+        constexpr int64_t maxRowElements = ((1LL << 40) - 1) / sizeof(float);
+        if (N > maxElements / 2 || M > maxElements / 8 || N > maxElements / M || M > maxRowElements) {
+            OP_LOGE(opName, "shape exceeds the supported tensor size or DMA stride range");
+            return ge::GRAPH_FAILED;
+        }
+        if (ubSize > std::numeric_limits<uint32_t>::max()) {
+            OP_LOGE(opName, "UB size exceeds the buffer size representation");
             return ge::GRAPH_FAILED;
         }
     }
@@ -153,6 +179,21 @@ static ge::graphStatus TilingFuncPointsInPolygons(gert::TilingContext* context)
         bufferSize = bout.bufferSize;
         launchCoreNum = bout.launchCoreNum;
         branchKey = POINTS_IN_POLYGONS_KEY_NORMAL;
+    }
+
+    if (!isEmpty) {
+        uint64_t requiredUb = 0;
+        if (useNVec) {
+            // Six double buffers plus the range flag; each small allocation is 32B aligned.
+            requiredUb = 8ULL * tileNVec * (M + 2) + 64ULL * M + 128;
+        } else {
+            const uint64_t scratch = tileM > 64 ? tileM : 64;
+            requiredUb = 16ULL * tileN + 64ULL * tileM + 8ULL * tileN * tileM + 24 * scratch + 32;
+        }
+        if (requiredUb > ubSize || (!useNVec && tileN > std::numeric_limits<uint16_t>::max())) {
+            OP_LOGE(opName, "tile exceeds the UB capacity or DMA block-count range");
+            return ge::GRAPH_FAILED;
+        }
     }
 
     PointsInPolygonsTilingData* td = context->GetTilingData<PointsInPolygonsTilingData>();
@@ -224,43 +265,32 @@ void ComputeBranch0Tiling(const Branch0Inputs& in, Branch0Outputs& out)
     out.tilingKey = POINTS_IN_POLYGONS_KEY_EMPTY;
 }
 
-static inline int64_t CeilDivI64(int64_t a, int64_t b) { return (a + b - 1) / b; }
+static inline int64_t CeilDivI64(int64_t a, int64_t b) { return a / b + (a % b != 0); }
 
-static inline uint64_t CeilDivU64(uint64_t a, uint64_t b) { return (a + b - 1) / b; }
+static inline uint64_t CeilDivU64(uint64_t a, uint64_t b) { return a / b + (a % b != 0); }
 
-// UB 双轴反推：固定 tileM，由单 tile UB 上界反解 tileN
-static void FindTileNM(uint64_t ubAvailableSingle, uint32_t sizeofT, uint32_t alignElems, int64_t* tileN,
-                       int64_t* tileM)
+// Use full vector rows and enough N tiles to occupy the available cores.
+static void FindTileNM(const Branch1Inputs& in, int64_t* tileN, int64_t* tileM)
 {
-    const int64_t coeffB0PerTileN = 2 * static_cast<int64_t>(sizeofT);
-    const int64_t coeffB1PerTileM = 8 * static_cast<int64_t>(sizeofT);
-    const int64_t coeffCalcPerNm = 4 * static_cast<int64_t>(sizeofT);
-
-    int64_t mUpper = static_cast<int64_t>(ubAvailableSingle / (4 * 8 * sizeofT));
-    int64_t candidateM = 32;
-    if (candidateM > mUpper) {
-        candidateM = mUpper;
-    }
-    if (candidateM < 1) {
-        candidateM = 1;
-    }
-    candidateM = (candidateM / static_cast<int64_t>(alignElems)) * static_cast<int64_t>(alignElems);
-    if (candidateM < 1) {
-        candidateM = 1;
-    }
-    *tileM = candidateM;
-
-    int64_t denom = coeffB0PerTileN + coeffCalcPerNm * (*tileM);
-    int64_t numer = static_cast<int64_t>(ubAvailableSingle) - coeffB1PerTileM * (*tileM);
-    int64_t candidateN = numer / denom;
-    if (candidateN < 1) {
-        candidateN = 1;
-    }
-    candidateN = (candidateN / static_cast<int64_t>(alignElems)) * static_cast<int64_t>(alignElems);
-    if (candidateN < 1) {
-        candidateN = 1;
-    }
-    *tileN = candidateN;
+    constexpr int64_t ALIGN_ELEMS = 8;
+    constexpr int64_t VECTOR_ELEMS = 64;
+    *tileM = ((in.M < VECTOR_ELEMS ? in.M : VECTOR_ELEMS) + ALIGN_ELEMS - 1) / ALIGN_ELEMS * ALIGN_ELEMS;
+    const uint64_t fixedBytes = 64 * (*tileM) + 24 * VECTOR_ELEMS + 32;
+    const uint64_t bytesPerPoint = 16 + 8 * (*tileM);
+    uint64_t nByUb = in.ubSize > fixedBytes ? (in.ubSize - fixedBytes) / bytesPerPoint : 0;
+    nByUb = nByUb / ALIGN_ELEMS * ALIGN_ELEMS;
+    const uint64_t mTiles = CeilDivI64(in.M, *tileM);
+    const uint64_t cores = in.coreNum == 0 ? 1 : in.coreNum;
+    const uint64_t nParts = cores / mTiles > 0 ? cores / mTiles : 1;
+    // Balance every wave, including cases whose N dimension cannot fit one tile per core.
+    const uint64_t capacity = nByUb >= ALIGN_ELEMS ? nByUb : ALIGN_ELEMS;
+    const uint64_t waves = CeilDivU64(CeilDivU64(in.N, capacity), nParts);
+    const uint64_t nByCores = (CeilDivU64(in.N, nParts * waves) + ALIGN_ELEMS - 1) / ALIGN_ELEMS * ALIGN_ELEMS;
+    uint64_t n = nByUb < nByCores ? nByUb : nByCores;
+    // NORMAL DataCopyPad's blockCount and VF row loop are uint16_t.
+    constexpr uint64_t MAX_TILE_N = 65528;
+    n = n < MAX_TILE_N ? n : MAX_TILE_N;
+    *tileN = n >= ALIGN_ELEMS ? n : ALIGN_ELEMS;
 }
 
 static void MultiCoreSplit(uint64_t totalTiles, uint32_t coreNum, uint64_t* perCoreCount, uint64_t* realCoreNum)
@@ -284,10 +314,7 @@ static void MultiCoreSplit(uint64_t totalTiles, uint32_t coreNum, uint64_t* perC
 void ComputeBranch1Tiling(const Branch1Inputs& in, Branch1Outputs& out)
 {
     constexpr uint32_t SIZEOF_FLOAT = 4;
-    constexpr uint32_t ALIGN_ELEMS = 8;
-
-    uint64_t ubAvailableSingle = in.ubSize / 2;
-    FindTileNM(ubAvailableSingle, SIZEOF_FLOAT, ALIGN_ELEMS, &out.tileN, &out.tileM);
+    FindTileNM(in, &out.tileN, &out.tileM);
 
     out.tileNTail = in.N % out.tileN;
     out.tileMTail = in.M % out.tileM;
@@ -307,17 +334,33 @@ void ComputeBranch2Tiling(const Branch2Inputs& in, Branch2Outputs& out)
     constexpr uint32_t SIZEOF_FLOAT = 4;
     constexpr uint32_t ALIGN_ELEMS = 8;
 
-    uint64_t ubAvailableSingle = in.ubSize / 2;
+    // B3/B4/B5 and maskBuf each occupy 32B after InitBuffer alignment.
+    constexpr uint64_t SMALL_BUFFER_BYTES = 4 * 32;
+    uint64_t ubAvailableSingle = in.ubSize > SMALL_BUFFER_BYTES ? (in.ubSize - SMALL_BUFFER_BYTES) / 2 : 0;
     int64_t fixedOverhead = in.M * 8 * SIZEOF_FLOAT;
     int64_t perTileN = (2 + in.M) * SIZEOF_FLOAT;
     int64_t numer = static_cast<int64_t>(ubAvailableSingle) - fixedOverhead;
     int64_t candidateN = numer / perTileN;
-    if (candidateN < 1) {
-        candidateN = 1;
+    if (candidateN < static_cast<int64_t>(ALIGN_ELEMS)) {
+        candidateN = ALIGN_ELEMS;
     }
     candidateN = (candidateN / static_cast<int64_t>(ALIGN_ELEMS)) * static_cast<int64_t>(ALIGN_ELEMS);
-    if (candidateN < 1) {
-        candidateN = 1;
+    if (candidateN < static_cast<int64_t>(ALIGN_ELEMS)) {
+        candidateN = ALIGN_ELEMS;
+    }
+    // Distribute each wave evenly rather than leaving cores idle after the UB cap.
+    constexpr int64_t VECTOR_ELEMS = 64;
+    int64_t cores = in.coreNum == 0 ? 1 : in.coreNum;
+    int64_t waves = CeilDivI64(CeilDivI64(in.N, candidateN), cores);
+    int64_t nByCores = CeilDivI64(in.N, cores * waves);
+    nByCores = CeilDivI64(nByCores, VECTOR_ELEMS) * VECTOR_ELEMS;
+    // One polygon is too little work to amortize splitting a tiny input across cores.
+    const int64_t minTileN = in.M == 1 ? 4 * VECTOR_ELEMS : VECTOR_ELEMS;
+    if (nByCores < minTileN) {
+        nByCores = minTileN;
+    }
+    if (candidateN > nByCores) {
+        candidateN = nByCores;
     }
     out.tileNVec = candidateN;
 

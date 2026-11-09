@@ -24,8 +24,10 @@ namespace ge {
 
 * @par Inputs:
 * @li points: A 2D Tensor with shape (N, 2), format ND, dtype must be float32. \n
-* @li polygons: A 2D Tensor with shape (M, 8), format ND, dtype must be float32.
-*     This parameter will be transposed to be (8, M) before passed to the operator. \n
+* @li polygons: A 2D Tensor with shape (8, M), format ND, dtype must be float32.
+*     Column j contains (x0, y0, x1, y1, x2, y2, x3, y3) for quadrilateral j.
+*     The caller must transpose row-wise (M, 8) data into contiguous (8, M) data
+*     before calling this operator. The operator does not transpose polygons. \n
 
 * @par Outputs:
 * @li output: A 2D Tensor with shape (N, M), format ND, dtype must be float32.  \n

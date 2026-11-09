@@ -18,14 +18,18 @@
 #include "points_in_polygons_tiling_data.h"
 #include "points_in_polygons_tiling_key.h"
 
-constexpr AscendC::Reg::DivSpecificMode kRayCastDivMode = {AscendC::Reg::MaskMergeMode::ZEROING, false,
-                                                           AscendC::DivAlgo::PRECISION_1ULP_FTZ_FALSE};
+// A 1 ULP quotient error can turn a strictly inside point into a boundary
+// point. Both coordinate-range paths require correctly rounded FP32 division.
+constexpr AscendC::Reg::DivSpecificMode kRayCastNonFtzDivMode = {AscendC::Reg::MaskMergeMode::ZEROING, false,
+                                                                 AscendC::DivAlgo::PRECISION_0ULP_FTZ_FALSE};
+constexpr AscendC::Reg::DivSpecificMode kRayCastNormalDivMode = {AscendC::Reg::MaskMergeMode::ZEROING, false,
+                                                                 AscendC::DivAlgo::PRECISION_0ULP_FTZ_TRUE};
 
 constexpr uint32_t VL_F32 = 64; // 256B / 4B = 64 elements per vector register
 
 // Nonzero coordinates in [2^-40, 2^40] have differences in [2^-64, 2^41].
-// Their quotient stays normal, so the original division is safe. Inspect bits
-// rather than float comparisons so subnormal inputs and signed zero are handled.
+// Their nonzero quotients stay normal, so FTZ division is safe in this range.
+// Inspect bits so subnormal coordinates and signed zero are handled correctly.
 template <typename T>
 __simd_vf__ inline void CheckCoordinateRangeVF(__ubuf__ T* points, __ubuf__ T* polygons, __ubuf__ uint32_t* flag,
                                                uint32_t pointStride, uint32_t curN, uint32_t polygonStride,
@@ -58,7 +62,8 @@ __simd_vf__ inline void CheckCoordinateRangeVF(__ubuf__ T* points, __ubuf__ T* p
         uint16_t loops = static_cast<uint16_t>((count + VL_F32 - 1U) / VL_F32);
         for (uint16_t j = 0; j < loops; ++j) {
             mask = UpdateMask<uint32_t>(remain);
-            LoadAlign(bits, reinterpret_cast<__ubuf__ uint32_t*>(addr) + j * VL_F32);
+            LoadAlign<uint32_t, DataCopyMode::DATA_BLOCK_COPY>(
+                bits, reinterpret_cast<__ubuf__ uint32_t*>(addr) + j * VL_F32, 1, mask);
             And(absBits, bits, signMask, mask);
             Compares<uint32_t, CMPMODE::LT>(small, absBits, kFastDivMinAbsCoordinateBits, mask);
             Compares<uint32_t, CMPMODE::NE>(nonzero, absBits, 0U, mask);
@@ -112,10 +117,15 @@ __simd_vf__ inline void RayCastComputeVF(__ubuf__ T* pxAddr, __ubuf__ T* pyAddr,
                 __ubuf__ T* ysKRow = polyBase + (uint32_t)(2 * k + 1) * tileM;
                 __ubuf__ T* xsNextRow = polyBase + (uint32_t)(2 * ((k + 1) % 4)) * tileM;
                 __ubuf__ T* ysNextRow = polyBase + (uint32_t)(2 * ((k + 1) % 4) + 1) * tileM;
-                AscendC::Reg::LoadAlign(vYsK, ysKRow + mOff);
-                AscendC::Reg::LoadAlign(vYsNext, ysNextRow + mOff);
-                AscendC::Reg::LoadAlign(vXsK, xsKRow + mOff);
-                AscendC::Reg::LoadAlign(vXsNext, xsNextRow + mOff);
+                // Predicate the load itself: tileM may be smaller than one full vector.
+                AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vYsK, ysKRow + mOff, 1,
+                                                                                            mask);
+                AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vYsNext, ysNextRow + mOff,
+                                                                                            1, mask);
+                AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vXsK, xsKRow + mOff, 1,
+                                                                                            mask);
+                AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vXsNext, xsNextRow + mOff,
+                                                                                            1, mask);
 
                 AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpMask1, vYsK, vPy, mask);
                 AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpMask2, vYsNext, vPy, mask);
@@ -126,9 +136,9 @@ __simd_vf__ inline void RayCastComputeVF(__ubuf__ T* pxAddr, __ubuf__ T* pyAddr,
                 AscendC::Reg::Compares<float, AscendC::CMPMODE::EQ>(cmpEq, vDy, 0.0f, mask);
                 AscendC::Reg::Select<float>(vSafeDy, vOne, vDy, cmpEq); // (dy==0)?1.0:dy
                 if constexpr (preserveSubnormals) {
-                    AscendC::Reg::Div<float, &kRayCastDivMode>(vT, vPyMinusYsK, vSafeDy, mask);
+                    AscendC::Reg::Div<float, &kRayCastNonFtzDivMode>(vT, vPyMinusYsK, vSafeDy, mask);
                 } else {
-                    AscendC::Reg::Div<float>(vT, vPyMinusYsK, vSafeDy, mask);
+                    AscendC::Reg::Div<float, &kRayCastNormalDivMode>(vT, vPyMinusYsK, vSafeDy, mask);
                 }
                 AscendC::Reg::Sub<float>(vDx, vXsNext, vXsK, mask);
                 AscendC::Reg::Mul<float>(vT, vT, vDx, mask);
@@ -202,8 +212,8 @@ __simd_vf__ inline void RayCastComputeVF_N(__ubuf__ T* pxAddr, __ubuf__ T* pyAdd
         mask = AscendC::Reg::UpdateMask<float>(rowRemain);
         uint32_t mOff = (uint32_t)j * VL_F32;
 
-        AscendC::Reg::LoadAlign(vPx, pxAddr + mOff);
-        AscendC::Reg::LoadAlign(vPy, pyAddr + mOff);
+        AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vPx, pxAddr + mOff, 1, mask);
+        AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vPy, pyAddr + mOff, 1, mask);
 
         AscendC::Reg::Duplicate(vCount, 0.0f);
         AscendC::Reg::Duplicate(vOnBoundary, 0.0f);
@@ -229,9 +239,9 @@ __simd_vf__ inline void RayCastComputeVF_N(__ubuf__ T* pxAddr, __ubuf__ T* pyAdd
             AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vDy, vZero, mask);
             AscendC::Reg::Select<float>(vSafeDy, vOne, vDy, cmpEq);
             if constexpr (preserveSubnormals) {
-                AscendC::Reg::Div<float, &kRayCastDivMode>(vT, vPyMinusSyK, vSafeDy, mask);
+                AscendC::Reg::Div<float, &kRayCastNonFtzDivMode>(vT, vPyMinusSyK, vSafeDy, mask);
             } else {
-                AscendC::Reg::Div<float>(vT, vPyMinusSyK, vSafeDy, mask);
+                AscendC::Reg::Div<float, &kRayCastNormalDivMode>(vT, vPyMinusSyK, vSafeDy, mask);
             }
             AscendC::Reg::Sub<float>(vDx, vTxNext, vSxK, mask);
             AscendC::Reg::Mul<float>(vT, vT, vDx, mask);

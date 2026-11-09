@@ -36,6 +36,8 @@ Two supplementary conventions apply to the formula above:
 - Boundary priority: if a point falls on any edge or any vertex of a quadrilateral, the point is on the boundary, the output is directly set to `0.0`, and the parity of the intersection count is no longer used for the determination.
 - Crossing condition: the operator computes `x_intersect_k` and counts an intersection only for an edge whose two y coordinates cross py (that is, an edge satisfying `(y_k > py) ≠ (y_{k+1} > py)`). A horizontal edge (`y_{k+1} = y_k`) does not satisfy the crossing condition, so the operator skips the intersection calculation and division by zero never occurs.
 
+Boundary comparisons use exact float32 equality without an epsilon. Very close points can differ from a float64 geometric reference because coordinate differences, division, multiplication and addition round in float32. Ray intersections use correctly rounded float32 division, including the subnormal path.
+
 ## Parameter Description
 
 - **Parameter description**:
@@ -84,14 +86,14 @@ Two supplementary conventions apply to the formula above:
 
 ## Constraints
 
-- The data types of points and polygons must both be FLOAT, and other data types are not supported.
-- The data formats of points, polygons, and output must all be ND.
-- The ranks of points and polygons must both be 2; for non-empty tensors, the 1st dimension of points must be fixed to 2, and the 0th dimension of polygons must be fixed to 8.
-- The shape of output must be (N,M), where N = points.shape[0] and M = polygons.shape[1]; N and M are independent and have no broadcast relationship.
-- Empty tensors are supported: when N = 0 or M = 0, output is an empty tensor (the number of elements is 0), the interface does not report an error and returns directly.
+- Inputs and output support FLOAT (float32) in ND format only.
+- points and polygons must both be rank 2. All actual input dimensions must be nonnegative.
+- output.shape=(N,M), where N=points.shape[0] and M=polygons.shape[1].
+- When both N and M are nonzero, points.shape[1] must be 2 and polygons.shape[0] must be 8. When N=0 or M=0, return an empty output and skip these two dimension checks.
+- For membership computation, polygons must use contiguous (8,M) layout, with one quadrilateral per column. Transpose row-wise (M,8) data and make it contiguous before invocation.
 
 ## Invocation Description
 
 | Invocation Method | Sample Code | Description |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| Graph mode | [test_geir_points_in_polygons](examples/arch35/test_geir_points_in_polygons.cpp) | Call the PointsInPolygons operator by building a graph through [operator IR](op_graph/points_in_polygons_proto.h). |
+| GE graph mode | [test_geir_points_in_polygons](examples/arch35/test_geir_points_in_polygons.cpp) | Call the PointsInPolygons operator by building a graph through [operator IR](op_graph/points_in_polygons_proto.h). |
