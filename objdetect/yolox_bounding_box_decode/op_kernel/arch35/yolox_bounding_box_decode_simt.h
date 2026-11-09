@@ -55,6 +55,18 @@ __simt_callee__ inline float ComputeFp32HalfExtent(float logExtent, float expExt
     return expExtent * stride * HALF_EXTENT_SCALE;
 }
 
+// Align the near-zero FP32 exp plateau across platforms.
+// A one-ULP difference here can overflow exp * stride and change Inf/NaN results.
+static constexpr float FP32_EXP_ONE_MAX_INPUT = 0x1.62e42ep-24f; // bits 0x33b17217
+
+__simt_callee__ inline float ComputeFp32Exp(float x)
+{
+    if (x >= 0.0f && x <= FP32_EXP_ONE_MAX_INPUT) {
+        return 1.0f;
+    }
+    return expf(x);
+}
+
 // LocalMemAllocator 的分配字节数必须按 32B 对齐。
 __aicore__ inline int64_t AlignAllocN(int64_t n, int64_t elemSize)
 {
@@ -109,8 +121,8 @@ __simt_callee__ inline void ComputeBox(uint64_t idx, uint64_t boxNum, uint64_t d
         ew = (half)expf((float)dw);
         eh = (half)expf((float)dh);
     } else {
-        ew = expf(dw);
-        eh = expf(dh);
+        ew = ComputeFp32Exp(dw);
+        eh = ComputeFp32Exp(dh);
     }
     T w2;
     T h2;

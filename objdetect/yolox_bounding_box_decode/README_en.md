@@ -56,7 +56,7 @@ $$
     <tr>
       <td>priors</td>
       <td>Input</td>
-      <td>Prior box information, with shape (N, 4). Each row is [center_x, center_y, width, height].</td>
+      <td>Prior box information, with shape (N, 4). Each row is [offset_x, offset_y, scale_x, scale_y]. The first two values are center offsets, and the last two are scale factors applied to dx/dy and exp(dw/dh).</td>
       <td>FLOAT16, FLOAT</td>
       <td>ND</td>
     </tr>

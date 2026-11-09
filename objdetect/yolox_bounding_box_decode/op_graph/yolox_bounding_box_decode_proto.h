@@ -29,8 +29,9 @@ namespace ge {
 *@brief Decodes predicted bounding boxes based on the YOLOX decode formula.
 *@par Inputs:
 *Two inputs, including:
-* @li priors: A Tensor of shape (N, 4), indicating the center_x, center_y, width and height
-*of the prior boxes. Must be one of the following types: float16, float32.
+* @li priors: A Tensor of shape (N, 4), with each row [offset_x, offset_y, scale_x, scale_y].
+*The first two values are center offsets. The last two scale the predicted center offsets and
+*the exponentiated width and height. Must be one of the following types: float16, float32.
 * @li bboxes: A Tensor of shape (B, N, 4), indicating the predicted offsets. Must be one of the
 *following types: float16, float32. \n
 

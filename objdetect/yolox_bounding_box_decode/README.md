@@ -54,7 +54,7 @@ $$
     <tr>
       <td>priors</td>
       <td>输入</td>
-      <td>先验框信息，shape为(N, 4)，每行为[center_x, center_y, width, height]。</td>
+      <td>先验框信息，shape为(N, 4)，每行为[offset_x, offset_y, scale_x, scale_y]。前两列为中心偏移，后两列为缩放因子，用于缩放dx/dy及exp(dw/dh)。</td>
       <td>FLOAT16、FLOAT</td>
       <td>ND</td>
     </tr>
