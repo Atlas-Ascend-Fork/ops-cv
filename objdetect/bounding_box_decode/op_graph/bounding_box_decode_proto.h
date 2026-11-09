@@ -39,10 +39,14 @@ namespace ge {
 *@li stds: An index of type float32. Defaults to [1.0, 1.0, 1.0, 1.0].
 * "deltas" = "deltas" x "stds" + "means".
 *@li max_shape: Shape [h, w], specifying the size of the image transferred to
-* the network. Used to ensure that the bbox shape after conversion does not
-* exceed "max_shape".
-*@li wh_ratio_clip: Defaults to "16/1000". The values of "dw" and "dh" fall
-* within (-wh_ratio_clip, wh_ratio_clip) . \n
+* the network. Decoded bbox coordinates are clipped to [0, w-1] / [0, h-1]
+* (last valid pixel), consistent with the CANN built-in TBE baseline
+* (clamp_result: 0 <= x <= max_shape[1] - 1).
+*@li wh_ratio_clip: Defaults to "16/1000". Must be positive. The
+* de-standardized "dw" and "dh" are clamped to
+* [-|ln(wh_ratio_clip)|, +|ln(wh_ratio_clip)|] before the exponential,
+* consistent with the CANN built-in TBE baseline (clamp_denorm_detal);
+* the default 0.016 corresponds to a clamp threshold of about 4.1352. \n
 
 *@par Outputs:
 *bboxes: Bboxes generated based on "rois" and "deltas". Have the same format

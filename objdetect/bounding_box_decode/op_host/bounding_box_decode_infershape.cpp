@@ -11,9 +11,12 @@
 #include "register/op_impl_registry.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
+#include "error_report_util.h"
 #include "graph/types.h"
+#include "log/log.h"
 
 using namespace ge;
 
@@ -42,6 +45,9 @@ ge::graphStatus InferShapeForBoundingBoxDecode(gert::InferShapeContext* context)
     const gert::Shape* deltasShape = context->GetInputShape(1);
     gert::Shape* boxesShape = context->GetOutputShape(0);
     if (anchorShape == nullptr || deltasShape == nullptr || boxesShape == nullptr) {
+        error_report::ReportInferShapeStageError(
+            context->GetNodeName(),
+            "rois/deltas/bboxes shape is null in the infershape context; check the InferShapeContext construction");
         return GRAPH_FAILED;
     }
 
@@ -53,9 +59,16 @@ ge::graphStatus InferShapeForBoundingBoxDecode(gert::InferShapeContext* context)
 
     const size_t rank = anchorShape->GetDimNum();
     if (rank != 2 || deltasShape->GetDimNum() != 2) {
+        const std::string rankMsg = std::to_string(rank) + " and " + std::to_string(deltasShape->GetDimNum());
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(context->GetNodeName(), "rois and deltas", rankMsg.c_str(),
+                                                  "the rank of rois and deltas must be 2");
         return GRAPH_FAILED;
     }
     if (anchorShape->GetDim(1) != 4 || deltasShape->GetDim(1) != 4) {
+        const std::string lastDimMsg = std::to_string(anchorShape->GetDim(1)) + " and " +
+                                       std::to_string(deltasShape->GetDim(1));
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(context->GetNodeName(), "rois and deltas", lastDimMsg.c_str(),
+                                                  "the last dimension of rois and deltas must be 4");
         return GRAPH_FAILED;
     }
 
@@ -63,6 +76,9 @@ ge::graphStatus InferShapeForBoundingBoxDecode(gert::InferShapeContext* context)
     const int64_t anchorN = anchorShape->GetDim(0);
     const int64_t deltasN = deltasShape->GetDim(0);
     if (anchorN != deltasN && anchorN != ge::UNKNOWN_DIM && deltasN != ge::UNKNOWN_DIM) {
+        const std::string nMsg = std::to_string(anchorN) + " and " + std::to_string(deltasN);
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(context->GetNodeName(), "rois and deltas", nMsg.c_str(),
+                                                  "the first dimension (N) of rois and deltas must be the same");
         return GRAPH_FAILED;
     }
 

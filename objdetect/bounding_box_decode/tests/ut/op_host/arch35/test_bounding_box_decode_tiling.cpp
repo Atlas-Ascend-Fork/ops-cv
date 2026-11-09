@@ -55,7 +55,7 @@ TEST_F(BoundingBoxDecodeTiling, bbd_fp32_normal)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 0;
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey,
-                    "8 1 512 1 5280 1 512 1 8 0 0 4575657222473777152 4575657222473777152 768 1280 ", {0});
+                    "8 1 512 1 5248 1 512 1 8 0 0 4575657222473777152 4575657222473777152 768 1280 1082413897 ", {0});
 }
 
 TEST_F(BoundingBoxDecodeTiling, bbd_fp16_normal)
@@ -83,7 +83,7 @@ TEST_F(BoundingBoxDecodeTiling, bbd_fp16_normal)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 1;
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey,
-                    "8 1 512 1 4512 1 512 1 8 0 0 4575657222473777152 4575657222473777152 768 1280 ", {0});
+                    "8 1 512 1 4480 1 512 1 8 0 0 4575657222473777152 4575657222473777152 768 1280 1082413897 ", {0});
 }
 
 TEST_F(BoundingBoxDecodeTiling, bbd_fp32_empty)
@@ -111,7 +111,7 @@ TEST_F(BoundingBoxDecodeTiling, bbd_fp32_empty)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 0;
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey,
-                    "0 1 0 1 0 0 0 0 0 0 0 4575657222473777152 4575657222473777152 768 1280 ", {0});
+                    "0 1 0 1 0 0 0 0 0 0 0 4575657222473777152 4575657222473777152 768 1280 1082413897 ", {0});
 }
 
 TEST_F(BoundingBoxDecodeTiling, bbd_fp16_empty)
@@ -139,7 +139,7 @@ TEST_F(BoundingBoxDecodeTiling, bbd_fp16_empty)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 1;
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey,
-                    "0 1 0 1 0 0 0 0 0 0 0 4575657222473777152 4575657222473777152 768 1280 ", {0});
+                    "0 1 0 1 0 0 0 0 0 0 0 4575657222473777152 4575657222473777152 768 1280 1082413897 ", {0});
 }
 
 TEST_F(BoundingBoxDecodeTiling, bbd_fp32_non_default_attr)
@@ -167,8 +167,8 @@ TEST_F(BoundingBoxDecodeTiling, bbd_fp32_non_default_attr)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 0;
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey,
-                    "16 1 512 1 5280 1 512 1 16 -4575657218178809856 -4647714812233515008 4453159313439771853 "
-                    "4489188110467124429 1080 1920 ",
+                    "16 1 512 1 5248 1 512 1 16 -4575657218178809856 -4647714812233515008 4453159313439771853 "
+                    "4489188110467124429 1080 1920 1024029396 ",
                     {0});
 }
 
@@ -197,7 +197,9 @@ TEST_F(BoundingBoxDecodeTiling, bbd_fp32_large_multicore)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 0;
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey,
-                    "100000 49 2048 49 5280 1 2048 1 1696 0 0 4575657222473777152 4575657222473777152 1080 1920 ", {0});
+                    "100000 49 2048 49 5248 1 2048 1 1696 0 0 4575657222473777152 4575657222473777152 1080 1920 "
+                    "1082413897 ",
+                    {0});
 }
 
 TEST_F(BoundingBoxDecodeTiling, bbd_fp16_nonaligned)
@@ -225,7 +227,7 @@ TEST_F(BoundingBoxDecodeTiling, bbd_fp16_nonaligned)
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 1;
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey,
-                    "33 1 512 1 4512 1 512 1 33 0 0 4575657222473777152 4575657222473777152 768 1280 ", {0});
+                    "33 1 512 1 4480 1 512 1 33 0 0 4575657222473777152 4575657222473777152 768 1280 1082413897 ", {0});
 }
 
 TEST_F(BoundingBoxDecodeTiling, bbd_invalid_rank1)
@@ -356,4 +358,199 @@ TEST_F(BoundingBoxDecodeTiling, bbd_invalid_dtype_mismatch)
         },
         &compileInfo, "Ascend950", 64, 262144, 4096);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+// N=-1（未解析动态维）应被 PreCheck N 值域校验拒绝，而非进入 blockFormer 除零路径
+TEST_F(BoundingBoxDecodeTiling, bbd_invalid_negative_n)
+{
+    struct BoundingBoxDecodeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "BoundingBoxDecode",
+        {
+            {{{-1, 4}, {-1, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{-1, 4}, {-1, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{-1, 4}, {-1, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::TilingContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+            gert::TilingContextPara::OpAttr("max_shape",
+                                            Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({768, 1280})),
+            gert::TilingContextPara::OpAttr("wh_ratio_clip", Ops::Cv::AnyValue::CreateFrom<float>(0.016f)),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+// N=2^62 超出 fp32 安全上界 INT64_MAX/(4×4×8)=2^56-1，应拒绝（防止元素数 int64 溢出回绕）
+TEST_F(BoundingBoxDecodeTiling, bbd_invalid_huge_n)
+{
+    struct BoundingBoxDecodeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "BoundingBoxDecode",
+        {
+            {{{4611686018427387904, 4}, {4611686018427387904, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4611686018427387904, 4}, {4611686018427387904, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{4611686018427387904, 4}, {4611686018427387904, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::TilingContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+            gert::TilingContextPara::OpAttr("max_shape",
+                                            Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({768, 1280})),
+            gert::TilingContextPara::OpAttr("wh_ratio_clip", Ops::Cv::AnyValue::CreateFrom<float>(0.016f)),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+// wh_ratio_clip=0 违反 >0 约束，应拒绝
+TEST_F(BoundingBoxDecodeTiling, bbd_invalid_wh_ratio_clip_zero)
+{
+    struct BoundingBoxDecodeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "BoundingBoxDecode",
+        {
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::TilingContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+            gert::TilingContextPara::OpAttr("max_shape",
+                                            Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({768, 1280})),
+            gert::TilingContextPara::OpAttr("wh_ratio_clip", Ops::Cv::AnyValue::CreateFrom<float>(0.0f)),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+// wh_ratio_clip<0 违反 >0 约束，应拒绝
+TEST_F(BoundingBoxDecodeTiling, bbd_invalid_wh_ratio_clip_negative)
+{
+    struct BoundingBoxDecodeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "BoundingBoxDecode",
+        {
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::TilingContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+            gert::TilingContextPara::OpAttr("max_shape",
+                                            Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({768, 1280})),
+            gert::TilingContextPara::OpAttr("wh_ratio_clip", Ops::Cv::AnyValue::CreateFrom<float>(-0.5f)),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+// stds 含 0 元素违反非零约束，应拒绝
+TEST_F(BoundingBoxDecodeTiling, bbd_invalid_stds_zero)
+{
+    struct BoundingBoxDecodeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "BoundingBoxDecode",
+        {
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::TilingContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 0.0f, 1.0f})),
+            gert::TilingContextPara::OpAttr("max_shape",
+                                            Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({768, 1280})),
+            gert::TilingContextPara::OpAttr("wh_ratio_clip", Ops::Cv::AnyValue::CreateFrom<float>(0.016f)),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+// max_shape 长度 != 2 应拒绝
+TEST_F(BoundingBoxDecodeTiling, bbd_invalid_max_shape_len)
+{
+    struct BoundingBoxDecodeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "BoundingBoxDecode",
+        {
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::TilingContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+            gert::TilingContextPara::OpAttr("max_shape",
+                                            Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({768, 1280, 3})),
+            gert::TilingContextPara::OpAttr("wh_ratio_clip", Ops::Cv::AnyValue::CreateFrom<float>(0.016f)),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+// fp16 大 N 多 tile 切分：N=300000 → coreNum=min(586,64)=64，blockFormer=AlignUp(4688,512)=5120 >
+// ubFormer(4480)，覆盖 ubLoop=2 的跨 tile 路径；blockNum=59 反向收敛 coreNum=59（空闲核裁剪）；
+// ubFormer 为 64 的倍数（VF 物理访问粒度对齐，SAFE.01/1、SAFE.02/1 修复的回归见证）
+TEST_F(BoundingBoxDecodeTiling, bbd_fp16_multitile_align64)
+{
+    struct BoundingBoxDecodeCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "BoundingBoxDecode",
+        {
+            {{{300000, 4}, {300000, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+            {{{300000, 4}, {300000, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        {
+            {{{300000, 4}, {300000, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::TilingContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+            gert::TilingContextPara::OpAttr("max_shape",
+                                            Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({768, 1280})),
+            gert::TilingContextPara::OpAttr("wh_ratio_clip", Ops::Cv::AnyValue::CreateFrom<float>(0.016f)),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    uint64_t expectTilingKey = 1;
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey,
+                    "300000 59 5120 59 4480 2 640 1 3040 0 0 4575657222473777152 4575657222473777152 768 1280 "
+                    "1082413897 ",
+                    {0});
 }

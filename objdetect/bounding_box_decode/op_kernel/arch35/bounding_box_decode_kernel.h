@@ -87,14 +87,16 @@ __simd_vf__ inline void AnchorPreVF(__ubuf__ float* pwOut, __ubuf__ float* pcxOu
 }
 
 // =========================================================================
-// VF 2: DeltaDeStdVF — dx=dLo*stdsLo+meansLo, dw=dHi*stdsHi+meansHi
+// VF 2: DeltaDeStdVF — dx=dLo*stdsLo+meansLo, dw=clamp(dHi*stdsHi+meansHi, ±whMaxRatio)
 //   Loads T from channel-contiguous dChLo/dChHi (fp16 upcast), stores fp32
 //   dx/dw. DESIGN §5.2 S3b/S3g.
+//   dw/dh 裁剪对齐 A2 基线 canndev tbe clamp_denorm_detal（主链无条件调用）：
+//   whMaxRatio = |ln(wh_ratio_clip)| 由 Host 预计算经 TilingData 下发。
 // =========================================================================
 template <typename T>
 __simd_vf__ inline void DeltaDeStdVF(__ubuf__ float* dxOut, __ubuf__ float* dwOut, __ubuf__ T* dChLo, __ubuf__ T* dChHi,
-                                     float stdsLo, float stdsHi, float meansLo, float meansHi, uint32_t count,
-                                     uint16_t repeatTime)
+                                     float stdsLo, float stdsHi, float meansLo, float meansHi, float whMaxRatio,
+                                     uint32_t count, uint16_t repeatTime)
 {
     uint32_t remaining = count;
     for (uint16_t i = 0; i < repeatTime; ++i) {
@@ -115,6 +117,17 @@ __simd_vf__ inline void DeltaDeStdVF(__ubuf__ float* dxOut, __ubuf__ float* dwOu
         AscendC::Reg::Adds<float>(dx, dx, meansLo, mask);
         AscendC::Reg::Muls<float>(dw, dHi, stdsHi, mask);
         AscendC::Reg::Adds<float>(dw, dw, meansHi, mask);
+        // A2 基线 clamp_denorm_detal：dw = min(dw, +whMaxRatio) 后 max(dw, -whMaxRatio)。
+        // 采用张量 Compare+Select（与 BoxClipVF 同款原语）；NaN 比较恒假 → NaN 原样透传，
+        // 与既有 NaN 处理路径（BoxClipVF 收敛）保持一致。
+        AscendC::Reg::MaskReg gtMask, ltMask;
+        AscendC::Reg::RegTensor<float> hiReg, loReg;
+        AscendC::Reg::Duplicate<float>(hiReg, whMaxRatio);
+        AscendC::Reg::Duplicate<float>(loReg, -whMaxRatio);
+        AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(gtMask, dw, hiReg, mask);
+        AscendC::Reg::Select(dw, hiReg, dw, gtMask);
+        AscendC::Reg::Compare<float, AscendC::CMPMODE::LT>(ltMask, dw, loReg, mask);
+        AscendC::Reg::Select(dw, loReg, dw, ltMask);
         AscendC::Reg::StoreAlign(dxOut + off, dx, mask);
         AscendC::Reg::StoreAlign(dwOut + off, dw, mask);
     }
@@ -345,11 +358,13 @@ private:
 
         // ===== Compute: x-chain (ch0,ch2) then y-chain (ch1,ch3) =====
         // clip 上界为 max_shape-1（最后有效像素），与 CANN 内置 BoundingBoxDecode
-        // (tbe clamp_result: 0<=x<=max_shape[1]-1) 及 CheckValid(x<=W*r-1) 语义闭合
+        // (tbe clamp_result: 0<=x<=max_shape[1]-1) 及 CheckValid(x<=W*r-1) 语义闭合。
+        // int64 域先减 1 再转 fp32（与 A2 基线 Python 整数运算一致）：若先转 float 再减
+        // 1.0f，奇数 W>2^24（如 16777217）会因舍入使上界再小 1。
         ProcessAxis(boxCount, 0, 2, td_->stds[0], td_->stds[2], td_->means[0], td_->means[2],
-                    static_cast<float>(td_->maxShapeW) - 1.0f);
+                    static_cast<float>(td_->maxShapeW - 1));
         ProcessAxis(boxCount, 1, 3, td_->stds[1], td_->stds[3], td_->means[1], td_->means[3],
-                    static_cast<float>(td_->maxShapeH) - 1.0f);
+                    static_cast<float>(td_->maxShapeH - 1));
 
         // ===== CopyOut: 2D stride scatter, 4 channels → GM [N,4] =====
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(0);
@@ -407,8 +422,9 @@ private:
 
         // S3a/S3f: anchor preprocess → pw, pcx
         asc_vf_call<AnchorPreVF<T>>(pwOut, pcxOut, aChLo, aChHi, count, rep);
-        // S3b/S3g: deltas de-standardize → dx, dw
-        asc_vf_call<DeltaDeStdVF<T>>(dxOut, dwOut, dChLo, dChHi, stdsLo, stdsHi, meansLo, meansHi, count, rep);
+        // S3b/S3g: deltas de-standardize + A2 基线 wh_ratio 裁剪（dw/dh → ±whMaxRatio）→ dx, dw
+        asc_vf_call<DeltaDeStdVF<T>>(dxOut, dwOut, dChLo, dChHi, stdsLo, stdsHi, meansLo, meansHi, td_->whMaxRatio,
+                                     count, rep);
         // S3c/S3h: decode gw, gx (reads pw,pcx,dx,dw; writes gw,gx)
         asc_vf_call<DecodeGwGxVF<T>>(gwIn, gxIn, pwOut, pcxOut, dxOut, dwOut, count, rep);
         // S3d: ox1/oy1 = clip(gx - gw*0.5 + 0.5, 0, clipHi) → B_boxes chLo

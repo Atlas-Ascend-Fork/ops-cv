@@ -12,7 +12,10 @@
 import numpy as np
 import torch
 
-__spec__ = {"bounding_box_decode": "BoundingBoxDecodeTestSpec"}
+__spec__ = {
+    "bounding_box_decode": "BoundingBoxDecodeTestSpec",
+    "BoundingBoxDecode": "BoundingBoxDecodeTestSpec",
+}
 
 
 class BoundingBoxDecodeTestSpec:
@@ -57,6 +60,13 @@ class BoundingBoxDecodeTestSpec:
         dw = dw_in * stds[2] + means[2]
         dh = dh_in * stds[3] + means[3]
 
+        # A2 基线 canndev tbe clamp_denorm_detal：反标准化后 dw/dh 裁剪到
+        # ±|ln(wh_ratio_clip)| 再进入 exp（默认 0.016 → ±4.1352）。
+        # torch.clamp 对 NaN 原样传播，与 kernel 的 NaN 处理路径一致。
+        max_ratio = abs(float(np.log(float(wh_ratio_clip))))
+        dw = torch.clamp(dw, -max_ratio, max_ratio)
+        dh = torch.clamp(dh, -max_ratio, max_ratio)
+
         gw = pw * torch.exp(dw)
         gh = ph * torch.exp(dh)
         gx = pcx + pw * dx
@@ -97,6 +107,8 @@ class BoundingBoxDecodeTestSpec:
             self.clip_w = self.max_w - 1.0
             self.means = [float(v) for v in means]
             self.stds = [float(v) for v in stds]
+            # A2 基线 clamp_denorm_detal 阈值：|ln(wh_ratio_clip)|
+            self.wh_max_ratio = abs(float(np.log(float(wh_ratio_clip))))
 
         def __call__(self, anchor_box, deltas, **kwargs):
             a = anchor_box.to(torch.float32)
@@ -114,6 +126,10 @@ class BoundingBoxDecodeTestSpec:
             dy = dy_in * self.stds[1] + self.means[1]
             dw = dw_in * self.stds[2] + self.means[2]
             dh = dh_in * self.stds[3] + self.means[3]
+
+            # A2 基线 clamp_denorm_detal：dw/dh 裁剪到 ±|ln(wh_ratio_clip)|
+            dw = torch.clamp(dw, -self.wh_max_ratio, self.wh_max_ratio)
+            dh = torch.clamp(dh, -self.wh_max_ratio, self.wh_max_ratio)
 
             gw = pw * torch.exp(dw)
             gh = ph * torch.exp(dh)
@@ -142,6 +158,6 @@ class BoundingBoxDecodeTestSpec:
     }
 
     tolerance = {
-        "float32": {"standard": "stat_rel_err"},
-        "float16": {"standard": "stat_rel_err"},
+        "float32": {"standard": "cross_check", "level": "L1"},
+        "float16": {"standard": "cross_check", "level": "L1"},
     }

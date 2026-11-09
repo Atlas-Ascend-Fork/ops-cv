@@ -115,7 +115,7 @@ The y dimension (y1, y2) follows the same rule, and the clipping upper bound is 
 - The dtypes of rois and deltas must be the same.
 - The lengths of means and stds must be 4, and no element of stds can be 0.
 - The length of max_shape must be 2.
-- wh_ratio_clip must be greater than 0. It does not participate in the core decoding formula currently, and is used only for input parameter validation.
+- wh_ratio_clip must be greater than 0. The de-standardized dw and dh are clamped to [-|ln(wh_ratio_clip)|, +|ln(wh_ratio_clip)|] before the exponential computation (consistent with the CANN built-in TBE baseline clamp_denorm_detal); the default value 0.016 corresponds to a clamp threshold of about 4.1352.
 - Only the ND data format is supported for the input.
 
 ## Invocation Description
@@ -136,8 +136,10 @@ The y dimension (y1, y2) follows the same rule, and the clipping upper bound is 
 <tbody>
 <tr>
 <td>GE graph mode</td>
-<td>-</td>
 <td><a href="examples/arch35/test_geir_bounding_box_decode.cpp">test_geir_bounding_box_decode.cpp</a></td>
+<td>Calls the BoundingBoxDecode operator by constructing a graph through the <a href="op_graph/bounding_box_decode_proto.h">operator IR</a>. The IR registration names are rois/deltas/bboxes; see the parameter description for the mapping to the parameter table in this document. For compilation and verification, refer to [Operator Invocation](../../docs/zh/invocation/quick_op_invocation.md). The sample is located in `examples/arch35`. For compilation and running, you must explicitly specify `--soc=ascend950` (for example, `bash build.sh --run_example bounding_box_decode graph --soc=ascend950`).</td>
 </tr>
 </tbody>
 </table>
+
+- This operator is registered in GE graph mode. The custom package is built with `ACLNNTYPE aclnn_exclude` and does not generate the `aclnnBoundingBoxDecode` API; therefore, no aclnn (eager mode) example is provided.

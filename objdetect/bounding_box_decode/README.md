@@ -113,7 +113,7 @@ y维度（y1、y2）同理，裁剪上界为H-1。裁剪上界取最后有效像
 - rois与deltas的dtype必须一致。
 - means与stds长度必须为4，stds各元素不能为0。
 - max_shape长度必须为2。
-- wh_ratio_clip必须大于0，当前不参与核心解码公式，仅做入参校验。
+- wh_ratio_clip必须大于0；反标准化后的dw、dh在进入指数运算前会被裁剪到[-|ln(wh_ratio_clip)|, +|ln(wh_ratio_clip)|]（与CANN内置TBE基线clamp_denorm_detal一致），默认值0.016对应裁剪阈值约4.1352。
 - 输入仅支持ND数据格式。
 
 ## 调用说明
@@ -134,8 +134,10 @@ y维度（y1、y2）同理，裁剪上界为H-1。裁剪上界取最后有效像
 <tbody>
 <tr>
 <td>GE图模式</td>
-<td>-</td>
 <td><a href="examples/arch35/test_geir_bounding_box_decode.cpp">test_geir_bounding_box_decode.cpp</a></td>
+<td>通过<a href="op_graph/bounding_box_decode_proto.h">算子IR</a>构图方式调用BoundingBoxDecode算子。IR注册名为rois/deltas/bboxes，与本文档参数表的对应关系见参数说明。参见<a href="../../docs/zh/invocation/quick_op_invocation.md">算子调用</a>完成编译和验证。样例位于`examples/arch35`，编译运行须显式指定`--soc=ascend950`（如`bash build.sh --run_example bounding_box_decode graph --soc=ascend950`）。</td>
 </tr>
 </tbody>
 </table>
+
+- 本算子以GE图模式注册；自定义包按`ACLNNTYPE aclnn_exclude`构建，包内不生成`aclnnBoundingBoxDecode`接口，因此无aclnn（eager模式）样例。

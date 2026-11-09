@@ -9,9 +9,15 @@
  */
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <string>
 
+// log/log.h — OP_LOGE_FOR_INVALID_* 规范错误码日志 + Ops::Base::ToString（DataType/Format/Shape 序列化）。
+#include "log/log.h"
+// op_api/error_report_util.h — error_report::ReportTilingStageError（内部空指针类诊断）。
+#include "op_api/error_report_util.h"
 // BoundingBoxDecodeTilingData struct (§7, 13 fields) — shared host/kernel.
 #include "../../op_kernel/arch35/bounding_box_decode_tiling_struct.h"
 // gert::TilingContext — GetInputShape / GetInputDesc / GetAttrs / GetTilingData /
@@ -105,7 +111,14 @@ static void ComputeUbSplit(int64_t ubSize, int64_t sizeofT, int64_t K, int64_t b
                            int64_t blockNum, BoundingBoxDecodeTilingData* td)
 {
     int64_t perBoxBytes = NUM_IO_BUFS * ELEMS_PER_BOX * sizeofT + K * ELEMS_PER_BOX * sizeof(float);
-    int64_t alignFactor = ALIGN_256 / (ELEMS_PER_BOX * sizeofT);
+    // alignFactor 同时满足两个约束：
+    //   1) 256B UB 对齐：ALIGN_256 / (4 × sizeof(T)) box（fp16=32 / fp32=16）；
+    //   2) VF 物理访问粒度：Reg::LoadAlign/StoreAlign 每 repeat 固定按 VL_F32=64 元素取放，
+    //      ubFormer 为 64 box 的倍数时 ceil(count/64)×64 ≤ ubFormer 恒成立，
+    //      消除满 tile/尾 tile 下最高通道越过 TBuf 分配末端的物理读写（SAFE.01/1、SAFE.02/1）。
+    // 64 box（fp16=512B / fp32=1024B）天然满足 256B 对齐，取两者较大值。
+    constexpr int64_t VF_GRANULARITY_BOXES = 64;
+    int64_t alignFactor = std::max(ALIGN_256 / (ELEMS_PER_BOX * sizeofT), VF_GRANULARITY_BOXES);
     int64_t maxBoxNum = (ubSize - RESERVED_BYTES) / perBoxBytes;
     int64_t ubFormer = AlignDown(maxBoxNum, alignFactor);
     ubFormer = std::max(ubFormer, alignFactor); // floor at 1 alignment block
@@ -143,78 +156,127 @@ static bool BoundingBoxDecodePreCheck(gert::TilingContext* ctx, int64_t& N, bool
     const gert::StorageShape* aShape = ctx->GetInputShape(0);
     const gert::StorageShape* dShape = ctx->GetInputShape(1);
     if (aShape == nullptr || dShape == nullptr) {
-        return false; // → null_input
+        error_report::ReportInvalidArgument(ctx->GetNodeName(), "rois or deltas",
+                                            "the input shape of required input rois/deltas is missing in the tiling "
+                                            "context; check that the graph node provides all required inputs");
+        return false;
     }
 
     // 2. dtype check: anchor_box/deltas ∈ {fp16,fp32} and equal.
     const gert::CompileTimeTensorDesc* aDesc = ctx->GetInputDesc(0);
     const gert::CompileTimeTensorDesc* dDesc = ctx->GetInputDesc(1);
     if (aDesc == nullptr || dDesc == nullptr) {
+        error_report::ReportInvalidArgument(ctx->GetNodeName(), "rois or deltas",
+                                            "the input desc of required input rois/deltas is missing in the tiling "
+                                            "context; check that the graph node provides all required inputs");
         return false;
     }
     ge::DataType aDt = aDesc->GetDataType();
     ge::DataType dDt = dDesc->GetDataType();
     if (aDt != ge::DT_FLOAT16 && aDt != ge::DT_FLOAT) {
-        return false; // → dtype_not_supported
+        OP_LOGE_FOR_INVALID_DTYPE(ctx->GetNodeName(), "rois", Ops::Base::ToString(aDt).c_str(), "float16 or float32");
+        return false;
     }
     if (aDt != dDt) {
-        return false; // → dtype_not_supported (mix)
+        const std::string dtypeMsg = Ops::Base::ToString(aDt) + " and " + Ops::Base::ToString(dDt);
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(ctx->GetNodeName(), "rois and deltas", dtypeMsg.c_str(),
+                                               "rois and deltas must have the same dtype");
+        return false;
     }
 
     // 3. format check: inputs must be ND.
     ge::Format aFmt = aDesc->GetStorageFormat();
     ge::Format dFmt = dDesc->GetStorageFormat();
     if (aFmt != ge::FORMAT_ND || dFmt != ge::FORMAT_ND) {
-        return false; // → shape_mismatch (non-ND format rejected)
+        const std::string formatMsg = Ops::Base::ToString(aFmt) + " and " + Ops::Base::ToString(dFmt);
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON(ctx->GetNodeName(), "rois and deltas", formatMsg.c_str(),
+                                                "only ND format is supported");
+        return false;
     }
 
     // 4. rank check: both inputs rank == 2 (MAX_RANK).
     const gert::Shape& aShp = aShape->GetStorageShape();
     const gert::Shape& dShp = dShape->GetStorageShape();
     if (aShp.GetDimNum() != static_cast<size_t>(MAX_RANK) || dShp.GetDimNum() != static_cast<size_t>(MAX_RANK)) {
-        return false; // → shape_mismatch (rank != 2)
+        const std::string rankMsg = std::to_string(aShp.GetDimNum()) + " and " + std::to_string(dShp.GetDimNum());
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+            ctx->GetNodeName(), "rois and deltas", rankMsg.c_str(),
+            ("the rank of rois and deltas must be " + std::to_string(MAX_RANK)).c_str());
+        return false;
     }
 
     // 5. attr value-range check.
     const gert::RuntimeAttrs* attrs = ctx->GetAttrs();
     if (attrs == nullptr) {
-        return false; // → attribute_value_out_of_range (attrs missing)
+        error_report::ReportTilingStageError(
+            ctx->GetNodeName(), "runtime attrs is null in the tiling context; check the TilingContext construction");
+        return false;
     }
     const auto* meansVec = attrs->GetListFloat(0);  // means   ListFloat index 0
     const auto* stdsVec = attrs->GetListFloat(1);   // stds    ListFloat index 1
     const auto* maxShapeVec = attrs->GetListInt(2); // max_shape ListInt index 2
     const float* clipPtr = attrs->GetFloat(3);      // wh_ratio_clip Float index 3
     if (maxShapeVec == nullptr || meansVec == nullptr || stdsVec == nullptr || clipPtr == nullptr) {
-        return false; // → attribute_value_out_of_range (required attr missing)
+        error_report::ReportTilingStageError(
+            ctx->GetNodeName(),
+            "required attr (means/stds/max_shape/wh_ratio_clip) is missing; check the graph construction");
+        return false;
     }
     // means/stds length == 4
     if (meansVec->GetSize() != 4 || stdsVec->GetSize() != 4) {
-        return false; // → attribute_value_out_of_range (length != 4)
+        const std::string sizeMsg = std::to_string(meansVec->GetSize()) + " and " + std::to_string(stdsVec->GetSize());
+        OP_LOGE_FOR_INVALID_LISTSIZE_WITH_REASON(ctx->GetNodeName(), "means and stds", sizeMsg.c_str(),
+                                                 "the size of means and stds must be 4");
+        return false;
     }
-    const float* means = meansVec->GetData();
     const float* stds = stdsVec->GetData();
     // stds elements must be non-zero
     if (stds[0] == 0.0f || stds[1] == 0.0f || stds[2] == 0.0f || stds[3] == 0.0f) {
-        return false; // → attribute_value_out_of_range (stds has zero)
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(ctx->GetNodeName(), "stds", "0", "stds must not contain zero elements");
+        return false;
     }
     // wh_ratio_clip > 0
     if (*clipPtr <= 0.0f) {
-        return false; // → attribute_value_out_of_range (wh_ratio_clip <= 0)
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(ctx->GetNodeName(), "wh_ratio_clip", std::to_string(*clipPtr).c_str(),
+                                              "wh_ratio_clip must be positive");
+        return false;
     }
     // max_shape length == 2 (H, W)
     if (maxShapeVec->GetSize() != 2) {
-        return false; // → attribute_value_out_of_range (max_shape length != 2)
+        OP_LOGE_FOR_INVALID_LISTSIZE_WITH_REASON(ctx->GetNodeName(), "max_shape",
+                                                 std::to_string(maxShapeVec->GetSize()).c_str(),
+                                                 "the size of max_shape must be 2");
+        return false;
     }
 
     // 6. shape check: last dim == 4 and N (dim 0) matches across inputs.
     if (aShp.GetDim(1) != ELEMS_PER_BOX || dShp.GetDim(1) != ELEMS_PER_BOX) {
-        return false; // → shape_mismatch (last dim != 4)
+        const std::string lastDimMsg = std::to_string(aShp.GetDim(1)) + " and " + std::to_string(dShp.GetDim(1));
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+            ctx->GetNodeName(), "rois and deltas", lastDimMsg.c_str(),
+            ("the last dimension of rois and deltas must be " + std::to_string(ELEMS_PER_BOX)).c_str());
+        return false;
     }
     if (aShp.GetDim(0) != dShp.GetDim(0)) {
-        return false; // → shape_mismatch (N mismatch)
+        const std::string nMsg = std::to_string(aShp.GetDim(0)) + " and " + std::to_string(dShp.GetDim(0));
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(ctx->GetNodeName(), "rois and deltas", nMsg.c_str(),
+                                                  "the first dimension (N) of rois and deltas must be the same");
+        return false;
     }
 
     N = aShp.GetDim(0);
+    // 7. N 值域校验（A2 基线 para_check.check_shape 拒绝非法 shape；spec 声明 N∈[0, INT64_MAX]）：
+    //   - N < 0（含未解析动态维 -1）：blockFormer 经 AlignUp 归 0，blockNum 计算除零；
+    //   - N > maxSafeN：dim0 × ELEMS_PER_BOX × sizeofT × 8 溢出 int64，AlignUp 回绕为负、
+    //     coreNum 归 0 并 SetBlockDim(0)。
+    const int64_t sizeofT = (aDt == ge::DT_FLOAT) ? 4 : 2;
+    const int64_t maxSafeN = INT64_MAX / (ELEMS_PER_BOX * sizeofT * 8);
+    if (N < 0 || N > maxSafeN) {
+        OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(
+            ctx->GetNodeName(), "rois", std::to_string(N).c_str(),
+            ("N must be within the range [0, " + std::to_string(maxSafeN) + "]").c_str());
+        return false;
+    }
     isEmpty = (N == 0);
     return true;
 }
@@ -233,7 +295,8 @@ static void FillTilingData(gert::TilingContext* ctx, BoundingBoxDecodeTilingData
 {
     td->dim0 = N;
 
-    // Attr passthrough (§7 field table; aclnn-supplied, kernel Compute consumes).
+    // Attr passthrough (§7 field table; supplied via GE graph attrs — this op is
+    // aclnn_exclude, kernel Compute consumes).
     const gert::RuntimeAttrs* attrs = ctx->GetAttrs();
     const auto* meansVec = attrs->GetListFloat(0);
     const auto* stdsVec = attrs->GetListFloat(1);
@@ -247,7 +310,11 @@ static void FillTilingData(gert::TilingContext* ctx, BoundingBoxDecodeTilingData
     }
     td->maxShapeH = ms[0];
     td->maxShapeW = ms[1];
-    // wh_ratio_clip is not referenced by the core formula (§1.3) — not in TilingData.
+    // wh_ratio_clip 对齐 A2 基线（canndev tbe clamp_denorm_detal:458-522，主链无条件调用）：
+    // Host 预计算 whMaxRatio = |ln(wh_ratio_clip)|，kernel 在反标准化后将 dw/dh 裁剪到
+    // ±whMaxRatio 再进入 exp（默认 0.016 → ±4.1352）。PreCheck 已保证 clipPtr 非空且 > 0。
+    const float* clipPtr = attrs->GetFloat(3);
+    td->whMaxRatio = fabsf(logf(*clipPtr));
 
     if (isEmpty) {
         // empty branch: coreNum=1, compute fields=0 (kernel short-circuits via td.dim0==0).

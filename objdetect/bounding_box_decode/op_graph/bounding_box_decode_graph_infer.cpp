@@ -10,6 +10,10 @@
 
 #include "register/op_impl_registry.h"
 
+#include <string>
+
+#include "log/log.h"
+
 using namespace ge;
 
 namespace ops {
@@ -25,6 +29,9 @@ static ge::graphStatus InferDataTypeForBoundingBoxDecode(gert::InferDataTypeCont
     const ge::DataType anchorDtype = context->GetInputDataType(0);
     const ge::DataType deltasDtype = context->GetInputDataType(1);
     if (anchorDtype != deltasDtype) {
+        const std::string dtypeMsg = Ops::Base::ToString(anchorDtype) + " and " + Ops::Base::ToString(deltasDtype);
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "rois and deltas", dtypeMsg.c_str(),
+                                               "rois and deltas must have the same dtype");
         return ge::GRAPH_FAILED;
     }
 
