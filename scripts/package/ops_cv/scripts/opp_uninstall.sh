@@ -198,6 +198,7 @@ remove_ops_cv() {
 whl_uninstall_package() {
   local _module="$1"
   local _module_apth="$2"
+  export PIP_BREAK_SYSTEM_PACKAGES=1
   if [ ! -d "${_module_apth}/${_module}" ]; then
       pip3 show "${_module}" > /dev/null 2>&1
       if [ $? -ne 0 ]; then
