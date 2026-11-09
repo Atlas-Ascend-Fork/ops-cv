@@ -1,0 +1,5 @@
+testcase_name,api_name,tensor_view_shapes,tensor_dtypes,tensor_formats,attributes,output_tensor_indexes,input_data_ranges
+ln1dgrad_fp32_same,aclnnUpsampleLinear1dBackward,"((1,2,8),(1,2,8))","('float32',)","('NCL',)","{'outputSize': [8], 'inputSize': [1, 2, 8], 'alignCorners': False, 'scales': 0.0}","(1,)","((-3.0, 5.0),)"
+ln1dgrad_fp16_5to7,aclnnUpsampleLinear1dBackward,"((2,2,7),(2,2,5))","('float16',)","('NCL',)","{'outputSize': [7], 'inputSize': [2, 2, 5], 'alignCorners': False, 'scales': 0.0}","(1,)","((-3.0, 5.0),)"
+ln1dgrad_fp32_ac_up_nonint,aclnnUpsampleLinear1dBackward,"((1,2,8),(1,2,4))","('float32',)","('NCL',)","{'outputSize': [8], 'inputSize': [1, 2, 4], 'alignCorners': True, 'scales': 0.0}","(1,)","((-3.0, 5.0),)"
+ln1dgrad_nd_fp32_up2x,aclnnUpsampleLinear1dBackward,"((1,2,16),(1,2,8))","('float32',)","('ND',)","{'outputSize': [16], 'inputSize': [1, 2, 8], 'alignCorners': False, 'scales': 0.0}","(1,)","((-3.0, 5.0),)"

@@ -1,0 +1,6 @@
+testcase_name,api_name,tensor_view_shapes,tensor_dtypes,tensor_formats,attributes,output_tensor_indexes,input_data_ranges
+ln1d_fp32_same,aclnnUpsampleLinear1d,"((1,2,8),(1,2,8))","('float32',)","('NCL',)","{'outputSize': [8], 'alignCorners': False, 'scale': -1.0}","(1,)","((-2.0, 2.0),)"
+ln1d_fp16_5to7,aclnnUpsampleLinear1d,"((2,2,5),(2,2,7))","('float16',)","('NCL',)","{'outputSize': [7], 'alignCorners': False, 'scale': -1.0}","(1,)","((-2.0, 2.0),)"
+ln1d_fp32_ac_up_nonint,aclnnUpsampleLinear1d,"((1,2,4),(1,2,8))","('float32',)","('NCL',)","{'outputSize': [8], 'alignCorners': True, 'scale': -1.0}","(1,)","((-2.0, 2.0),)"
+ln1d_bf16_multicore_37to23,aclnnUpsampleLinear1d,"((2,16,37),(2,16,23))","('bfloat16',)","('NCL',)","{'outputSize': [23], 'alignCorners': False, 'scale': -1.0}","(1,)","((-2.0, 2.0),)"
+ln1d_nd_fp32_up2x,aclnnUpsampleLinear1d,"((1,2,8),(1,2,16))","('float32',)","('ND',)","{'outputSize': [16], 'alignCorners': False, 'scale': -1.0}","(1,)","((-2.0, 2.0),)"

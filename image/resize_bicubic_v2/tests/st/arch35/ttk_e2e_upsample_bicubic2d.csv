@@ -1,0 +1,5 @@
+testcase_name,api_name,tensor_view_shapes,tensor_dtypes,tensor_formats,attributes,output_tensor_indexes,input_data_ranges
+e2e_bc2d_fp32_ac_outw1,torch.ops.aten.upsample_bicubic2d,"((1,2,8,8),(1,2,5,1))","('float32',)","('NCHW',)","{'output_size': [5, 1], 'align_corners': True, 'scales_h': 0.0, 'scales_w': 0.0}","(1,)","((-2.0, 2.0),)"
+e2e_bc2d_fp16_7to3,torch.ops.aten.upsample_bicubic2d,"((2,3,7,5),(2,3,3,9))","('float16',)","('NCHW',)","{'output_size': [3, 9], 'align_corners': False, 'scales_h': 0.0, 'scales_w': 0.0}","(1,)","((-2.0, 2.0),)"
+e2e_bc2d_bf16_up2x,torch.ops.aten.upsample_bicubic2d,"((1,3,8,8),(1,3,16,16))","('bfloat16',)","('NCHW',)","{'output_size': [16, 16], 'align_corners': False, 'scales_h': 0.0, 'scales_w': 0.0}","(1,)","((-2.0, 2.0),)"
+e2e_bc2d_bf16_5to3,torch.ops.aten.upsample_bicubic2d,"((1,2,5,5),(1,2,3,3))","('bfloat16',)","('NCHW',)","{'output_size': [3, 3], 'align_corners': False, 'scales_h': 0.0, 'scales_w': 0.0}","(1,)","((-2.0, 2.0),)"

@@ -587,11 +587,13 @@ class ResizeNearestNeighborV2GradTestSpec:
             out_len, in_len = int(out_len), int(in_len)
             dst = torch.arange(out_len, dtype=torch.float32, device=self.device)
             if self.align_corners:
-                ratio = (in_len - 1) / (out_len - 1) if out_len > 1 else 0.0
-                coord = dst.to(torch.float64) * torch.tensor(
-                    ratio, dtype=torch.float64, device=self.device
-                )
-                idx = torch.floor(coord + 0.5).long()
+                s = torch.tensor(in_len - 1, dtype=torch.float32, device=self.device)
+                s = s / (out_len - 1) if out_len > 1 else s * 0.0
+                coord = dst * s
+                # Match FP32 TF/IR coordinates without rounding coord + 0.5
+                # to the next integer before applying round-half-away.
+                lower = torch.floor(coord)
+                idx = lower.long() + (coord - lower >= 0.5).long()
             else:
                 if scale is not None and scale > 0:
                     s = torch.tensor(

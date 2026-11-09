@@ -1,0 +1,7 @@
+testcase_name,api_name,tensor_view_shapes,tensor_dtypes,tensor_formats,attributes,output_tensor_indexes,input_data_ranges
+bc2d_fp32_mix_updown,aclnnUpsampleBicubic2d,"((1,2,8,5),(1,2,4,7))","('float32',)","('NCHW',)","{'outputSize': [4, 7], 'alignCorners': False, 'scalesH': 0.0, 'scalesW': 0.0}","(1,)","((-2.0, 2.0),)"
+bc2d_bf16_up2x,aclnnUpsampleBicubic2d,"((1,3,8,8),(1,3,16,16))","('bfloat16',)","('NCHW',)","{'outputSize': [16, 16], 'alignCorners': False, 'scalesH': 0.0, 'scalesW': 0.0}","(1,)","((-2.0, 2.0),)"
+bc2d_nhwc_fp32_7to3,aclnnUpsampleBicubic2d,"((2,7,5,16),(2,3,9,16))","('float32',)","('NHWC',)","{'outputSize': [3, 9], 'alignCorners': False, 'scalesH': 0.0, 'scalesW': 0.0}","(1,)","((-2.0, 2.0),)"
+bc2d_nhwc_fp16_ac,aclnnUpsampleBicubic2d,"((1,5,5,8),(1,9,9,8))","('float16',)","('NHWC',)","{'outputSize': [9, 9], 'alignCorners': True, 'scalesH': 0.0, 'scalesW': 0.0}","(1,)","((-2.0, 2.0),)"
+bc2d_nhwc_bf16_outw1,aclnnUpsampleBicubic2d,"((1,8,8,16),(1,5,1,16))","('bfloat16',)","('NHWC',)","{'outputSize': [5, 1], 'alignCorners': False, 'scalesH': 0.0, 'scalesW': 0.0}","(1,)","((-2.0, 2.0),)"
+bc2d_nd_fp32_up2x,aclnnUpsampleBicubic2d,"((1,2,4,4),(1,2,8,8))","('float32',)","('ND',)","{'outputSize': [8, 8], 'alignCorners': False, 'scalesH': 0.0, 'scalesW': 0.0}","(1,)","((-2.0, 2.0),)"

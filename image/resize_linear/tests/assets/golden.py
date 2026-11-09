@@ -138,7 +138,9 @@ class ResizeLinearTestSpec:
 
         def __call__(self, x, size, **kwargs):
             # 阶段 3: 计算
-            dst = np.asarray(size).reshape(-1)
+            dst = np.asarray(
+                size.detach().cpu() if torch.is_tensor(size) else size
+            ).reshape(-1)
             t = self._prepare(x)
             lo = int(dst[0])
             if self.scale is not None and int(t.shape[-1]) == lo:

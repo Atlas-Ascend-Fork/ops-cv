@@ -1,0 +1,4 @@
+testcase_name,api_name,tensor_view_shapes,tensor_dtypes,tensor_formats,attributes,output_tensor_indexes,input_data_ranges
+e2e_ln1dgrad_fp16_5to7,torch.ops.aten.upsample_linear1d_backward,"((2,2,7),(2,2,5))","('float16',)","('NCL',)","{'output_size': [7], 'input_size': [2, 2, 5], 'align_corners': False, 'scales': 0.0}","(1,)","((-3.0, 5.0),)"
+e2e_ln1dgrad_fp32_ac_up_nonint,torch.ops.aten.upsample_linear1d_backward,"((1,2,8),(1,2,4))","('float32',)","('NCL',)","{'output_size': [8], 'input_size': [1, 2, 4], 'align_corners': True, 'scales': 0.0}","(1,)","((-3.0, 5.0),)"
+e2e_ln1dgrad_bf16_multicore_37to23,torch.ops.aten.upsample_linear1d_backward,"((2,16,23),(2,16,37))","('bfloat16',)","('NCL',)","{'output_size': [23], 'input_size': [2, 16, 37], 'align_corners': False, 'scales': 0.0}","(1,)","((-3.0, 5.0),)"

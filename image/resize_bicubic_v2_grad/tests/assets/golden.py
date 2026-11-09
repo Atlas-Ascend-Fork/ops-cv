@@ -22,8 +22,11 @@ PR !1808 review: the Ascend IR op is benchmarked against the ATen IR op).
 Equivalence (Ascend IR ResizeBicubicV2Grad <-> aten::upsample_bicubic2d_
 backward), verified point-wise in float64 against an independent
 high-precision reference AND torch autograd (rel <= 2.9e-14 across half_pixel
-/ align_corners / lenDst==1 / explicit-scales / identity shapes; adjoint
-identity <grad, x> == <g, forward(x)> at 1e-16):
+/ align_corners / lenDst==1 / non-identity explicit-scales / default-scale
+identity shapes; adjoint identity <grad, x> == <g, forward(x)> at 1e-16).
+Same-size explicit scales are an ATen backward exception: backward copies
+the gradient although CPU forward still resamples. The adapters preserve that
+ATen contract rather than claiming an adjoint equivalence for this case.
 
 Parameter mapping:
 * grads (tensor input, forward-output shape)   -> grad_output
@@ -42,11 +45,19 @@ Parameter mapping:
   while ATen area_pixel_compute_scale also returns 0 — identical; the
   forward-side in/out variant degenerates the same (dst=0 -> src=0).
 * Layout: ATen is NCHW; NHWC inputs are transposed around the aten call.
-* dtype fp16/bf16: lifted to fp32 before the call (the NPU grad kernel
-  computes in float with asc_atomic_add on float accumulators; the ATen
-  backward uses an opmath float accumulation buffer for reduced floats —
-  both are fp32-inner, verified against the fp64 reference); result
-  quantised back to the grads dtype.
+* Golden dtype fp16/bf16: lifted to fp32, then quantised back to grads dtype.
+  Inputs already promoted by the harness retain their supplied precision.
+* Third-party dtype: preserved, including fp16/bf16. PyTorch CUDA computes
+  coefficients in opmath precision but casts each contribution to scalar_t
+  before atomic addition (ATen/native/cuda/UpSample.cuh,
+  upsample_increment_value_bounded). Promoting the input would replace the
+  native low-precision benchmark with a different fp32-accumulation operation.
+  Likewise, the NPU scatter uses T_DATA atomics, whereas its gather uses a
+  float accumulator; the two paths do not share one accumulation precision.
+* NaN/Inf: retain ATen's four-tap scatter, including zero-weight products.
+  Skipping those products can change NaN propagation. Finite extreme inputs
+  can also overflow intermediate device accumulators; neither discrepancy
+  justifies replacing the reference with the device result.
 """
 
 import numpy as np
@@ -158,15 +169,16 @@ class ResizeBicubicV2GradTestSpec:
         return [_to_numpy(y_t, orig_dtype)]
 
     class ThirdPartyImpl:
-        """torch autograd reference: interpolate(bicubic).backward(grads).
+        """Low-level ATen bicubic backward adapter.
 
-        Only supports default scales (torch derives scale from sizes when
-        ``size`` is given). Explicit non-zero scales have no torch equivalent:
-        ``F.interpolate``'s ``size`` and ``scale_factor`` are mutually
-        exclusive and ``recompute_scale_factor`` re-derives the coordinate
-        scale from out/in rather than honouring the given value. That
-        limitation belongs to ``F.interpolate`` and is NOT propagated to the
-        ACLNN golden, which feeds explicit scales straight to ATen.
+        ATen accepts output size and explicit scales together, unlike the
+        ``F.interpolate`` wrapper. It copies same-size gradients even with
+        positive scales; this is the backward API's behavior, not the adjoint
+        of the resampling performed by CPU forward for those scales. This adapter
+        shares ATen with the golden and is not an independent numerical oracle.
+
+        Preserve the input dtype: CUDA's native half/bfloat16 atomics are part
+        of the benchmark. Only the CPU golden may promote its inputs.
 
         Layout: kernel cross_check **does** carry per-input format, so the
         NHWC normalisation below is live on that path. Chain verified in the
@@ -199,44 +211,22 @@ class ResizeBicubicV2GradTestSpec:
             self.device = device or "cpu"
 
         def __call__(self, grads, original_image, **kwargs):
-            g = (
-                grads
-                if torch.is_tensor(grads)
-                else torch.from_numpy(np.ascontiguousarray(grads))
-            )
-            o = (
-                original_image
-                if torch.is_tensor(original_image)
-                else torch.from_numpy(np.ascontiguousarray(original_image))
-            )
-            out_dtype = o.dtype
+            g = grads if torch.is_tensor(grads) else _to_torch(np.asarray(grads))
+            input_size = list(original_image.shape)
+            out_dtype = g.dtype
             g = g.to(self.device)
-            o = o.to(self.device)
             if self.channels_last:
-                if g.dim() != 4 or o.dim() != 4:
+                if g.dim() != 4 or len(input_size) != 4:
                     raise ValueError(
-                        f"NHWC expects 4-D inputs, got {tuple(g.shape)} / {tuple(o.shape)}"
+                        f"NHWC expects 4-D inputs, got {tuple(g.shape)} / {tuple(input_size)}"
                     )
                 g = torch.movedim(g, -1, 1).contiguous()
-                o = torch.movedim(o, -1, 1).contiguous()
-            if any(s is not None for s in self.scales) and (
-                int(g.shape[2]) == int(o.shape[2])
-                and int(g.shape[3]) == int(o.shape[3])
-            ):
-                raise NotImplementedError(
-                    "same-size grad/original with explicit positive scales: ATen "
-                    "upsample_bicubic2d_backward early-exits on src == dst and returns "
-                    "a copy, ignoring the scales, so it cannot serve as an independent "
-                    "standard for this quadrant; covered by the in-file golden"
-                )
-            # fp32 compute keeps the historical precision convention of this
-            # entry; the ATen low-level backward is the exact transpose of the
-            # forward (same coordinate/weight code path) and, unlike
-            # F.interpolate + autograd, accepts explicit scales directly.
+                input_size = [input_size[i] for i in (0, 3, 1, 2)]
+            # Use native ATen precision; original_image supplies only shape.
             grad_in = torch.ops.aten.upsample_bicubic2d_backward(
-                g.to(torch.float32).contiguous(),
+                g.contiguous(),
                 [int(g.shape[2]), int(g.shape[3])],
-                [int(v) for v in o.shape],
+                [int(v) for v in input_size],
                 self.align_corners,
                 self.scales[0],
                 self.scales[1],
@@ -323,18 +313,14 @@ def _tp_bicubic_grad_aten(
     reordering, dtype handling). The math is shared with the golden, so it is
     NOT an independent numerical benchmark. No TF provider is registered: the
     op proto (``op_graph/resize_bicubic_v2_grad_proto.h``) declares
-    "Compatible with PyTorch upsample_bicubic2d_backward operator." only, so
-    the independent numerical reference is this file's fp64 golden.
+    "Compatible with PyTorch upsample_bicubic2d_backward operator." only.
+    Promoting an ATen golden to fp64 does not make it independent of ATen.
 
-    dtype follows this file's convention: fp16/bf16 -> fp32, fp32 stays fp32
-    (no fp64 lift; see the aclnn entry docstring for the cancellation
-    measurement behind that choice).
+    Unlike the CPU golden, the third-party call preserves the input dtype.
+    In particular, CUDA fp16/bf16 atomics must not be replaced with fp32
+    accumulation by promoting the gradient before calling ATen.
     """
-    g = (
-        grads
-        if torch.is_tensor(grads)
-        else torch.from_numpy(np.ascontiguousarray(grads))
-    )
+    g = grads if torch.is_tensor(grads) else _to_torch(np.asarray(grads))
     g = g.to(device or "cpu")
     orig = g.dtype
     isz = [int(v) for v in input_size]
@@ -344,8 +330,6 @@ def _tp_bicubic_grad_aten(
         g = torch.movedim(g, -1, 1)
         # {N,H,W,C} -> {N,C,H,W}
         isz = [isz[0], isz[3], isz[1], isz[2]]
-    if orig in (torch.float16, torch.bfloat16):
-        g = g.to(torch.float32)
     y = torch.ops.aten.upsample_bicubic2d_backward(
         g.contiguous(),
         [int(g.shape[2]), int(g.shape[3])],
@@ -466,8 +450,7 @@ class AclnnUpsampleBicubic2dBackwardTestSpec:
         Math core shared with the in-file golden (see
         ``_tp_bicubic_grad_aten``); covers the parameter adaptation / binding
         path. Per the op proto this entry is aligned to PyTorch only, so
-        there is no TF sibling; the independent numerical reference is this
-        file's fp64 golden.
+        there is no TF sibling or independent numerical oracle here.
         """
 
         def __init__(self, *, device=None, **kwargs):
@@ -602,8 +585,7 @@ class E2eUpsampleBicubic2dBackwardTestSpec:
         Math core shared with the in-file golden (see
         ``_tp_bicubic_grad_aten``); covers the parameter adaptation / binding
         path. Per the op proto this entry is aligned to PyTorch only, so
-        there is no TF sibling; the independent numerical reference is this
-        file's fp64 golden.
+        there is no TF sibling or independent numerical oracle here.
 
         The e2e csv always uses NCHW logical dims (see the class docstring,
         gap **G-E8**), so ``channels_last`` is fixed to False here.

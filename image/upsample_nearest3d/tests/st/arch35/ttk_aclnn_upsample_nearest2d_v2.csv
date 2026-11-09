@@ -1,0 +1,6 @@
+testcase_name,api_name,tensor_view_shapes,tensor_dtypes,tensor_formats,attributes,output_tensor_indexes,input_data_ranges
+n2dv2_fp32_asym,aclnnUpsampleNearest2dV2,"((1,2,3,10),(1,2,10,5))","('float32',)","('NCHW',)","{'outputSize': [10, 5], 'scalesH': 0.0, 'scalesW': 0.0}","(1,)",
+n2dv2_fp16_nhwc,aclnnUpsampleNearest2dV2,"((1,8,8,3),(1,16,16,3))","('float16',)","('NHWC',)","{'outputSize': [16, 16], 'scalesH': 0.0, 'scalesW': 0.0}","(1,)",
+n2dv2_bf16_identity,aclnnUpsampleNearest2dV2,"((2,3,9,17),(2,3,9,17))","('bfloat16',)","('NCHW',)","{'outputSize': [9, 17], 'scalesH': 0.0, 'scalesW': 0.0}","(1,)",
+n2dv2_uint8_up2x,aclnnUpsampleNearest2dV2,"((2,1,32,32),(2,1,64,64))","('uint8',)","('NCHW',)","{'outputSize': [64, 64], 'scalesH': 0.0, 'scalesW': 0.0}","(1,)","((0, 255),)"
+n2dv2_fp64_up2x,aclnnUpsampleNearest2dV2,"((1,2,4,4),(1,2,8,8))","('float64',)","('NCHW',)","{'outputSize': [8, 8], 'scalesH': 0.0, 'scalesW': 0.0}","(1,)",

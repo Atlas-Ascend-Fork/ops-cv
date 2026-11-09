@@ -516,12 +516,13 @@ def _tp_axis_index(
     in_len = int(in_len)
     dst = torch.arange(out_len, dtype=torch.float32, device=device)
     if align_corners:
-        ratio = (in_len - 1) / (out_len - 1) if out_len > 1 else 0.0
-        coord = dst.to(torch.float64) * torch.tensor(
-            ratio, dtype=torch.float64, device=device
-        )
-        # roundf == round-half-away-from-zero; coord >= 0 so floor(v+0.5) is it
-        idx = torch.floor(coord + 0.5).long()
+        scale = torch.tensor(in_len - 1, dtype=torch.float32, device=device)
+        scale = scale / (out_len - 1) if out_len > 1 else scale * 0.0
+        coord = dst * scale
+        # TF/IR use FP32 coordinates and round-half-away-from-zero. Adding
+        # 0.5 in FP32 would round 0.49999997 up to 1 before floor is applied.
+        lower = torch.floor(coord)
+        idx = lower.long() + (coord - lower >= 0.5).long()
     else:
         if scale_attr is not None and scale_attr > 0:
             scale = torch.tensor(

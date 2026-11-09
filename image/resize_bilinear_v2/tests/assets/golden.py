@@ -374,7 +374,7 @@ def _to_logical_nchw(arr, fmt):
     return nchw, restore
 
 
-def _resolve_out_dtype(x, dtype_attr, kwargs):
+def _resolve_out_dtype(input_dtype, dtype_attr, kwargs):
     """输出 dtype: output_dtypes[0] > dtype 属性(acl 枚举) > 输入 dtype。"""
     name = _first(kwargs.get("output_dtypes"))
     if name:
@@ -386,7 +386,7 @@ def _resolve_out_dtype(x, dtype_attr, kwargs):
             key = None
         if key in _ACL_DTYPE_TO_NAME:
             return _np_dtype(_ACL_DTYPE_TO_NAME[key])
-    return x.dtype
+    return input_dtype
 
 
 # ---------------------------------------------------------------- torch 分支 A/B
@@ -569,7 +569,7 @@ class ResizeBilinearV2TestSpec:
         fmt = _fmt_of(kwargs, "input_formats")
         # ALL_COPY 闸门必须在 _to_logical_nchw 升 fp64 **之前**算: 设备侧
         # IsMatchAllCopy 要求 dtypeX_ == dtypeY_, 升型后原始 dtype 已不可见。
-        out_dtype = _resolve_out_dtype(x, dtype, kwargs)
+        out_dtype = _resolve_out_dtype(x.dtype, dtype, kwargs)
         all_copy = (
             x.dtype == out_dtype
             and int(x.shape[_h_axis(fmt)]) == ho
@@ -659,9 +659,14 @@ class ResizeBilinearV2TestSpec:
 
         def __call__(self, x, size, **kwargs):
             # 阶段 2/3: 布局归一 + 设备迁移 + 计算
-            dst = np.asarray(size).reshape(-1)
+            dst = np.asarray(
+                size.detach().cpu() if torch.is_tensor(size) else size
+            ).reshape(-1)
             ho, wo = int(dst[0]), int(dst[1])
             arr, in_dtype = _as_numpy_keep_dtype(x)
+            out_dtype = _resolve_out_dtype(
+                in_dtype, self.kwargs.get("dtype"), self.kwargs
+            )
             nchw, restore = _to_logical_nchw(np.ascontiguousarray(arr), self.fmt)
             if (self.scale_h is not None or self.scale_w is not None) and (
                 int(nchw.shape[2]) == ho and int(nchw.shape[3]) == wo
@@ -675,7 +680,7 @@ class ResizeBilinearV2TestSpec:
             y = torch.ops.aten.upsample_bilinear2d(
                 t, [ho, wo], self.align_corners, self.scale_h, self.scale_w
             )
-            return [restore(y.detach().cpu().numpy(), in_dtype)]
+            return [restore(y.detach().cpu().numpy(), out_dtype)]
 
     class TfThirdPartyImpl:
         """``tf.raw_ops.ResizeBilinear`` 三方标杆 —— 覆盖 torch 表达不了的组合。
@@ -721,9 +726,14 @@ class ResizeBilinearV2TestSpec:
             self.kwargs = kwargs
 
         def __call__(self, x, size, **kwargs):
-            dst = np.asarray(size).reshape(-1)
+            dst = np.asarray(
+                size.detach().cpu() if torch.is_tensor(size) else size
+            ).reshape(-1)
             ho, wo = int(dst[0]), int(dst[1])
             arr, in_dtype = _as_numpy_keep_dtype(x)
+            out_dtype = _resolve_out_dtype(
+                in_dtype, self.kwargs.get("dtype"), self.kwargs
+            )
             nchw, restore = _to_logical_nchw(np.ascontiguousarray(arr), self.fmt)
             hi, wi = int(nchw.shape[2]), int(nchw.shape[3])
 
@@ -770,7 +780,7 @@ class ResizeBilinearV2TestSpec:
             out_nchw = np.ascontiguousarray(np.transpose(y, (0, 3, 1, 2))).astype(
                 np.float64
             )
-            return [restore(out_nchw, in_dtype)]
+            return [restore(out_nchw, out_dtype)]
 
     third_party = {"torch": ThirdPartyImpl, "tf": TfThirdPartyImpl}
 

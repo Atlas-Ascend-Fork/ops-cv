@@ -1,0 +1,6 @@
+testcase_name,api_name,tensor_view_shapes,tensor_dtypes,tensor_formats,attributes,output_tensor_indexes,input_data_ranges
+nn2d_fp32_3to10,aclnnUpsampleNearest2d,"((1,2,3,10),(1,2,10,5))","('float32',)","('NCHW',)","{'outputSize': [10, 5]}","(1,)",
+nn2d_bf16_5to3,aclnnUpsampleNearest2d,"((1,2,5,5),(1,2,3,3))","('bfloat16',)","('NCHW',)","{'outputSize': [3, 3]}","(1,)",
+nn2d_nhwc_fp16,aclnnUpsampleNearest2d,"((1,8,8,3),(1,16,16,3))","('float16',)","('NHWC',)","{'outputSize': [16, 16]}","(1,)",
+nn2d_uint8_up2x,aclnnUpsampleNearest2d,"((2,3,32,32),(2,3,64,64))","('uint8',)","('NCHW',)","{'outputSize': [64, 64]}","(1,)","((0, 255),)"
+nn2d_fp64_down,aclnnUpsampleNearest2d,"((1,2,8,8),(1,2,4,4))","('float64',)","('NCHW',)","{'outputSize': [4, 4]}","(1,)",

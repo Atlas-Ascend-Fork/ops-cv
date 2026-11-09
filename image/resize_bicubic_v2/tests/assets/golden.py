@@ -168,11 +168,12 @@ class ResizeBicubicV2TestSpec:
         the scales — kernel / aclnn / ATen agree, so it is passed through
         without special-casing.
 
-        **Still rejected (with evidence, not avoidance)**: same-size input with
-        explicit positive scales. ATen early-exits on ``in == out`` and returns
-        a copy, ignoring the scales, so such a reference reproduces the very
-        same early-exit and carries no cross-check value; that quadrant is
-        covered by the in-file golden.
+        Same-size input with non-unit positive scales resamples on ATen CPU,
+        but PyTorch 2.7 CUDA's ``upsample_bicubic2d_out_frame`` copies it.
+        Reject that CUDA quadrant rather than accept a different coordinate
+        mapping as a reference. Default or unit scales agree on both backends.
+        This adapter shares ATen with the golden and checks adaptation, not
+        an independent numerical implementation.
 
         Layout: kernel cross_check **does** carry per-input format, so the
         NHWC normalisation below is live on that path. Chain verified in the
@@ -205,22 +206,27 @@ class ResizeBicubicV2TestSpec:
             self.device = device or "cpu"
 
         def __call__(self, x, size, **kwargs):
-            size_arr = np.asarray(size).flatten()
+            size_arr = np.asarray(
+                size.detach().cpu() if torch.is_tensor(size) else size
+            ).flatten()
             out_h, out_w = int(size_arr[0]), int(size_arr[1])
-            t = x if torch.is_tensor(x) else torch.from_numpy(np.ascontiguousarray(x))
+            t = x if torch.is_tensor(x) else _to_torch(np.asarray(x))
             t = t.to(self.device)
+            orig_dtype = t.dtype
+            if t.dtype in (torch.float16, torch.bfloat16):
+                t = t.to(torch.float32)
             if self.channels_last:
                 if t.dim() != 4:
                     raise ValueError(f"NHWC expects a 4-D input, got {tuple(t.shape)}")
                 t = torch.movedim(t, -1, 1).contiguous()
-            if any(s is not None for s in self.scales) and (
-                int(t.shape[2]) == out_h and int(t.shape[3]) == out_w
+            if (
+                t.device.type == "cuda"
+                and tuple(t.shape[2:]) == (out_h, out_w)
+                and any(s is not None and s != 1.0 for s in self.scales)
             ):
                 raise NotImplementedError(
-                    "same-size input with explicit positive scales: ATen "
-                    "upsample_bicubic2d early-exits on in == out and returns a copy, "
-                    "ignoring the scales, so it cannot serve as an independent "
-                    "standard for this quadrant; covered by the in-file golden"
+                    "CUDA bicubic forward copies same-size inputs even with "
+                    "non-unit positive scales, whereas the CPU golden resamples"
                 )
             out = torch.ops.aten.upsample_bicubic2d(
                 t.contiguous(),
@@ -231,7 +237,7 @@ class ResizeBicubicV2TestSpec:
             )
             if self.channels_last:
                 out = torch.movedim(out, 1, -1).contiguous()
-            return [out]
+            return [out.to(orig_dtype)]
 
     third_party = {"torch": ThirdPartyImpl}
 
