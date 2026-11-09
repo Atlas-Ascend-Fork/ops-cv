@@ -20,12 +20,26 @@
 #include "op_common/op_host/util/shape_util.h"
 #include <cstdint>
 #include <limits>
+#include <string>
 
 using namespace ge;
 
 namespace ops {
 
 static constexpr int64_t IDX_0 = 0;
+
+// Stringify an int64 attribute list for structured error reporting, e.g. "[2, 2, 64]".
+static std::string IntListToString(const gert::TypedContinuousVector<int64_t>* list)
+{
+    std::string result = "[";
+    for (size_t i = 0; i < list->GetSize(); ++i) {
+        if (i > 0) {
+            result += ", ";
+        }
+        result += std::to_string(list->GetData()[i]);
+    }
+    return result + "]";
+}
 
 static ge::graphStatus InferShapeAnchorResponseFlags(gert::InferShapeContext* context)
 {
@@ -37,27 +51,54 @@ static ge::graphStatus InferShapeAnchorResponseFlags(gert::InferShapeContext* co
 
     auto featmapSizeAttr = attrs->GetListInt(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, featmapSizeAttr);
-    OP_CHECK_IF(featmapSizeAttr->GetSize() != 2, OP_LOGE(context, "featmap_size must have exactly 2 elements"),
-                return GRAPH_FAILED);
+    if (featmapSizeAttr->GetSize() < 2) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "featmap_size",
+                                              IntListToString(featmapSizeAttr).c_str(),
+                                              "The length of featmap_size must be at least 2; only the first two "
+                                              "elements [feat_h, feat_w] are used and extra elements are ignored");
+        return GRAPH_FAILED;
+    }
     auto featmapSizeData = featmapSizeAttr->GetData();
-    OP_CHECK_IF(featmapSizeData[0] <= 0 || featmapSizeData[0] > std::numeric_limits<int32_t>::max() ||
-                    featmapSizeData[1] <= 0 || featmapSizeData[1] > std::numeric_limits<int32_t>::max(),
-                OP_LOGE(context, "featmap_size elements must be in [1, INT32_MAX]"), return GRAPH_FAILED);
+    if (featmapSizeData[0] <= 0 || featmapSizeData[0] > std::numeric_limits<int32_t>::max() ||
+        featmapSizeData[1] <= 0 || featmapSizeData[1] > std::numeric_limits<int32_t>::max()) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "featmap_size",
+                                              IntListToString(featmapSizeAttr).c_str(),
+                                              "Each element of featmap_size must be in [1, INT32_MAX]");
+        return GRAPH_FAILED;
+    }
 
     // Validate strides (index 1)
     auto stridesAttr = attrs->GetListInt(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, stridesAttr);
-    OP_CHECK_IF(stridesAttr->GetSize() != 2, OP_LOGE(context, "strides must have exactly 2 elements"),
-                return GRAPH_FAILED);
+    if (stridesAttr->GetSize() < 2) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "strides", IntListToString(stridesAttr).c_str(),
+                                              "The length of strides must be at least 2; only the first two "
+                                              "elements [stride_w, stride_h] are used and extra elements are ignored");
+        return GRAPH_FAILED;
+    }
     auto stridesData = stridesAttr->GetData();
-    OP_CHECK_IF(stridesData[0] <= 0 || stridesData[0] > std::numeric_limits<int32_t>::max() || stridesData[1] <= 0 ||
-                    stridesData[1] > std::numeric_limits<int32_t>::max(),
-                OP_LOGE(context, "strides elements must be in [1, INT32_MAX]"), return GRAPH_FAILED);
+    if (stridesData[0] <= 0 || stridesData[0] > std::numeric_limits<int32_t>::max() || stridesData[1] <= 0 ||
+        stridesData[1] > std::numeric_limits<int32_t>::max()) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "strides", IntListToString(stridesAttr).c_str(),
+                                              "Each element of strides must be in [1, INT32_MAX]");
+        return GRAPH_FAILED;
+    }
 
     auto numBaseAnchorsPtr = attrs->GetInt(2);
     OP_CHECK_NULL_WITH_CONTEXT(context, numBaseAnchorsPtr);
     int64_t numBaseAnchors = *numBaseAnchorsPtr;
-    OP_CHECK_IF(numBaseAnchors < 0, OP_LOGE(context, "num_base_anchors must not be negative"), return GRAPH_FAILED);
+    if (numBaseAnchors < 0) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "num_base_anchors",
+                                              std::to_string(numBaseAnchors).c_str(),
+                                              "num_base_anchors must not be negative");
+        return GRAPH_FAILED;
+    }
+    if (numBaseAnchors > std::numeric_limits<int32_t>::max()) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "num_base_anchors",
+                                              std::to_string(numBaseAnchors).c_str(),
+                                              "num_base_anchors must not exceed INT32_MAX");
+        return GRAPH_FAILED;
+    }
 
     // Validate input shape
     const gert::Shape* inputShape = context->GetInputShape(IDX_0);
@@ -65,10 +106,19 @@ static ge::graphStatus InferShapeAnchorResponseFlags(gert::InferShapeContext* co
     // Unknown-rank ([-2]) and unknown-dim (-1) cases are skipped to support dynamic shape.
     // The output shape only depends on attrs and can still be fully inferred.
     if (!Ops::Base::IsUnknownRank(*inputShape)) {
-        OP_CHECK_IF(inputShape->GetDimNum() != 2, OP_LOGE(context, "gt_bboxes must be 2D"), return GRAPH_FAILED);
+        if (inputShape->GetDimNum() != 2) {
+            OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "gt_bboxes",
+                                                  Ops::Base::ToString(*inputShape).c_str(),
+                                                  "gt_bboxes must be a 2D tensor");
+            return GRAPH_FAILED;
+        }
         const int64_t dim1 = inputShape->GetDim(1);
-        OP_CHECK_IF(dim1 != ge::UNKNOWN_DIM && dim1 != 4, OP_LOGE(context, "gt_bboxes second dimension must be 4"),
-                    return GRAPH_FAILED);
+        if (dim1 != ge::UNKNOWN_DIM && dim1 != 4) {
+            OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "gt_bboxes",
+                                                  Ops::Base::ToString(*inputShape).c_str(),
+                                                  "The second dimension of gt_bboxes must be 4");
+            return GRAPH_FAILED;
+        }
     }
 
     // Compute output shape: [featH * featW * numBaseAnchors]
@@ -76,8 +126,15 @@ static ge::graphStatus InferShapeAnchorResponseFlags(gert::InferShapeContext* co
     int64_t featW = featmapSizeData[1];
     // Each dimension is bounded by INT32_MAX, so featHW itself fits in int64_t.
     int64_t featHW = featH * featW;
-    OP_CHECK_IF(numBaseAnchors > 0 && featHW > std::numeric_limits<int64_t>::max() / numBaseAnchors,
-                OP_LOGE(context, "output anchor count overflows int64"), return GRAPH_FAILED);
+    if (numBaseAnchors > 0 && featHW > std::numeric_limits<int64_t>::max() / numBaseAnchors) {
+        std::string incorrectValue = "featmap_size=" + IntListToString(featmapSizeAttr) +
+                                     ", num_base_anchors=" + std::to_string(numBaseAnchors);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "featmap_size and num_base_anchors",
+                                              incorrectValue.c_str(),
+                                              "The output anchor count feat_h * feat_w * num_base_anchors must not "
+                                              "exceed INT64_MAX");
+        return GRAPH_FAILED;
+    }
     int64_t totalAnchors = featHW * numBaseAnchors;
 
     // Set output shape

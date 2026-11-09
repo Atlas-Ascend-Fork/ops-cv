@@ -410,3 +410,114 @@ TEST_F(AnchorResponseFlagsInfershape, anchor_response_flags_infershape_large_rep
                                                       attrs);
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{9223372028264841218LL}});
 }
+
+// Test case 16: strides with more than 2 elements, extras ignored (baseline-compatible), should succeed
+TEST_F(AnchorResponseFlagsInfershape, anchor_response_flags_infershape_strides_extra_elements)
+{
+    std::vector<gert::InfershapeContextPara::OpAttr> attrs = {
+        gert::InfershapeContextPara::OpAttr("featmap_size",
+                                            Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{60, 60})),
+        gert::InfershapeContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2, 2, 64})),
+        gert::InfershapeContextPara::OpAttr("num_base_anchors", Ops::Cv::AnyValue::CreateFrom(int64_t(9))),
+    };
+    gert::InfershapeContextPara infershapeContextPara(
+        "AnchorResponseFlags",
+        {
+            {{{100, 4}, {100, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}, // gt_bboxes input
+        },
+        {
+            {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND}, // flags output (shape to be inferred)
+        },
+        attrs);
+    // Expected output shape: 60 * 60 * 9 = 32400 (extra stride element ignored)
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {32400},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+// Test case 17: strides with fewer than 2 elements, must be rejected
+TEST_F(AnchorResponseFlagsInfershape, anchor_response_flags_infershape_strides_too_short)
+{
+    std::vector<gert::InfershapeContextPara::OpAttr> attrs = {
+        gert::InfershapeContextPara::OpAttr("featmap_size",
+                                            Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{60, 60})),
+        gert::InfershapeContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2})),
+        gert::InfershapeContextPara::OpAttr("num_base_anchors", Ops::Cv::AnyValue::CreateFrom(int64_t(9))),
+    };
+    gert::InfershapeContextPara infershapeContextPara(
+        "AnchorResponseFlags",
+        {
+            {{{100, 4}, {100, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}, // gt_bboxes input
+        },
+        {
+            {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND}, // flags output (shape to be inferred)
+        },
+        attrs);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+// Test case 18: featmap_size with more than 2 elements, extras ignored (baseline-compatible), should succeed
+TEST_F(AnchorResponseFlagsInfershape, anchor_response_flags_infershape_featmap_size_extra_elements)
+{
+    std::vector<gert::InfershapeContextPara::OpAttr> attrs = {
+        gert::InfershapeContextPara::OpAttr("featmap_size",
+                                            Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{60, 60, 26})),
+        gert::InfershapeContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2, 2})),
+        gert::InfershapeContextPara::OpAttr("num_base_anchors", Ops::Cv::AnyValue::CreateFrom(int64_t(9))),
+    };
+    gert::InfershapeContextPara infershapeContextPara(
+        "AnchorResponseFlags",
+        {
+            {{{100, 4}, {100, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}, // gt_bboxes input
+        },
+        {
+            {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND}, // flags output (shape to be inferred)
+        },
+        attrs);
+    // Expected output shape: 60 * 60 * 9 = 32400 (extra featmap_size element ignored)
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {32400},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+// Test case 19: featmap_size with fewer than 2 elements, must be rejected
+TEST_F(AnchorResponseFlagsInfershape, anchor_response_flags_infershape_featmap_size_too_short)
+{
+    std::vector<gert::InfershapeContextPara::OpAttr> attrs = {
+        gert::InfershapeContextPara::OpAttr("featmap_size", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{60})),
+        gert::InfershapeContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2, 2})),
+        gert::InfershapeContextPara::OpAttr("num_base_anchors", Ops::Cv::AnyValue::CreateFrom(int64_t(9))),
+    };
+    gert::InfershapeContextPara infershapeContextPara(
+        "AnchorResponseFlags",
+        {
+            {{{100, 4}, {100, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}, // gt_bboxes input
+        },
+        {
+            {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND}, // flags output (shape to be inferred)
+        },
+        attrs);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+// Test case 20: num_base_anchors exceeds INT32_MAX, must be rejected
+TEST_F(AnchorResponseFlagsInfershape, anchor_response_flags_infershape_num_base_anchors_exceeds_int32)
+{
+    std::vector<gert::InfershapeContextPara::OpAttr> attrs = {
+        gert::InfershapeContextPara::OpAttr("featmap_size", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2, 2})),
+        gert::InfershapeContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{2, 2})),
+        gert::InfershapeContextPara::OpAttr("num_base_anchors", Ops::Cv::AnyValue::CreateFrom(int64_t(4294967296))),
+    };
+    gert::InfershapeContextPara infershapeContextPara(
+        "AnchorResponseFlags",
+        {
+            {{{1, 4}, {1, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}, // gt_bboxes input
+        },
+        {
+            {{{}, {}}, ge::DT_UINT8, ge::FORMAT_ND}, // flags output (shape to be inferred)
+        },
+        attrs);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}

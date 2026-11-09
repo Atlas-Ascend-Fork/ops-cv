@@ -69,10 +69,20 @@ __simt_callee__ __aicore__ inline int32_t SafeGridCoord(float center, int32_t st
     if (fgrid <= 0.0f) {
         return 0;
     }
-    if (fgrid >= static_cast<float>(featSize)) {
+    // 2^31 is exactly representable in float32 and bounds every legal featSize (<= INT32_MAX),
+    // so any coordinate at or above it is out of range. Comparing against
+    // static_cast<float>(featSize) instead misjudges legal top-range coordinates as out of
+    // bounds once featSize > 2^24 and the conversion rounds down.
+    if (fgrid >= 2147483648.0f) {
         return featSize - 1;
     }
-    return static_cast<int32_t>(fgrid);
+    // fgrid is an integral float below 2^31 (largest representable value is 2147483520), so the
+    // narrowing is exact; the range check runs in the integer domain to keep the threshold exact.
+    int32_t grid = static_cast<int32_t>(fgrid);
+    if (grid >= featSize) {
+        return featSize - 1;
+    }
+    return grid;
 }
 
 /*!

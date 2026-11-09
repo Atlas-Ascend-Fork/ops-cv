@@ -25,28 +25,23 @@
 #include "ascendc/host_api/tiling/template_argument.h"
 
 // Dimension 1: dtype schedule mode
-#define ANCHOR_RESPONSE_FLAGS_SCH_MODE_0 0  // float32 input
-#define ANCHOR_RESPONSE_FLAGS_SCH_MODE_1 1  // float16 input
+#define ANCHOR_RESPONSE_FLAGS_SCH_MODE_0 0 // float32 input
+#define ANCHOR_RESPONSE_FLAGS_SCH_MODE_1 1 // float16 input
 
-// Dimension 2: index width (R003 optimization)
+// Dimension 2: index width (32-bit index path when totalAnchors fits in int32)
 #define ANCHOR_RESPONSE_FLAGS_IS_64BIT 0
 #define ANCHOR_RESPONSE_FLAGS_IS_32BIT 1
 
-ASCENDC_TPL_ARGS_DECL(
-    AnchorResponseFlags,
-    ASCENDC_TPL_UINT_DECL(schMode, 1, ASCENDC_TPL_UI_LIST,
-        ANCHOR_RESPONSE_FLAGS_SCH_MODE_0,
-        ANCHOR_RESPONSE_FLAGS_SCH_MODE_1),
-    ASCENDC_TPL_UINT_DECL(is32Bit, 1, ASCENDC_TPL_UI_LIST,
-        ANCHOR_RESPONSE_FLAGS_IS_64BIT,
-        ANCHOR_RESPONSE_FLAGS_IS_32BIT));
+ASCENDC_TPL_ARGS_DECL(AnchorResponseFlags,
+                      ASCENDC_TPL_UINT_DECL(schMode, 1, ASCENDC_TPL_UI_LIST, ANCHOR_RESPONSE_FLAGS_SCH_MODE_0,
+                                            ANCHOR_RESPONSE_FLAGS_SCH_MODE_1),
+                      ASCENDC_TPL_UINT_DECL(is32Bit, 1, ASCENDC_TPL_UI_LIST, ANCHOR_RESPONSE_FLAGS_IS_64BIT,
+                                            ANCHOR_RESPONSE_FLAGS_IS_32BIT));
 
-ASCENDC_TPL_SEL(ASCENDC_TPL_ARGS_SEL(
-    ASCENDC_TPL_UINT_SEL(schMode, ASCENDC_TPL_UI_LIST,
-        ANCHOR_RESPONSE_FLAGS_SCH_MODE_0,
-        ANCHOR_RESPONSE_FLAGS_SCH_MODE_1),
-    ASCENDC_TPL_UINT_SEL(is32Bit, ASCENDC_TPL_UI_LIST,
-        ANCHOR_RESPONSE_FLAGS_IS_64BIT,
-        ANCHOR_RESPONSE_FLAGS_IS_32BIT)));
+ASCENDC_TPL_SEL(ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_UINT_SEL(schMode, ASCENDC_TPL_UI_LIST,
+                                                          ANCHOR_RESPONSE_FLAGS_SCH_MODE_0,
+                                                          ANCHOR_RESPONSE_FLAGS_SCH_MODE_1),
+                                     ASCENDC_TPL_UINT_SEL(is32Bit, ASCENDC_TPL_UI_LIST, ANCHOR_RESPONSE_FLAGS_IS_64BIT,
+                                                          ANCHOR_RESPONSE_FLAGS_IS_32BIT)));
 
 #endif // __ANCHOR_RESPONSE_FLAGS_TILING_KEY_H__

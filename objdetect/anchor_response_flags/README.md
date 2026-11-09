@@ -45,6 +45,8 @@ $$
 output = repeat(responsible\_grid, num\_base\_anchors)
 $$
 
+- 求值精度：上述公式中的除法以 float32 精度求值，kernel 与参考实现均先做 float32 除法再向下取整；当 stride 超过 2^24（float32 可精确表示的整数上限）时，除数按 float32 舍入后的值参与运算。
+
 ## 参数说明
 
 <table style="undefined;table-layout: fixed; width: 980px"><colgroup>
@@ -80,14 +82,14 @@ $$
     <tr>
       <td>featmap_size</td>
       <td>属性</td>
-      <td>特征图大小，长度为2的列表[feat_h, feat_w]。</td>
+      <td>特征图大小，长度不少于 2 的列表 [feat_h, feat_w]，仅前两个元素参与计算，多余元素忽略。</td>
       <td>ListInt</td>
       <td>-</td>
     </tr>
     <tr>
       <td>strides</td>
       <td>属性</td>
-      <td>步长，长度为2的列表[stride_w, stride_h]，值必须为正整数。x 方向步长在前，y 方向步长在后。</td>
+      <td>步长，长度不少于 2 的列表 [stride_w, stride_h]，值必须为正整数。x 方向步长在前，y 方向步长在后，仅前两个元素参与计算，多余元素忽略。</td>
       <td>ListInt</td>
       <td>-</td>
     </tr>
@@ -102,14 +104,16 @@ $$
 
 ## 约束说明
 
-1. 输入 gt_bboxes 必须为 2D tensor，第二维必须为 4。
-2. featmap_size 和 strides 必须为长度为 2 的列表。
+1. 输入 gt_bboxes 必须为 2D tensor，第二维必须为 4，行数 N 不超过 INT32_MAX（2^31-1）。
+2. featmap_size 与 strides 的长度均必须不少于 2，仅前两个元素参与计算（featmap_size 取 [feat_h, feat_w]，strides 取 [stride_w, stride_h]），多余元素忽略。
 3. featmap_size 中的值必须为正整数（不包含 0），且不超过 INT32_MAX。
 4. strides 中的值必须为正整数（不包含 0），且不超过 INT32_MAX。
-5. num_base_anchors 不能为负数。
+5. num_base_anchors 取值范围为 [0, INT32_MAX]（不含负数）。
 6. 输出 dtype 固定为 uint8，不随输入 dtype 变化。
 7. 当 gt_bboxes 为空（N=0）时，输出全零 tensor。
-8. 中心点映射后超出特征图范围时，grid 索引会被裁剪到有效范围内。
+8. 中心点映射后的 grid 索引超出特征图范围时，索引被裁剪到有效范围内：负索引裁剪到 0（即中心点位于特征图左/上边界之外时映射到首行/首列网格），正向越界裁剪到 feat_size - 1。
+9. 当中心点坐标值为 NaN 或 Inf（包括中心点求和溢出为 Inf 的情况）时，该中心点映射到 grid 索引 0。
+10. gt_bboxes 支持动态 Shape：第 0 维（行数 N）在构图时可置 -1（unknown dim），也支持 unknown rank（shape 为 [-2]）。此时 InferShape 跳过对输入维度的校验，输出 shape [feat_h * feat_w * num_base_anchors] 仅由属性推导，可与动态 batch 图配合使用；N 在图执行前由实际输入具体化。
 
 ## 调用说明
 

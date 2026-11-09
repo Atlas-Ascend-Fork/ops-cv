@@ -23,6 +23,7 @@
 #include "../../op_kernel/arch35/anchor_response_flags_tiling_data.h"
 #include "../../op_kernel/arch35/anchor_response_flags_tiling_key.h"
 #include <limits>
+#include <string>
 
 namespace optiling {
 
@@ -30,6 +31,19 @@ constexpr int64_t PER_CORE_MIN = 1024;
 constexpr int64_t CORE_PARTITION_ALIGN = 256;
 constexpr uint32_t DCACHE_SIZE = 128 * 1024;
 constexpr uint32_t STATIC_UB_ESTIMATE = 0;
+
+// Stringify an int64 attribute list for structured error reporting, e.g. "[2, 2, 64]".
+static std::string IntListToString(const gert::TypedContinuousVector<int64_t>* list)
+{
+    std::string result = "[";
+    for (size_t i = 0; i < list->GetSize(); ++i) {
+        if (i > 0) {
+            result += ", ";
+        }
+        result += std::to_string(list->GetData()[i]);
+    }
+    return result + "]";
+}
 
 struct AnchorResponseFlagsCompileInfo {};
 
@@ -54,19 +68,40 @@ static ge::graphStatus GetAndValidateAttrs(gert::TilingContext* context, int32_t
 
     auto numBaseAnchorsPtr = attrs->GetInt(2);
     OP_CHECK_NULL_WITH_CONTEXT(context, numBaseAnchorsPtr);
-    OP_CHECK_IF(*numBaseAnchorsPtr < 0 || *numBaseAnchorsPtr > static_cast<int64_t>(INT32_MAX),
-                OP_LOGE(context, "num_base_anchors must be in [0, INT32_MAX]"), return ge::GRAPH_FAILED);
+    if (*numBaseAnchorsPtr < 0 || *numBaseAnchorsPtr > static_cast<int64_t>(INT32_MAX)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "num_base_anchors",
+                                              std::to_string(*numBaseAnchorsPtr).c_str(),
+                                              "num_base_anchors must be in [0, INT32_MAX]");
+        return ge::GRAPH_FAILED;
+    }
     numBaseAnchors = static_cast<int32_t>(*numBaseAnchorsPtr);
 
-    OP_CHECK_IF(featmapSizeLen != 2, OP_LOGE(context, "featmap_size must have exactly 2 elements"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(featmapSizeData[0] <= 0 || featmapSizeData[0] > static_cast<int64_t>(INT32_MAX) ||
-                    featmapSizeData[1] <= 0 || featmapSizeData[1] > static_cast<int64_t>(INT32_MAX),
-                OP_LOGE(context, "featmap_size elements must be in [1, INT32_MAX]"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(stridesLen != 2, OP_LOGE(context, "strides must have exactly 2 elements"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(stridesData[0] <= 0 || stridesData[0] > static_cast<int64_t>(INT32_MAX) || stridesData[1] <= 0 ||
-                    stridesData[1] > static_cast<int64_t>(INT32_MAX),
-                OP_LOGE(context, "strides elements must be in [1, INT32_MAX]"), return ge::GRAPH_FAILED);
+    if (featmapSizeLen < 2) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "featmap_size",
+                                              IntListToString(featmapSizeAttr).c_str(),
+                                              "The length of featmap_size must be at least 2; only the first two "
+                                              "elements [feat_h, feat_w] are used and extra elements are ignored");
+        return ge::GRAPH_FAILED;
+    }
+    if (featmapSizeData[0] <= 0 || featmapSizeData[0] > static_cast<int64_t>(INT32_MAX) || featmapSizeData[1] <= 0 ||
+        featmapSizeData[1] > static_cast<int64_t>(INT32_MAX)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "featmap_size",
+                                              IntListToString(featmapSizeAttr).c_str(),
+                                              "Each element of featmap_size must be in [1, INT32_MAX]");
+        return ge::GRAPH_FAILED;
+    }
+    if (stridesLen < 2) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "strides", IntListToString(stridesAttr).c_str(),
+                                              "The length of strides must be at least 2; only the first two "
+                                              "elements [stride_w, stride_h] are used and extra elements are ignored");
+        return ge::GRAPH_FAILED;
+    }
+    if (stridesData[0] <= 0 || stridesData[0] > static_cast<int64_t>(INT32_MAX) || stridesData[1] <= 0 ||
+        stridesData[1] > static_cast<int64_t>(INT32_MAX)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "strides", IntListToString(stridesAttr).c_str(),
+                                              "Each element of strides must be in [1, INT32_MAX]");
+        return ge::GRAPH_FAILED;
+    }
     featH = static_cast<int32_t>(featmapSizeData[0]);
     featW = static_cast<int32_t>(featmapSizeData[1]);
     strideH = static_cast<int32_t>(stridesData[0]);
@@ -81,13 +116,27 @@ static ge::graphStatus ValidateInputShape(gert::TilingContext* context, int64_t&
     auto inputGtBboxes = context->GetInputShape(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, inputGtBboxes);
     const auto& storageShape = inputGtBboxes->GetStorageShape();
-    OP_CHECK_IF(storageShape.GetDimNum() != 2,
-                OP_LOGE(context, "gt_bboxes must be 2D, but got %zu dims", storageShape.GetDimNum()),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(storageShape.GetDim(1) != 4,
-                OP_LOGE(context, "gt_bboxes second dimension must be 4, but got %ld", storageShape.GetDim(1)),
-                return ge::GRAPH_FAILED);
+    if (storageShape.GetDimNum() != 2) {
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "gt_bboxes",
+                                              Ops::Base::ToString(storageShape).c_str(),
+                                              "gt_bboxes must be a 2D tensor");
+        return ge::GRAPH_FAILED;
+    }
+    if (storageShape.GetDim(1) != 4) {
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "gt_bboxes",
+                                              Ops::Base::ToString(storageShape).c_str(),
+                                              "The second dimension of gt_bboxes must be 4");
+        return ge::GRAPH_FAILED;
+    }
     n = storageShape.GetDim(0);
+    // The tiling data and kernel carry n as int32; reject row counts that would silently narrow.
+    if (n > static_cast<int64_t>(INT32_MAX)) {
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "gt_bboxes",
+                                              Ops::Base::ToString(storageShape).c_str(),
+                                              "The N-dimension (0th axis) of gt_bboxes must not exceed INT32_MAX "
+                                              "because tiling carries N as int32");
+        return ge::GRAPH_FAILED;
+    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -97,17 +146,22 @@ static ge::graphStatus ValidateDtype(gert::TilingContext* context)
     auto inputDesc = context->GetInputDesc(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, inputDesc);
     ge::DataType inputDtype = inputDesc->GetDataType();
-    OP_CHECK_IF(
-        inputDtype != ge::DT_FLOAT && inputDtype != ge::DT_FLOAT16,
-        OP_LOGE(context, "gt_bboxes dtype must be float32 or float16, but got %d", static_cast<int32_t>(inputDtype)),
-        return ge::GRAPH_FAILED);
+    if (inputDtype != ge::DT_FLOAT && inputDtype != ge::DT_FLOAT16) {
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "gt_bboxes",
+                                               Ops::Base::ToString(inputDtype).c_str(),
+                                               "The dtype of gt_bboxes must be float32 or float16");
+        return ge::GRAPH_FAILED;
+    }
 
     auto outputDesc = context->GetOutputDesc(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, outputDesc);
     ge::DataType outputDtype = outputDesc->GetDataType();
-    OP_CHECK_IF(outputDtype != ge::DT_UINT8,
-                OP_LOGE(context, "flags dtype must be uint8, but got %d", static_cast<int32_t>(outputDtype)),
-                return ge::GRAPH_FAILED);
+    if (outputDtype != ge::DT_UINT8) {
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "flags",
+                                               Ops::Base::ToString(outputDtype).c_str(),
+                                               "The dtype of flags must be uint8");
+        return ge::GRAPH_FAILED;
+    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -186,12 +240,13 @@ static ge::graphStatus SetupTilingKey(gert::TilingContext* context, int64_t tota
     } else if (dataType == ge::DT_FLOAT16) {
         schMode = ANCHOR_RESPONSE_FLAGS_SCH_MODE_1;
     } else {
-        OP_LOGE(context, "unsupported dtype of input[0], ge::DataType[%d], only DT_FLOAT and DT_FLOAT16 are supported",
-                static_cast<int32_t>(dataType));
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "gt_bboxes",
+                                               Ops::Base::ToString(dataType).c_str(),
+                                               "The dtype of gt_bboxes must be float32 or float16");
         return ge::GRAPH_FAILED;
     }
 
-    // R003: use 32-bit index path when totalAnchors fits in int32
+    // Use the 32-bit index path when totalAnchors fits in int32
     bool use32Bit = (totalAnchors > 0 && totalAnchors <= static_cast<int64_t>(INT32_MAX));
     uint32_t is32Bit = use32Bit ? ANCHOR_RESPONSE_FLAGS_IS_32BIT : ANCHOR_RESPONSE_FLAGS_IS_64BIT;
 
@@ -239,8 +294,15 @@ static ge::graphStatus AnchorResponseFlagsTilingFunc(gert::TilingContext* contex
     int64_t totalAnchors = 0;
     int64_t perCoreBytes = 0;
     int64_t needCoreNum = 0;
-    OP_CHECK_IF(!ComputeTilingParams(featH, featW, numBaseAnchors, coreNum, totalAnchors, perCoreBytes, needCoreNum),
-                OP_LOGE(context, "output anchor count overflows int64"), return ge::GRAPH_FAILED);
+    if (!ComputeTilingParams(featH, featW, numBaseAnchors, coreNum, totalAnchors, perCoreBytes, needCoreNum)) {
+        std::string incorrectValue = "featmap_size=[" + std::to_string(featH) + ", " + std::to_string(featW) +
+                                     "], num_base_anchors=" + std::to_string(numBaseAnchors);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "featmap_size and num_base_anchors",
+                                              incorrectValue.c_str(),
+                                              "The output anchor count feat_h * feat_w * num_base_anchors must not "
+                                              "exceed INT64_MAX");
+        return ge::GRAPH_FAILED;
+    }
 
     ret = FillTilingData(context, needCoreNum, n, featH, featW, strideH, strideW, numBaseAnchors, totalAnchors,
                          perCoreBytes);
