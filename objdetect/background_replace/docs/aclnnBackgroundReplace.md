@@ -319,7 +319,7 @@ int main() {
   aclTensor* out = nullptr;
   std::vector<uint8_t> bkgHostData = {0, 1, 2, 3, 4, 5, 6, 7};
   std::vector<uint8_t> srcHostData = {1, 2, 3, 4, 5, 6, 7, 8};
-  std::vector<float> maskHostData = {1, 1, 1, 1, 1, 1, 1, 1};
+  std::vector<aclFloat16> maskHostData(8, aclFloatToFloat16(1.0f));
   std::vector<uint8_t> outHostData = {0, 0, 0, 0, 0, 0, 0, 0};
   // 创建bkg aclTensor
   ret = CreateAclTensor(bkgHostData, bkgShape, &bkgDeviceAddr, aclDataType::ACL_UINT8, &bkg);
