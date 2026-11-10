@@ -13,7 +13,9 @@
  * \brief resize_nearest_neighbor_v2
  */
 #include "./arch35/resize_nearest_neighbor_v2_base.h"
+#ifdef __CCE_AICORE_SUPPORT_SIMT__
 #include "./arch35/resize_nearest_neighbor_v2_simt.h"
+#endif
 #include "./arch35/resize_nearest_neighbor_v2_data_copy_big_c.h"
 #include "./arch35/resize_nearest_neighbor_v2_data_copy_jh.h"
 #include "./arch35/resize_nearest_neighbor_v2_data_copy_small_c.h"
@@ -111,6 +113,7 @@ __global__ __aicore__ void resize_nearest_neighbor_v2(GM_ADDR x, GM_ADDR size, G
         }
         return;
     }
+#ifdef __CCE_AICORE_SUPPORT_SIMT__
     if constexpr (idxInt32) {
         ResizeNearestNeighborV2::ResizeNearestNeighborV2Simt<DTYPE_X, uint32_t, format, schId, alignCorners,
                                                              halfPixelCenters>
@@ -126,4 +129,5 @@ __global__ __aicore__ void resize_nearest_neighbor_v2(GM_ADDR x, GM_ADDR size, G
         op.Process();
         return;
     }
+#endif
 }

@@ -319,8 +319,8 @@ __aicore__ inline void ResizeGather<T, T1, schId, alignCorners>::ComputeHids(Loc
         }
         for (uint16_t i = 0; i < times; i++) {
             pregRemainB32 = AscendC::Reg::UpdateMask<int32_t>(remainNum);
-            Adds(idxInt32Reg, idxInt32Reg, 64, pregRemainB32);
-            AscendC::Reg::AddrReg dstOffset = AscendC::Reg::CreateAddrReg<T1>(i, 64);
+            Adds(idxInt32Reg, idxInt32Reg, vlLenB32_, pregRemainB32);
+            AscendC::Reg::AddrReg dstOffset = AscendC::Reg::CreateAddrReg<T1>(i, vlLenB32_);
             if constexpr (sizeof(T1) == sizeof(int32_t)) {
                 StoreAlign(idxUbRemainAddr, (Reg::RegTensor<T1>&)idxInt32Reg, dstOffset, pregRemainB32);
             } else {
@@ -391,7 +391,7 @@ __aicore__ inline void ComputeHOrWids(LocalTensor<T1>& idxUb, float bias, float 
         }
         for (uint16_t i = 0; i < times; i++) {
             pregRemainB32 = AscendC::Reg::UpdateMask<int32_t>(remainNum);
-            Adds(idxInt32Reg, idxInt32Reg, 64.0f, pregRemainB32);
+            Adds(idxInt32Reg, idxInt32Reg, static_cast<float>(vfLenb32), pregRemainB32);
             Adds(hIdxF, idxInt32Reg, bias, pregRemainB32);
             Muls(hIdxF, hIdxF, scale, pregRemainB32);
             if constexpr (alignCorners == 1) {
@@ -403,7 +403,7 @@ __aicore__ inline void ComputeHOrWids(LocalTensor<T1>& idxUb, float bias, float 
             if constexpr (isH) {
                 Muls(hIdxInt32C, hIdxInt32C, srcW, pregRemainB32);
             }
-            AscendC::Reg::AddrReg dstOffset = AscendC::Reg::CreateAddrReg<T1>(i, 64);
+            AscendC::Reg::AddrReg dstOffset = AscendC::Reg::CreateAddrReg<T1>(i, vfLenb32);
             if constexpr (sizeof(T1) == sizeof(int32_t)) {
                 StoreAlign(idxUbRemainAddr, (Reg::RegTensor<T1>&)hIdxInt32C, dstOffset, pregRemainB32);
             } else {
@@ -656,7 +656,7 @@ __aicore__ inline void ResizeGather<T, T1, schId, alignCorners>::ComputeAllHw()
             loopParams.loop2SrcStride = 0;
             loopParams.loop2DstStride = 0;
             loopParams.loop1SrcStride = srcHwNum_ * sizeof(T);
-            loopParams.loop1DstStride = srcHSize_ * srcWAlignSize_ * sizeof(T);
+            loopParams.loop1DstStride = hiSize * srcWAlignSize_ * sizeof(T);
             SetLoopModePara(loopParams, DataCopyMVType::OUT_TO_UB);
             DataCopyPad(xLocal, xGm_[srcOffset], copyParams_, padParams_);
             ResetLoopModePara(DataCopyMVType::OUT_TO_UB);
