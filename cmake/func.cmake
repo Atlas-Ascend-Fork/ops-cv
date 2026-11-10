@@ -537,6 +537,28 @@ function(find_value_by_key key_list value_list search_key result)
   set(${result} ${found_value} PARENT_SCOPE)
 endfunction()
 
+# 收集所有匹配 key 的 value，保持配对顺序，支持同一芯片型号配置多个 tiling 目录
+function(find_values_by_key key_list value_list search_key result)
+  list(LENGTH key_list key_list_length)
+  list(LENGTH value_list value_list_length)
+  if(NOT ${key_list_length} EQUAL ${value_list_length})
+    message(FATAL_ERROR "key_list length is ${key_list_length}, value_list length is ${value_list_length}, not equal")
+  endif()
+  set(found_values "")
+  set(index 0)
+  while(index LESS key_list_length)
+    list(GET key_list ${index} key)
+    if("${key}" STREQUAL "${search_key}")
+      list(GET value_list ${index} value)
+      if(NOT "${value}" STREQUAL "")
+        list(APPEND found_values ${value})
+      endif()
+    endif()
+    math(EXPR index "${index} + 1")
+  endwhile()
+  set(${result} "${found_values}" PARENT_SCOPE)
+endfunction()
+
 ###################################################################################################
 # get npuArch by socVersion, mapping is consistent with get_simulator_chip_version in scripts/build_example.sh
 # 映射列表 ASCEND_ALL_COMPUTE_UNIT/SOC_TO_ARCH_VALUES 定义在 soc_arch_variables.cmake，两者按位置一一对应
@@ -758,11 +780,13 @@ function(add_tiling_sources tiling_dir disable_in_opp)
   endif()
 
   set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-  if("${tiling_dir}" STREQUAL "")
-    file(GLOB OPTILING_SRCS ${SOURCE_DIR}/op_host/*_tiling*.cpp)
-  else()
-    file(GLOB OPTILING_SRCS ${SOURCE_DIR}/op_host/*_tiling*.cpp ${SOURCE_DIR}/op_host/${tiling_dir}/*_tiling*.cpp)
-  endif()
+  set(_tiling_globs ${SOURCE_DIR}/op_host/*_tiling*.cpp)
+  foreach(_tiling_sub_dir IN LISTS tiling_dir)
+    if(NOT "${_tiling_sub_dir}" STREQUAL "")
+      list(APPEND _tiling_globs ${SOURCE_DIR}/op_host/${_tiling_sub_dir}/*_tiling*.cpp)
+    endif()
+  endforeach()
+  file(GLOB OPTILING_SRCS ${_tiling_globs})
 
   if(OPTILING_SRCS)
     add_tiling_modules()
@@ -779,6 +803,8 @@ endfunction()
 # NPU_ARCH 设置支持的npuArch列表，必须与TILING_DIR一一对应，示例：dav_2201 dav_3510；与COMPUTE_UNIT互斥，
 #          配置后当前构建芯片转换为npuArch统一按arch匹配
 # TILING_DIR 设置所支持芯片类型对应的tiling文件目录，必须与COMPUTE_UNIT（或NPU_ARCH）一一对应，示例：arch22 arch35
+#            同一型号可在 NPU_ARCH（或 COMPUTE_UNIT）中重复填写，并按位置配对多个目录，
+#            示例：NPU_ARCH dav_2201 dav_2201 dav_3510 TILING_DIR arch22 arch22_common arch35
 # DISABLE_IN_OPP 设置是否在opp包中编译tiling文件，布尔类型：TRUE，FALSE
 # HOSTCPU 设置是否编译host侧常量折叠OBJECT，布尔类型：TRUE，FALSE，仅在built-in包生效
 macro(add_all_modules_sources)
@@ -851,7 +877,7 @@ macro(add_all_modules_sources)
     set(_cur_keys "${MODULE_COMPUTE_UNIT}")
   endif()
   if(_cur_key)
-    find_value_by_key("${_cur_keys}" "${MODULE_TILING_DIR}" "${_cur_key}" tiling_dir)
+    find_values_by_key("${_cur_keys}" "${MODULE_TILING_DIR}" "${_cur_key}" tiling_dir)
   endif()
   add_tiling_sources("${tiling_dir}" "${MODULE_DISABLE_IN_OPP}")
 

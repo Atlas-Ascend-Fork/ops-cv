@@ -325,7 +325,7 @@ if(UT_TEST_ALL
   function(add_modules_ut_sources)
     set(options OPTION_RESERVED)
     set(oneValueArgs UT_NAME MODE DIR)
-    set(multiValueArgs MULIT_RESERVED)
+    set(multiValueArgs TILING_DIR MULIT_RESERVED)
     cmake_parse_arguments(MODULE "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if("${MODULE_UT_NAME}" STREQUAL "${OP_TILING_MODULE_NAME}")
@@ -342,7 +342,13 @@ if(UT_TEST_ALL
       if(NOT TARGET ${MODULE_UT_NAME}_cases_obj)
         add_library(${MODULE_UT_NAME}_cases_obj OBJECT)
       endif()
-      file(GLOB OPHOST_TILING_CASES_SRC ${MODULE_DIR}/test_*_tiling.cpp)
+      set(_ut_tiling_globs ${MODULE_DIR}/test_*_tiling.cpp)
+      foreach(_tiling_sub_dir IN LISTS MODULE_TILING_DIR)
+        if(NOT "${_tiling_sub_dir}" STREQUAL "")
+          list(APPEND _ut_tiling_globs ${MODULE_DIR}/${_tiling_sub_dir}/test_*_tiling*.cpp)
+        endif()
+      endforeach()
+      file(GLOB OPHOST_TILING_CASES_SRC ${_ut_tiling_globs})
       target_sources(${MODULE_UT_NAME}_cases_obj ${MODULE_MODE} ${OPHOST_TILING_CASES_SRC})
     endif()
 
