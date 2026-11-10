@@ -36,10 +36,20 @@
 
 namespace optiling {
 
-constexpr int32_t PER_CORE_MIN = 1024;             // 每核最小处理量（对齐 32）
+constexpr int32_t PER_CORE_MIN = 1024;             // 每核最小处理量（对齐 ALIGN_32）
+constexpr int64_t ALIGN_32 = 32;                   // SIMT 调度对齐粒度
 constexpr int64_t MAX_SAFE_SAMPLING_RATIO = 46340; // ratio^2 must fit int32 in kernel
 constexpr int64_t WS_ALIGN = 128;
 constexpr int64_t MAX_USER_WORKSPACE_BYTES = 2LL * 1024 * 1024 * 1024;
+// NCHW / offset layout
+static constexpr size_t NCHW_RANK = 4;
+static constexpr size_t ROIS_RANK = 2;
+static constexpr int64_t DIM_N = 0;
+static constexpr int64_t DIM_C = 1;
+static constexpr int64_t DIM_H = 2;
+static constexpr int64_t DIM_W = 3;
+static constexpr int64_t ROI_FIELD_NUM = 5;
+static constexpr int64_t OFFSET_CHANNEL_NUM = 2; // offset channels: (dh, dw)
 
 struct DeformableRoiPoolGradCompileInfo {};
 
@@ -72,25 +82,27 @@ static ge::graphStatus ValidateShapes(gert::TilingContext* context, bool hasOffs
     const auto& grad = gradShape->GetStorageShape();
     const auto& x = xShape->GetStorageShape();
     const auto& rois = roisShape->GetStorageShape();
-    OP_CHECK_IF(grad.GetDimNum() != 4 || x.GetDimNum() != 4 || rois.GetDimNum() != 2,
+    OP_CHECK_IF(grad.GetDimNum() != NCHW_RANK || x.GetDimNum() != NCHW_RANK || rois.GetDimNum() != ROIS_RANK,
                 OP_LOGE(context, "grad/x/rois rank must be 4/4/2"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(!IsInt32Dimension(grad.GetDim(0), true) || !IsInt32Dimension(grad.GetDim(1)) ||
-                    !IsInt32Dimension(grad.GetDim(2)) || !IsInt32Dimension(grad.GetDim(3)) ||
-                    !IsInt32Dimension(x.GetDim(0), true) || !IsInt32Dimension(x.GetDim(1)) ||
-                    !IsInt32Dimension(x.GetDim(2)) || !IsInt32Dimension(x.GetDim(3)),
+    OP_CHECK_IF(!IsInt32Dimension(grad.GetDim(DIM_N), true) || !IsInt32Dimension(grad.GetDim(DIM_C)) ||
+                    !IsInt32Dimension(grad.GetDim(DIM_H)) || !IsInt32Dimension(grad.GetDim(DIM_W)) ||
+                    !IsInt32Dimension(x.GetDim(DIM_N), true) || !IsInt32Dimension(x.GetDim(DIM_C)) ||
+                    !IsInt32Dimension(x.GetDim(DIM_H)) || !IsInt32Dimension(x.GetDim(DIM_W)),
                 OP_LOGE(context, "grad/x dimensions are outside the supported int32 range"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(rois.GetDim(0) != grad.GetDim(0) || rois.GetDim(1) != 5,
+    OP_CHECK_IF(rois.GetDim(DIM_N) != grad.GetDim(DIM_N) || rois.GetDim(DIM_C) != ROI_FIELD_NUM,
                 OP_LOGE(context, "rois shape must be [grad.N, 5]"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(grad.GetDim(1) != x.GetDim(1), OP_LOGE(context, "grad.C must equal x.C"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(x.GetDim(2) > std::numeric_limits<int32_t>::max() / x.GetDim(3),
+    OP_CHECK_IF(grad.GetDim(DIM_C) != x.GetDim(DIM_C), OP_LOGE(context, "grad.C must equal x.C"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(x.GetDim(DIM_H) > std::numeric_limits<int32_t>::max() / x.GetDim(DIM_W),
                 OP_LOGE(context, "x.H * x.W exceeds the kernel int32 index range"), return ge::GRAPH_FAILED);
 
     if (hasOffset) {
         const auto* offsetShape = context->GetInputShape(3);
         OP_CHECK_NULL_WITH_CONTEXT(context, offsetShape);
         const auto& offset = offsetShape->GetStorageShape();
-        if (offset.GetDimNum() != 4 || offset.GetDim(0) != grad.GetDim(0) || offset.GetDim(1) != 2 ||
-            offset.GetDim(2) != grad.GetDim(2) || offset.GetDim(3) != grad.GetDim(3)) {
+        if (offset.GetDimNum() != NCHW_RANK || offset.GetDim(DIM_N) != grad.GetDim(DIM_N) ||
+            offset.GetDim(DIM_C) != OFFSET_CHANNEL_NUM || offset.GetDim(DIM_H) != grad.GetDim(DIM_H) ||
+            offset.GetDim(DIM_W) != grad.GetDim(DIM_W)) {
             OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "offset", Ops::Base::ToString(offset).c_str(),
                                                   "offset must have shape [grad.N, 2, grad.pH, grad.pW]");
             return ge::GRAPH_FAILED;
@@ -244,7 +256,7 @@ static ge::graphStatus DeformableRoiPoolGradTilingFunc(gert::TilingContext* cont
     if (perCoreElements < PER_CORE_MIN) {
         perCoreElements = PER_CORE_MIN;
     }
-    perCoreElements = AlignUp(perCoreElements, 32);
+    perCoreElements = AlignUp(perCoreElements, ALIGN_32);
     int32_t needCoreNum = static_cast<int32_t>(Ops::Base::CeilDiv(schedulingElements, perCoreElements));
     if (needCoreNum < 1) {
         needCoreNum = 1;

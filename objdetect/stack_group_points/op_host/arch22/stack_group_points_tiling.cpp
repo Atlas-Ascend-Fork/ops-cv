@@ -53,6 +53,8 @@ public:
     ge::graphStatus RunKernelTiling();
 
 private:
+    ge::graphStatus LoadShapesAndPartitionCores(const char* opName, int64_t actCoreNum);
+
     StackGroupPointsTilingData tilingData;
     gert::TilingContext* tilingContext = nullptr;
     int64_t b;
@@ -71,21 +73,8 @@ private:
     int64_t actCore;
 };
 
-ge::graphStatus StackGroupPointsTiling::Init()
+ge::graphStatus StackGroupPointsTiling::LoadShapesAndPartitionCores(const char* opName, int64_t actCoreNum)
 {
-    const char* opName = OpNameOf(tilingContext);
-    auto compileInfo = reinterpret_cast<const StackGroupPointsCompileInfo*>(tilingContext->GetCompileInfo());
-    if (compileInfo == nullptr) {
-        OP_LOGE_WITHOUT_REPORT(opName, "compileInfo is nullptr");
-        return ge::GRAPH_FAILED;
-    }
-    const int64_t actCoreNum = compileInfo->totalCoreNum;
-    if (actCoreNum <= 0) {
-        OP_LOGE_FOR_INVALID_CONFIG_WITH_REASON(opName, "platform", "vectorCoreNum", std::to_string(actCoreNum).c_str(),
-                                               "vectorCoreNum must be > 0");
-        return ge::GRAPH_FAILED;
-    }
-
     this->res = 0;
     this->reminder = 0;
     this->outLength = 0;
@@ -132,6 +121,27 @@ ge::graphStatus StackGroupPointsTiling::Init()
         tilingContext->SetBlockDim(actCoreNum);
     } else {
         tilingContext->SetBlockDim(coreRes);
+    }
+    return ge::GRAPH_SUCCESS;
+}
+
+ge::graphStatus StackGroupPointsTiling::Init()
+{
+    const char* opName = OpNameOf(tilingContext);
+    auto compileInfo = reinterpret_cast<const StackGroupPointsCompileInfo*>(tilingContext->GetCompileInfo());
+    if (compileInfo == nullptr) {
+        OP_LOGE_WITHOUT_REPORT(opName, "compileInfo is nullptr");
+        return ge::GRAPH_FAILED;
+    }
+    const int64_t actCoreNum = compileInfo->totalCoreNum;
+    if (actCoreNum <= 0) {
+        OP_LOGE_FOR_INVALID_CONFIG_WITH_REASON(opName, "platform", "vectorCoreNum", std::to_string(actCoreNum).c_str(),
+                                               "vectorCoreNum must be > 0");
+        return ge::GRAPH_FAILED;
+    }
+
+    if (LoadShapesAndPartitionCores(opName, actCoreNum) != ge::GRAPH_SUCCESS) {
+        return ge::GRAPH_FAILED;
     }
 
     auto features = tilingContext->GetInputTensor(0);

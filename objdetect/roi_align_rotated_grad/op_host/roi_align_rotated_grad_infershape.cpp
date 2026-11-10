@@ -64,37 +64,8 @@ const uint32_t OUTPUT_Y_GRAD = 0;
 } // namespace
 
 namespace ge {
-// ══ 属性约束校验（SE §6.3 表1 C7~C9，与 tiling 侧对偶）══════════════════════
-static ge::graphStatus ValidateInferShapeAttrs(gert::InferShapeContext* context, const gert::RuntimeAttrs* attrs,
-                                               const int64_t*& yGradShape)
+static ge::graphStatus ValidatePooledAndSamplingAttrs(gert::InferShapeContext* context, const gert::RuntimeAttrs* attrs)
 {
-    auto yGradShapeList = attrs->GetListInt(INPUT_Y_GRAD_SHAPE);
-    if (yGradShapeList == nullptr) {
-        return ge::GRAPH_FAILED;
-    }
-    const size_t shapeLen = yGradShapeList->GetSize();
-    yGradShape = yGradShapeList->GetData();
-    // SE "参数约束"小节单参数约束: y_grad_shape 长度 == 4 且各元素 ≥ 0
-    if (shapeLen != Y_GRAD_SHAPE_LEN) {
-        const std::string actual = std::to_string(shapeLen);
-        OP_LOGE_FOR_INVALID_LISTSIZE(OpNameOf(context), "y_grad_shape", actual.c_str(), "4");
-        return ge::GRAPH_FAILED;
-    }
-    for (size_t i = 0; i < shapeLen; i++) {
-        if (yGradShape[i] < 0) {
-            const std::string actual = std::to_string(yGradShape[i]);
-            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "y_grad_shape", actual.c_str(),
-                                                  "each element must be greater than or equal to 0");
-            return ge::GRAPH_FAILED;
-        }
-        // 上界为 kernel int32 消费契约：B/H/W 经 VF 参数窄化（与 tiling 侧对偶）
-        if (yGradShape[i] > INT32_LIMIT) {
-            const std::string actual = std::to_string(yGradShape[i]);
-            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "y_grad_shape", actual.c_str(),
-                                                  "each element must not exceed 2147483647");
-            return ge::GRAPH_FAILED;
-        }
-    }
     // SE "参数约束"小节单参数约束: pooled_h > 0、pooled_w > 0
     const int64_t* pooledHeight = attrs->GetAttrPointer<int64_t>(INPUT_POOLED_H);
     const int64_t* pooledWidth = attrs->GetAttrPointer<int64_t>(INPUT_POOLED_W);
@@ -128,6 +99,65 @@ static ge::graphStatus ValidateInferShapeAttrs(gert::InferShapeContext* context,
         const std::string actual = std::to_string(*samplingRatio);
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "sampling_ratio", actual.c_str(),
                                               "must not exceed 2147483647");
+        return ge::GRAPH_FAILED;
+    }
+    return ge::GRAPH_SUCCESS;
+}
+
+// ══ 属性约束校验（SE §6.3 表1 C7~C9，与 tiling 侧对偶）══════════════════════
+static ge::graphStatus ValidateInferShapeAttrs(gert::InferShapeContext* context, const gert::RuntimeAttrs* attrs,
+                                               const int64_t*& yGradShape)
+{
+    auto yGradShapeList = attrs->GetListInt(INPUT_Y_GRAD_SHAPE);
+    if (yGradShapeList == nullptr) {
+        return ge::GRAPH_FAILED;
+    }
+    const size_t shapeLen = yGradShapeList->GetSize();
+    yGradShape = yGradShapeList->GetData();
+    // SE "参数约束"小节单参数约束: y_grad_shape 长度 == 4 且各元素 ≥ 0
+    if (shapeLen != Y_GRAD_SHAPE_LEN) {
+        const std::string actual = std::to_string(shapeLen);
+        OP_LOGE_FOR_INVALID_LISTSIZE(OpNameOf(context), "y_grad_shape", actual.c_str(), "4");
+        return ge::GRAPH_FAILED;
+    }
+    for (size_t i = 0; i < shapeLen; i++) {
+        if (yGradShape[i] < 0) {
+            const std::string actual = std::to_string(yGradShape[i]);
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "y_grad_shape", actual.c_str(),
+                                                  "each element must be greater than or equal to 0");
+            return ge::GRAPH_FAILED;
+        }
+        // 上界为 kernel int32 消费契约：B/H/W 经 VF 参数窄化（与 tiling 侧对偶）
+        if (yGradShape[i] > INT32_LIMIT) {
+            const std::string actual = std::to_string(yGradShape[i]);
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "y_grad_shape", actual.c_str(),
+                                                  "each element must not exceed 2147483647");
+            return ge::GRAPH_FAILED;
+        }
+    }
+    return ValidatePooledAndSamplingAttrs(context, attrs);
+}
+
+static ge::graphStatus ValidateXGradPooledAndChannel(gert::InferShapeContext* context, const gert::RuntimeAttrs* attrs,
+                                                     const gert::Shape* xGradShape, const int64_t* yGradShape)
+{
+    // SE "参数约束"小节跨参数约束: x_grad.dim(1)==pooled_h 且 dim(2)==pooled_w（C4）
+    const int64_t pooledHeight = *(attrs->GetAttrPointer<int64_t>(INPUT_POOLED_H));
+    const int64_t pooledWidth = *(attrs->GetAttrPointer<int64_t>(INPUT_POOLED_W));
+    if ((xGradShape->GetDim(HEIGHT_DIM) != ge::UNKNOWN_DIM && xGradShape->GetDim(HEIGHT_DIM) != pooledHeight) ||
+        (xGradShape->GetDim(WIDTH_DIM) != ge::UNKNOWN_DIM && xGradShape->GetDim(WIDTH_DIM) != pooledWidth)) {
+        const std::string actual = "[" + std::to_string(xGradShape->GetDim(HEIGHT_DIM)) + ", " +
+                                   std::to_string(xGradShape->GetDim(WIDTH_DIM)) + "]";
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "x_grad", actual.c_str(),
+                                              "the pooled height and width must equal pooled_h and pooled_w");
+        return ge::GRAPH_FAILED;
+    }
+    // SE "参数约束"小节跨参数约束: x_grad.dim(3) == y_grad_shape[3]（通道数一致）（C5）
+    if (xGradShape->GetDim(CHANNEL_DIM) != ge::UNKNOWN_DIM &&
+        xGradShape->GetDim(CHANNEL_DIM) != yGradShape[CHANNEL_DIM]) {
+        const std::string actual = "[" + std::to_string(xGradShape->GetDim(CHANNEL_DIM)) + "]";
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "x_grad", actual.c_str(),
+                                              "the channel dimension must equal y_grad_shape[3]");
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -178,26 +208,7 @@ static ge::graphStatus ValidateInferShapeInputs(gert::InferShapeContext* context
                                               "dim0(N) must not exceed 2147483647");
         return ge::GRAPH_FAILED;
     }
-    // SE "参数约束"小节跨参数约束: x_grad.dim(1)==pooled_h 且 dim(2)==pooled_w（C4）
-    const int64_t pooledHeight = *(attrs->GetAttrPointer<int64_t>(INPUT_POOLED_H));
-    const int64_t pooledWidth = *(attrs->GetAttrPointer<int64_t>(INPUT_POOLED_W));
-    if ((xGradShape->GetDim(1) != ge::UNKNOWN_DIM && xGradShape->GetDim(1) != pooledHeight) ||
-        (xGradShape->GetDim(2) != ge::UNKNOWN_DIM && xGradShape->GetDim(2) != pooledWidth)) {
-        const std::string actual = "[" + std::to_string(xGradShape->GetDim(1)) + ", " +
-                                   std::to_string(xGradShape->GetDim(2)) + "]";
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "x_grad", actual.c_str(),
-                                              "the pooled height and width must equal pooled_h and pooled_w");
-        return ge::GRAPH_FAILED;
-    }
-    // SE "参数约束"小节跨参数约束: x_grad.dim(3) == y_grad_shape[3]（通道数一致）（C5）
-    if (xGradShape->GetDim(CHANNEL_DIM) != ge::UNKNOWN_DIM &&
-        xGradShape->GetDim(CHANNEL_DIM) != yGradShape[CHANNEL_DIM]) {
-        const std::string actual = "[" + std::to_string(xGradShape->GetDim(CHANNEL_DIM)) + "]";
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "x_grad", actual.c_str(),
-                                              "the channel dimension must equal y_grad_shape[3]");
-        return ge::GRAPH_FAILED;
-    }
-    return ge::GRAPH_SUCCESS;
+    return ValidateXGradPooledAndChannel(context, attrs, xGradShape, yGradShape);
 }
 
 static ge::graphStatus InferShapeForRoiAlignRotatedGrad(gert::InferShapeContext* context)

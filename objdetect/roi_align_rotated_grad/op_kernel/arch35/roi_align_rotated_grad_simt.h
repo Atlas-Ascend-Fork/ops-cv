@@ -82,6 +82,12 @@ using namespace AscendC;
 
 static constexpr uint32_t THREAD_NUM = 256; // VF 线程数（MDE §2.2/§9.1，编译期常量；TTK r2 由 512 降 256 控栈）
 static constexpr int32_t C_SEG_SIZE = 32; // C 段大小（MDE §2.1，编译期常量）
+// sin/cos 象限：k mod 4 → (sin, cos) 符号/交换
+static constexpr int32_t SINCOS_QUAD_MASK = 3;
+static constexpr int32_t SINCOS_QUAD_0 = 0; // (sin, cos)
+static constexpr int32_t SINCOS_QUAD_1 = 1; // (cos, -sin)
+static constexpr int32_t SINCOS_QUAD_2 = 2; // (-sin, -cos)
+static constexpr int32_t SINCOS_QUAD_3 = 3; // (-cos, sin)
 
 // ============================================================================
 // float-float（Dekker 双单精度拆分）算术库（MDE §5.3，TTK r1 修复）
@@ -288,18 +294,18 @@ __simt_callee__ inline DfSinCosPair DfSinCos(Df theta)
     const Df z = DfMul(r, r);
     const Df sr = DfKernelSin(r, z);
     const Df cr = DfKernelCos(z);
-    const int32_t m = k & 3;
+    const int32_t m = k & SINCOS_QUAD_MASK;
     DfSinCosPair out;
-    if (m == 0) {
+    if (m == SINCOS_QUAD_0) {
         out.sinV = sr;
         out.cosV = cr;
-    } else if (m == 1) {
+    } else if (m == SINCOS_QUAD_1) {
         out.sinV = cr;
         out.cosV = DfNeg(sr);
-    } else if (m == 2) {
+    } else if (m == SINCOS_QUAD_2) {
         out.sinV = DfNeg(sr);
         out.cosV = DfNeg(cr);
-    } else {
+    } else { // SINCOS_QUAD_3
         out.sinV = DfNeg(cr);
         out.cosV = sr;
     }

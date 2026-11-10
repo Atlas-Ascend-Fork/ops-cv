@@ -21,6 +21,17 @@
 using namespace ge;
 
 namespace ops {
+namespace {
+constexpr size_t NCHW_RANK = 4;
+constexpr size_t ROIS_RANK = 2;
+constexpr int64_t DIM_N = 0;
+constexpr int64_t DIM_C = 1;
+constexpr int64_t DIM_H = 2;
+constexpr int64_t DIM_W = 3;
+constexpr int64_t ROI_FIELD_NUM = 5;
+constexpr int64_t OFFSET_CHANNEL_NUM = 2; // offset channels: (dh, dw)
+constexpr size_t OUTPUT_SIZE_LEN = 2;
+} // namespace
 
 static ge::graphStatus InferShapeDeformableRoiPoolGrad(gert::InferShapeContext* context)
 {
@@ -57,44 +68,45 @@ static ge::graphStatus InferShapeDeformableRoiPoolGrad(gert::InferShapeContext* 
         return ge::GRAPH_SUCCESS;
     }
 
-    OP_CHECK_IF(gradShape->GetDimNum() != 4 || xShape->GetDimNum() != 4 || roisShape->GetDimNum() != 2,
-                OP_LOGE(context, "grad/x/rois rank must be 4/4/2"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        gradShape->GetDimNum() != NCHW_RANK || xShape->GetDimNum() != NCHW_RANK || roisShape->GetDimNum() != ROIS_RANK,
+        OP_LOGE(context, "grad/x/rois rank must be 4/4/2"), return ge::GRAPH_FAILED);
 
     auto validDim = [kMaxInt32](int64_t dim, bool allowZero) {
         return dim == ge::UNKNOWN_DIM || ((allowZero ? dim >= 0 : dim > 0) && dim <= kMaxInt32);
     };
-    for (size_t i = 0; i < 4; ++i) {
-        OP_CHECK_IF(!validDim(gradShape->GetDim(i), i == 0),
+    for (size_t i = 0; i < NCHW_RANK; ++i) {
+        OP_CHECK_IF(!validDim(gradShape->GetDim(i), i == DIM_N),
                     OP_LOGE(context, "grad dimension is outside the supported int32 range"), return ge::GRAPH_FAILED);
-        OP_CHECK_IF(!validDim(xShape->GetDim(i), i == 0),
+        OP_CHECK_IF(!validDim(xShape->GetDim(i), i == DIM_N),
                     OP_LOGE(context, "x dimension is outside the supported int32 range"), return ge::GRAPH_FAILED);
     }
-    OP_CHECK_IF(
-        !validDim(roisShape->GetDim(0), true) || (roisShape->GetDim(1) != ge::UNKNOWN_DIM && roisShape->GetDim(1) != 5),
-        OP_LOGE(context, "rois shape must be [grad.N, 5]"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(gradShape->GetDim(0) != ge::UNKNOWN_DIM && roisShape->GetDim(0) != ge::UNKNOWN_DIM &&
-                    gradShape->GetDim(0) != roisShape->GetDim(0),
+    OP_CHECK_IF(!validDim(roisShape->GetDim(DIM_N), true) ||
+                    (roisShape->GetDim(DIM_C) != ge::UNKNOWN_DIM && roisShape->GetDim(DIM_C) != ROI_FIELD_NUM),
+                OP_LOGE(context, "rois shape must be [grad.N, 5]"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(gradShape->GetDim(DIM_N) != ge::UNKNOWN_DIM && roisShape->GetDim(DIM_N) != ge::UNKNOWN_DIM &&
+                    gradShape->GetDim(DIM_N) != roisShape->GetDim(DIM_N),
                 OP_LOGE(context, "grad.N must equal rois.N"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(gradShape->GetDim(1) != ge::UNKNOWN_DIM && xShape->GetDim(1) != ge::UNKNOWN_DIM &&
-                    gradShape->GetDim(1) != xShape->GetDim(1),
+    OP_CHECK_IF(gradShape->GetDim(DIM_C) != ge::UNKNOWN_DIM && xShape->GetDim(DIM_C) != ge::UNKNOWN_DIM &&
+                    gradShape->GetDim(DIM_C) != xShape->GetDim(DIM_C),
                 OP_LOGE(context, "grad.C must equal x.C"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(xShape->GetDim(2) != ge::UNKNOWN_DIM && xShape->GetDim(3) != ge::UNKNOWN_DIM &&
-                    xShape->GetDim(2) > kMaxInt32 / xShape->GetDim(3),
+    OP_CHECK_IF(xShape->GetDim(DIM_H) != ge::UNKNOWN_DIM && xShape->GetDim(DIM_W) != ge::UNKNOWN_DIM &&
+                    xShape->GetDim(DIM_H) > kMaxInt32 / xShape->GetDim(DIM_W),
                 OP_LOGE(context, "x.H * x.W exceeds the kernel int32 index range"), return ge::GRAPH_FAILED);
 
     auto attrs = context->GetAttrs();
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
     const auto* outputSize = attrs->GetListInt(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, outputSize);
-    OP_CHECK_IF(outputSize->GetSize() != 2, OP_LOGE(context, "output_size must have exactly 2 elements"),
+    OP_CHECK_IF(outputSize->GetSize() != OUTPUT_SIZE_LEN, OP_LOGE(context, "output_size must have exactly 2 elements"),
                 return ge::GRAPH_FAILED);
     const int64_t* outputSizeData = outputSize->GetData();
     OP_CHECK_NULL_WITH_CONTEXT(context, outputSizeData);
     OP_CHECK_IF(outputSizeData[0] <= 0 || outputSizeData[0] > kMaxInt32 || outputSizeData[1] <= 0 ||
                     outputSizeData[1] > kMaxInt32,
                 OP_LOGE(context, "output_size elements must be in [1, INT32_MAX]"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF((gradShape->GetDim(2) != ge::UNKNOWN_DIM && gradShape->GetDim(2) != outputSizeData[0]) ||
-                    (gradShape->GetDim(3) != ge::UNKNOWN_DIM && gradShape->GetDim(3) != outputSizeData[1]),
+    OP_CHECK_IF((gradShape->GetDim(DIM_H) != ge::UNKNOWN_DIM && gradShape->GetDim(DIM_H) != outputSizeData[0]) ||
+                    (gradShape->GetDim(DIM_W) != ge::UNKNOWN_DIM && gradShape->GetDim(DIM_W) != outputSizeData[1]),
                 OP_LOGE(context, "output_size must equal grad spatial shape"), return ge::GRAPH_FAILED);
 
     const float* spatialScale = attrs->GetFloat(1);
@@ -113,24 +125,26 @@ static ge::graphStatus InferShapeDeformableRoiPoolGrad(gert::InferShapeContext* 
     const bool emptyOffset = offsetShape == nullptr || offsetShape->GetDimNum() == 0 ||
                              (offsetShape->GetDimNum() == 1 && offsetShape->GetDim(0) == 0);
     if (!emptyOffset) {
-        OP_CHECK_IF(offsetShape->GetDimNum() != 4, OP_LOGE(context, "non-empty offset rank must be 4"),
+        OP_CHECK_IF(offsetShape->GetDimNum() != NCHW_RANK, OP_LOGE(context, "non-empty offset rank must be 4"),
                     return ge::GRAPH_FAILED);
-        const bool mismatch = (offsetShape->GetDim(0) != ge::UNKNOWN_DIM && gradShape->GetDim(0) != ge::UNKNOWN_DIM &&
-                               offsetShape->GetDim(0) != gradShape->GetDim(0)) ||
-                              (offsetShape->GetDim(1) != ge::UNKNOWN_DIM && offsetShape->GetDim(1) != 2) ||
-                              (offsetShape->GetDim(2) != ge::UNKNOWN_DIM &&
-                               offsetShape->GetDim(2) != outputSizeData[0]) ||
-                              (offsetShape->GetDim(3) != ge::UNKNOWN_DIM &&
-                               offsetShape->GetDim(3) != outputSizeData[1]);
+        const bool mismatch = (offsetShape->GetDim(DIM_N) != ge::UNKNOWN_DIM &&
+                               gradShape->GetDim(DIM_N) != ge::UNKNOWN_DIM &&
+                               offsetShape->GetDim(DIM_N) != gradShape->GetDim(DIM_N)) ||
+                              (offsetShape->GetDim(DIM_C) != ge::UNKNOWN_DIM &&
+                               offsetShape->GetDim(DIM_C) != OFFSET_CHANNEL_NUM) ||
+                              (offsetShape->GetDim(DIM_H) != ge::UNKNOWN_DIM &&
+                               offsetShape->GetDim(DIM_H) != outputSizeData[0]) ||
+                              (offsetShape->GetDim(DIM_W) != ge::UNKNOWN_DIM &&
+                               offsetShape->GetDim(DIM_W) != outputSizeData[1]);
         OP_CHECK_IF(mismatch, OP_LOGE(context, "offset shape must be [grad.N, 2, grad.pH, grad.pW]"),
                     return ge::GRAPH_FAILED);
         *gradOffsetShape = *offsetShape;
     } else {
-        gradOffsetShape->SetDimNum(4);
-        gradOffsetShape->SetDim(0, gradShape->GetDim(0));
-        gradOffsetShape->SetDim(1, 2);
-        gradOffsetShape->SetDim(2, gradShape->GetDim(2));
-        gradOffsetShape->SetDim(3, gradShape->GetDim(3));
+        gradOffsetShape->SetDimNum(NCHW_RANK);
+        gradOffsetShape->SetDim(DIM_N, gradShape->GetDim(DIM_N));
+        gradOffsetShape->SetDim(DIM_C, OFFSET_CHANNEL_NUM);
+        gradOffsetShape->SetDim(DIM_H, gradShape->GetDim(DIM_H));
+        gradOffsetShape->SetDim(DIM_W, gradShape->GetDim(DIM_W));
     }
 
     OP_LOGI(context->GetNodeName(), "[GEIR_DYNAMIC_TRACE] inferred outputs: grad_x=%s, grad_offset=%s",

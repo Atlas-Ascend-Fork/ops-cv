@@ -34,6 +34,13 @@ constexpr int64_t PER_CORE_MIN = 1024;            // 每核最小处理元素数
 constexpr uint32_t DCACHE_SIZE = 32 * 1024;       // SIMT DCache 最小预留（保持默认 32KB）
 constexpr uint32_t STATIC_UB_ESTIMATE = 0;        // 本算子无静态 __ubuf__ 声明（纯 GM 直读直写）
 constexpr int64_t MAX_INT32_VALUE = 2147483647LL; // tiling data int32 字段值域上界（防截断）
+// NCHW layout indices
+static constexpr int64_t DIM_N = 0;
+static constexpr int64_t DIM_C = 1;
+static constexpr int64_t DIM_H = 2;
+static constexpr int64_t DIM_W = 3;
+static constexpr size_t ROIS_RANK = 2;
+static constexpr int64_t ROI_FIELD_NUM = 6;
 
 // ========== TilingKey（手写常量，与 apt.cpp TILING_KEY_IS(1) 单一真值约定）==========
 constexpr uint64_t ROI_ALIGN_ROTATED_SCH_MODE_DEFAULT = 1; // 单场景模式唯一取值（非 0）
@@ -164,26 +171,26 @@ ge::graphStatus ValidateShape(gert::TilingContext* context, Arch35TilingState& s
     auto roisShape = roisInput->GetStorageShape();
     // rois rank == 2
     const std::string roisDimNum = std::to_string(roisShape.GetDimNum()) + "D";
-    OP_CHECK_IF(roisShape.GetDimNum() != 2,
+    OP_CHECK_IF(roisShape.GetDimNum() != ROIS_RANK,
                 OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "rois", roisDimNum.c_str(), "2D"),
                 return ge::GRAPH_FAILED);
     // rois.dim(1) == 6（旋转 ROI 固定 6 字段行主序）
-    const std::string roisLast = "[" + std::to_string(roisShape.GetDim(1)) + "]";
-    OP_CHECK_IF(roisShape.GetDim(1) != 6,
+    const std::string roisLast = "[" + std::to_string(roisShape.GetDim(DIM_C)) + "]";
+    OP_CHECK_IF(roisShape.GetDim(DIM_C) != ROI_FIELD_NUM,
                 OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "rois", roisLast.c_str(),
                                                       "rois dim[1] must be 6 (rotated ROI, row-major)"),
                 return ge::GRAPH_FAILED);
     // C/H/W 写入 tiling data 的 int32 字段，超界拒绝（防 FillTilingData 截断）
     const std::string xShapeMsg = Ops::Base::ToString(xShape);
-    OP_CHECK_IF(
-        xShape.GetDim(1) > MAX_INT32_VALUE || xShape.GetDim(2) > MAX_INT32_VALUE || xShape.GetDim(3) > MAX_INT32_VALUE,
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "x", xShapeMsg.c_str(),
-                                              "C/H/W must not exceed INT32_MAX"),
-        return ge::GRAPH_FAILED);
-    st.roisNum = roisShape.GetDim(0);
-    st.channels = xShape.GetDim(1);
-    st.height = xShape.GetDim(2);
-    st.width = xShape.GetDim(3);
+    OP_CHECK_IF(xShape.GetDim(DIM_C) > MAX_INT32_VALUE || xShape.GetDim(DIM_H) > MAX_INT32_VALUE ||
+                    xShape.GetDim(DIM_W) > MAX_INT32_VALUE,
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "x", xShapeMsg.c_str(),
+                                                      "C/H/W must not exceed INT32_MAX"),
+                return ge::GRAPH_FAILED);
+    st.roisNum = roisShape.GetDim(DIM_N);
+    st.channels = xShape.GetDim(DIM_C);
+    st.height = xShape.GetDim(DIM_H);
+    st.width = xShape.GetDim(DIM_W);
     return ge::GRAPH_SUCCESS;
 }
 

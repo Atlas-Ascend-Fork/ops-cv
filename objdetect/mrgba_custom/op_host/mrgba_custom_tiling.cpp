@@ -19,18 +19,22 @@
 namespace optiling {
 constexpr uint32_t BLOCK_DIM = 8;
 constexpr size_t RGB_RANK = 3;
+constexpr size_t ALPHA_MIN_RANK = 2;
+constexpr size_t CHANNEL_DIM = 2; // HWC: dim2 = C
+constexpr size_t DIM_H = 0;
+constexpr size_t DIM_W = 1;
 constexpr int64_t RGB_CHANNEL = 3;
 
 namespace {
 bool IsMrgbaCustomShapeValid(const gert::Shape& rgbShape, const gert::Shape& alphaShape)
 {
-    if (rgbShape.GetDimNum() != RGB_RANK || rgbShape.GetDim(2) != RGB_CHANNEL) {
+    if (rgbShape.GetDimNum() != RGB_RANK || rgbShape.GetDim(CHANNEL_DIM) != RGB_CHANNEL) {
         return false;
     }
-    if (alphaShape.GetDimNum() < 2) {
+    if (alphaShape.GetDimNum() < ALPHA_MIN_RANK) {
         return false;
     }
-    return rgbShape.GetDim(0) == alphaShape.GetDim(0) && rgbShape.GetDim(1) == alphaShape.GetDim(1);
+    return rgbShape.GetDim(DIM_H) == alphaShape.GetDim(DIM_H) && rgbShape.GetDim(DIM_W) == alphaShape.GetDim(DIM_W);
 }
 } // namespace
 

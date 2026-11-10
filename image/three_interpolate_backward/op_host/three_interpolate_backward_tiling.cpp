@@ -80,12 +80,9 @@ void TilingDebugPrint(gert::TilingContext* context, ThreeInterpolateBackwardTili
 }
 
 template <typename DATA_T, typename IDX_T>
-ge::graphStatus TilingProcess(ThreeInterpolateBackwardTilingData& tiling_host, const uint32_t& aicore_num,
-                              const int64_t& ub_platform_byte_size, bool force_multi_core_mode_1_flag,
-                              gert::TilingContext* context)
+void ConfigureMultiCoreMode(ThreeInterpolateBackwardTilingData& tiling_host, const uint32_t& aicore_num,
+                            bool force_multi_core_mode_1_flag)
 {
-    // 实现tiling 逻辑
-    OP_LOGD(context, "aicore_num %u ub_platform_byte_size:%ld.", aicore_num, ub_platform_byte_size);
     if (tiling_host.get_bs() >= RATIO_TILING * tiling_host.get_ns() || force_multi_core_mode_1_flag) {
         tiling_host.set_mulit_core_mode(static_cast<uint32_t>(MULTI_CORE_MODE::MOLTI_CORE_MODE_B_AXIS));
         tiling_host.set_used_core_num((tiling_host.get_bs() <= aicore_num) ? tiling_host.get_bs() : aicore_num);
@@ -110,6 +107,16 @@ ge::graphStatus TilingProcess(ThreeInterpolateBackwardTilingData& tiling_host, c
         tiling_host.set_last_core_proc_num(tiling_host.get_ns() - tiling_host.get_each_core_proc_num() *
                                                                       (tiling_host.get_used_core_num() - 1));
     }
+}
+
+template <typename DATA_T, typename IDX_T>
+ge::graphStatus TilingProcess(ThreeInterpolateBackwardTilingData& tiling_host, const uint32_t& aicore_num,
+                              const int64_t& ub_platform_byte_size, bool force_multi_core_mode_1_flag,
+                              gert::TilingContext* context)
+{
+    // 实现tiling 逻辑
+    OP_LOGD(context, "aicore_num %u ub_platform_byte_size:%ld.", aicore_num, ub_platform_byte_size);
+    ConfigureMultiCoreMode<DATA_T, IDX_T>(tiling_host, aicore_num, force_multi_core_mode_1_flag);
 
     // double buffer
     uint32_t ub_free_byte_size = ub_platform_byte_size / BUFFER_NUM;

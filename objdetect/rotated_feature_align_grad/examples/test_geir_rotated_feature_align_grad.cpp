@@ -15,6 +15,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <random>
 #include "cassert"
 
 #include "graph.h"
@@ -48,6 +49,13 @@ constexpr int32_t BBOX_SIZE_RANGE = 8;  // w/h 范围跨度
 constexpr float ANGLE_RANGE = 3.14f;    // 角度上界（近似 π）
 constexpr size_t TIME_STR_BUF_LEN = 64; // 时间字符串缓冲区长度
 constexpr int64_t PRINT_COUNT_MAX = 10; // 结果打印的最大元素个数
+constexpr uint32_t RANDOM_SEED = 42;    // 固定种子，保证 example 可复现
+
+std::mt19937& ExampleRng()
+{
+    static std::mt19937 rng(RANDOM_SEED);
+    return rng;
+}
 } // namespace
 
 string GetTime()
@@ -86,8 +94,9 @@ int32_t GenRandomDataFloat32(vector<int64_t> shapes, Tensor& input_tensor, Tenso
     if (pData == nullptr) {
         return FAILED;
     }
+    std::uniform_real_distribution<float> unitDist(0.0f, 1.0f);
     for (size_t i = 0; i < size; ++i) {
-        pData[i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        pData[i] = unitDist(ExampleRng());
     }
     input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
     delete[] pData;
@@ -107,13 +116,15 @@ int32_t GenBboxDataFloat32(vector<int64_t> shapes, Tensor& input_tensor, TensorD
         return FAILED;
     }
     size_t numBoxes = size / BBOX_COMPONENT_NUM;
+    std::uniform_int_distribution<int32_t> coordDist(0, COORD_RANGE - 1);
+    std::uniform_int_distribution<int32_t> sizeDist(0, BBOX_SIZE_RANGE - 1);
+    std::uniform_real_distribution<float> angleDist(0.0f, ANGLE_RANGE);
     for (size_t i = 0; i < numBoxes; ++i) {
-        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_Y] = static_cast<float>(rand() % COORD_RANGE);
-        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_X] = static_cast<float>(rand() % COORD_RANGE);
-        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_W] = static_cast<float>(rand() % BBOX_SIZE_RANGE + BBOX_SIZE_MIN);
-        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_H] = static_cast<float>(rand() % BBOX_SIZE_RANGE + BBOX_SIZE_MIN);
-        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_ANGLE] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) *
-                                                         ANGLE_RANGE;
+        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_Y] = static_cast<float>(coordDist(ExampleRng()));
+        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_X] = static_cast<float>(coordDist(ExampleRng()));
+        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_W] = static_cast<float>(sizeDist(ExampleRng()) + BBOX_SIZE_MIN);
+        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_H] = static_cast<float>(sizeDist(ExampleRng()) + BBOX_SIZE_MIN);
+        pData[i * BBOX_COMPONENT_NUM + BBOX_IDX_ANGLE] = angleDist(ExampleRng());
     }
     input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
     delete[] pData;

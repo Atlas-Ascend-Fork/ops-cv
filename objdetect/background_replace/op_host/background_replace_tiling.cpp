@@ -31,12 +31,13 @@ static constexpr uint64_t TILING_KEY_UINT8_C3 = 4;
 static constexpr uint32_t ASCEND_310P_BLOCK_DIM = 8;
 static constexpr size_t MIN_HW_RANK = 2;
 static constexpr size_t HWC_RANK = 3;
+static constexpr size_t CHANNEL_DIM = 2; // HWC layout: dim0=H, dim1=W, dim2=C
 static constexpr int64_t CHANNEL_C1 = 1;
 static constexpr int64_t CHANNEL_C3 = 3;
 
 static int64_t GetChannel(const gert::Shape& shape)
 {
-    return shape.GetDimNum() < HWC_RANK ? CHANNEL_C1 : shape.GetDim(2);
+    return shape.GetDimNum() < HWC_RANK ? CHANNEL_C1 : shape.GetDim(CHANNEL_DIM);
 }
 
 static bool IsShapeContractValid(const gert::Shape& bkgShape, const gert::Shape& srcShape, const gert::Shape& maskShape,
@@ -57,6 +58,21 @@ static bool IsShapeContractValid(const gert::Shape& bkgShape, const gert::Shape&
         return false;
     }
     return GetChannel(maskShape) == CHANNEL_C1;
+}
+
+static uint64_t ResolveBackgroundReplaceTilingKey(int64_t maskSize, int64_t bkgSize, ge::DataType bkgDataType)
+{
+    uint64_t tiling_key = 0;
+    if (maskSize == bkgSize && bkgDataType == ge::DT_FLOAT16) {
+        tiling_key = TILING_KEY_HALF_C1;
+    } else if (maskSize == bkgSize && bkgDataType == ge::DT_UINT8) {
+        tiling_key = TILING_KEY_UINT8_C1;
+    } else if (maskSize != bkgSize && bkgDataType == ge::DT_FLOAT16) {
+        tiling_key = TILING_KEY_HALF_C3;
+    } else if (maskSize != bkgSize && bkgDataType == ge::DT_UINT8) {
+        tiling_key = TILING_KEY_UINT8_C3;
+    }
+    return tiling_key;
 }
 
 static ge::graphStatus TilingBackgroundReplace(gert::TilingContext* context)
@@ -91,16 +107,7 @@ static ge::graphStatus TilingBackgroundReplace(gert::TilingContext* context)
         OP_LOGE("BackgroundReplace", "bkg, src and out dtype must be the same.");
         return ge::GRAPH_FAILED;
     }
-    uint64_t tiling_key = 0;
-    if (maskSize == bkgSize && bkgDataType == ge::DT_FLOAT16) {
-        tiling_key = TILING_KEY_HALF_C1;
-    } else if (maskSize == bkgSize && bkgDataType == ge::DT_UINT8) {
-        tiling_key = TILING_KEY_UINT8_C1;
-    } else if (maskSize != bkgSize && bkgDataType == ge::DT_FLOAT16) {
-        tiling_key = TILING_KEY_HALF_C3;
-    } else if (maskSize != bkgSize && bkgDataType == ge::DT_UINT8) {
-        tiling_key = TILING_KEY_UINT8_C3;
-    }
+    const uint64_t tiling_key = ResolveBackgroundReplaceTilingKey(maskSize, bkgSize, bkgDataType);
     tiling.set_size(static_cast<uint32_t>(maskSize));
     context->SetTilingKey(tiling_key);
     context->SetBlockDim(ASCEND_310P_BLOCK_DIM);

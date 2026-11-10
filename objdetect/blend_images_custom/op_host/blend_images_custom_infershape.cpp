@@ -23,6 +23,8 @@ static const size_t ALPHA_INDEX = 1;
 static const size_t H_INDEX = 0;
 static const size_t W_INDEX = 1;
 static const size_t CHANNEL_INDEX = 2;
+static const int64_t RGB_CHANNEL_NUM = 3;
+static const int64_t ALPHA_CHANNEL_NUM = 1;
 
 using namespace ge;
 namespace ge {
@@ -46,7 +48,8 @@ bool IsBlendImagesCustomShapeValid(const gert::Shape& rgb_shape, const gert::Sha
         Ops::Base::IsUnknownRank(frame_shape)) {
         return true;
     }
-    if (!IsHwcShape(rgb_shape, 3) || !IsHwcShape(alpha_shape, 1) || !IsHwcShape(frame_shape, 3)) {
+    if (!IsHwcShape(rgb_shape, RGB_CHANNEL_NUM) || !IsHwcShape(alpha_shape, ALPHA_CHANNEL_NUM) ||
+        !IsHwcShape(frame_shape, RGB_CHANNEL_NUM)) {
         return false;
     }
     for (size_t index = H_INDEX; index <= W_INDEX; ++index) {

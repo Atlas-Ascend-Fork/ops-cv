@@ -29,6 +29,41 @@ static const size_t DIM_3 = 3;
 
 OP_TYPE_REGISTER(ROIAlignGrad);
 
+static const aclTensor* ReportRoiAlignGradLaunchFail(aclnnStatus ret)
+{
+    const std::string reason = "ADD_TO_LAUNCHER_LIST_AICORE failed, rc=" + std::to_string(static_cast<int32_t>(ret)) +
+                               ". Kernel is ROIAlignGrad.";
+    OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "%s", reason.c_str());
+    const std::vector<const char*> keys = {"opName", "reason"};
+    const std::vector<const char*> values = {"ROIAlignGrad", reason.c_str()};
+    REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
+    return nullptr;
+}
+
+static const aclTensor* ROIAlignGradRegbase(const aclTensor* gradOutput, const aclTensor* boxes, const aclTensor* roisN,
+                                            const aclIntArray* inputShape, int64_t pooledHeight, int64_t pooledWidth,
+                                            float spatialScale, int64_t samplingRatio, int64_t roiEndMode,
+                                            aclOpExecutor* executor)
+{
+    op::Shape outShape = gradOutput->GetViewShape();
+    outShape.SetDim(DIM_0, (*inputShape)[DIM_0]);
+    outShape.SetDim(DIM_2, (*inputShape)[DIM_2]);
+    outShape.SetDim(DIM_3, (*inputShape)[DIM_3]);
+    auto gradInput = executor->AllocTensor(outShape, gradOutput->GetDataType(), gradOutput->GetStorageFormat());
+    if (gradInput == nullptr) {
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                               "ROIAlignGrad AllocTensor returned nullptr; propagate allocator first error");
+        return nullptr;
+    }
+    auto ret = ADD_TO_LAUNCHER_LIST_AICORE(
+        ROIAlignGrad, OP_INPUT(gradOutput, boxes, roisN), OP_OUTPUT(gradInput),
+        OP_ATTR(inputShape, pooledWidth, pooledHeight, spatialScale, samplingRatio, roiEndMode));
+    if (ret != ACLNN_SUCCESS) {
+        return ReportRoiAlignGradLaunchFail(ret);
+    }
+    return gradInput;
+}
+
 const aclTensor* ROIAlignGrad(const aclTensor* gradOutput, const aclTensor* boxes, const aclTensor* roisN,
                               const aclIntArray* inputShape, int64_t pooledHeight, int64_t pooledWidth,
                               float spatialScale, int64_t samplingRatio, int64_t roiEndMode, aclOpExecutor* executor)
@@ -39,29 +74,8 @@ const aclTensor* ROIAlignGrad(const aclTensor* gradOutput, const aclTensor* boxe
     // A5(Regbase)不转私有格式，直接用 4D ViewShape + ND 格式；其他芯片经 TransData 转 5D，沿用 StorageShape
     bool is950 = (GetCurrentPlatformInfo().GetCurNpuArch() == NpuArch::DAV_3510);
     if (is950) {
-        op::Shape outShape = gradOutput->GetViewShape();
-        outShape.SetDim(DIM_0, (*inputShape)[DIM_0]);
-        outShape.SetDim(DIM_2, (*inputShape)[DIM_2]);
-        outShape.SetDim(DIM_3, (*inputShape)[DIM_3]);
-        auto gradInput = executor->AllocTensor(outShape, gradOutput->GetDataType(), gradOutput->GetStorageFormat());
-        if (gradInput == nullptr) {
-            OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
-                                   "ROIAlignGrad AllocTensor returned nullptr; propagate allocator first error");
-            return nullptr;
-        }
-        auto ret = ADD_TO_LAUNCHER_LIST_AICORE(
-            ROIAlignGrad, OP_INPUT(gradOutput, boxes, roisN), OP_OUTPUT(gradInput),
-            OP_ATTR(inputShape, pooledWidth, pooledHeight, spatialScale, samplingRatio, roiEndMode));
-        if (ret != ACLNN_SUCCESS) {
-            const std::string reason = "ADD_TO_LAUNCHER_LIST_AICORE failed, rc=" +
-                                       std::to_string(static_cast<int32_t>(ret)) + ". Kernel is ROIAlignGrad.";
-            OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "%s", reason.c_str());
-            const std::vector<const char*> keys = {"opName", "reason"};
-            const std::vector<const char*> values = {"ROIAlignGrad", reason.c_str()};
-            REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
-            return nullptr;
-        }
-        return gradInput;
+        return ROIAlignGradRegbase(gradOutput, boxes, roisN, inputShape, pooledHeight, pooledWidth, spatialScale,
+                                   samplingRatio, roiEndMode, executor);
     }
     op::Shape outStorageShape = gradOutput->GetStorageShape();
     op::Shape outOriginalShape = gradOutput->GetOriginalShape();
@@ -84,13 +98,7 @@ const aclTensor* ROIAlignGrad(const aclTensor* gradOutput, const aclTensor* boxe
         ROIAlignGrad, OP_INPUT(gradOutput, boxes), OP_OUTPUT(gradInput),
         OP_ATTR(inputShape, pooledWidth, pooledHeight, spatialScale, samplingRatio, roiEndMode));
     if (ret != ACLNN_SUCCESS) {
-        const std::string reason = "ADD_TO_LAUNCHER_LIST_AICORE failed, rc=" +
-                                   std::to_string(static_cast<int32_t>(ret)) + ". Kernel is ROIAlignGrad.";
-        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "%s", reason.c_str());
-        const std::vector<const char*> keys = {"opName", "reason"};
-        const std::vector<const char*> values = {"ROIAlignGrad", reason.c_str()};
-        REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
-        return nullptr;
+        return ReportRoiAlignGradLaunchFail(ret);
     }
 
     return gradInput;

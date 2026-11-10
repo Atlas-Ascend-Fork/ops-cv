@@ -67,113 +67,67 @@ objdetect@ops-cv:
                 - ops/ops-cv/image/three_interpolate_backward/op_host/three_interpolate_backward_infershape.cpp
                 - ops/ops-cv/image/three_interpolate_backward/examples/
                 - ops/ops-cv/image/three_interpolate_backward/tests/
+                - ops/ops-cv/objdetect/*/docs/
+                - ops/ops-cv/objdetect/*/examples/
+                - ops/ops-cv/objdetect/*/tests/
                 - ops/ops-cv/objdetect/anchor_response_flags/op_host/
                 - ops/ops-cv/objdetect/anchor_response_flags/op_kernel/
-                - ops/ops-cv/objdetect/anchor_response_flags/examples/
-                - ops/ops-cv/objdetect/anchor_response_flags/tests/
-                - ops/ops-cv/objdetect/background_replace/examples/
-                - ops/ops-cv/objdetect/background_replace/tests/
                 - ops/ops-cv/objdetect/batch_multi_class_non_max_suppression/op_host/
                 - ops/ops-cv/objdetect/batch_multi_class_non_max_suppression/op_kernel/
-                - ops/ops-cv/objdetect/batch_multi_class_non_max_suppression/examples/
-                - ops/ops-cv/objdetect/batch_multi_class_non_max_suppression/tests/
-                - ops/ops-cv/objdetect/blend_images_custom/examples/
-                - ops/ops-cv/objdetect/blend_images_custom/tests/
                 - ops/ops-cv/objdetect/bounding_box_decode/op_host/
                 - ops/ops-cv/objdetect/bounding_box_decode/op_kernel/
-                - ops/ops-cv/objdetect/bounding_box_decode/examples/
-                - ops/ops-cv/objdetect/bounding_box_decode/tests/
                 - ops/ops-cv/objdetect/bounding_box_encode/op_host/
                 - ops/ops-cv/objdetect/bounding_box_encode/op_kernel/
-                - ops/ops-cv/objdetect/bounding_box_encode/examples/
-                - ops/ops-cv/objdetect/bounding_box_encode/tests/
                 - ops/ops-cv/objdetect/check_valid/op_host/
                 - ops/ops-cv/objdetect/check_valid/op_kernel/
-                - ops/ops-cv/objdetect/check_valid/examples/
-                - ops/ops-cv/objdetect/check_valid/tests/
-                - ops/ops-cv/objdetect/ciou/examples/
-                - ops/ops-cv/objdetect/ciou/tests/
                 - ops/ops-cv/objdetect/d_io_u_grad/op_host/
                 - ops/ops-cv/objdetect/d_io_u_grad/op_kernel/
-                - ops/ops-cv/objdetect/d_io_u_grad/examples/
-                - ops/ops-cv/objdetect/d_io_u_grad/tests/
                 - ops/ops-cv/objdetect/decode_bbox_v2/op_host/
                 - ops/ops-cv/objdetect/decode_bbox_v2/op_kernel/
-                - ops/ops-cv/objdetect/decode_bbox_v2/examples/
-                - ops/ops-cv/objdetect/decode_bbox_v2/tests/
                 - ops/ops-cv/objdetect/deformable_roi_pool/op_host/
                 - ops/ops-cv/objdetect/deformable_roi_pool/op_kernel/
-                - ops/ops-cv/objdetect/deformable_roi_pool/examples/
-                - ops/ops-cv/objdetect/deformable_roi_pool/tests/
+                - ops/ops-cv/objdetect/deformable_roi_pool_grad/op_host/
+                - ops/ops-cv/objdetect/deformable_roi_pool_grad/op_kernel/
                 - ops/ops-cv/objdetect/g_io_u_grad/op_host/
                 - ops/ops-cv/objdetect/g_io_u_grad/op_kernel/
-                - ops/ops-cv/objdetect/g_io_u_grad/examples/
-                - ops/ops-cv/objdetect/g_io_u_grad/tests/
-                - ops/ops-cv/objdetect/iou_v2/examples/
-                - ops/ops-cv/objdetect/iou_v2/tests/
                 - ops/ops-cv/objdetect/iou3d/op_host/
                 - ops/ops-cv/objdetect/iou3d/op_kernel/
-                - ops/ops-cv/objdetect/iou3d/examples/
-                - ops/ops-cv/objdetect/iou3d/tests/
-                - ops/ops-cv/objdetect/mrgba_custom/examples/
-                - ops/ops-cv/objdetect/mrgba_custom/tests/
-                - ops/ops-cv/objdetect/non_max_suppression_v6/examples/
-                - ops/ops-cv/objdetect/non_max_suppression_v6/tests/
                 - ops/ops-cv/objdetect/non_max_suppression_v7/op_host/
                 - ops/ops-cv/objdetect/non_max_suppression_v7/op_kernel/
-                - ops/ops-cv/objdetect/non_max_suppression_v7/examples/
-                - ops/ops-cv/objdetect/non_max_suppression_v7/tests/
-                - ops/ops-cv/objdetect/roi_align/examples/
-                - ops/ops-cv/objdetect/roi_align/tests/
+                - ops/ops-cv/objdetect/roi_align/op_host/
+                - ops/ops-cv/objdetect/roi_align/op_kernel/
                 - ops/ops-cv/objdetect/roi_align_grad/op_host/
                 - ops/ops-cv/objdetect/roi_align_grad/op_kernel/
-                - ops/ops-cv/objdetect/roi_align_grad/examples/
-                - ops/ops-cv/objdetect/roi_align_grad/tests/
-                - ops/ops-cv/objdetect/roi_align_rotated/examples/
-                - ops/ops-cv/objdetect/roi_align_rotated/tests/
-                - ops/ops-cv/objdetect/roi_align_rotated_grad/examples/
-                - ops/ops-cv/objdetect/roi_align_rotated_grad/tests/
+                - ops/ops-cv/objdetect/roi_align_rotated/op_host/arch35/
+                - ops/ops-cv/objdetect/roi_align_rotated/op_host/roi_align_rotated_infershape_arch35.cpp
+                - ops/ops-cv/objdetect/roi_align_rotated/op_kernel/arch35/
+                - ops/ops-cv/objdetect/roi_align_rotated_grad/op_host/arch35/
+                - ops/ops-cv/objdetect/roi_align_rotated_grad/op_kernel/arch35/
                 - ops/ops-cv/objdetect/roi_pooling_grad_with_arg_max/op_host/
                 - ops/ops-cv/objdetect/roi_pooling_grad_with_arg_max/op_kernel/
-                - ops/ops-cv/objdetect/roi_pooling_grad_with_arg_max/examples/
-                - ops/ops-cv/objdetect/roi_pooling_grad_with_arg_max/tests/
                 - ops/ops-cv/objdetect/roi_pooling_with_arg_max/op_host/
                 - ops/ops-cv/objdetect/roi_pooling_with_arg_max/op_kernel/
-                - ops/ops-cv/objdetect/roi_pooling_with_arg_max/examples/
-                - ops/ops-cv/objdetect/roi_pooling_with_arg_max/tests/
                 - ops/ops-cv/objdetect/rotated_box_decode/op_host/
                 - ops/ops-cv/objdetect/rotated_box_decode/op_kernel/
-                - ops/ops-cv/objdetect/rotated_box_decode/examples/
-                - ops/ops-cv/objdetect/rotated_box_decode/tests/
                 - ops/ops-cv/objdetect/rotated_box_encode/op_host/
                 - ops/ops-cv/objdetect/rotated_box_encode/op_kernel/
-                - ops/ops-cv/objdetect/rotated_box_encode/examples/
-                - ops/ops-cv/objdetect/rotated_box_encode/tests/
+                - ops/ops-cv/objdetect/rotated_feature_align/op_host/
+                - ops/ops-cv/objdetect/rotated_feature_align/op_kernel/
+                - ops/ops-cv/objdetect/rotated_feature_align_grad/op_host/
+                - ops/ops-cv/objdetect/rotated_feature_align_grad/op_kernel/
                 - ops/ops-cv/objdetect/rotated_overlaps/op_host/
                 - ops/ops-cv/objdetect/rotated_overlaps/op_kernel/
-                - ops/ops-cv/objdetect/rotated_overlaps/examples/
-                - ops/ops-cv/objdetect/rotated_overlaps/tests/
                 - ops/ops-cv/objdetect/sorted_nms/op_host/
                 - ops/ops-cv/objdetect/sorted_nms/op_kernel/
-                - ops/ops-cv/objdetect/sorted_nms/examples/
-                - ops/ops-cv/objdetect/sorted_nms/tests/
                 - ops/ops-cv/objdetect/stack_group_points/op_host/arch35/
                 - ops/ops-cv/objdetect/stack_group_points/op_kernel/arch35/
                 - ops/ops-cv/objdetect/stack_group_points/op_kernel/stack_group_points_apt.cpp
-                - ops/ops-cv/objdetect/stack_group_points/examples/
-                - ops/ops-cv/objdetect/stack_group_points/tests/
                 - ops/ops-cv/objdetect/to_absolute_b_box/op_host/
                 - ops/ops-cv/objdetect/to_absolute_b_box/op_kernel/
-                - ops/ops-cv/objdetect/to_absolute_b_box/examples/
-                - ops/ops-cv/objdetect/to_absolute_b_box/tests/
                 - ops/ops-cv/objdetect/yolo/op_host/
                 - ops/ops-cv/objdetect/yolo/op_kernel/
-                - ops/ops-cv/objdetect/yolo/examples/
-                - ops/ops-cv/objdetect/yolo/tests/
                 - ops/ops-cv/objdetect/yolox_bounding_box_decode/op_host/
                 - ops/ops-cv/objdetect/yolox_bounding_box_decode/op_kernel/
-                - ops/ops-cv/objdetect/yolox_bounding_box_decode/examples/
-                - ops/ops-cv/objdetect/yolox_bounding_box_decode/tests/
             non_delivery: null
             open_source: null
 

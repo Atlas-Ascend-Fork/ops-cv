@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <cstring>
+#include <securec.h>
 
 #include "cv_plugin_util.h"
 
@@ -28,8 +28,7 @@ bool ReadConst(const ge::Operator& node, const char* port, T& value)
     if ((buf == nullptr) || (data.GetSize() < sizeof(T))) {
         return false;
     }
-    (void)memcpy(&value, buf, sizeof(T));
-    return true;
+    return memcpy_s(&value, sizeof(T), buf, sizeof(T)) == EOK;
 }
 } // namespace
 

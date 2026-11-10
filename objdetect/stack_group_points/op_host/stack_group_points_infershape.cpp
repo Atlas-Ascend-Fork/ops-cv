@@ -47,6 +47,44 @@ static const char* OpNameOf(gert::InferShapeContext* context)
 } // namespace
 
 namespace ops {
+static ge::graphStatus ValidateAndFillStackGroupPointsOutput(
+    gert::InferShapeContext* context, const gert::Shape* feture_shape, const gert::Shape* featuresBatchCntShape,
+    const gert::Shape* indices_shape, const gert::Shape* indicesBatchCntShape, gert::Shape* output_shape)
+{
+    // 维度校验
+    if (feture_shape->GetDimNum() != TWO_NUM_DIM) {
+        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "features",
+                                     (std::to_string(feture_shape->GetDimNum()) + "D").c_str(), "2D");
+        return GRAPH_FAILED;
+    }
+    if (indices_shape->GetDimNum() != TWO_NUM_DIM) {
+        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "indices",
+                                     (std::to_string(indices_shape->GetDimNum()) + "D").c_str(), "2D");
+        return GRAPH_FAILED;
+    }
+    if (featuresBatchCntShape->GetDimNum() != 1) {
+        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "features_batch_cnt",
+                                     (std::to_string(featuresBatchCntShape->GetDimNum()) + "D").c_str(), "1D");
+        return GRAPH_FAILED;
+    }
+    if (indicesBatchCntShape->GetDimNum() != 1) {
+        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "indices_batch_cnt",
+                                     (std::to_string(indicesBatchCntShape->GetDimNum()) + "D").c_str(), "1D");
+        return GRAPH_FAILED;
+    }
+
+    int32_t m = indices_shape->GetDim(M_INDEX);
+    int32_t nsample = indices_shape->GetDim(NSAMPLE_INDEX);
+    int32_t c = feture_shape->GetDim(C_INDEX);
+
+    output_shape->SetDimNum(OUTPUT_DIM_NUM);
+    output_shape->SetDim(FIRST_DIM_INDEX, m);
+    output_shape->SetDim(SECOND_DIM_INDEX, c);
+    output_shape->SetDim(THIRD_DIM_INDEX, nsample);
+
+    return GRAPH_SUCCESS;
+}
+
 static ge::graphStatus InferShapeForStackGroupPoints(gert::InferShapeContext* context)
 {
     if (context == nullptr) {
@@ -92,38 +130,8 @@ static ge::graphStatus InferShapeForStackGroupPoints(gert::InferShapeContext* co
         return ge::GRAPH_SUCCESS;
     }
 
-    // 维度校验
-    if (feture_shape->GetDimNum() != TWO_NUM_DIM) {
-        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "features",
-                                     (std::to_string(feture_shape->GetDimNum()) + "D").c_str(), "2D");
-        return GRAPH_FAILED;
-    }
-    if (indices_shape->GetDimNum() != TWO_NUM_DIM) {
-        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "indices",
-                                     (std::to_string(indices_shape->GetDimNum()) + "D").c_str(), "2D");
-        return GRAPH_FAILED;
-    }
-    if (featuresBatchCntShape->GetDimNum() != 1) {
-        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "features_batch_cnt",
-                                     (std::to_string(featuresBatchCntShape->GetDimNum()) + "D").c_str(), "1D");
-        return GRAPH_FAILED;
-    }
-    if (indicesBatchCntShape->GetDimNum() != 1) {
-        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "indices_batch_cnt",
-                                     (std::to_string(indicesBatchCntShape->GetDimNum()) + "D").c_str(), "1D");
-        return GRAPH_FAILED;
-    }
-
-    int32_t m = indices_shape->GetDim(M_INDEX);
-    int32_t nsample = indices_shape->GetDim(NSAMPLE_INDEX);
-    int32_t c = feture_shape->GetDim(C_INDEX);
-
-    output_shape->SetDimNum(OUTPUT_DIM_NUM);
-    output_shape->SetDim(FIRST_DIM_INDEX, m);
-    output_shape->SetDim(SECOND_DIM_INDEX, c);
-    output_shape->SetDim(THIRD_DIM_INDEX, nsample);
-
-    return GRAPH_SUCCESS;
+    return ValidateAndFillStackGroupPointsOutput(context, feture_shape, featuresBatchCntShape, indices_shape,
+                                                 indicesBatchCntShape, output_shape);
 }
 
 IMPL_OP_INFERSHAPE(StackGroupPoints).InferShape(InferShapeForStackGroupPoints);

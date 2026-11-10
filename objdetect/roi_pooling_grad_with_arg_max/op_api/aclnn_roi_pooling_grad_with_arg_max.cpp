@@ -196,6 +196,23 @@ static const aclTensor* GetOutTensorWithValueZero(const aclTensor* gradInput, ac
     return l0op::Fill(dimTensor, valueTensor, dimArray, executor);
 }
 
+// gradOutput 为空时无梯度可累加；若输出非空则写回全 0，与 kernel InitOutput(0) 语义一致。
+static aclnnStatus FillEmptyGradOutput(const aclTensor* gradInputRef, uint64_t* workspaceSize, aclOpExecutor* executor)
+{
+    if (gradInputRef->IsEmpty()) {
+        *workspaceSize = 0;
+        return ACLNN_SUCCESS;
+    }
+    auto fillOut = GetOutTensorWithValueZero(gradInputRef, executor);
+    CHECK_RET(fillOut != nullptr, ACLNN_ERR_INNER_NULLPTR);
+
+    auto viewCopyResult = l0op::ViewCopy(fillOut, gradInputRef, executor);
+    CHECK_RET(viewCopyResult != nullptr, ACLNN_ERR_INNER_NULLPTR);
+
+    *workspaceSize = executor->GetWorkspaceSize();
+    return ACLNN_SUCCESS;
+}
+
 aclnnStatus aclnnRoiPoolingGradWithArgMaxGetWorkspaceSize(const aclTensor* gradOutput, const aclTensor* gradInputRef,
                                                           const aclTensor* rois, const aclTensor* argmax,
                                                           int64_t pooledH, int64_t pooledW, double spatialScale,
@@ -214,20 +231,9 @@ aclnnStatus aclnnRoiPoolingGradWithArgMaxGetWorkspaceSize(const aclTensor* gradO
     auto ret = CheckParams(gradOutput, rois, argmax, gradInputRef, pooledH, pooledW, spatialScale);
     CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
-    // gradOutput 为空时无梯度可累加；若输出非空则写回全 0，与 kernel InitOutput(0) 语义一致
     if (gradOutput->IsEmpty()) {
-        if (gradInputRef->IsEmpty()) {
-            *workspaceSize = 0;
-            uniqueExecutor.ReleaseTo(executor);
-            return ACLNN_SUCCESS;
-        }
-        auto fillOut = GetOutTensorWithValueZero(gradInputRef, uniqueExecutor.get());
-        CHECK_RET(fillOut != nullptr, ACLNN_ERR_INNER_NULLPTR);
-
-        auto viewCopyResult = l0op::ViewCopy(fillOut, gradInputRef, uniqueExecutor.get());
-        CHECK_RET(viewCopyResult != nullptr, ACLNN_ERR_INNER_NULLPTR);
-
-        *workspaceSize = uniqueExecutor->GetWorkspaceSize();
+        ret = FillEmptyGradOutput(gradInputRef, workspaceSize, uniqueExecutor.get());
+        CHECK_RET(ret == ACLNN_SUCCESS, ret);
         uniqueExecutor.ReleaseTo(executor);
         return ACLNN_SUCCESS;
     }

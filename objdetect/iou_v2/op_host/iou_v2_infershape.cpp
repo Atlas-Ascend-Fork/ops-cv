@@ -37,6 +37,45 @@ const char* OpNameOf(gert::InferShapeContext* context)
 } // namespace
 
 namespace ops {
+static ge::graphStatus ValidateIouV2RanksAndCoords(gert::InferShapeContext* context, const gert::Shape* bboxesShape,
+                                                   const gert::Shape* gtboxesShape, bool aligned)
+{
+    const bool bboxesRankOk = bboxesShape->GetDimNum() == INPUT_DIM_NUM;
+    const bool gtboxesRankOk = gtboxesShape->GetDimNum() == INPUT_DIM_NUM;
+    if (!bboxesRankOk && !gtboxesRankOk) {
+        const std::string dims = std::to_string(bboxesShape->GetDimNum()) + "D and " +
+                                 std::to_string(gtboxesShape->GetDimNum()) + "D";
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(OpNameOf(context), "bboxes, gtboxes", dims.c_str(),
+                                                  "bboxes and gtboxes must be 2D");
+        return ge::GRAPH_FAILED;
+    }
+    if (!bboxesRankOk) {
+        const std::string dim = std::to_string(bboxesShape->GetDimNum()) + "D";
+        OP_LOGE_FOR_INVALID_SHAPEDIM(OpNameOf(context), "bboxes", dim.c_str(), "2D");
+        return ge::GRAPH_FAILED;
+    }
+    if (!gtboxesRankOk) {
+        const std::string dim = std::to_string(gtboxesShape->GetDimNum()) + "D";
+        OP_LOGE_FOR_INVALID_SHAPEDIM(OpNameOf(context), "gtboxes", dim.c_str(), "2D");
+        return ge::GRAPH_FAILED;
+    }
+    const int64_t coordinateDim = aligned ? bboxesShape->GetDim(0) : bboxesShape->GetDim(1);
+    const int64_t gtCoordinateDim = aligned ? gtboxesShape->GetDim(0) : gtboxesShape->GetDim(1);
+    if (coordinateDim != ge::UNKNOWN_DIM && coordinateDim != BOX_COORDINATE_DIM) {
+        const std::string actual = std::to_string(coordinateDim);
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "bboxes", actual.c_str(),
+                                              "the coordinate dimension must be 4");
+        return ge::GRAPH_FAILED;
+    }
+    if (gtCoordinateDim != ge::UNKNOWN_DIM && gtCoordinateDim != BOX_COORDINATE_DIM) {
+        const std::string actual = std::to_string(gtCoordinateDim);
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "gtboxes", actual.c_str(),
+                                              "the coordinate dimension must be 4");
+        return ge::GRAPH_FAILED;
+    }
+    return ge::GRAPH_SUCCESS;
+}
+
 static ge::graphStatus InferShapeForIouV2(gert::InferShapeContext* context)
 {
     auto overlapShape = context->GetOutputShape(OUTPUT_INDEX_OVERLAP);
@@ -59,37 +98,7 @@ static ge::graphStatus InferShapeForIouV2(gert::InferShapeContext* context)
         Ops::Base::SetUnknownRank(*overlapShape);
         return ge::GRAPH_SUCCESS;
     }
-    const bool bboxesRankOk = bboxesShape->GetDimNum() == INPUT_DIM_NUM;
-    const bool gtboxesRankOk = gtboxesShape->GetDimNum() == INPUT_DIM_NUM;
-    if (!bboxesRankOk && !gtboxesRankOk) {
-        const std::string dims = std::to_string(bboxesShape->GetDimNum()) + "D and " +
-                                 std::to_string(gtboxesShape->GetDimNum()) + "D";
-        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(OpNameOf(context), "bboxes, gtboxes", dims.c_str(),
-                                                  "bboxes and gtboxes must be 2D");
-        return ge::GRAPH_FAILED;
-    }
-    if (!bboxesRankOk) {
-        const std::string dim = std::to_string(bboxesShape->GetDimNum()) + "D";
-        OP_LOGE_FOR_INVALID_SHAPEDIM(OpNameOf(context), "bboxes", dim.c_str(), "2D");
-        return ge::GRAPH_FAILED;
-    }
-    if (!gtboxesRankOk) {
-        const std::string dim = std::to_string(gtboxesShape->GetDimNum()) + "D";
-        OP_LOGE_FOR_INVALID_SHAPEDIM(OpNameOf(context), "gtboxes", dim.c_str(), "2D");
-        return ge::GRAPH_FAILED;
-    }
-    const int64_t coordinateDim = *aligned ? bboxesShape->GetDim(0) : bboxesShape->GetDim(1);
-    const int64_t gtCoordinateDim = *aligned ? gtboxesShape->GetDim(0) : gtboxesShape->GetDim(1);
-    if (coordinateDim != ge::UNKNOWN_DIM && coordinateDim != BOX_COORDINATE_DIM) {
-        const std::string actual = std::to_string(coordinateDim);
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "bboxes", actual.c_str(),
-                                              "the coordinate dimension must be 4");
-        return ge::GRAPH_FAILED;
-    }
-    if (gtCoordinateDim != ge::UNKNOWN_DIM && gtCoordinateDim != BOX_COORDINATE_DIM) {
-        const std::string actual = std::to_string(gtCoordinateDim);
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(OpNameOf(context), "gtboxes", actual.c_str(),
-                                              "the coordinate dimension must be 4");
+    if (ValidateIouV2RanksAndCoords(context, bboxesShape, gtboxesShape, *aligned) != ge::GRAPH_SUCCESS) {
         return ge::GRAPH_FAILED;
     }
 
