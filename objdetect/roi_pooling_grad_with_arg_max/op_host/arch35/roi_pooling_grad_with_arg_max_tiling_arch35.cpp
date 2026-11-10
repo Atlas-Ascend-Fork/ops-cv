@@ -59,6 +59,7 @@ void RoiPoolingGradWithArgMaxTiling::SetTilingData()
     tilingData_->width = width_;
     tilingData_->poolChannel = poolChannel_;
     tilingData_->useCoreNum = useCoreNum_;
+    tilingData_->batch = batch_;
 }
 
 ge::graphStatus RoiPoolingGradWithArgMaxTiling::SetAttrParams()
@@ -174,6 +175,9 @@ ge::graphStatus RoiPoolingGradWithArgMaxTiling::GetInputTensorInfo()
                 return ge::GRAPH_FAILED);
     height_ = inputXShape[H_DIM];
     width_ = inputXShape[W_DIM];
+    batch_ = inputXShape[N_DIM];
+    OP_CHECK_IF(batch_ <= 0, OP_LOGE(context_, "inputX.N must be greater than 0, but got %ld.", batch_),
+                return ge::GRAPH_FAILED);
     usrWorkspaceSize_ *= inputXShape[N_DIM];
     usrWorkspaceSize_ *= inputXShape[C_DIM];
     usrWorkspaceSize_ *= inputXShape[H_DIM];

@@ -30,6 +30,7 @@ struct RoiPoolingGradWithArgMaxRegBaseTilingData {
     int64_t width;
     int64_t poolChannel;
     int64_t useCoreNum;
+    int64_t batch;
 
     std::string toString() const
     {
@@ -38,7 +39,7 @@ struct RoiPoolingGradWithArgMaxRegBaseTilingData {
                ", yTotalLength = " + std::to_string(yTotalLength) + ", pooledH = " + std::to_string(pooledH) +
                ", pooledW = " + std::to_string(pooledW) + ", height = " + std::to_string(height) +
                ", width = " + std::to_string(width) + ", poolChannel = " + std::to_string(poolChannel) +
-               ", useCoreNum = " + std::to_string(useCoreNum);
+               ", useCoreNum = " + std::to_string(useCoreNum) + ", batch = " + std::to_string(batch);
     }
 };
 #endif

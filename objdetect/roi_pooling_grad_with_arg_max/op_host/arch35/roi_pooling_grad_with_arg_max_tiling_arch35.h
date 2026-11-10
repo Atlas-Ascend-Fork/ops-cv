@@ -62,6 +62,7 @@ private:
     int64_t poolChannel_ = 1;
     int64_t height_ = 1;
     int64_t width_ = 1;
+    int64_t batch_ = 1;
     int64_t usrWorkspaceSize_ = 1;
 };
 } // namespace optiling
