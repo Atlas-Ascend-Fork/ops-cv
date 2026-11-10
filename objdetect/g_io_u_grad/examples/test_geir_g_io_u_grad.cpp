@@ -28,8 +28,6 @@
 #include "array_ops.h"
 #include "ge_ir_build.h"
 
-#include "experiment_ops.h"
-#include "nn_other.h"
 #include "../op_graph/g_io_u_grad_proto.h"
 
 #define FAILED -1

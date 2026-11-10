@@ -78,7 +78,7 @@ __simt_callee__ inline float RoundInputOp<half>(float val)
 
 __simt_callee__ inline float PreciseMul(float lhs, float rhs) { return fmaf(lhs, rhs, 0.0f); }
 
-__simt_callee__ inline float TorchMin(float lhs, float rhs)
+__simt_callee__ inline float PreciseMin(float lhs, float rhs)
 {
     if (lhs < rhs) {
         return lhs;
@@ -89,7 +89,7 @@ __simt_callee__ inline float TorchMin(float lhs, float rhs)
     return lhs == rhs ? lhs : lhs + rhs;
 }
 
-__simt_callee__ inline float TorchMax(float lhs, float rhs)
+__simt_callee__ inline float PreciseMax(float lhs, float rhs)
 {
     if (lhs > rhs) {
         return lhs;
@@ -235,8 +235,8 @@ __simt_callee__ inline void ComputeForwardGrad(float dy_val, float b_x1, float b
                                                float& g_h, float& g_w, float& uni, float& cw, float& ch, float& enclose,
                                                float& dunion_val, float& dinter_val, float& dxlen, float& dylen)
 {
-    xlen = TorchMin(b_x2, g_x2) - TorchMax(b_x1, g_x1);
-    ylen = TorchMin(b_y2, g_y2) - TorchMax(b_y1, g_y1);
+    xlen = PreciseMin(b_x2, g_x2) - PreciseMax(b_x1, g_x1);
+    ylen = PreciseMin(b_y2, g_y2) - PreciseMax(b_y1, g_y1);
     bool has_intersection = xlen > 0.0f && ylen > 0.0f;
     inter_x = has_intersection ? xlen : 0.0f;
     inter_y = has_intersection ? ylen : 0.0f;
@@ -248,8 +248,8 @@ __simt_callee__ inline void ComputeForwardGrad(float dy_val, float b_x1, float b
     float b_area = PreciseMul(b_w, b_h);
     float g_area = PreciseMul(g_w, g_h);
     uni = b_area + g_area - inter;
-    cw = TorchMax(b_x2, g_x2) - TorchMin(b_x1, g_x1);
-    ch = TorchMax(b_y2, g_y2) - TorchMin(b_y1, g_y1);
+    cw = PreciseMax(b_x2, g_x2) - PreciseMin(b_x1, g_x1);
+    ch = PreciseMax(b_y2, g_y2) - PreciseMin(b_y1, g_y1);
     enclose = PreciseMul(cw, ch);
     float union_denom = uni + EPS;
     float enclose_denom = enclose + EPS;
