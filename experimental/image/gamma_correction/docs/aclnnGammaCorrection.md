@@ -42,4 +42,19 @@ aclnnStatus aclnnGammaCorrection(
 | maxValue | 值域上界；<=0 时按 dtype 推导（浮点 1.0，8-bit 255.0，16-bit 65535.0） |
 | y | shape/dtype 与 x 相同 |
 
+## 约束说明
+
+- 输入 `x` 的 rank 必须为 2、3 或 4；各维度上界按位置从末维往前计算：
+
+| Rank | 维度顺序 | 各维上界 |
+|---|---|---|
+| 4 | [N, C, H, W] | N ≤ 200，C ≤ 1000，H ≤ 10000，W ≤ 10000 |
+| 3 | [d0, d1, d2] | d0 ≤ 1000，d1 ≤ 10000，d2 ≤ 10000 |
+| 2 | [d0, d1] | d0 ≤ 10000，d1 ≤ 10000 |
+
+- 任一维度 ≤ 0 会被拒绝。
+- 上述校验发生在 tiling 阶段（即 `aclnnGammaCorrectionGetWorkspaceSize` 调用期间），
+  越界时报错文案形如 `invalid x dimension <i>: <dim>, allowed range is [1, <limit>]`，
+  其中 `<i>` 为维度序号（从 0 开始），`<limit>` 为该维上界。
+
 调用样例见 [`examples/test_aclnn_gamma_correction.cpp`](../examples/test_aclnn_gamma_correction.cpp)。
