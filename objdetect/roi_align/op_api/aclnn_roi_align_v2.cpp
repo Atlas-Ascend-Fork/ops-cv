@@ -10,6 +10,8 @@
 
 #include <cmath>
 #include <limits>
+#include <string>
+#include <vector>
 
 #include "aclnn_roi_align_v2.h"
 #include "roi_align.h"
@@ -26,6 +28,8 @@
 #include "opdev/make_op_executor.h"
 #include "opdev/platform.h"
 #include "aclnn_kernels/common/op_error_check.h"
+#include "op_api/aclnn_check.h"
+#include "base/err_msg.h"
 
 using namespace op;
 
@@ -173,11 +177,33 @@ static const aclTensor* GetOutTensorWithValueZero(aclTensor* out, aclOpExecutor*
     return l0op::Fill(dimTensor, valueTensor, dimArray, executor);
 }
 
+static aclnnStatus CheckSocValid()
+{
+    // regbase系SoC（npuArch DAV_3510/DAV_9201/DAV_5162）不在aclnnRoiAlignV2交付范围，入口显式拒绝
+    if (IsRegBase()) {
+        SocVersion socVersion = GetCurrentPlatformInfo().GetSocVersion();
+        const std::string soc = op::ToString(socVersion).GetString();
+        const std::string
+            reason = "SoC " + soc +
+                     " is not supported. regbase SoCs (npuArch DAV_3510/DAV_9201/DAV_5162) are out of "
+                     "aclnnRoiAlignV2 delivery scope. Please refer to the product support table of aclnnRoiAlignV2.";
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_RUNTIME_ERROR, "%s", reason.c_str());
+        const std::vector<const char*> keys = {"opName", "reason"};
+        const std::vector<const char*> values = {"aclnnRoiAlignV2", reason.c_str()};
+        REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
+        return ACLNN_ERR_RUNTIME_ERROR;
+    }
+    return ACLNN_SUCCESS;
+}
+
 aclnnStatus aclnnRoiAlignV2GetWorkspaceSize(const aclTensor* self, const aclTensor* boxes, int64_t pooledHeight,
                                             int64_t pooledWidth, float spatialScale, int64_t samplingRatio,
                                             bool aligned, aclTensor* out, uint64_t* workspaceSize,
                                             aclOpExecutor** executor)
 {
+    auto ret = CheckSocValid();
+    CHECK_RET(ret == ACLNN_SUCCESS, ret);
+
     L2_DFX_PHASE_1(aclnnRoiAlignV2,
                    DFX_IN(self, boxes, pooledHeight, pooledWidth, spatialScale, samplingRatio, aligned), DFX_OUT(out));
     // 固定写法，创建OpExecutor
@@ -185,7 +211,7 @@ aclnnStatus aclnnRoiAlignV2GetWorkspaceSize(const aclTensor* self, const aclTens
     CHECK_RET(uniqueExecutor.get() != nullptr, ACLNN_ERR_INNER_CREATE_EXECUTOR);
 
     // 固定写法，参数检查
-    auto ret = CheckParams(self, boxes, out, pooledHeight, pooledWidth, samplingRatio, spatialScale);
+    ret = CheckParams(self, boxes, out, pooledHeight, pooledWidth, samplingRatio, spatialScale);
     CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
     // roialign算子的空tensor在kernel中支持
