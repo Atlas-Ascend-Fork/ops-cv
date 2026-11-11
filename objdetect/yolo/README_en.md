@@ -136,6 +136,7 @@ The object confidence and class probabilities are processed according to yolo_mo
 - The value range of classes is [1, 1024].
 - H and W must be greater than 0, that is, H*W > 0. Empty space dimensions are not supported.
 - yolo_version supports only "V2" or "V3".
+- Graph mode supports dynamic shape (-1 unknown dimension) and dynamic rank (-2 unknown rank).
 - The input x must be a continuous tensor.
 - When the input is float16, intermediate computations are promoted to the float32 precision.
 - The channel arrangement of the output coord_data is (x, y, h, w). Note that the positions of w and h are exchanged compared with the input.

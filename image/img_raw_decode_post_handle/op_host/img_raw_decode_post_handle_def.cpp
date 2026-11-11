@@ -73,7 +73,7 @@ public:
             .DynamicShapeSupportFlag(true)
             .NeedCheckSupportFlag(false)
             .PrecisionReduceFlag(true)
-            .ExtendCfgInfo("opFile.value", "img_raw_decode_post_handle_apt");
+            .ExtendCfgInfo("opFile.value", "img_raw_decode_post_handle");
         this->AICore().AddConfig("ascend950", aicoreConfig);
         this->AICore().AddConfig("ascend350", aicoreConfig);
     }

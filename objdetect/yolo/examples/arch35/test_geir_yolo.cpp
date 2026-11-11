@@ -196,10 +196,13 @@ int CreateOppInGraph(RunMode mode, DataType inDtype, const ShapeCombo& combo, st
     int64_t B = combo.boxes;
     int64_t coordCnt = combo.coords;
     int64_t K = combo.classes;
+    auto CeilX = [](int64_t size) { return (size + 31) / 32 * 32; };
+    int64_t ceilHW = CeilX(HW * 2 + 32) / 2;
+    int64_t ceilBoxesHw = CeilX(B * HW * 2 + 32) / 2;
 
-    vector<int64_t> coord_data_shape = {N, B * coordCnt, HW};
-    vector<int64_t> obj_prob_shape = {N, B * HW};
-    vector<int64_t> classes_prob_shape = {N, K, B * HW};
+    vector<int64_t> coord_data_shape = {N, B * coordCnt, ceilHW};
+    vector<int64_t> obj_prob_shape = {N, ceilBoxesHw};
+    vector<int64_t> classes_prob_shape = {N, K, ceilBoxesHw};
 
     ADD_OUTPUT_MODE(1, coord_data, inDtype, coord_data_shape, mode);
     ADD_OUTPUT_MODE(2, obj_prob, inDtype, obj_prob_shape, mode);

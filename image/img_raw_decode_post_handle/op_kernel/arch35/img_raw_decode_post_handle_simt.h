@@ -65,14 +65,29 @@ __simt_callee__ inline float ApplyGammaCorrection(float v_f32, float mask, float
     float d = (v_f32 - BLC) / SCALE * mask;
     float d_exp;
     if (d > 0.0f) {
-        d_exp = powf(fmaxf(d, CLAMP_EPS), gamma_ch);
+        if (isnan(gamma_ch) || isinf(gamma_ch)) {
+            // Non-finite gamma follows the reference g = exp(ln(max(d,1e-38)) * gamma).
+            // powf special-cases 1 ** gamma to 1, but the reference yields NaN when
+            // d == 1 (ln(1) * non-finite gamma), so the two would disagree there.
+            d_exp = expf(logf(fmaxf(d, CLAMP_EPS)) * gamma_ch);
+        } else {
+            d_exp = powf(fmaxf(d, CLAMP_EPS), gamma_ch);
+        }
+    } else if (gamma_ch > 0.0f) {
+        // 0 ** positive == 0, avoiding an intermediate -inf that turns into
+        // NaN when gamma is zero/negative.
+        d_exp = 0.0f;
+    } else if (gamma_ch == 0.0f) {
+        // 0 ** 0 == 1 (limit used by the reference implementation).
+        d_exp = 1.0f;
     } else {
-        float d_log = -ASCRT_INF_F;
-        d_log = d_log * gamma_ch;
-        d_exp = expf(d_log);
+        // 0 ** negative == +inf.
+        d_exp = ASCRT_INF_F;
     }
     d_exp = d_exp * SCALE + BLC;
-    d_exp = d_exp * mask;
+    // mask == 0 keeps the original pixel; force the correction term to zero so
+    // gamma <= 0 cannot inject NaN/Inf into the valid (unmasked) region.
+    d_exp = (mask > 0.0f) ? (d_exp * mask) : 0.0f;
     return v_f32 * (1.0f - mask) + d_exp;
 }
 

@@ -119,17 +119,17 @@ __simt_callee__ inline void ProcessCoords(IDX_T inputBase, IDX_T coordBase, int3
     float xVal = ToComputeFloat<T>(input[inputBase + inBhw + hw]);
     coord_data[coordBase + outBhw + hw] = FromComputeFloat<T>(SigmoidFloat(xVal));
     // y coordinate: sigmoid
-    IDX_T yInOff = static_cast<IDX_T>(boxes + b) * HW + hw;
-    IDX_T yOutOff = static_cast<IDX_T>(boxes + b) * ceilHW + hw;
+    IDX_T yInOff = (static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * HW + hw;
+    IDX_T yOutOff = (static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * ceilHW + hw;
     float yVal = ToComputeFloat<T>(input[inputBase + yInOff]);
     coord_data[coordBase + yOutOff] = FromComputeFloat<T>(SigmoidFloat(yVal));
     // h coordinate: move (from input 3B+b -> output 2B+b, swap!)
-    IDX_T hInOff = static_cast<IDX_T>(3 * boxes + b) * HW + hw;
-    IDX_T hOutOff = static_cast<IDX_T>(2 * boxes + b) * ceilHW + hw;
+    IDX_T hInOff = (static_cast<IDX_T>(3) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * HW + hw;
+    IDX_T hOutOff = (static_cast<IDX_T>(2) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * ceilHW + hw;
     coord_data[coordBase + hOutOff] = input[inputBase + hInOff];
     // w coordinate: move (from input 2B+b -> output 3B+b, swap!)
-    IDX_T wInOff = static_cast<IDX_T>(2 * boxes + b) * HW + hw;
-    IDX_T wOutOff = static_cast<IDX_T>(3 * boxes + b) * ceilHW + hw;
+    IDX_T wInOff = (static_cast<IDX_T>(2) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * HW + hw;
+    IDX_T wOutOff = (static_cast<IDX_T>(3) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * ceilHW + hw;
     coord_data[coordBase + wOutOff] = input[inputBase + wInOff];
 }
 
@@ -142,11 +142,11 @@ __simt_callee__ inline void ProcessMode1(IDX_T inputBase, IDX_T objBase, IDX_T c
 {
     IDX_T bHwHw = static_cast<IDX_T>(b) * HW + hw;
     // obj: sigmoid
-    IDX_T objOff = static_cast<IDX_T>(4 * boxes + b) * HW + hw;
+    IDX_T objOff = (static_cast<IDX_T>(4) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * HW + hw;
     float objVal = ToComputeFloat<T>(input[inputBase + objOff]);
     obj_prob[objBase + bHwHw] = FromComputeFloat<T>(SigmoidFloat(objVal));
     // classes: sigmoid
-    IDX_T clsInBase = inputBase + static_cast<IDX_T>(5 * boxes) * HW + bHwHw;
+    IDX_T clsInBase = inputBase + static_cast<IDX_T>(5) * static_cast<IDX_T>(boxes) * HW + bHwHw;
     IDX_T clsOutBase = clsBase + bHwHw;
     IDX_T inClsStep = static_cast<IDX_T>(boxes) * HW;
     for (int32_t k = 0; k < classes; k++) {
@@ -168,11 +168,11 @@ __simt_callee__ inline void ProcessMode2(IDX_T inputBase, IDX_T objBase, IDX_T c
     IDX_T bHwHw = static_cast<IDX_T>(b) * HW + hw;
     IDX_T inClsStep = static_cast<IDX_T>(boxes) * HW;
     // obj: sigmoid
-    IDX_T objOff = static_cast<IDX_T>(4 * boxes + b) * HW + hw;
+    IDX_T objOff = (static_cast<IDX_T>(4) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * HW + hw;
     float objVal = ToComputeFloat<T>(input[inputBase + objOff]);
     obj_prob[objBase + bHwHw] = FromComputeFloat<T>(SigmoidFloat(objVal));
     // classes: softmax (3-pass: max -> exp+sum -> normalize), MDE 5.3
-    IDX_T clsInBase = inputBase + static_cast<IDX_T>(5 * boxes) * HW + bHwHw;
+    IDX_T clsInBase = inputBase + static_cast<IDX_T>(5) * static_cast<IDX_T>(boxes) * HW + bHwHw;
     IDX_T clsOutBase = clsBase + bHwHw;
     // Pass 1: find max over K classes
     float maxVal = -ASCRT_INF_F;
@@ -208,10 +208,10 @@ __simt_callee__ inline void ProcessMode3(IDX_T inputBase, IDX_T objBase, IDX_T c
     IDX_T bHwHw = static_cast<IDX_T>(b) * HW + hw;
     IDX_T inClsStep = static_cast<IDX_T>(boxes) * HW;
     // obj: move (direct copy)
-    IDX_T objOff = static_cast<IDX_T>(4 * boxes + b) * HW + hw;
+    IDX_T objOff = (static_cast<IDX_T>(4) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * HW + hw;
     obj_prob[objBase + bHwHw] = input[inputBase + objOff];
     // classes: sigmoid
-    IDX_T clsInBase = inputBase + static_cast<IDX_T>(5 * boxes) * HW + bHwHw;
+    IDX_T clsInBase = inputBase + static_cast<IDX_T>(5) * static_cast<IDX_T>(boxes) * HW + bHwHw;
     IDX_T clsOutBase = clsBase + bHwHw;
     for (int32_t k = 0; k < classes; k++) {
         IDX_T inK = static_cast<IDX_T>(k) * inClsStep;
@@ -231,10 +231,10 @@ __simt_callee__ inline void ProcessMode4(IDX_T inputBase, IDX_T objBase, IDX_T c
 {
     IDX_T bHwHw = static_cast<IDX_T>(b) * HW + hw;
     IDX_T inClsStep = static_cast<IDX_T>(boxes) * HW;
-    IDX_T clsInBase = inputBase + static_cast<IDX_T>(5 * boxes) * HW + bHwHw;
+    IDX_T clsInBase = inputBase + static_cast<IDX_T>(5) * static_cast<IDX_T>(boxes) * HW + bHwHw;
     IDX_T clsOutBase = clsBase + bHwHw;
     // Read obj value
-    IDX_T objOff = static_cast<IDX_T>(4 * boxes + b) * HW + hw;
+    IDX_T objOff = (static_cast<IDX_T>(4) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * HW + hw;
     float objVal = ToComputeFloat<T>(input[inputBase + objOff]);
     // Pass 1: find max over obj + K classes (MDE: init with objVal)
     float maxVal = objVal;
@@ -269,9 +269,11 @@ __simt_callee__ inline void ZeroCoordPadding(__gm__ T* coord_data, IDX_T coordBa
                                              IDX_T ceilHW, IDX_T hw)
 {
     coord_data[coordBase + static_cast<IDX_T>(b) * ceilHW + hw] = static_cast<T>(0);
-    coord_data[coordBase + static_cast<IDX_T>(boxes + b) * ceilHW + hw] = static_cast<T>(0);
-    coord_data[coordBase + static_cast<IDX_T>(2 * boxes + b) * ceilHW + hw] = static_cast<T>(0);
-    coord_data[coordBase + static_cast<IDX_T>(3 * boxes + b) * ceilHW + hw] = static_cast<T>(0);
+    coord_data[coordBase + (static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * ceilHW + hw] = static_cast<T>(0);
+    coord_data[coordBase + (static_cast<IDX_T>(2) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * ceilHW +
+               hw] = static_cast<T>(0);
+    coord_data[coordBase + (static_cast<IDX_T>(3) * static_cast<IDX_T>(boxes) + static_cast<IDX_T>(b)) * ceilHW +
+               hw] = static_cast<T>(0);
 }
 
 // Zero obj/cls padding: tail of B*HW block up to ceilBoxesHw, per n (and per k for cls).
@@ -350,10 +352,26 @@ __aicore__ inline void Process(GM_ADDR x, GM_ADDR coord_data, GM_ADDR obj_prob, 
     __gm__ T* objGm = (__gm__ T*)obj_prob;
     __gm__ T* clsGm = (__gm__ T*)classes_prob;
 
-    // R003: Dispatch 32-bit or 64-bit path based on total data size
-    int64_t totalElements = static_cast<int64_t>(tilingData->N) * static_cast<int64_t>(tilingData->boxes) *
-                            static_cast<int64_t>(5 + tilingData->classes) * tilingData->HW;
-    if (totalElements <= static_cast<int64_t>(INT32_MAX)) {
+    // R003: Dispatch 32-bit or 64-bit path. The index width must cover the largest
+    // buffer that is addressed, not only the input: aligned outputs can be much larger.
+    const int64_t n = static_cast<int64_t>(tilingData->N);
+    const int64_t b = static_cast<int64_t>(tilingData->boxes);
+    const int64_t k = static_cast<int64_t>(tilingData->classes);
+    const int64_t inputElements = n * b * (5 + k) * tilingData->HW;
+    const int64_t coordElements = n * 4 * b * tilingData->ceilHW;
+    const int64_t objElements = n * tilingData->ceilBoxesHw;
+    const int64_t clsElements = n * k * tilingData->ceilBoxesHw;
+    int64_t maxElements = inputElements;
+    if (coordElements > maxElements) {
+        maxElements = coordElements;
+    }
+    if (objElements > maxElements) {
+        maxElements = objElements;
+    }
+    if (clsElements > maxElements) {
+        maxElements = clsElements;
+    }
+    if (maxElements <= static_cast<int64_t>(INT32_MAX)) {
         // 32-bit path: higher throughput index math
         asc_vf_call<OpYoloSimtKernel<T, YOLO_MODE, int32_t>>(
             dim3(THREAD_NUM), tilingData->N, tilingData->boxes, tilingData->classes,

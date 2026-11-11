@@ -149,21 +149,28 @@ static ge::graphStatus InferOutputShape(gert::InferShapeContext* context)
         return GRAPH_SUCCESS;
     }
 
-    // 数据不足 2 个 int32 时拒绝，避免越界读
-    if (imgSizeTensor->GetSize() < IMG_SIZE_BYTES) {
-        OP_LOGE_WITH_INVALID_INPUT_SHAPESIZE(context->GetNodeName(), IDX_4,
-                                             std::to_string(imgSizeTensor->GetSize() / sizeof(int32_t)).c_str(),
-                                             std::to_string(IMG_SIZE_ELEM_NUM).c_str());
-        return GRAPH_FAILED;
-    }
-
+    // 图模式 Data 输入在 infershape 阶段只有 shape、没有运行期数据，数据指针为空；
+    // 此时按“值不可获取”处理，输出设为 (-1, -1)。
+    // 注意不能用 GetSize()==0 判断：img_size 为未知 shape（dim0==-1）但带 const 值时
+    // GetSize() 同样为 0，会误判为无数据。
     const int32_t* imgSizeData = imgSizeTensor->GetData<int32_t>();
     if (imgSizeData == nullptr) {
         outputShape->SetDimNum(RANK_2);
         outputShape->SetDim(IDX_0, UNKNOWN_DIM);
         outputShape->SetDim(IDX_1, UNKNOWN_DIM);
-        OP_LOGD(context->GetNodeName(), "img_size data null, set output to (-1, -1)");
+        OP_LOGD(context->GetNodeName(), "img_size data unavailable, set output to (-1, -1)");
         return GRAPH_SUCCESS;
+    }
+
+    // shape 声明了具体元素个数时，数据不足 2 个 int32 则拒绝，避免越界读；
+    // dim0 为未知维（-1）时 GetSize() 为 0，无法据此判断，直接按值读取。
+    const gert::Shape* imgSizeShape = context->GetInputShape(IDX_4);
+    int64_t imgSizeDim0 = (imgSizeShape == nullptr) ? UNKNOWN_DIM : imgSizeShape->GetDim(IDX_0);
+    if (imgSizeDim0 != UNKNOWN_DIM && imgSizeTensor->GetSize() < IMG_SIZE_BYTES) {
+        OP_LOGE_WITH_INVALID_INPUT_SHAPESIZE(context->GetNodeName(), IDX_4,
+                                             std::to_string(imgSizeTensor->GetSize() / sizeof(int32_t)).c_str(),
+                                             std::to_string(IMG_SIZE_ELEM_NUM).c_str());
+        return GRAPH_FAILED;
     }
     int64_t hOut = static_cast<int64_t>(imgSizeData[IDX_0]);
     int64_t wOut = static_cast<int64_t>(imgSizeData[IDX_1]);

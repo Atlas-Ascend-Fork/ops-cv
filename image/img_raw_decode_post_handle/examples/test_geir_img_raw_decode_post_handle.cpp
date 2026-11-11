@@ -80,6 +80,7 @@ struct ShapeCombo {
                                                                   FORMAT_ND, intputDtype);                           \
     placeholder##intputIndex##_desc_graph.SetPlacement(ge::kPlacementHost);                                          \
     placeholder##intputIndex##_desc_graph.SetFormat(FORMAT_ND);                                                      \
+    placeholder##intputIndex##_desc_graph.SetRealDimCnt(placeholder##intputIndex##_graph_shape.size());              \
     TensorDesc placeholder##intputIndex##_desc_real = TensorDesc(ge::Shape(placeholder##intputIndex##_real_shape),   \
                                                                  FORMAT_ND, intputDtype);                            \
     placeholder##intputIndex##_desc_real.SetPlacement(ge::kPlacementHost);                                           \
@@ -189,6 +190,7 @@ int32_t GenOnesDataFloat32(vector<int64_t> shapes, Tensor& input_tensor, TensorD
         *(pData + i) = value;
     }
     input_tensor = Tensor(input_tensor_desc, (uint8_t*)pData, data_len);
+    delete[] pData;
     return SUCCESS;
 }
 
@@ -213,6 +215,7 @@ int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& in
         *(pData + i) = value;
     }
     input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
+    delete[] pData;
     return SUCCESS;
 }
 
@@ -241,6 +244,7 @@ int CreateOppInGraph(RunMode mode, const ShapeCombo& combo, std::vector<ge::Tens
         uint32_t dataLen = 2 * GetDataTypeSize(DT_INT32);
         Tensor sizeTensor(placeholder5_desc_real, reinterpret_cast<uint8_t*>(sizeData), dataLen);
         input.back() = sizeTensor;
+        delete[] sizeData;
     }
 
     ADD_INPUT_MODE(6, gamma, DT_FLOAT, combo.gammaShape, mode);

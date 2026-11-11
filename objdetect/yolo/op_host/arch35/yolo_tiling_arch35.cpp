@@ -20,6 +20,7 @@
 #include "objdetect/yolo/op_kernel/arch35/yolo_tiling_data.h"
 #include "objdetect/yolo/op_kernel/arch35/yolo_tiling_key.h"
 #include <cstring>
+#include <limits>
 #include <string>
 
 namespace optiling {
@@ -33,6 +34,18 @@ struct YoloCompileInfo {
 };
 
 static int64_t CeilDiv(int64_t a, int64_t b) { return (a + b - 1) / b; }
+
+static bool SafeMul(int64_t a, int64_t b, int64_t& out)
+{
+    if (a < 0 || b < 0) {
+        return false;
+    }
+    if (a != 0 && b > std::numeric_limits<int64_t>::max() / a) {
+        return false;
+    }
+    out = a * b;
+    return true;
+}
 
 static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& ubSize, int64_t& coreNum)
 {
@@ -92,13 +105,28 @@ static ge::graphStatus ExtractAndValidate(gert::TilingContext* context, int64_t&
                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                     opName, "H, W", (std::to_string(H) + ", " + std::to_string(W)).c_str(), "H and W must be > 0"),
                 return ge::GRAPH_FAILED);
-    int64_t expectedC = boxes * (coords + 1 + classes);
+    // The tiling data stores N and boxes as int32 and the kernel consumes them as int32;
+    // reject values that cannot be represented instead of silently narrowing.
+    OP_CHECK_IF(N > static_cast<int64_t>(std::numeric_limits<int32_t>::max()),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(opName, "N", std::to_string(N).c_str(), "N must fit in int32"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(boxes > static_cast<int64_t>(std::numeric_limits<int32_t>::max()),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(opName, "boxes", std::to_string(boxes).c_str(),
+                                                      "boxes must fit in int32"),
+                return ge::GRAPH_FAILED);
+    int64_t expectedC = 0;
+    OP_CHECK_IF(!SafeMul(boxes, coords + 1 + classes, expectedC),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(opName, "boxes*(coords+1+classes)", "overflow",
+                                                      "boxes*(coords+1+classes) must fit in int64"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(C != expectedC,
                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                     opName, "C", std::to_string(C).c_str(),
                     ("expected boxes*(coords+1+classes)=" + std::to_string(expectedC)).c_str()),
                 return ge::GRAPH_FAILED);
-    HW = H * W;
+    OP_CHECK_IF(!SafeMul(H, W, HW),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(opName, "H*W", "overflow", "H*W must fit in int64"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -246,7 +274,9 @@ static ge::graphStatus YoloTilingFunc(gert::TilingContext* context)
     OP_CHECK_IF(yoloMode < 0, OP_LOGE(context, "DetermineYoloMode error"), return ge::GRAPH_FAILED);
 
     // Core splitting: two-step method
-    int64_t totalPoints = N * boxes * HW;
+    int64_t totalPoints = 0;
+    OP_CHECK_IF(!SafeMul(N, boxes, totalPoints) || !SafeMul(totalPoints, HW, totalPoints),
+                OP_LOGE(context, "N*boxes*H*W overflows int64"), return ge::GRAPH_FAILED);
     int64_t perCoreElements = CeilDiv(totalPoints, coreNum);
     if (perCoreElements < PER_CORE_MIN) {
         perCoreElements = PER_CORE_MIN;
@@ -257,8 +287,37 @@ static ge::graphStatus YoloTilingFunc(gert::TilingContext* context)
     // CeilX(size, 32) = (size + 31) / 32 * 32
     // ceilHW = CeilX(HW * 2 + 32, 32) / 2
     // ceilBoxesHw = CeilX(boxes * HW * 2 + 32, 32) / 2
-    int64_t ceilHW = (HW * 2 + 32 + 31) / 32 * 32 / 2;
-    int64_t ceilBoxesHw = (boxes * HW * 2 + 32 + 31) / 32 * 32 / 2;
+    int64_t hw2 = 0;
+    int64_t boxesHw = 0;
+    int64_t boxesHw2 = 0;
+    OP_CHECK_IF(!SafeMul(HW, 2, hw2) || !SafeMul(boxes, HW, boxesHw) || !SafeMul(boxesHw, 2, boxesHw2),
+                OP_LOGE(context, "aligned output dimension overflows int64"), return ge::GRAPH_FAILED);
+    int64_t ceilHW = (hw2 + 32 + 31) / 32 * 32 / 2;
+    int64_t ceilBoxesHw = (boxesHw2 + 32 + 31) / 32 * 32 / 2;
+
+    // Validate that every element count the kernel will compute fits in int64. The kernel
+    // uses the same evaluation order to select a 32/64-bit index width, so accepting only
+    // non-overflowing shapes keeps that dispatch decision well defined.
+    int64_t expectedC = 0;
+    OP_CHECK_IF(!SafeMul(boxes, 5 + classes, expectedC), OP_LOGE(context, "boxes*(coords+1+classes) overflows int64"),
+                return ge::GRAPH_FAILED);
+    int64_t inputElements = 0;
+    int64_t coordElements = 0;
+    int64_t objElements = 0;
+    int64_t clsElements = 0;
+    int64_t tmp = 0;
+    OP_CHECK_IF(!SafeMul(N, expectedC, inputElements) || !SafeMul(inputElements, HW, inputElements),
+                OP_LOGE(context, "input element count overflows int64"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(!SafeMul(N, 4, tmp) || !SafeMul(tmp, boxes, tmp) || !SafeMul(tmp, ceilHW, coordElements),
+                OP_LOGE(context, "coord_data element count overflows int64"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(!SafeMul(N, ceilBoxesHw, objElements), OP_LOGE(context, "obj_prob element count overflows int64"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(!SafeMul(N, classes, tmp) || !SafeMul(tmp, ceilBoxesHw, clsElements),
+                OP_LOGE(context, "classes_prob element count overflows int64"), return ge::GRAPH_FAILED);
+    (void)inputElements;
+    (void)coordElements;
+    (void)objElements;
+    (void)clsElements;
 
     // Fill TilingData
     YoloTilingData* tiling = context->GetTilingData<YoloTilingData>();

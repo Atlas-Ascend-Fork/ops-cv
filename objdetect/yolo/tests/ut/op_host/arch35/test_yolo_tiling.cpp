@@ -40,9 +40,9 @@ TEST_F(YoloTiling, yolo_v3_mode1_fp32)
             {{{1, 255, 13, 13}, {1, 255, 13, 13}}, ge::DT_FLOAT, ge::FORMAT_ND}, // input x: (N, C, H, W)
         },
         {
-            {{{1, 12, 169}, {1, 12, 169}}, ge::DT_FLOAT, ge::FORMAT_ND}, // output coord_data
-            {{{1, 507}, {1, 507}}, ge::DT_FLOAT, ge::FORMAT_ND},         // output obj_prob
-            {{{1, 80, 507}, {1, 80, 507}}, ge::DT_FLOAT, ge::FORMAT_ND}, // output classes_prob
+            {{{1, 12, 192}, {1, 12, 192}}, ge::DT_FLOAT, ge::FORMAT_ND}, // output coord_data
+            {{{1, 528}, {1, 528}}, ge::DT_FLOAT, ge::FORMAT_ND},         // output obj_prob
+            {{{1, 80, 528}, {1, 80, 528}}, ge::DT_FLOAT, ge::FORMAT_ND}, // output classes_prob
         },
         {
             gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(3)),
@@ -73,9 +73,9 @@ TEST_F(YoloTiling, yolo_v2_mode1_fp16)
             {{{1, 125, 13, 13}, {1, 125, 13, 13}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // input x
         },
         {
-            {{{1, 20, 169}, {1, 20, 169}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // output coord_data
-            {{{1, 845}, {1, 845}}, ge::DT_FLOAT16, ge::FORMAT_ND},         // output obj_prob
-            {{{1, 20, 845}, {1, 20, 845}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // output classes_prob
+            {{{1, 20, 192}, {1, 20, 192}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // output coord_data
+            {{{1, 864}, {1, 864}}, ge::DT_FLOAT16, ge::FORMAT_ND},         // output obj_prob
+            {{{1, 20, 864}, {1, 20, 864}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // output classes_prob
         },
         {
             gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(5)),
@@ -102,9 +102,9 @@ TEST_F(YoloTiling, yolo_v2_mode2_fp32)
             {{{1, 125, 13, 13}, {1, 125, 13, 13}}, ge::DT_FLOAT, ge::FORMAT_ND}, // input x
         },
         {
-            {{{1, 20, 169}, {1, 20, 169}}, ge::DT_FLOAT, ge::FORMAT_ND},
-            {{{1, 845}, {1, 845}}, ge::DT_FLOAT, ge::FORMAT_ND},
-            {{{1, 20, 845}, {1, 20, 845}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 20, 192}, {1, 20, 192}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 864}, {1, 864}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 20, 864}, {1, 20, 864}}, ge::DT_FLOAT, ge::FORMAT_ND},
         },
         {
             gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(5)),
@@ -131,9 +131,9 @@ TEST_F(YoloTiling, yolo_v2_mode3_fp16)
             {{{1, 125, 13, 13}, {1, 125, 13, 13}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // input x
         },
         {
-            {{{1, 20, 169}, {1, 20, 169}}, ge::DT_FLOAT16, ge::FORMAT_ND},
-            {{{1, 845}, {1, 845}}, ge::DT_FLOAT16, ge::FORMAT_ND},
-            {{{1, 20, 845}, {1, 20, 845}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+            {{{1, 20, 192}, {1, 20, 192}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+            {{{1, 864}, {1, 864}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+            {{{1, 20, 864}, {1, 20, 864}}, ge::DT_FLOAT16, ge::FORMAT_ND},
         },
         {
             gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(5)),
@@ -160,9 +160,9 @@ TEST_F(YoloTiling, yolo_v2_mode4_fp32)
             {{{1, 125, 13, 13}, {1, 125, 13, 13}}, ge::DT_FLOAT, ge::FORMAT_ND}, // input x
         },
         {
-            {{{1, 20, 169}, {1, 20, 169}}, ge::DT_FLOAT, ge::FORMAT_ND},
-            {{{1, 845}, {1, 845}}, ge::DT_FLOAT, ge::FORMAT_ND},
-            {{{1, 20, 845}, {1, 20, 845}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 20, 192}, {1, 20, 192}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 864}, {1, 864}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 20, 864}, {1, 20, 864}}, ge::DT_FLOAT, ge::FORMAT_ND},
         },
         {
             gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(5)),
@@ -189,9 +189,9 @@ TEST_F(YoloTiling, yolo_invalid_dim_num)
             {{{1, 255, 13}, {1, 255, 13}}, ge::DT_FLOAT, ge::FORMAT_ND}, // input x: 3 dims (invalid)
         },
         {
-            {{{1, 12, 169}, {1, 12, 169}}, ge::DT_FLOAT, ge::FORMAT_ND},
-            {{{1, 507}, {1, 507}}, ge::DT_FLOAT, ge::FORMAT_ND},
-            {{{1, 80, 507}, {1, 80, 507}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 12, 192}, {1, 12, 192}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 528}, {1, 528}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 80, 528}, {1, 80, 528}}, ge::DT_FLOAT, ge::FORMAT_ND},
         },
         {
             gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(3)),
@@ -215,9 +215,9 @@ TEST_F(YoloTiling, yolo_invalid_channel_mismatch)
             {{{1, 100, 13, 13}, {1, 100, 13, 13}}, ge::DT_FLOAT, ge::FORMAT_ND}, // C=100, expected 255
         },
         {
-            {{{1, 12, 169}, {1, 12, 169}}, ge::DT_FLOAT, ge::FORMAT_ND},
-            {{{1, 507}, {1, 507}}, ge::DT_FLOAT, ge::FORMAT_ND},
-            {{{1, 80, 507}, {1, 80, 507}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 12, 192}, {1, 12, 192}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 528}, {1, 528}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 80, 528}, {1, 80, 528}}, ge::DT_FLOAT, ge::FORMAT_ND},
         },
         {
             gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(3)),
