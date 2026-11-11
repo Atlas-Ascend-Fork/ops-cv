@@ -32,6 +32,15 @@
  *   UnnormalizeNoClip and BicubicWeightedSum keep fmaf (validated in v36).
  *   ReflectCoordinates keeps non-FMA — FMA has zero effect there because
  *   doubleFlips*twiceSpan is typically exact (integer * power-of-2).
+ *
+ * Bicubic extended-precision fix (bicubic + float32):
+ *   A single fp32 unnormalized coordinate rounds ix to 0.5 ULP (~5e-7 texel at
+ *   ix ~ 10), and the Horner cubic tap forms lose ~1e-7 absolute on the taps
+ *   that cancel down to O(1e-2). On near-zero outputs this keeps the absolute
+ *   error around 1e-9, which the cross_check small-value count can reject.
+ *   Fix: UnnormalizeNoClipExact carries the unevaluated low word of
+ *   scale*coord + offset into the fractional position, and CubicWeights uses a
+ *   cancellation-free factored form of the Catmull-Rom taps.
  */
 
 #ifndef GRID_SAMPLER2_D_SIMT_H_
@@ -60,11 +69,12 @@
 //
 //   This file-level pragma disables compiler-driven FMA contraction globally.
 //   Strategy per computation:
-//     - CubicConvolution1/2: volatile float (double insurance with pragma)
-//       — separate mul/add with double rounding, matching x86 non-FMA path
+//     - CubicWeights: factored cancellation-free taps (per-step rounding is not
+//       amplified, so no contraction guard is needed)
 //     - ReflectCoordinates: volatile float (same rationale)
 //     - UnnormalizeNoClip: explicit fmaf() — library call, NOT affected by
 //       this pragma; matches PyTorch's x86 FMA compilation
+//     - UnnormalizeNoClipExact: Dekker two-product plus a volatile two-sum
 //     - BicubicWeightedSum: explicit fmaf() chain — same rationale
 //
 //   Explicit fmaf() calls are library function calls and are NOT affected by
@@ -129,6 +139,73 @@ __simt_callee__ inline float UnnormalizeNoClip(float coord, int32_t size, int32_
     }
     float scalingFactor = static_cast<float>(size) / 2.0f;
     return fmaf(scalingFactor, coord + 1.0f, -0.5f);
+}
+
+// Extended-precision variants used by the bicubic path. The fp32 unnormalized
+// coordinate loses up to 0.5 ULP of ix (~5e-7 texel at ix ~ 10); that rounding
+// dominates the absolute error of near-zero bicubic outputs. Return the
+// unevaluated low word of scale * coord + offset so the fractional position can
+// be recovered in BicubicSample.
+__simt_callee__ inline void TwoSumHiLo(float a, float b, float& sum, float& err)
+{
+    volatile float s = a + b;
+    volatile float bVirtual = s - a;
+    volatile float aVirtual = s - bVirtual;
+    volatile float e = (a - aVirtual) + (b - bVirtual);
+    sum = s;
+    err = e;
+}
+
+// Dekker split-based error-free product. Unlike fmaf(scale, coord, -prod), this
+// does not depend on the target compiler mapping fmaf to a real fused MAC, so
+// the low word survives on every toolchain. Valid for |a|, |b| < 2^115, which
+// the caller guarantees by only using it for |coord| <= 1.
+__simt_callee__ inline void TwoProductHiLo(float a, float b, float& hi, float& lo)
+{
+    constexpr float SPLIT = 4097.0f;
+    volatile float p = a * b;
+    volatile float ca = SPLIT * a;
+    volatile float aHi = ca - (ca - a);
+    volatile float aLo = a - aHi;
+    volatile float cb = SPLIT * b;
+    volatile float bHi = cb - (cb - b);
+    volatile float bLo = b - bHi;
+    volatile float e = ((aHi * bHi - p) + aHi * bLo + aLo * bHi) + aLo * bLo;
+    hi = p;
+    lo = e;
+}
+
+__simt_callee__ inline void UnnormalizeNoClipExact(float coord, int32_t size, int32_t alignCorners, float& hi,
+                                                   float& lo)
+{
+    if (fabsf(coord) > 1.0f) {
+        hi = UnnormalizeNoClip(coord, size, alignCorners);
+        lo = 0.0f;
+        return;
+    }
+    // Keep the offset split in (hi, lo). Rounding `scale - 0.5f` first loses
+    // the -0.5 once scale >= 2^23 (ULP >= 1), which is a half-texel shift for
+    // very large W/H; add the exact -0.5 through the low word instead.
+    float scale;
+    float offsetHi;
+    float offsetLo;
+    if (alignCorners != 0) {
+        scale = static_cast<float>(size - 1) / 2.0f;
+        offsetHi = scale;
+        offsetLo = 0.0f;
+    } else {
+        scale = static_cast<float>(size) / 2.0f;
+        offsetHi = scale;
+        offsetLo = -0.5f;
+    }
+    float prod;
+    float prodErr;
+    TwoProductHiLo(scale, coord, prod, prodErr);
+    float sum;
+    float sumErr;
+    TwoSumHiLo(prod, offsetHi, sum, sumErr);
+    hi = sum;
+    lo = sumErr + prodErr + offsetLo;
 }
 
 // NaN → 0 matches aicpu grid_sampler_2d.cc and PyTorch clip_coordinates.
@@ -265,16 +342,24 @@ __simt_callee__ inline bool WithinBounds2d(int32_t h, int32_t w, int32_t H, int3
 
 // ===== Bicubic helpers =====
 
-// Bicubic coefficient helpers. PyTorch's get_cubic_upsample_coefficients
-// evaluates coeffs[3] = cubic_convolution2(x2 + 1.0, A) with x2 = 1.0 - t.
-// The cx3/cy3 arguments below use 2.0f - t (a single rounding of the argument)
-// rather than the mathematically equivalent (1.0f - t) + 1.0f: round 34 tried
-// PyTorch's two-rounding argument, but round 37/38 reverted it because the NPU
-// fmaf rounding differs from x86 FMA and the two-rounding form regressed the
-// differential comparison (95.3% -> 92.4%). The current form pairs 2.0f - t
-// with the separate mul/add (volatile + file-level `#pragma clang fp
-// contract(off)`) evaluation, which is the validated-on-NPU formulation.
-// UnnormalizeNoClip and BicubicWeightedSum keep fmaf (validated in round 36).
+// Cancellation-free Catmull-Rom (a = -0.75) tap weights for t in [0, 1).
+// The generic cubic_convolution1/2 Horner forms subtract O(1) terms and lose
+// ~1e-7 absolute on taps that cancel down to O(1e-2), which sets a ~1e-9
+// absolute error floor on the bicubic output. The factored forms below avoid
+// that cancellation; all constants (0.75/1.25/1.5/2.25) are exact in binary.
+__simt_callee__ inline void CubicWeights(float t, float& w0, float& w1, float& w2, float& w3)
+{
+    float u = 1.0f - t;
+    float t2 = t * t;
+    w0 = -0.75f * t * (u * u);
+    w1 = 1.0f - t2 * (2.25f - 1.25f * t);
+    w2 = t * (0.75f + 1.5f * t - 1.25f * t2);
+    w3 = -0.75f * u * t2;
+}
+
+// fp16 keeps the round-36 Horner forms: its ULP is far larger than these
+// coefficient errors, and changing the rounding here only moves single-ULP
+// quantisation points (regressing max-relative-error cases).
 constexpr float A = -0.75f;
 
 __simt_callee__ inline float CubicConvolution1(float x, float a)
@@ -392,13 +477,21 @@ __simt_callee__ inline float BicubicWeightedSum(float c0, float c1, float c2, fl
 
 template <typename T, typename INDEX_SIZE_T>
 __simt_callee__ inline void BicubicSample(__gm__ T* xGm, __gm__ T* yGm, int32_t n, int32_t C, int32_t HIn, int32_t WIn,
-                                          int32_t HOut, int32_t WOut, int32_t hOut, int32_t wOut, float ix, float iy,
-                                          int32_t paddingMode, int32_t alignCorners)
+                                          int32_t HOut, int32_t WOut, int32_t hOut, int32_t wOut, float ixHi,
+                                          float ixLo, float iyHi, float iyLo, int32_t paddingMode, int32_t alignCorners)
 {
-    float ixFloor = floorf(ix);
-    float iyFloor = floorf(iy);
-    float tx = ix - ixFloor;
-    float ty = iy - iyFloor;
+    float ixFloor = floorf(ixHi);
+    float iyFloor = floorf(iyHi);
+    // Fold the fractional part unconditionally: |lo| can exceed 1 when a large
+    // coordinate has a coarse ULP, so a single +/-1 correction is not enough.
+    float tx = (ixHi - ixFloor) + ixLo;
+    float ty = (iyHi - iyFloor) + iyLo;
+    float txFloor = floorf(tx);
+    ixFloor += txFloor;
+    tx -= txFloor;
+    float tyFloor = floorf(ty);
+    iyFloor += tyFloor;
+    ty -= tyFloor;
 
     float fx0 = ComputeCoordinates(ixFloor - 1.0f, WIn, paddingMode, alignCorners);
     float fx1 = ComputeCoordinates(ixFloor, WIn, paddingMode, alignCorners);
@@ -418,14 +511,27 @@ __simt_callee__ inline void BicubicSample(__gm__ T* xGm, __gm__ T* yGm, int32_t 
     int32_t by2 = SafeFloatToInt32(fy2);
     int32_t by3 = SafeFloatToInt32(fy3);
 
-    float cx0 = CubicConvolution2(tx + 1.0f, A);
-    float cx1 = CubicConvolution1(tx, A);
-    float cx2 = CubicConvolution1(1.0f - tx, A);
-    float cx3 = CubicConvolution2(2.0f - tx, A);
-    float cy0 = CubicConvolution2(ty + 1.0f, A);
-    float cy1 = CubicConvolution1(ty, A);
-    float cy2 = CubicConvolution1(1.0f - ty, A);
-    float cy3 = CubicConvolution2(2.0f - ty, A);
+    float cx0;
+    float cx1;
+    float cx2;
+    float cx3;
+    float cy0;
+    float cy1;
+    float cy2;
+    float cy3;
+    if constexpr (std::is_same_v<T, float>) {
+        CubicWeights(tx, cx0, cx1, cx2, cx3);
+        CubicWeights(ty, cy0, cy1, cy2, cy3);
+    } else {
+        cx0 = CubicConvolution2(tx + 1.0f, A);
+        cx1 = CubicConvolution1(tx, A);
+        cx2 = CubicConvolution1(1.0f - tx, A);
+        cx3 = CubicConvolution2(2.0f - tx, A);
+        cy0 = CubicConvolution2(ty + 1.0f, A);
+        cy1 = CubicConvolution1(ty, A);
+        cy2 = CubicConvolution1(1.0f - ty, A);
+        cy3 = CubicConvolution2(2.0f - ty, A);
+    }
 
     INDEX_SIZE_T xBase = static_cast<INDEX_SIZE_T>(n) * C * HIn * WIn;
     INDEX_SIZE_T yBase = static_cast<INDEX_SIZE_T>(n) * C * HOut * WOut + static_cast<INDEX_SIZE_T>(hOut) * WOut + wOut;
@@ -527,15 +633,26 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM_T<INDEX_SIZE_T>) inline void
             NearestSample<T, INDEX_SIZE_T>(xGm, yGm, static_cast<int32_t>(n), C, HIn, WIn, HOut, WOut,
                                            static_cast<int32_t>(hOut), static_cast<int32_t>(wOut), ix, iy);
         } else {
-            float ix = UnnormalizeNoClip(xCoord, WIn, alignCorners);
-            float iy = UnnormalizeNoClip(yCoord, HIn, alignCorners);
-            if (IsNanOrInf(ix) || IsNanOrInf(iy)) {
+            float ixHi;
+            float ixLo;
+            float iyHi;
+            float iyLo;
+            if constexpr (std::is_same_v<T, float>) {
+                UnnormalizeNoClipExact(xCoord, WIn, alignCorners, ixHi, ixLo);
+                UnnormalizeNoClipExact(yCoord, HIn, alignCorners, iyHi, iyLo);
+            } else {
+                ixHi = UnnormalizeNoClip(xCoord, WIn, alignCorners);
+                iyHi = UnnormalizeNoClip(yCoord, HIn, alignCorners);
+                ixLo = 0.0f;
+                iyLo = 0.0f;
+            }
+            if (IsNanOrInf(ixHi) || IsNanOrInf(iyHi)) {
                 WriteNanToOutput<T, INDEX_SIZE_T>(yGm, static_cast<int32_t>(n), C, HOut, WOut,
                                                   static_cast<int32_t>(hOut), static_cast<int32_t>(wOut));
             } else {
                 BicubicSample<T, INDEX_SIZE_T>(xGm, yGm, static_cast<int32_t>(n), C, HIn, WIn, HOut, WOut,
-                                               static_cast<int32_t>(hOut), static_cast<int32_t>(wOut), ix, iy,
-                                               paddingMode, alignCorners);
+                                               static_cast<int32_t>(hOut), static_cast<int32_t>(wOut), ixHi, ixLo, iyHi,
+                                               iyLo, paddingMode, alignCorners);
             }
         }
     }
