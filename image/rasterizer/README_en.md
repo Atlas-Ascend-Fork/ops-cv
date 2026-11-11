@@ -6,7 +6,7 @@ English | [简体中文](./README.md)
 
 |Product             |  Supported  |
 |:-------------------------|:----------:|
-|  <term>Ascend 950PR&950DT products</term>   |     ×    |
+|  <term>Ascend 950PR&950DT products</term>   |     √    |
 |  <term>Atlas A3 products</term>   |     √    |
 |  <term>Atlas A2 products</term>     |     √    |
 |  <term>Atlas 200I/500 A2 inference products</term>    |     ×    |
@@ -144,7 +144,7 @@ English | [简体中文](./README.md)
     <tr>
       <td>d</td>
       <td>Optional input</td>
-      <td><ul><li>Represents the input tensor of the depth map, used to calculate the depth threshold; this parameter does not take effect.</li><li>The default value is empty.</li></ul></td>
+      <td><ul><li>Represents the input tensor of the depth map, used to calculate the depth threshold; this parameter does not take effect.</li><li>empty Tensors are supported, and the default value is empty.</li><li>When the Tensor is non-empty, the shape is (height, width).</li></ul></td>
       <td>FLOAT32</td>
       <td>ND</td>
     </tr>
@@ -165,8 +165,8 @@ English | [简体中文](./README.md)
     <tr>
       <td>occlusion_truncation</td>
       <td>Input</td>
-      <td><ul><li>Occlusion truncation, used to calculate the depth threshold; this parameter does not take effect but must be passed in.</li><li>The default value is 0.0, and currently only 0.0 is supported.</li></ul></td>
-      <td>DOUBLE</td>
+      <td><ul><li>Occlusion truncation, used to calculate the depth threshold; this parameter does not take effect but must be passed in.</li><li>The default value is 0.0.</li></ul></td>
+      <td>FLOAT32</td>
       <td>-</td>
     </tr>
     <tr>

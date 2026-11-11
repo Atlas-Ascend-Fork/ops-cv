@@ -194,7 +194,7 @@ aclnnStatus aclnnRasterizer(
       <td>dOptional（aclTensor*）</td>
       <td>输入</td>
       <td>表示深度图的输入张量，用于计算深度阈值。</td>
-      <td><ul><li>可选输入，支持空Tensor。</li><li>此参数不生效。</li></ul></td>
+      <td><ul><li>可选输入，支持空Tensor。</li><li>非空Tensor时，shape为(height, width)。</li><li>此参数不生效。</li></ul></td>
       <td>FLOAT32</td>
       <td>ND</td>
       <td>2</td>
@@ -307,13 +307,11 @@ aclnnStatus aclnnRasterizer(
         <td>传入的v、f、findicesOut或barycentricOut是空指针。</td>
       </tr>
       <tr>
-        <td>ACLNN_ERR_PARAM_INVALID</td>
-        <td>161002</td>
+        <td rowspan="3">ACLNN_ERR_PARAM_INVALID</td>
+        <td rowspan="3">161002</td>
         <td>v、f、findicesOut或barycentricOut的数据类型不在支持范围之内。</td>
       </tr>
       <tr>
-        <td rowspan="2">ACLNN_ERR_INNER_TILING_ERROR</td>
-        <td rowspan="2">561002</td>
         <td>v、f、findicesOut或barycentricOut的shape不在支持范围之内。</td>
       </tr>
       <tr>

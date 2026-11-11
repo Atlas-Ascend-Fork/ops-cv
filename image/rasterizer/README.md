@@ -144,7 +144,7 @@
     <tr>
       <td>d</td>
       <td>可选输入</td>
-      <td><ul><li>表示深度图的输入张量，用于计算深度阈值，此参数不生效。</li><li>默认值为空。</li></ul></td>
+      <td><ul><li>表示深度图的输入张量，用于计算深度阈值，此参数不生效。</li><li>支持空Tensor，默认值为空。</li><li>非空Tensor时，shape为(height, width)。</li></ul></td>
       <td>FLOAT32</td>
       <td>ND</td>
     </tr>
@@ -165,7 +165,7 @@
     <tr>
       <td>occlusion_truncation</td>
       <td>输入</td>
-      <td><ul><li>遮挡截断，用于计算深度阈值，此参数不生效但需要传入。</li><li>默认值为0.0，当前仅支持取值为0.0。</li></ul></td>
+      <td><ul><li>遮挡截断，用于计算深度阈值，此参数不生效但需要传入。</li><li>默认值为0.0。</li></ul></td>
       <td>FLOAT32</td>
       <td>-</td>
     </tr>
