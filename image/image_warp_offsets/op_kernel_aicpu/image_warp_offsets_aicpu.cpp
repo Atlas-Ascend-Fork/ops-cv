@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <cmath>
+#include <type_traits>
 
 #include "securec.h"
 #include "unsupported/Eigen/CXX11/Tensor"
@@ -71,6 +72,18 @@ uint32_t ImageWarpOffsetsCpuKernel::DoCompute(const CpuKernelContext& ctx)
                 for (int64_t i_h = start; i_h < end; ++i_h) {
                     for (int64_t i_w = 0; i_w < output_shape[3]; ++i_w) {
                         const TIndex index_value = input1(i_n, i_i, i_h, i_w);
+                        // Float offsets are converted to an integer address below.  Reject NaN before
+                        // the conversion: comparisons with NaN are false, and converting it to an
+                        // integer is undefined, which can otherwise select an arbitrary pixel.
+                        if constexpr (std::is_floating_point_v<TIndex>) {
+                            if (!std::isfinite(index_value)) {
+                                work_ret.store(KERNEL_STATUS_PARAM_INVALID, std::memory_order_relaxed);
+                                string err_msg = ConcatString(kImageWarpOffsets, " op input[1] value[", i_n, "][", i_i,
+                                                              "][", i_h, "][", i_w, "] is not finite");
+                                KERNEL_LOG_ERROR("%s", err_msg.c_str());
+                                return;
+                            }
+                        }
                         if ((index_value < 0) || (index_value > in_hxwxc - kImageChannels)) {
                             work_ret.store(KERNEL_STATUS_PARAM_INVALID, std::memory_order_relaxed);
                             string err_msg = ConcatString(

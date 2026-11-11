@@ -8,6 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <limits>
+
 #include "gtest/gtest.h"
 #ifndef private
 #define private public
@@ -288,4 +290,16 @@ TEST_F(TEST_IMAGE_WARP_OFFSETS_UT, DT_FLOAT16_DT_INT32_DT_FLOAT16_SUCCESS)
     EXPECT_EQ(static_cast<float>(output_data[3]), 2.0f);
     EXPECT_EQ(static_cast<float>(output_data[4]), 3.0f);
     EXPECT_EQ(static_cast<float>(output_data[5]), 4.0f);
+}
+
+TEST_F(TEST_IMAGE_WARP_OFFSETS_UT, NAN_FLOAT_OFFSET_FAILED)
+{
+    vector<DataType> data_types = {DT_FLOAT16, DT_FLOAT, DT_FLOAT16};
+    vector<vector<int64_t>> shapes = {{1, 4, 2, 3}, {1, 4, 1, 1}, {1, 4, 1, 1, 3}};
+    Eigen::half input0_data[24] = {Eigen::half(1.0f)};
+    float input1_data[4] = {std::numeric_limits<float>::quiet_NaN(), 1.0f, 2.0f, 3.0f};
+    Eigen::half output_data[12] = {Eigen::half(0.0f)};
+    vector<void*> datas = {(void*)input0_data, (void*)input1_data, (void*)output_data};
+    CREATE_NODEDEF(shapes, data_types, datas);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
 }
