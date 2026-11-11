@@ -184,8 +184,8 @@ template <typename T>
 __aicore__ inline void Process(GM_ADDR img, GM_ADDR lutTable, GM_ADDR output, const Lut3DTilingData* tilingData)
 {
     int64_t totalPixels = tilingData->totalPixels;
-    // Empty tensor: kernel launched but no work to do, output stays empty (SE 1.4)
-    if (totalPixels == 0) {
+    // Empty tensor or non-positive totalPixels (defensive against invalid tiling): no work to do (SE 1.4)
+    if (totalPixels <= 0) {
         return;
     }
     int32_t lutN = tilingData->lutN;

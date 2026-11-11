@@ -62,11 +62,13 @@ ge::graphStatus InferShapeForDecodeBboxV2(gert::InferShapeContext* context)
         return GRAPH_FAILED;
     }
 
-    // Validate boxes.shape == anchors.shape (no broadcast)
-    const int64_t boxesN = boxesShape->GetDim(0);
-    const int64_t anchorsN = anchorsShape->GetDim(0);
-    if (boxesN != anchorsN && boxesN != ge::UNKNOWN_DIM && anchorsN != ge::UNKNOWN_DIM) {
-        return GRAPH_FAILED;
+    // Validate boxes.shape == anchors.shape (no broadcast, full per-dim equality)
+    for (size_t i = 0; i < rank; ++i) {
+        const int64_t boxesDim = boxesShape->GetDim(i);
+        const int64_t anchorsDim = anchorsShape->GetDim(i);
+        if (boxesDim != anchorsDim && boxesDim != ge::UNKNOWN_DIM && anchorsDim != ge::UNKNOWN_DIM) {
+            return GRAPH_FAILED;
+        }
     }
 
     // y.shape = boxes.shape (identity copy)

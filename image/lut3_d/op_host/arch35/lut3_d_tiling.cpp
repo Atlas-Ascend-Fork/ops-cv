@@ -95,10 +95,10 @@ static ge::graphStatus ValidateShapes(gert::TilingContext* context, int64_t& tot
     }
     for (int64_t i = 0; i < imgDimNum; ++i) {
         const int64_t imgDim = imgShape.GetDim(i);
-        if (imgDim < 0 && imgDim != ge::UNKNOWN_DIM) {
+        if (imgDim < 0) {
             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "img dimension",
                                                   std::to_string(imgDim).c_str(),
-                                                  "must be non-negative or UNKNOWN_DIM");
+                                                  "must be non-negative (UNKNOWN_DIM/-1 not allowed at tiling)");
             return ge::GRAPH_FAILED;
         }
     }
@@ -140,7 +140,15 @@ static ge::graphStatus ValidateShapes(gert::TilingContext* context, int64_t& tot
         return ge::GRAPH_FAILED;
     }
 
-    totalPixels = imgShape.GetShapeSize() / 3;
+    const int64_t shapeSize = imgShape.GetShapeSize();
+    // GetShapeSize() 在维度乘积溢出 int64 时返回 gert::Shape::kInvalidDimValue（INT64_MIN）。
+    if (shapeSize < 0) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "img shape size",
+                                              std::to_string(shapeSize).c_str(),
+                                              "must be non-negative (dim product overflows int64)");
+        return ge::GRAPH_FAILED;
+    }
+    totalPixels = shapeSize / 3;
     return ge::GRAPH_SUCCESS;
 }
 

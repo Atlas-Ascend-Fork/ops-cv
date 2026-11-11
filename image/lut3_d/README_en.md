@@ -76,4 +76,4 @@ English | [简体中文](./README.md)
 
 | Invocation Method | Sample Code | Description |
 | ---- | ---- | ---- |
-| Graph mode | [test_geir_lut3_d](examples/arch35/test_geir_lut3_d.cpp) | Calls the Lut3D operator by constructing a graph in the [operator IR](op_graph/lut3_d_proto.h) mode. For compilation and verification, refer to [Operator Invocation](../../docs/zh/invocation/quick_op_invocation.md). |
+| GE graph mode | [test_geir_lut3_d](examples/arch35/test_geir_lut3_d.cpp) | Calls the Lut3D operator by constructing a graph in the [operator IR](op_graph/lut3_d_proto.h) mode. For compilation and verification, refer to [Operator Invocation](../../docs/zh/invocation/quick_op_invocation.md). |

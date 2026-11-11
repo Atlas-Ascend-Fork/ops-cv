@@ -18,6 +18,7 @@
 #include "decode_bbox_v2_tiling_arch35.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <set>
 #include <string>
@@ -128,7 +129,7 @@ ge::graphStatus CheckInputs(gert::TilingContext* ctx, int64_t& dim0, bool& rever
 
     const float* clipPtr = attrs->GetFloat(1);
     decodeClip = (clipPtr != nullptr) ? *clipPtr : 0.0f;
-    if (decodeClip < kDecodeClipMin || decodeClip > kDecodeClipMax) {
+    if (std::isnan(decodeClip) || decodeClip < kDecodeClipMin || decodeClip > kDecodeClipMax) {
         OP_LOGE(nodeName, "decode_clip must be in [0.0, 10.0], got %f", decodeClip);
         return ge::GRAPH_FAILED;
     }
@@ -248,6 +249,15 @@ ge::graphStatus TilingFuncDecodeBboxV2(gert::TilingContext* context)
     uint64_t totalUb = 0;
     plat.GetCoreMemSize(platform_ascendc::CoreMemType::UB, totalUb);
     int64_t availableCoreNum = static_cast<int64_t>(plat.GetCoreNumAiv());
+
+    if (totalUb == 0) {
+        OP_LOGE(context->GetNodeName(), "invalid platform query: total UB size == 0");
+        return ge::GRAPH_FAILED;
+    }
+    if (availableCoreNum <= 0) {
+        OP_LOGE(context->GetNodeName(), "invalid platform query: available core num = %ld", availableCoreNum);
+        return ge::GRAPH_FAILED;
+    }
 
     int64_t dim0 = 0;
     bool reversedBox = false;

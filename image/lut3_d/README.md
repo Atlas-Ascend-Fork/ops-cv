@@ -74,4 +74,4 @@
 
 | 调用方式 | 样例代码 | 说明 |
 | ---- | ---- | ---- |
-| 图模式 | [test_geir_lut3_d](examples/arch35/test_geir_lut3_d.cpp) | 通过[算子IR](op_graph/lut3_d_proto.h)构图方式调用Lut3D算子，参见[算子调用](../../docs/zh/invocation/quick_op_invocation.md)完成编译和验证。 |
+| GE图模式 | [test_geir_lut3_d](examples/arch35/test_geir_lut3_d.cpp) | 通过[算子IR](op_graph/lut3_d_proto.h)构图方式调用Lut3D算子，参见[算子调用](../../docs/zh/invocation/quick_op_invocation.md)完成编译和验证。 |

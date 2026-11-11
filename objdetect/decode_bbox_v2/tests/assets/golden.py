@@ -36,7 +36,7 @@ class DecodeBboxV2TestSpec:
         scales = scales if scales is not None else [1.0, 1.0, 1.0, 1.0]
         sy, sx, sh, sw = [float(s) for s in scales]
 
-        x_dtype = boxes.dtype
+        out_dtype = torch.from_numpy(boxes).dtype
 
         b_in = torch.from_numpy(boxes.astype(np.float32))
         a_in = torch.from_numpy(anchors.astype(np.float32))
@@ -82,7 +82,7 @@ class DecodeBboxV2TestSpec:
         else:
             y = y4
 
-        return [y.numpy().astype(x_dtype)]
+        return [y.to(out_dtype).numpy()]
 
     class TorchImpl:
         """torch 算子拼接实现：用 torch.exp + torch.minimum 拼接解码公式。"""
@@ -124,7 +124,9 @@ class DecodeBboxV2TestSpec:
             tws = tw / sw
 
             if self.decode_clip != 0:
-                clip_val = torch.tensor(self.decode_clip, dtype=torch.float32)
+                clip_val = torch.scalar_tensor(
+                    self.decode_clip, dtype=torch.float32, device=ths.device
+                )
                 h = torch.exp(torch.minimum(ths, clip_val)) * ah
                 w = torch.exp(torch.minimum(tws, clip_val)) * aw
             else:
@@ -153,6 +155,6 @@ class DecodeBboxV2TestSpec:
     }
 
     tolerance = {
-        "float32": {"standard": "stat_rel_err"},
-        "float16": {"standard": "stat_rel_err"},
+        "float32": {"standard": "mix_tolerance", "rtol": 1.0e-05, "atol": 1.0e-05},
+        "float16": {"standard": "mix_tolerance", "rtol": 1.0e-03, "atol": 1.0e-03},
     }

@@ -9,7 +9,7 @@ English | [简体中文](./README.md)
 | <term>Ascend 950PR&950DT products</term> | √ |
 | <term>Atlas A3 products</term> | √ |
 | <term>Atlas A2 products</term> | √ |
-| <term>Atlas 200I/500 A2 inference products</term> | × |
+| <term>Atlas 200I/500 A2 inference products</term> | √ |
 | <term>Atlas inference products</term> | × |
 | <term>Atlas training products</term> | × |
 
