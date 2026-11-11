@@ -70,6 +70,36 @@ public:
         this->AICore().AddConfig("ascend960dt", aicoreConfig);
         this->AICore().AddConfig("ascend960pr", aicoreConfig);
         this->AICore().AddConfig("mc62", aicoreConfig);
+
+        OpAICoreConfig config5162 = Get5162CoreConfig();
+        this->AICore().AddConfig("ascend5162", config5162);
+    }
+
+private:
+    OpAICoreConfig Get5162CoreConfig() const
+    {
+        OpAICoreConfig config5162;
+        config5162.DynamicCompileStaticFlag(true)
+            .DynamicRankSupportFlag(true)
+            .DynamicShapeSupportFlag(true)
+            .ExtendCfgInfo("opFile.value", "resize_bilinear_v2_apt");
+        config5162.Input("x")
+            .ParamType(REQUIRED)
+            .DataType({ge::DT_FLOAT16, ge::DT_FLOAT16, ge::DT_FLOAT, ge::DT_BF16, ge::DT_BF16})
+            .Format({ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC})
+            .UnknownShapeFormat({ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC});
+        config5162.Input("size")
+            .ParamType(REQUIRED)
+            .ValueDepend(OPTIONAL)
+            .DataType({ge::DT_INT32, ge::DT_INT32, ge::DT_INT32, ge::DT_INT32, ge::DT_INT32})
+            .Format({ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND})
+            .UnknownShapeFormat({ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND, ge::FORMAT_ND});
+        config5162.Output("y")
+            .ParamType(REQUIRED)
+            .DataType({ge::DT_FLOAT16, ge::DT_FLOAT, ge::DT_FLOAT, ge::DT_BF16, ge::DT_FLOAT})
+            .Format({ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC})
+            .UnknownShapeFormat({ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC, ge::FORMAT_NHWC});
+        return config5162;
     }
 };
 

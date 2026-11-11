@@ -12,6 +12,9 @@
  * \file resize_bilinear_v2.cpp
  * \brief resize_bilinear_v2
  */
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 5162)
+#include "./arch51/resize_bilinear_v2_simd_nhwc.h"
+#else
 #include "./arch35/resize_bilinear_v2_base.h"
 #include "./arch35/resize_bilinear_v2_all_copy.h"
 #include "./arch35/resize_bilinear_v2_point_copy.h"
@@ -23,7 +26,11 @@
 #include "./arch35/resize_bilinear_v2_simt_nhwc.h"
 #include "./arch35/resize_bilinear_v2_simt_nhwc.h"
 #include "./arch35/resize_bilinear_v2_simt_hw.h"
+#endif
 
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 5162)
+#define TILING_KEY_SIMD_NHWC 50000
+#else
 #define TILING_KEY_C_PARALLEL 10000
 #define TILING_KEY_HW_CACHE 20000
 #define TILING_KEY_SIMT_NHWC 30000
@@ -36,6 +43,7 @@
 #define TILING_KEY_POINT_COPY 40001
 #define TILING_KEY_NCHW_BROADCAST 40002
 #define TILING_KEY_NHWC_BROADCAST 40003
+#endif
 
 using namespace AscendC;
 
@@ -47,6 +55,13 @@ extern "C" __global__ __aicore__ void resize_bilinear_v2(GM_ADDR x, GM_ADDR size
 
     TPipe pipe;
 
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 5162)
+    if (TILING_KEY_IS(TILING_KEY_SIMD_NHWC)) {
+        ResizeBilinearV2::ResizeBilinearV2SimdNhwc<DTYPE_X, DTYPE_Y> op;
+        op.Init(x, size, y, &pipe, &tilingData);
+        op.Process();
+    }
+#else
     if (TILING_KEY_IS(TILING_KEY_ALL_COPY)) {
         ResizeBilinearV2::ResizeBilinearV2AllCopy<DTYPE_X> op;
         op.Init(x, size, y, &pipe, &tilingData);
@@ -219,4 +234,5 @@ extern "C" __global__ __aicore__ void resize_bilinear_v2(GM_ADDR x, GM_ADDR size
         }
         return;
     }
+#endif
 }
