@@ -198,7 +198,7 @@ static aclnnStatus CheckParams(const aclTensor* grad_x, const aclTensor* idx, co
 }
 
 // n==0 时 kernel 会把非空 grad_y 清零。aclnn 早退不写输出会把未初始化内存当作梯度返回。
-static const aclTensor* GetOutTensorWithValueZero(aclTensor* grad_y, aclOpExecutor* executor)
+static const aclTensor* GetOutTensorWithValueZero(const aclTensor* grad_y, aclOpExecutor* executor)
 {
     aclScalar* scalar = executor->AllocScalar(0);
     auto valueTensor = executor->ConvertToTensor(scalar, grad_y->GetDataType());
