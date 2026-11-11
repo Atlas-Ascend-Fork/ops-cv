@@ -112,15 +112,6 @@ static bool CheckInputElement(const aclTensor* self, const aclFloatArray* scales
         dimWidth = DIM_WIDTH_NHWC;
     }
 
-    // API定义仅支持调整H/W维，scales的N/C位必须为1
-    if (std::fabs(static_cast<double>((*scales)[dimBatch]) - 1.0) > EPSILON ||
-        std::fabs(static_cast<double>((*scales)[dimChannel]) - 1.0) > EPSILON) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                "The scales of batch and channel must be 1, but got scales[%zu]=%lf, scales[%zu]=%lf.", dimBatch,
-                static_cast<double>((*scales)[dimBatch]), dimChannel, static_cast<double>((*scales)[dimChannel]));
-        return false;
-    }
-
     if (selfShape.GetDim(dimBatch) != outShape.GetDim(dimBatch) ||
         selfShape.GetDim(dimChannel) != outShape.GetDim(dimChannel)) {
         OP_LOGE(ACLNN_ERR_PARAM_INVALID,
