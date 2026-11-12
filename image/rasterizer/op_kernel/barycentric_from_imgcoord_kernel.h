@@ -571,6 +571,10 @@ template <typename T>
 __aicore__ inline void BarycentricFromImgcoordAIV<T>::Process()
 {
     GenMaskDataInGM();
+    // maskGM is shared by all vec cores and gathered in full by CopyOutRslt.
+    // Sync here so every core's mask write is globally visible before any
+    // core issues the Gather, otherwise stale workspace data may be read.
+    SyncAll();
 
     if (this->calPixNum == 0) {
         return;

@@ -1,0 +1,11314 @@
+[
+ {
+  "id": 0,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     3,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     1,
+     3
+    ],
+    "range_values": [
+     0,
+     2
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 1,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     3,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     1,
+     3
+    ],
+    "range_values": [
+     0,
+     2
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 2,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     3,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     1,
+     3
+    ],
+    "range_values": [
+     0,
+     2
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 3,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     3,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     1,
+     3
+    ],
+    "range_values": [
+     0,
+     2
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 4,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     3,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     1,
+     3
+    ],
+    "range_values": [
+     0,
+     2
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 5,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     3,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     1,
+     3
+    ],
+    "range_values": [
+     0,
+     2
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 6,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     3,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     1,
+     3
+    ],
+    "range_values": [
+     0,
+     2
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 7,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     3,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     1,
+     3
+    ],
+    "range_values": [
+     0,
+     2
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 8,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     2,
+     3
+    ],
+    "range_values": [
+     0,
+     3
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 9,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     2,
+     3
+    ],
+    "range_values": [
+     0,
+     3
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 10,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     2,
+     3
+    ],
+    "range_values": [
+     0,
+     3
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 11,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     2,
+     3
+    ],
+    "range_values": [
+     0,
+     3
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 12,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     2,
+     3
+    ],
+    "range_values": [
+     0,
+     3
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 13,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     2,
+     3
+    ],
+    "range_values": [
+     0,
+     3
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 14,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     2,
+     3
+    ],
+    "range_values": [
+     0,
+     3
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 15,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     2,
+     3
+    ],
+    "range_values": [
+     0,
+     3
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 16,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     6,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     3,
+     3
+    ],
+    "range_values": [
+     0,
+     5
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 17,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     6,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     3,
+     3
+    ],
+    "range_values": [
+     0,
+     5
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 18,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     6,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     3,
+     3
+    ],
+    "range_values": [
+     0,
+     5
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 19,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     6,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     3,
+     3
+    ],
+    "range_values": [
+     0,
+     5
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 20,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     6,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     3,
+     3
+    ],
+    "range_values": [
+     0,
+     5
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 21,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     6,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     3,
+     3
+    ],
+    "range_values": [
+     0,
+     5
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 22,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     6,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     3,
+     3
+    ],
+    "range_values": [
+     0,
+     5
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 23,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     6,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     3,
+     3
+    ],
+    "range_values": [
+     0,
+     5
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 24,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     9,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     4,
+     3
+    ],
+    "range_values": [
+     0,
+     8
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 25,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     9,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     4,
+     3
+    ],
+    "range_values": [
+     0,
+     8
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 26,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     9,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     4,
+     3
+    ],
+    "range_values": [
+     0,
+     8
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 27,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     9,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     4,
+     3
+    ],
+    "range_values": [
+     0,
+     8
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 28,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     9,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     4,
+     3
+    ],
+    "range_values": [
+     0,
+     8
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 29,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     9,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     4,
+     3
+    ],
+    "range_values": [
+     0,
+     8
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 30,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     9,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     4,
+     3
+    ],
+    "range_values": [
+     0,
+     8
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 31,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     9,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     4,
+     3
+    ],
+    "range_values": [
+     0,
+     8
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 32,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     6,
+     3
+    ],
+    "range_values": [
+     0,
+     11
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 33,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     6,
+     3
+    ],
+    "range_values": [
+     0,
+     11
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 34,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     6,
+     3
+    ],
+    "range_values": [
+     0,
+     11
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 35,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     6,
+     3
+    ],
+    "range_values": [
+     0,
+     11
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 36,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     6,
+     3
+    ],
+    "range_values": [
+     0,
+     11
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 37,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     6,
+     3
+    ],
+    "range_values": [
+     0,
+     11
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 38,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     6,
+     3
+    ],
+    "range_values": [
+     0,
+     11
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 39,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     6,
+     3
+    ],
+    "range_values": [
+     0,
+     11
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 40,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     16,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     8,
+     3
+    ],
+    "range_values": [
+     0,
+     15
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 41,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     16,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     8,
+     3
+    ],
+    "range_values": [
+     0,
+     15
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 42,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     16,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     8,
+     3
+    ],
+    "range_values": [
+     0,
+     15
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 43,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     16,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     8,
+     3
+    ],
+    "range_values": [
+     0,
+     15
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 44,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     16,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     8,
+     3
+    ],
+    "range_values": [
+     0,
+     15
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 45,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     16,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     8,
+     3
+    ],
+    "range_values": [
+     0,
+     15
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 46,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     16,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     8,
+     3
+    ],
+    "range_values": [
+     0,
+     15
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 47,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     16,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     8,
+     3
+    ],
+    "range_values": [
+     0,
+     15
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 48,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     20,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     10,
+     3
+    ],
+    "range_values": [
+     0,
+     19
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 49,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     20,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     10,
+     3
+    ],
+    "range_values": [
+     0,
+     19
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 50,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     20,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     10,
+     3
+    ],
+    "range_values": [
+     0,
+     19
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 51,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     20,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     10,
+     3
+    ],
+    "range_values": [
+     0,
+     19
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 52,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     20,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     10,
+     3
+    ],
+    "range_values": [
+     0,
+     19
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 53,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     20,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     10,
+     3
+    ],
+    "range_values": [
+     0,
+     19
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 54,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     20,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     10,
+     3
+    ],
+    "range_values": [
+     0,
+     19
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 55,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     20,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     10,
+     3
+    ],
+    "range_values": [
+     0,
+     19
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 56,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     12,
+     3
+    ],
+    "range_values": [
+     0,
+     23
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 57,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     12,
+     3
+    ],
+    "range_values": [
+     0,
+     23
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 58,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     12,
+     3
+    ],
+    "range_values": [
+     0,
+     23
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 59,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     12,
+     3
+    ],
+    "range_values": [
+     0,
+     23
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 60,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     12,
+     3
+    ],
+    "range_values": [
+     0,
+     23
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 61,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     12,
+     3
+    ],
+    "range_values": [
+     0,
+     23
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 62,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     12,
+     3
+    ],
+    "range_values": [
+     0,
+     23
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 63,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     12,
+     3
+    ],
+    "range_values": [
+     0,
+     23
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 64,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     32,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     16,
+     3
+    ],
+    "range_values": [
+     0,
+     31
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 65,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     32,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     16,
+     3
+    ],
+    "range_values": [
+     0,
+     31
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 66,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     32,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     16,
+     3
+    ],
+    "range_values": [
+     0,
+     31
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 67,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     32,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     16,
+     3
+    ],
+    "range_values": [
+     0,
+     31
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 68,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     32,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     16,
+     3
+    ],
+    "range_values": [
+     0,
+     31
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 69,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     32,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     16,
+     3
+    ],
+    "range_values": [
+     0,
+     31
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 70,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     32,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     16,
+     3
+    ],
+    "range_values": [
+     0,
+     31
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 71,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     32,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     16,
+     3
+    ],
+    "range_values": [
+     0,
+     31
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 72,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     40,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     20,
+     3
+    ],
+    "range_values": [
+     0,
+     39
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 73,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     40,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     20,
+     3
+    ],
+    "range_values": [
+     0,
+     39
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 74,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     40,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     20,
+     3
+    ],
+    "range_values": [
+     0,
+     39
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 75,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     40,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     20,
+     3
+    ],
+    "range_values": [
+     0,
+     39
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 76,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     40,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     20,
+     3
+    ],
+    "range_values": [
+     0,
+     39
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 77,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     40,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     20,
+     3
+    ],
+    "range_values": [
+     0,
+     39
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 78,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     40,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     20,
+     3
+    ],
+    "range_values": [
+     0,
+     39
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 79,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     40,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     20,
+     3
+    ],
+    "range_values": [
+     0,
+     39
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 80,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     24,
+     3
+    ],
+    "range_values": [
+     0,
+     47
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 81,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     24,
+     3
+    ],
+    "range_values": [
+     0,
+     47
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 82,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     24,
+     3
+    ],
+    "range_values": [
+     0,
+     47
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 83,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     24,
+     3
+    ],
+    "range_values": [
+     0,
+     47
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 84,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     24,
+     3
+    ],
+    "range_values": [
+     0,
+     47
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 85,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     24,
+     3
+    ],
+    "range_values": [
+     0,
+     47
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 86,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     24,
+     3
+    ],
+    "range_values": [
+     0,
+     47
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 87,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     24,
+     3
+    ],
+    "range_values": [
+     0,
+     47
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 88,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     64,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     32,
+     3
+    ],
+    "range_values": [
+     0,
+     63
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 89,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     64,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     32,
+     3
+    ],
+    "range_values": [
+     0,
+     63
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 90,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     64,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     32,
+     3
+    ],
+    "range_values": [
+     0,
+     63
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 91,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     64,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     32,
+     3
+    ],
+    "range_values": [
+     0,
+     63
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 92,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     64,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     32,
+     3
+    ],
+    "range_values": [
+     0,
+     63
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 93,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     64,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     32,
+     3
+    ],
+    "range_values": [
+     0,
+     63
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 94,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     64,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     32,
+     3
+    ],
+    "range_values": [
+     0,
+     63
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 95,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     64,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     32,
+     3
+    ],
+    "range_values": [
+     0,
+     63
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 96,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     81,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     40,
+     3
+    ],
+    "range_values": [
+     0,
+     80
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 97,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     81,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     40,
+     3
+    ],
+    "range_values": [
+     0,
+     80
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 98,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     81,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     40,
+     3
+    ],
+    "range_values": [
+     0,
+     80
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 99,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     81,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     40,
+     3
+    ],
+    "range_values": [
+     0,
+     80
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 100,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     81,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     40,
+     3
+    ],
+    "range_values": [
+     0,
+     80
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 101,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     81,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     40,
+     3
+    ],
+    "range_values": [
+     0,
+     80
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 102,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     81,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     40,
+     3
+    ],
+    "range_values": [
+     0,
+     80
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 103,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     81,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     40,
+     3
+    ],
+    "range_values": [
+     0,
+     80
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 104,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     100,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     50,
+     3
+    ],
+    "range_values": [
+     0,
+     99
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     12,
+     16
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     16
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     12
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 105,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     100,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     50,
+     3
+    ],
+    "range_values": [
+     0,
+     99
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     24,
+     32
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     32
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     24
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 106,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     100,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     50,
+     3
+    ],
+    "range_values": [
+     0,
+     99
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     48,
+     64
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     64
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     48
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 107,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     100,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     50,
+     3
+    ],
+    "range_values": [
+     0,
+     99
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     80,
+     96
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     96
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     80
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 108,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     100,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     50,
+     3
+    ],
+    "range_values": [
+     0,
+     99
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     128,
+     128
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     128
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 109,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     100,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     50,
+     3
+    ],
+    "range_values": [
+     0,
+     99
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     200,
+     200
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     200
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 110,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     100,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     50,
+     3
+    ],
+    "range_values": [
+     0,
+     99
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     1,
+     1
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     1
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ },
+ {
+  "id": 111,
+  "name": "aclnnRasterizer",
+  "aclnn_name": "Rasterizer",
+  "api_type": "aclnn_rasterizer",
+  "standard": {
+   "acc": "single_bm"
+  },
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tensor",
+    "required": true,
+    "dtype": "fp32",
+    "shape": [
+     100,
+     4
+    ],
+    "range_values": [
+     -1,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "f",
+    "type": "tensor",
+    "required": true,
+    "dtype": "int32",
+    "shape": [
+     50,
+     3
+    ],
+    "range_values": [
+     0,
+     99
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "d",
+    "type": "tensor",
+    "required": false,
+    "dtype": "fp32",
+    "shape": [
+     4,
+     4
+    ],
+    "range_values": [
+     0,
+     1
+    ],
+    "backward": false,
+    "align_32B": null
+   },
+   {
+    "name": "width",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "height",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     4
+    ],
+    "backward": false
+   },
+   {
+    "name": "occlusionTruncation",
+    "type": "attr",
+    "required": true,
+    "dtype": "float32",
+    "shape": null,
+    "range_values": 0.0,
+    "backward": false
+   },
+   {
+    "name": "useDepthPrior",
+    "type": "attr",
+    "required": true,
+    "dtype": "int",
+    "shape": null,
+    "range_values": [
+     0
+    ],
+    "backward": false
+   }
+  ]
+ }
+]
