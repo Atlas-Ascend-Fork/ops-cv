@@ -30,7 +30,7 @@
 
 - 非CANNLab云开发环境：
 
-  从[release仓库](https://gitcode.com/cann/release-management)各文件夹下的release-notes文件获取源码与CANN版本配套关系（CANN ops组合包内可独立升级子包配套关系），执行如下命令下载源码，\$\{tag\_version\}替换为目标分支标签，例如9.0.0。
+  从[release仓库](https://gitcode.com/cann/release-management)各文件夹下的release-notes文件获取源码与CANN版本配套关系（CANN ops组合包内可独立升级子包配套关系），执行如下命令下载源码，将\$\{tag\_version\}替换为目标分支标签，例如9.0.0。
 
   ```bash
   git clone -b ${tag_version} https://gitcode.com/cann/ops-cv.git && cd ops-cv
@@ -61,7 +61,7 @@ bash build.sh --pkg --soc=${soc_version} --ops=add_example -j16
 
 若提示如下信息，说明编译成功。
 
-```bash
+```output
 Self-extractable archive "cann-ops-cv-custom-linux.${arch}.run" successfully created.
 ```
 
@@ -93,12 +93,12 @@ export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/opp/vendors/custom_cv/op_api/lib:${LD
 bash build.sh --run_example add_example eager cust --vendor_name=custom --soc=${soc_version}
 ```
 
-> **注意**：运行样例时需确保`--soc`参数与编译算子包时使用的`--soc`取值一致，否则可能报`error 161001`（如`aclnnXxxGetWorkspaceSize failed`）。如遇此错误，请回到[第2节](#2编译addexample算子)核对`--soc`取值后重新编译安装。
+> **注意**：运行样例时需确保`--soc`参数与编译算子包时使用的`--soc`取值一致，否则可能报`error 161001`（如`aclnnXxxGetWorkspaceSize failed`）。如遇此错误，请回到[编译AddExample算子](#2编译addexample算子)核对`--soc`取值后重新编译安装。
 
 - <算子名>：add_example
 - <运行模式>：eager
 - <包模式>：cust
-- --vendor_name(可选)：vendorname表示构建的自定义算子包名，默认名为custom
+- --vendor_name（可选）：vendor_name表示构建的自定义算子包名，默认名为custom
 
 预期输出：打印算子`AddExample`的加法计算结果，表明算子已成功部署并正确执行。
 
@@ -120,7 +120,7 @@ add_example first input[7] is: 1.000000, second input[7] is: 1.000000, result[7]
 
 ### 1.修改Kernel实现
 
-找到AddExample算子的核心kernel实现文件`ops-cv/examples/add_example/op_kernel/add_example.h`，尝试将算子中的Add操作改为Mul操作：
+找到AddExample算子的核心Kernel实现文件`ops-cv/examples/add_example/op_kernel/add_example.h`，尝试将算子中的Add操作改为Mul操作：
 
 ```cpp
 __aicore__ inline void AddExample<T>::Compute(int64_t currentNum)
@@ -250,7 +250,7 @@ int main() {
     // ... 初始化代码...
 
     // === ① 修改selfX的输入 ===
-    // 修改前：shape = {32, 4, 4, 4}, 数值全为1
+    // 修改前：shape = {32, 4, 4, 4}，数值全为1
     // 修改后：将输入shape改为 {8, 8, 8, 8}，并填充不同的测试数据
     std::vector<int64_t> selfXShape = {8, 8, 8, 8};
     auto selfXNumElements = GetShapeSize(selfXShape);
