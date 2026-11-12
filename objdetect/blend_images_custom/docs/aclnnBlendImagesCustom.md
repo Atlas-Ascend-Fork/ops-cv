@@ -116,7 +116,7 @@ aclnnStatus aclnnBlendImagesCustom(
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">UINT8</td>
       <td class="tg-0pky">ND</td>
-      <td class="tg-0pky">HWC(C=3)，与frameshape一致。</td>
+      <td class="tg-0pky">HWC(C=3)，与frame shape一致。</td>
       <td class="tg-0pky">-</td>
     </tr>
     <tr>
