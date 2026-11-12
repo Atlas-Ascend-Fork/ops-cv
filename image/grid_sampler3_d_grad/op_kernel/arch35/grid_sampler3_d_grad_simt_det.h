@@ -36,6 +36,7 @@ private:
     GlobalTensor<uint32_t> tmpOutGm[1];
     GlobalTensor<T> tmpOutValueGm[1];
     uint32_t blockId_ = GetBlockIdx();
+    uint64_t tmpOutSize_ = 0;
     const GridSampler3DGradTilingData* tiling_;
 };
 
@@ -44,7 +45,8 @@ __aicore__ inline void GridSampler3DGradSimtDet<T>::Init(const GridSampler3DGrad
                                                          GM_ADDR inputTensors[GM_PARAMS_SIZE])
 {
     tiling_ = tilingData;
-    uint64_t tmpOutSize = static_cast<uint64_t>(VF_MAX_THREAD_NUM * 8 * tiling_->blockNum * tiling_->batch);
+    // 先提升到 uint64 再相乘，避免 32 位乘法链在超大 shape 下绕回
+    tmpOutSize_ = VF_MAX_THREAD_NUM * UINT64_C(8) * tiling_->blockNum * tiling_->batch;
     // init inputTensor
     inputGm[GRAD_INPUT_INDEX_SIMT].SetGlobalBuffer(reinterpret_cast<__gm__ T*>(inputTensors[GRAD_INPUT_INDEX_SIMT]));
     inputGm[X_INPUT_INDEX_SIMT].SetGlobalBuffer(reinterpret_cast<__gm__ T*>(inputTensors[X_INPUT_INDEX_SIMT]));
@@ -52,12 +54,38 @@ __aicore__ inline void GridSampler3DGradSimtDet<T>::Init(const GridSampler3DGrad
     inputGm[DX_INPUT_INDEX_SIMT].SetGlobalBuffer(reinterpret_cast<__gm__ T*>(inputTensors[DX_INPUT_INDEX_SIMT]));
     inputGm[DGRID_INPUT_INDEX_SIMT].SetGlobalBuffer(reinterpret_cast<__gm__ T*>(inputTensors[DGRID_INPUT_INDEX_SIMT]));
     tmpOutGm[TMP_OUT_INDEX].SetGlobalBuffer(reinterpret_cast<__gm__ uint32_t*>(inputTensors[WORKSPACE_INDEX]),
-                                            tmpOutSize);
+                                            tmpOutSize_);
     tmpOutValueGm[TMP_OUT_INDEX].SetGlobalBuffer(
-        reinterpret_cast<__gm__ T*>(inputTensors[WORKSPACE_INDEX] + static_cast<uint64_t>(tmpOutSize * 4)), tmpOutSize);
-    for (uint64_t i = 0; i < tmpOutSize; i++) {
-        tmpOutGm[TMP_OUT_INDEX].SetValue(i, 0);
-        tmpOutValueGm[TMP_OUT_INDEX].SetValue(i, static_cast<T>(0));
+        reinterpret_cast<__gm__ T*>(inputTensors[WORKSPACE_INDEX] + tmpOutSize_ * UINT64_C(4)), tmpOutSize_);
+}
+
+// tmpOut 与 dx 的累加起点清零需与 deterministicCompute 的读写同处 VF 线程域：
+// 发射线程的普通 GM 写对 VF 线程无可见的顺序保证，首次执行时 VF 线程可能
+// 读到清零前的旧 (index, value) 对，被原子累加到 dx 后破坏逐位可复现性。
+//
+// 划分方式（两个循环同构，均为段内 grid-stride）：
+// - tmpOut 区间 [0, tmpOutSize)：不按核划分，每个核都对全区间做 grid-stride
+//   （写 0 幂等，量级小，无需避免重复）；等价于段 [0, tmpOutSize) 的特例。
+// - dx 区间 [dxBegin, dxEnd)：按核均分（blockId 段），各核只清自己的一段，
+//   段内由该核 VF 线程 grid-stride 分摊，全部核的段拼接恰为 [0, dxTotal)。
+template <typename T>
+__simt_vf__ LAUNCH_BOUND(VF_MAX_THREAD_NUM) __aicore__
+    void ZeroTmpOutVf(uint64_t tmpOutSize, __gm__ uint32_t* tmpOutAddr, __gm__ T* tmpOutValueAddr, uint64_t dxTotal,
+                      __gm__ T* dxGmAddr, uint32_t blockNum, uint32_t blockId)
+{
+    uint64_t totalThreads = static_cast<uint64_t>(blockDim.x) * gridDim.x;
+    uint64_t tidInBlock = static_cast<uint64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    // 段 1：tmpOut 全区间，本核 grid-stride 覆盖（与其它核重复，写 0 幂等）
+    for (uint64_t idx = tidInBlock; idx < tmpOutSize; idx += totalThreads) {
+        tmpOutAddr[idx] = 0;
+        tmpOutValueAddr[idx] = static_cast<T>(0);
+    }
+    // 段 2：dx 的本核段 [dxBegin, dxEnd)，段内 grid-stride
+    uint64_t dxPerBlock = (dxTotal + blockNum - 1) / blockNum;
+    uint64_t dxBegin = static_cast<uint64_t>(blockId) * dxPerBlock;
+    uint64_t dxEnd = (dxBegin + dxPerBlock) < dxTotal ? (dxBegin + dxPerBlock) : dxTotal;
+    for (uint64_t idx = dxBegin + tidInBlock; idx < dxEnd; idx += totalThreads) {
+        dxGmAddr[idx] = static_cast<T>(0);
     }
 }
 
@@ -415,6 +443,13 @@ __aicore__ inline void GridSampler3DGradSimtDet<T>::Process()
     GetUintDivMagicAndShift(mD_, shiftD_, gridSize);
     GetUintDivMagicAndShift(mH_, shiftH_, static_cast<uint32_t>(tiling_->gridH * tiling_->gridW));
     GetUintDivMagicAndShift(mW_, shiftW_, static_cast<uint32_t>(tiling_->gridW));
+    uint64_t dxTotal = static_cast<uint64_t>(tiling_->batch) * tiling_->channel * tiling_->xD * tiling_->xH *
+                       tiling_->xW;
+    asc_vf_call<ZeroTmpOutVf<T>>(dim3{VF_MAX_THREAD_NUM, 1, 1}, tmpOutSize_,
+                                 (__gm__ uint32_t*)(tmpOutGm[TMP_OUT_INDEX].GetPhyAddr()),
+                                 (__gm__ T*)(tmpOutValueGm[TMP_OUT_INDEX].GetPhyAddr()), dxTotal,
+                                 (__gm__ T*)(inputGm[DX_INPUT_INDEX_SIMT].GetPhyAddr()), tiling_->blockNum, blockId_);
+    SyncAll();
     asc_vf_call<ComputeGridSampler3DGrad<T>>(
         dim3{VF_MAX_THREAD_NUM, 1, 1}, (__gm__ T*)(inputGm[GRAD_INPUT_INDEX_SIMT].GetPhyAddr()),
         (__gm__ T*)(inputGm[X_INPUT_INDEX_SIMT].GetPhyAddr()), (__gm__ T*)(inputGm[GRID_INPUT_INDEX_SIMT].GetPhyAddr()),
