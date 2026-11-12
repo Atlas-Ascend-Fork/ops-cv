@@ -601,5 +601,6 @@
     {"name":"ROIAlign", "compute_units": ["ascend950", "ascend350"], "auto_sync":false, "compile_options": {"ascend950": ["--cce-use-fast-math=false"], "ascend350": ["--cce-use-fast-math=false"]}, "impl_mode" : ""},
     {"name":"DIoUGrad", "compute_units": ["ascend950", "ascend350"], "auto_sync": false},
     {"name":"GIoUGrad", "compute_units": ["ascend950", "ascend350"], "auto_sync": false},
-    {"name":"ImgRawDecodePostHandle", "compute_units": ["ascend950", "ascend350"], "auto_sync": false, "compile_options": {"ascend950": ["--cce-ftz=false"], "ascend350": ["--cce-ftz=false"]}}
+    {"name":"ImgRawDecodePostHandle", "compute_units": ["ascend950", "ascend350"], "auto_sync": false, "compile_options": {"ascend950": ["--cce-ftz=false"], "ascend350": ["--cce-ftz=false"]}},
+    {"name":"YoloxBoundingBoxDecode", "compute_units": ["ascend950"], "compile_options": {"ascend950": ["--cce-ftz=false"]}}
 ]
