@@ -42,6 +42,8 @@ enum class ValidationCode : int32_t {
     kRankOrChannel = 3,
     kWeightLength = 4,
     kShapeInconsistent = 5,
+    kShapeValue = 6,
+    kShapeOverflow = 7,
 };
 
 struct ValidationInputs {
@@ -52,6 +54,8 @@ struct ValidationInputs {
     ge::Format outFormat;
     int64_t rank;
     int64_t channel;
+    int64_t deltasRank;
+    int64_t deltasChannel;
     int64_t anchorB;
     int64_t anchorN;
     int64_t deltasB;
@@ -68,7 +72,10 @@ static ValidationCode ValidateInputs(const ValidationInputs& in)
     if (in.anchorFormat != ge::FORMAT_ND || in.deltasFormat != ge::FORMAT_ND || in.outFormat != ge::FORMAT_ND) {
         return ValidationCode::kFormat;
     }
-    if (in.rank != 3 || in.channel != 5) {
+    // README 约束三输入 shape 完全相同（3D、shape[1]=5）；deltas 的 rank/channel 需独立校验，
+    // 否则 [B,6,N] 或 rank!=3 的 deltas 仅凭 B/N 匹配即可直达 kernel，按固定 5 通道布局
+    // (b*5+c)*N+n 寻址读取而通道错位、静默产出错误数值。
+    if (in.rank != 3 || in.channel != 5 || in.deltasRank != 3 || in.deltasChannel != 5) {
         return ValidationCode::kRankOrChannel;
     }
     if (in.weightLen != 5) {
@@ -76,6 +83,22 @@ static ValidationCode ValidateInputs(const ValidationInputs& in)
     }
     if (in.anchorB != in.deltasB || in.anchorN != in.deltasN) {
         return ValidationCode::kShapeInconsistent;
+    }
+    // -1（动态 shape 未具体化的未知维）与负值均 < 0，统一拒绝：
+    // 非法 B/N 若进入 totalCount=B*N 与 SelectUbAxis 分块计算会产生负值与未定义结果
+    if (in.anchorB < 0 || in.anchorN < 0 || in.deltasB < 0 || in.deltasN < 0) {
+        return ValidationCode::kShapeValue;
+    }
+    // B、N 非负但无上界：B*N 及派生乘积（SelectUbAxis 的 totalBoxesN*minDtypeBits、
+    // B*(N*ELEMS_PER_BOX*sizeofT*8)，kernel Init 的 totalElems=(B*5)*N 等）均为 int64
+    // 有符号乘法，溢出即 UB，会使 totalCount/核切分/缓冲区长度取到垃圾值。
+    // 阈值 INT64_MAX/160（160 = fp32 的 5 通道 bit 宽度，覆盖两种 dtype）远超可物化
+    // 规模（FP32 每 box 20B，阈值对应 ~1.15EB 张量），合法输入不可能触达。
+    // 除法判别避免判别式自身溢出：N <= INT64_MAX/B 保证 B*N 可安全求值。
+    constexpr int64_t kMaxBoxBits = ELEMS_PER_BOX * static_cast<int64_t>(sizeof(float)) * 8; // 160
+    if ((in.anchorB != 0 && in.anchorN > INT64_MAX / in.anchorB) ||
+        (in.anchorB * in.anchorN > INT64_MAX / kMaxBoxBits)) {
+        return ValidationCode::kShapeOverflow;
     }
     return ValidationCode::kOk;
 }
@@ -142,8 +165,10 @@ static ge::graphStatus RotatedBoxDecodeTilingFunc(gert::TilingContext* context)
     int64_t channel = (rank >= 2) ? anchorSs.GetDim(1) : 0;
     int64_t B = (rank >= 1) ? anchorSs.GetDim(0) : 0;
     int64_t N = (rank >= 3) ? anchorSs.GetDim(2) : 0;
-    int64_t deltasB = (static_cast<int64_t>(deltasSs.GetDimNum()) >= 1) ? deltasSs.GetDim(0) : 0;
-    int64_t deltasN = (static_cast<int64_t>(deltasSs.GetDimNum()) >= 3) ? deltasSs.GetDim(2) : 0;
+    int64_t deltasRank = static_cast<int64_t>(deltasSs.GetDimNum());
+    int64_t deltasB = (deltasRank >= 1) ? deltasSs.GetDim(0) : 0;
+    int64_t deltasN = (deltasRank >= 3) ? deltasSs.GetDim(2) : 0;
+    int64_t deltasChannel = (deltasRank >= 2) ? deltasSs.GetDim(1) : 0;
 
     const gert::Tensor* anchorTensor = context->GetInputTensor(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, anchorTensor);
@@ -178,6 +203,8 @@ static ge::graphStatus RotatedBoxDecodeTilingFunc(gert::TilingContext* context)
     vin.outFormat = outFormat;
     vin.rank = rank;
     vin.channel = channel;
+    vin.deltasRank = deltasRank;
+    vin.deltasChannel = deltasChannel;
     vin.anchorB = B;
     vin.anchorN = N;
     vin.deltasB = deltasB;
@@ -187,8 +214,10 @@ static ge::graphStatus RotatedBoxDecodeTilingFunc(gert::TilingContext* context)
     ValidationCode vcode = ValidateInputs(vin);
     if (vcode != ValidationCode::kOk) {
         OP_LOGE(context->GetNodeName(),
-                "ValidateInputs failed: code=%d (1=dtype 2=format 3=rank/chan 4=weight 5=shape)",
-                static_cast<int32_t>(vcode));
+                "ValidateInputs failed: code=%d (1=dtype 2=format 3=rank/chan 4=weight 5=shape-consistency "
+                "6=negative-or-unconcretized dim 7=product-overflow), rank=%ld channel=%ld deltasRank=%ld "
+                "deltasChannel=%ld B=%ld N=%ld deltasB=%ld deltasN=%ld",
+                static_cast<int32_t>(vcode), rank, channel, deltasRank, deltasChannel, B, N, deltasB, deltasN);
         return ge::GRAPH_FAILED;
     }
 
@@ -227,6 +256,38 @@ static ge::graphStatus RotatedBoxDecodeTilingFunc(gert::TilingContext* context)
         OP_CHECK_NULL_WITH_CONTEXT(context, workspaces);
         workspaces[0] = 0;
         OP_LOGI(context->GetNodeName(), "[rotated_box_decode] empty tensor: B=%ld N=%ld", B, N);
+        return ge::GRAPH_SUCCESS;
+    }
+
+    // N==1 SIMT branch (key=512): every N==1 shape (both dtypes, any B>0)
+    // routes to the per-box scalar SIMT pipeline in rotated_box_decode_simt.h.
+    // Rationale: N==1 gives 1-box tiles on the VF path (1/8 lane utilization +
+    // fp16 conversion tax + 3 tiny MTE descriptors + 6 flag ops per box) —
+    // PRC-SIMT-001's scattered-small-packet regime (10B/20B contiguous per
+    // box). The VF path (kernel.h) is untouched; all N>1 shapes keep
+    // byte-identical scheduling (keys 0/256).
+    // Core count: threads-per-core is the compile-time RBD_SIMT_THREAD_NUM;
+    // scale AIV count with the work, floor 1, cap at the platform core count.
+    if (N == 1) {
+        td->perCoreCount = 0; // unused by the SIMT branch
+        td->ubAxis = RBD_UB_AXIS_I;
+        td->ubFactor = 0;   // no UB tiles on this path
+        td->bufferSize = 0; // no TBuf allocation
+        int64_t coreNumSimt = CeilDiv(B, RBD_SIMT_THREAD_NUM);
+        coreNumSimt = std::max(coreNumSimt, static_cast<int64_t>(1));
+        coreNumSimt = std::min(coreNumSimt, static_cast<int64_t>(coreNum));
+        context->SetBlockDim(static_cast<uint32_t>(coreNumSimt));
+        context->SetTilingKey(GET_TPL_TILING_KEY(ROTATED_BOX_DECODE_COPY_MODE_NDDMA, ROTATED_BOX_DECODE_UB_AXIS_SEL_I));
+
+        size_t* workspaces = context->GetWorkspaceSizes(1);
+        OP_CHECK_NULL_WITH_CONTEXT(context, workspaces);
+        workspaces[0] = 0;
+
+        OP_LOGI(context->GetNodeName(),
+                "rotated_box_decode tiling (simt): shape=(%ld,5,%ld) totalCount=%ld ubAxis=I coreNum=%ld "
+                "threadNum=%ld tilingKey=%lu",
+                B, N, td->totalCount, coreNumSimt, RBD_SIMT_THREAD_NUM,
+                GET_TPL_TILING_KEY(ROTATED_BOX_DECODE_COPY_MODE_NDDMA, ROTATED_BOX_DECODE_UB_AXIS_SEL_I));
         return ge::GRAPH_SUCCESS;
     }
 

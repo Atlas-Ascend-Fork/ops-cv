@@ -22,7 +22,12 @@ static constexpr int64_t RBD_CHANNELS = 5;
 static constexpr int64_t RBD_WEIGHT_LEN = 5;
 static constexpr int64_t RBD_UB_AXIS_N = 0;
 static constexpr int64_t RBD_UB_AXIS_B = 1;
+static constexpr int64_t RBD_UB_AXIS_I = 2; // N==1 SIMT branch (per-box scalar compute)
 static constexpr int64_t RBD_COPY_MODE_NDDMA = 0;
+// SIMT thread count per AIV block for the N==1 branch (key=512). Compile-time
+// constant per the SIMT MDE rule (must match __launch_bounds__ in
+// rotated_box_decode_simt.h); host mirrors it only for core-count math.
+static constexpr int64_t RBD_SIMT_THREAD_NUM = 256;
 
 struct RotatedBoxDecodeTilingData {
     int64_t rank;

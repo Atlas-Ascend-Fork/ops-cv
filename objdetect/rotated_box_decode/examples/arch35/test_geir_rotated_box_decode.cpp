@@ -39,7 +39,7 @@ using std::string;
 using std::vector;
 #define ADD_INPUT(intputIndex, intputName, intputDtype, inputShape)                                                 \
     vector<int64_t> placeholder##intputIndex##_shape = inputShape;                                                  \
-    auto placeholder##intputIndex = op::Data("placeholder" + intputIndex).set_attr_index(0);                        \
+    auto placeholder##intputIndex = op::Data("placeholder" #intputIndex).set_attr_index(0);                         \
     TensorDesc placeholder##intputIndex##_desc = TensorDesc(ge::Shape(placeholder##intputIndex##_shape), FORMAT_ND, \
                                                             intputDtype);                                           \
     placeholder##intputIndex##_desc.SetPlacement(ge::kPlacementHost);                                               \
@@ -195,6 +195,7 @@ int main(int argc, char* argv[])
     ret = CreateOppInGraph(inDtype, input, inputs, outputs, graph);
     if (ret != SUCCESS) {
         printf("%s - ERROR - [XIR]: Create ir session using build options failed\n", GetTime().c_str());
+        GEFinalize();
         return FAILED;
     }
 
@@ -210,6 +211,7 @@ int main(int argc, char* argv[])
 
     if (session == nullptr) {
         printf("%s - ERROR - [XIR]: Create ir session using build options failed\n", GetTime().c_str());
+        GEFinalize();
         return FAILED;
     }
     printf("%s - INFO - [XIR]: Create ir session using build options success\n", GetTime().c_str());
@@ -220,7 +222,12 @@ int main(int argc, char* argv[])
     };
     uint32_t graph_id = 0;
     ret = session->AddGraph(graph_id, graph, graph_options);
-
+    if (ret != SUCCESS) {
+        printf("%s - ERROR - [XIR]: Session add ir compute graph to ir session failed\n", GetTime().c_str());
+        delete session;
+        GEFinalize();
+        return FAILED;
+    }
     printf("%s - INFO - [XIR]: Session add ir compute graph to ir session success\n", GetTime().c_str());
     printf("%s - INFO - [XIR]: dump graph to txt\n", GetTime().c_str());
     std::string file_path = "./dump";
@@ -264,7 +271,13 @@ int main(int argc, char* argv[])
     ge::AscendString warning_msg = ge::GEGetWarningMsgV2();
     std::string warning_str(warning_msg.GetString());
     std::cout << "Warning message: " << warning_str << std::endl;
-    printf("%s - INFO - [XIR]: Precision is ok\n", GetTime().c_str());
+    // This demo only shows GE graph construction and interface invocation. It does NOT
+    // validate numerics: no golden/reference is compared here. For precision verification,
+    // read the dumped .bin output and compare it against a reference implementation
+    // (e.g. tests/assets/golden.py in this operator).
+    printf("%s - INFO - [XIR]: Graph executed, outputs written to tc_ge_irrun_test_*_npu_output_*.bin "
+           "(no numerical comparison in this demo)\n",
+           GetTime().c_str());
     printf("%s - INFO - [XIR]: Start to finalize ir graph session\n", GetTime().c_str());
     delete session;
     ret = ge::GEFinalize();

@@ -36,32 +36,37 @@
 // ---------------------------------------------------------------------------
 // TPL param value constants (DESIGN §6)
 //   COPY_MODE: 0 = NDDMA (按通道 DataCopyPad + NDDMA transpose/split)
-//   UB_AXIS_SEL: 0 = UB_AXIS_N (大 N 多核), 1 = UB_AXIS_B (小 N fullload 兜底)
+//   UB_AXIS_SEL: 0 = UB_AXIS_N (大 N 多核), 1 = UB_AXIS_B (小 N fullload 兜底),
+//                2 = UB_AXIS_I (N==1 SIMT 分支, 见 rotated_box_decode_simt.h)
 // ---------------------------------------------------------------------------
 #define ROTATED_BOX_DECODE_COPY_MODE_NDDMA 0
 #define ROTATED_BOX_DECODE_UB_AXIS_SEL_N 0
 #define ROTATED_BOX_DECODE_UB_AXIS_SEL_B 1
+#define ROTATED_BOX_DECODE_UB_AXIS_SEL_I 2
 
 // ---------------------------------------------------------------------------
 // ASCENDC_TPL_ARGS_DECL — declares compile-time template arguments
 //   Param 1: COPY_MODE   (uint, bitwidth=8, values {0} — 1 active value NDDMA)
-//   Param 2: UB_AXIS_SEL (uint, bitwidth=8, values {0, 1} — 2 active values N/B)
+//   Param 2: UB_AXIS_SEL (uint, bitwidth=8, values {0, 1, 2} — 3 active values N/B/I)
 // ---------------------------------------------------------------------------
 ASCENDC_TPL_ARGS_DECL(RotatedBoxDecode,
                       ASCENDC_TPL_UINT_DECL(COPY_MODE, 8, ASCENDC_TPL_UI_LIST, ROTATED_BOX_DECODE_COPY_MODE_NDDMA),
                       ASCENDC_TPL_UINT_DECL(UB_AXIS_SEL, 8, ASCENDC_TPL_UI_LIST, ROTATED_BOX_DECODE_UB_AXIS_SEL_N,
-                                            ROTATED_BOX_DECODE_UB_AXIS_SEL_B));
+                                            ROTATED_BOX_DECODE_UB_AXIS_SEL_B, ROTATED_BOX_DECODE_UB_AXIS_SEL_I));
 
 // ---------------------------------------------------------------------------
 // ASCENDC_TPL_SEL — generates template specialization selectors
-//   2 active combinations (key=0 / key=1):
+//   3 active combinations (key=0 / key=1 / key=2):
 //     (COPY_MODE=0, UB_AXIS_SEL=0) → key=0 (N-axis multicore, NDDMA)
 //     (COPY_MODE=0, UB_AXIS_SEL=1) → key=1 (B-axis fullload, NDDMA)
+//     (COPY_MODE=0, UB_AXIS_SEL=2) → key=2 (N==1 SIMT branch)
 // ---------------------------------------------------------------------------
 ASCENDC_TPL_SEL(
     ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_UINT_SEL(COPY_MODE, ASCENDC_TPL_UI_LIST, ROTATED_BOX_DECODE_COPY_MODE_NDDMA),
                          ASCENDC_TPL_UINT_SEL(UB_AXIS_SEL, ASCENDC_TPL_UI_LIST, ROTATED_BOX_DECODE_UB_AXIS_SEL_N)),
     ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_UINT_SEL(COPY_MODE, ASCENDC_TPL_UI_LIST, ROTATED_BOX_DECODE_COPY_MODE_NDDMA),
-                         ASCENDC_TPL_UINT_SEL(UB_AXIS_SEL, ASCENDC_TPL_UI_LIST, ROTATED_BOX_DECODE_UB_AXIS_SEL_B)));
+                         ASCENDC_TPL_UINT_SEL(UB_AXIS_SEL, ASCENDC_TPL_UI_LIST, ROTATED_BOX_DECODE_UB_AXIS_SEL_B)),
+    ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_UINT_SEL(COPY_MODE, ASCENDC_TPL_UI_LIST, ROTATED_BOX_DECODE_COPY_MODE_NDDMA),
+                         ASCENDC_TPL_UINT_SEL(UB_AXIS_SEL, ASCENDC_TPL_UI_LIST, ROTATED_BOX_DECODE_UB_AXIS_SEL_I)));
 
 #endif

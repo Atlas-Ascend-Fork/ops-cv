@@ -834,18 +834,8 @@ private:
         int64_t boxCount;
     };
 
-    // Max ubFormer-sized tiles a core can produce. Per DESIGN-BRANCH-0 §2.3 the
-    // per-core tile count is CeilDiv(perCoreBoxes, ubFormer) — tiles span batch
-    // boundaries when N < ubFormer (CopyIn/CopyOut segment loops handle the
-    // per-batch 2D stride gather/scatter). Worst-case (largest blackbox shape
-    // B≈10M, N=3, bf16) yields ~130 tiles/core; 1024 gives a 7× safety margin
-    // while keeping the on-stack TileInfo array at 16 KB (AIV stack budget).
-    static constexpr int64_t kMaxTilesPerCore = 1024;
-
     __aicore__ inline CoreRange GetCoreRange();
-    __aicore__ inline TileInfo GetTile(int64_t k);
     __aicore__ inline TileInfo NextTile(int64_t pos, int64_t end);
-    __aicore__ inline int64_t BuildBatchTiles(TileInfo* out, int64_t maxTiles);
     __aicore__ inline void DoCopyInTransposeSplit(int64_t boxStart, int64_t boxCount, int slot);
     __aicore__ inline void ComputeMain(int slot, int64_t boxCount);
     __aicore__ inline void DoCopyOutStackTranspose(int64_t boxStart, int64_t boxCount, int slot);
@@ -950,15 +940,6 @@ RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::GetCoreRange()
 
 template <typename T, int COPY_MODE, int UB_AXIS_SEL>
 __aicore__ inline typename RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::TileInfo
-RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::GetTile(int64_t k)
-{
-    int64_t bs = coreBoxBegin_ + k * ubFormer_;
-    int64_t bc = MinI64(ubFormer_, coreBoxEnd_ - bs);
-    return {bs, bc};
-}
-
-template <typename T, int COPY_MODE, int UB_AXIS_SEL>
-__aicore__ inline typename RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::TileInfo
 RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::NextTile(int64_t pos, int64_t end)
 {
     int64_t N = td_->N;
@@ -968,61 +949,6 @@ RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::NextTile(int64_t pos, int64_t
     int64_t cap = MinI64(batchEnd, end);
     int64_t bc = MinI64(ubFormer_, cap - pos);
     return {pos, bc};
-}
-
-// BuildBatchTiles — decompose a core's range into single-batch tiles.
-//
-// Tiles are capped by ubFormer_ AND by the current batch's tail, so each tile
-// stays within one batch. This keeps the CopyIn/CopyOut 2D stride gather /
-// scatter a SINGLE segment per tile (ubOff=0, UB destination 32B-aligned) —
-// required because a multi-batch tile would accumulate a non-32B-aligned
-// ubOff across segments and trigger an AICore 507035 exception.
-//
-// When N > ubFormer_ the cap collapses to ubFormer_ (partial-batch slice,
-// still single-segment). When N ≤ ubFormer_ the cap is the batch tail (one
-// batch per tile).
-//
-// N-axis (key=0): range [coreBoxBegin_, coreBoxEnd_) is in BOX index space
-//   (totalCount = B×N boxes).
-// B-axis (key=1): range is in BATCH index space (DESIGN-BRANCH-1.md §2.3);
-//   converted to BOX index space here so both axes share the same tile
-//   decomposition. gmOff for boxStart = batchIdx × N is computed by
-//   DoCopyInTransposeSplit from boxStart.
-//
-// NOTE: Process() iterates tiles on-the-fly (no TileInfo array) to avoid the
-// kMaxTilesPerCore cap — for small N + large B a core may need O(B/cores)
-// single-batch tiles, far exceeding any fixed stack array. This helper is
-// kept only for UT/inspection; Process does not call it.
-template <typename T, int COPY_MODE, int UB_AXIS_SEL>
-__aicore__ inline int64_t RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::BuildBatchTiles(TileInfo* out,
-                                                                                             int64_t maxTiles)
-{
-    int64_t N = td_->N;
-    int64_t cnt = 0;
-
-    // B-axis core range is in BATCH space → convert to BOX space.
-    int64_t boxBegin, boxEnd;
-    if constexpr (UB_AXIS_SEL == ROTATED_BOX_DECODE_UB_AXIS_SEL_B) {
-        boxBegin = coreBoxBegin_ * N;
-        boxEnd = coreBoxEnd_ * N;
-    } else {
-        boxBegin = coreBoxBegin_;
-        boxEnd = coreBoxEnd_;
-    }
-
-    int64_t pos = boxBegin;
-    while (pos < boxEnd && cnt < maxTiles) {
-        int64_t b = pos / N;
-        int64_t n = pos % N;
-        int64_t batchEnd = (b + 1) * N; // next batch boundary
-        int64_t cap = MinI64(batchEnd, boxEnd);
-        int64_t bc = MinI64(ubFormer_, cap - pos); // ≤ ubFormer, within batch
-        out[cnt].boxStart = pos;
-        out[cnt].boxCount = bc;
-        pos += bc;
-        cnt++;
-    }
-    return cnt;
 }
 
 // ---------------------------------------------------------------------------
@@ -1079,7 +1005,7 @@ __aicore__ inline void RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::DoCopy
 //   which amplifies on near-zero outputs (catastrophic cancellation).
 //   The 5 weight floats are passed as VF scalars; verified safe (non-default
 //   weight cases pass — the earlier "≥7 scalars corrupt" diagnosis was a
-//   misattribution of the real kMaxTilesPerCore truncation bug).
+//   misattribution of the real tile-truncation bug).
 // ---------------------------------------------------------------------------
 template <typename T, int COPY_MODE, int UB_AXIS_SEL>
 __aicore__ inline void RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::ComputeMain(int slot, int64_t boxCount)
@@ -1135,7 +1061,7 @@ __aicore__ inline void RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::DoCopy
 // Process — main kernel entry (DESIGN §10.5 / §10.6)
 //   P=2 ping-pong three-phase pipeline over single-batch tiles.
 //
-//   N-axis (key=0): each tile is split at batch boundaries (BuildBatchTiles)
+//   N-axis (key=0): each tile is split at batch boundaries (NextTile)
 //   so the CopyIn 2D stride gather has one segment per tile (ubOff=0, UB dst
 //   32B-aligned).
 //
@@ -1187,8 +1113,8 @@ __aicore__ inline void RotatedBoxDecodeKernel<T, COPY_MODE, UB_AXIS_SEL>::Proces
     // batch's tail (single-segment CopyIn/CopyOut, UB destination 32B-aligned).
     // Tiles are produced on-the-fly — no TileInfo array — so a core handling
     // small-N + large-B (O(B/cores) single-batch tiles) is not capped by any
-    // fixed stack array (kMaxTilesPerCore). This was the root cause of 57/71
-    // blackbox failures: BuildBatchTiles previously truncated at 512 tiles,
+    // fixed stack array. This was the root cause of 57/71 blackbox failures in
+    // an earlier design: its on-stack tile builder truncated at 512 tiles,
     // leaving the rest of the core's box range uncomputed (stale GM output).
 
     // ===== Prologue: round 0, slot 0 =====

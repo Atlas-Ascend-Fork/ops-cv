@@ -95,10 +95,11 @@ $$
 ## 约束说明
 
 - anchor_box、deltas、y 三者 shape 完全相同，dtype 相同。
-- 必须 3D，shape[1] 必须为 5，shape[0] ≥ 0，shape[2] ≥ 0。
+- 必须 3D，shape[1] 必须为 5，shape[0] ≥ 0，shape[2] ≥ 0；此外 B×N 乘积受 int64 溢出防护约束（B×N > INT64_MAX/160 时 Tiling 直接拒绝；该阈值远超可物化张量规模，合法输入不受影响）。
 - weight 长度必须为 5，各元素不能为 0（否则产生 inf/NaN，kernel 不校验）。
 - 数据布局为 ND，不支持其他布局。
-- 支持动态 Shape 与动态 Rank：算子注册开启 DynamicShapeSupportFlag 与 DynamicRankSupportFlag，anchor_box/deltas 的维度可标记为 -1（未知维），整体 shape 可标记为 -2（未知秩）。InferShape 对未知维/未知秩放行；维度被具体化后再由 Tiling 校验：Tiling 仅校验 rank=3 与 shape[1]=5，因此未知秩（{-2}）或 shape[1]=-1 会被 Tiling 拒绝；shape[0]/shape[2] 为 -1 时 Tiling 不做拒绝，必须在 Tiling 前具体化，否则 tiling 参数非法、结果未定义。
+- 支持动态 Shape 与动态 Rank：算子注册开启 DynamicShapeSupportFlag 与 DynamicRankSupportFlag，anchor_box/deltas 的维度可标记为 -1（未知维），整体 shape 可标记为 -2（未知秩）。InferShape 对未知维/未知秩放行；维度被具体化后再由 Tiling 校验：Tiling 对 anchor_box 与 deltas 各自独立校验 rank=3、shape[1]=5 以及 shape[0]/shape[2] 非负（deltas 仅凭 B/N 与 anchor 一致不够，[B,6,N] 或非 3D 的 deltas 会被直接拒绝），并对 B×N 乘积做 int64 溢出防护，因此未知秩（{-2}）、shape[1]=-1、shape[0]/shape[2] 为 -1（未具体化）、负值或 B×N 超出 int64 安全范围时会被 Tiling 直接拒绝并报错，shape[0]/shape[2] 必须在 Tiling 前具体化为非负值。
+- FLOAT16 计算过程中，算子内部将数据升为 FLOAT32 进行计算，计算结果再转换回 FLOAT16 输出。
 - 支持空 Tensor（B=0 或 N=0）。
 
 ## 调用说明
