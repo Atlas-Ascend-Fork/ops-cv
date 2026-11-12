@@ -149,6 +149,8 @@ int32_t GenOnesDataFloat32(vector<int64_t> shapes, Tensor& input_tensor, TensorD
         *(pData + i) = value;
     }
     input_tensor = Tensor(input_tensor_desc, (uint8_t*)pData, data_len);
+    // Tensor 构造为深拷贝，缓冲所有权不随 Tensor 转移，须由调用方释放。
+    delete[] pData;
     return SUCCESS;
 }
 
@@ -170,6 +172,8 @@ int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& in
         *(pData + i) = value;
     }
     input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
+    // Tensor 构造为深拷贝，缓冲所有权不随 Tensor 转移，须由调用方释放。
+    delete[] pData;
     return SUCCESS;
 }
 
@@ -227,7 +231,6 @@ int main(int argc, char* argv[])
     std::vector<Operator> inputs{};
     std::vector<Operator> outputs{};
 
-    std::cout << argv[1] << std::endl;
     char* endptr;
 
     DataType inDtype = DT_FLOAT;
@@ -237,6 +240,8 @@ int main(int argc, char* argv[])
     ret = CreateOppInGraph(inDtype, input, inputs, outputs, graph);
     if (ret != SUCCESS) {
         printf("%s - ERROR - [XIR]: Create ir session using build options failed\n", GetTime().c_str());
+        // 与 GEInitialize 对称回收，避免失败路径泄漏 GE 上下文。
+        GEFinalize();
         return FAILED;
     }
 
@@ -252,6 +257,8 @@ int main(int argc, char* argv[])
 
     if (session == nullptr) {
         printf("%s - ERROR - [XIR]: Create ir session using build options failed\n", GetTime().c_str());
+        // 与 GEInitialize 对称回收，避免失败路径泄漏 GE 上下文。
+        GEFinalize();
         return FAILED;
     }
     printf("%s - INFO - [XIR]: Create ir session using build options success\n", GetTime().c_str());
@@ -318,6 +325,31 @@ int main(int argc, char* argv[])
     ge::AscendString warning_msg = ge::GEGetWarningMsgV2();
     std::string warning_str(warning_msg.GetString());
     std::cout << "Warning message: " << warning_str << std::endl;
+
+    // 数值比较：输入由 GenOnesData 以 int32 位型常量 2 填充，本例 VALID padding 且
+    // 所有 patch 完全落在图像内，纯数据搬运算子的每个输出元素都必须复现该位型。
+    const int32_t expectedValue = 2;
+    bool precisionOk = true;
+    for (int i = 0; i < output_num; i++) {
+        int64_t outputElements = output[i].GetTensorDesc().GetShape().GetShapeSize();
+        const int32_t* outputData = reinterpret_cast<const int32_t*>(output[i].GetData());
+        if (outputData == nullptr) {
+            precisionOk = false;
+            break;
+        }
+        for (int64_t e = 0; e < outputElements; e++) {
+            if (outputData[e] != expectedValue) {
+                precisionOk = false;
+                break;
+            }
+        }
+    }
+    if (!precisionOk) {
+        printf("%s - ERROR - [XIR]: Output differs from the expected reference value\n", GetTime().c_str());
+        delete session;
+        GEFinalize();
+        return FAILED;
+    }
     printf("%s - INFO - [XIR]: Precision is ok\n", GetTime().c_str());
     printf("%s - INFO - [XIR]: Start to finalize ir graph session\n", GetTime().c_str());
     delete session;

@@ -118,3 +118,110 @@ TEST_F(ExtractImagePatchesTiling, extract_image_patches_nchw_zero_spatial_ksize)
         &compileInfo);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
 }
+
+TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_stride_nc_not_one)
+{
+    gert::StorageShape xShape = {{1, 3, 3, 1}, {1, 3, 3, 1}};
+    gert::StorageShape yShape = {{}, {}};
+    ExtractImagePatchesCompileInfo compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractImagePatches", {{xShape, ge::DT_FLOAT, ge::FORMAT_NHWC}}, {{yShape, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {gert::TilingContextPara::OpAttr("ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 2, 2, 1})),
+         gert::TilingContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 2})),
+         gert::TilingContextPara::OpAttr("rates", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ExtractImagePatchesTiling, extract_image_patches_nchw_rate_nc_not_one)
+{
+    gert::StorageShape xShape = {{1, 1, 3, 3}, {1, 1, 3, 3}};
+    gert::StorageShape yShape = {{}, {}};
+    ExtractImagePatchesCompileInfo compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractImagePatches", {{xShape, ge::DT_FLOAT, ge::FORMAT_NCHW}}, {{yShape, ge::DT_FLOAT, ge::FORMAT_NCHW}},
+        {gert::TilingContextPara::OpAttr("ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 2, 2})),
+         gert::TilingContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("rates", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 2, 1, 1})),
+         gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_input_scale_selects_64bit)
+{
+    // 输入元素数 2^32 超过 INT32_MAX 而输出元素数 268435456 未超过：输入偏移上界
+    // （inStrideN=2^32）在 32 位路径会回绕，必须选择 64 位索引（tilingKey 0）。
+    gert::StorageShape xShape = {{1, 65536, 65536, 1}, {1, 65536, 65536, 1}};
+    gert::StorageShape yShape = {{}, {}};
+    ExtractImagePatchesCompileInfo compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractImagePatches", {{xShape, ge::DT_FLOAT, ge::FORMAT_NHWC}}, {{yShape, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {gert::TilingContextPara::OpAttr("ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 4, 4, 1})),
+         gert::TilingContextPara::OpAttr("rates", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, 0,
+                    "64 268435456 268435456 16384 268435456 268435456 1 16384 1 1 65536 65536 4 4 1 1 0 0 "
+                    "4294967296 65536 1 1 4194304 4194304 ",
+                    {0});
+}
+
+TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_huge_rate_selects_64bit)
+{
+    // rateH=2^31 使输入坐标表达式上界 (outH-1)*strideH + (kH-1)*rateH 超过 INT32_MAX，
+    // 32 位路径的带符号坐标运算会溢出，必须选择 64 位索引（tilingKey 0）。
+    gert::StorageShape xShape = {{1, 4, 4, 1}, {1, 4, 4, 1}};
+    gert::StorageShape yShape = {{}, {}};
+    ExtractImagePatchesCompileInfo compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractImagePatches", {{xShape, ge::DT_FLOAT, ge::FORMAT_NHWC}}, {{yShape, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {gert::TilingContextPara::OpAttr("ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 2, 2, 1})),
+         gert::TilingContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("rates",
+                                         Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 2147483648, 1, 1})),
+         gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("SAME"))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, 0,
+                    "1 64 64 16 64 16 4 4 4 2 4 4 1 1 2147483648 1 1073741824 0 16 4 1 1 1024 64 ", {0});
+}
+
+TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_input_elements_int64_overflow)
+{
+    // 输入四维乘积超过 INT64_MAX，须显式报错而不是让回绕值欺骗位宽判定。
+    gert::StorageShape xShape = {{1, 2147483647, 2147483647, 4}, {1, 2147483647, 2147483647, 4}};
+    gert::StorageShape yShape = {{}, {}};
+    ExtractImagePatchesCompileInfo compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractImagePatches", {{xShape, ge::DT_FLOAT, ge::FORMAT_NHWC}}, {{yShape, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {gert::TilingContextPara::OpAttr("ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("rates", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ExtractImagePatchesTiling, extract_image_patches_nhwc_per_core_align_int64_overflow)
+{
+    // coreNum==1 且 totalElements==INT64_MAX 时 perCoreElements 达到 INT64_MAX，
+    // 对齐表达式 (perCoreElements + BLOCK_ALIGN - 1) 会发生 int64 有符号溢出；
+    // 须保持 perCoreElements=INT64_MAX、needCoreNum=1 而不是产生负值/垃圾分块参数。
+    gert::StorageShape xShape = {{1, 1, 1, 9223372036854775807}, {1, 1, 1, 9223372036854775807}};
+    gert::StorageShape yShape = {{}, {}};
+    ExtractImagePatchesCompileInfo compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "ExtractImagePatches", {{xShape, ge::DT_FLOAT, ge::FORMAT_NHWC}}, {{yShape, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {gert::TilingContextPara::OpAttr("ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("strides", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("rates", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+         gert::TilingContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID"))},
+        &compileInfo, "Ascend910b", 1);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, 0,
+                    "1 9223372036854775807 9223372036854775807 9223372036854775807 9223372036854775807 1 "
+                    "9223372036854775807 1 1 1 1 1 1 1 1 1 0 0 9223372036854775807 9223372036854775807 "
+                    "9223372036854775807 1 9223372036854775807 9223372036854775807 ",
+                    {0});
+}

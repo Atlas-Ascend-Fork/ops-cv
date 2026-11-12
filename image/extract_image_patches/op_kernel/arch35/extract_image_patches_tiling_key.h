@@ -21,8 +21,8 @@
  *   formatMode (UINT 2-bit): 数据格式
  *     0 = NHWC, 1 = NCHW
  *   idxBit (UINT 1-bit): 索引位宽
- *     0 = 64-bit (uint64_t), totalElements > INT32_MAX 时选择
- *     1 = 32-bit (uint32_t), totalElements ≤ INT32_MAX 时选择
+ *     0 = 64-bit (uint64_t), 输出/输入元素数或输入坐标上界超出 INT32_MAX 时选择
+ *     1 = 32-bit (uint32_t), 输出与输入元素数及输入坐标上界均 ≤ INT32_MAX 时选择
  */
 
 #ifndef EXTRACT_IMAGE_PATCHES_TILING_KEY_H_

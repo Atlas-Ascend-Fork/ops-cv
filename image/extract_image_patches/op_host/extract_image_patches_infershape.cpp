@@ -111,12 +111,25 @@ static ge::graphStatus ParseEipAttrs(gert::InferShapeContext* context, bool isNh
                                                   .c_str()),
         return GRAPH_FAILED);
     OP_CHECK_IF(
+        strides[DIM_IDX_N] != 1 || strides[idxC] != 1,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+            context->GetNodeName(), "strides", FormatAttrList(strides).c_str(),
+            ("batch/channel elements at indices 0 and " + std::to_string(idxC) + " must both be 1 for " + formatName)
+                .c_str()),
+        return GRAPH_FAILED);
+    OP_CHECK_IF(
         strides[idxH] <= 0 || strides[idxW] <= 0,
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "strides", FormatAttrList(strides).c_str(),
                                               ("spatial elements at indices " + std::to_string(idxH) + " and " +
                                                std::to_string(idxW) + " must both be greater than 0 for " + formatName)
                                                   .c_str()),
         return GRAPH_FAILED);
+    OP_CHECK_IF(rates[DIM_IDX_N] != 1 || rates[idxC] != 1,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "rates", FormatAttrList(rates).c_str(),
+                                                      ("batch/channel elements at indices 0 and " +
+                                                       std::to_string(idxC) + " must both be 1 for " + formatName)
+                                                          .c_str()),
+                return GRAPH_FAILED);
     OP_CHECK_IF(
         rates[idxH] < 1 || rates[idxW] < 1,
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "rates", FormatAttrList(rates).c_str(),
@@ -184,6 +197,31 @@ static ge::graphStatus InferShape4ExtractImagePatches(gert::InferShapeContext* c
     int64_t inW = xShape->GetDim(idxW);
     int64_t inC = xShape->GetDim(idxC);
 
+    // 乘法/加法前上界检查：溢出会得到负的 effFilter/outC/outH 并写入输出维度。
+    // 动态维度（-1）不参与具体数值计算，跳过对应检查。
+    OP_CHECK_IF((a.kH - 1) > (INT64_MAX - 1) / a.rateH || (a.kW - 1) > (INT64_MAX - 1) / a.rateW,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "rates",
+                                                      (std::to_string(a.kH) + " * " + std::to_string(a.rateH) + ", " +
+                                                       std::to_string(a.kW) + " * " + std::to_string(a.rateW))
+                                                          .c_str(),
+                                                      "(ksizes - 1) * rates + 1 must not overflow the 64-bit range"),
+                return GRAPH_FAILED);
+    if (inC != -1) {
+        OP_CHECK_IF(inC > INT64_MAX / a.kH || inC * a.kH > INT64_MAX / a.kW,
+                    OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(
+                        context->GetNodeName(), "x",
+                        (std::to_string(inC) + " * " + std::to_string(a.kH) + " * " + std::to_string(a.kW)).c_str(),
+                        "C * kH * kW must not overflow the 64-bit range"),
+                    return GRAPH_FAILED);
+    }
+    // SAME/VALID 的 outH/outW 公式均含 inH + strideH 形式的加法。
+    OP_CHECK_IF(
+        (inH != -1 && inH > INT64_MAX - a.strideH) || (inW != -1 && inW > INT64_MAX - a.strideW),
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "strides",
+                                              (std::to_string(a.strideH) + ", " + std::to_string(a.strideW)).c_str(),
+                                              "H + stride_h and W + stride_w must not overflow the 64-bit range"),
+        return GRAPH_FAILED);
+
     int64_t effFilterH = (a.kH - 1) * a.rateH + 1;
     int64_t effFilterW = (a.kW - 1) * a.rateW + 1;
     int64_t outH;
@@ -195,10 +233,11 @@ static ge::graphStatus InferShape4ExtractImagePatches(gert::InferShapeContext* c
         outH = (inH == -1) ? -1 : (inH - effFilterH + a.strideH) / a.strideH;
         outW = (inW == -1) ? -1 : (inW - effFilterW + a.strideW) / a.strideW;
         // Signed integer division can produce negative dimensions; clamp them to zero.
-        if (outH != -1 && outH < 0) {
+        // -1 也是 VALID 公式可算出的空输出值，不能当动态哨兵用，故按输入维判断。
+        if (inH != -1 && outH < 0) {
             outH = 0;
         }
-        if (outW != -1 && outW < 0) {
+        if (inW != -1 && outW < 0) {
             outW = 0;
         }
     }

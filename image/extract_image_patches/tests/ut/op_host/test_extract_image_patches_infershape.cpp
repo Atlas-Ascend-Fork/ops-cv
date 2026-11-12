@@ -107,6 +107,28 @@ TEST_F(ExtractImagePatchesInfershape, extract_image_patches_nhwc_dilation_fp32)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
 
+TEST_F(ExtractImagePatchesInfershape, extract_image_patches_nhwc_valid_negative_out_clamped_to_zero)
+{
+    // VALID 下 inH < effFilterH 时 (inH - effFilterH + strideH) / strideH 可恰好等于 -1，
+    // 与动态维哨兵混淆；具体输入维算出的空输出须钳到 0 而不是保留 -1。
+    gert::InfershapeContextPara infershapeContextPara(
+        "ExtractImagePatches", {{{{1, 1, 5, 2}, {1, 1, 5, 2}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {
+            gert::InfershapeContextPara::OpAttr("ksizes",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 3, 3, 1})),
+            gert::InfershapeContextPara::OpAttr("strides",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("rates",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID")),
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {1, 0, 3, 18},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
 TEST_F(ExtractImagePatchesInfershape, extract_image_patches_dynamic_shape_nhwc)
 {
     gert::InfershapeContextPara infershapeContextPara(
@@ -237,6 +259,76 @@ TEST_F(ExtractImagePatchesInfershape, extract_image_patches_nchw_zero_spatial_ks
             gert::InfershapeContextPara::OpAttr("rates",
                                                 Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
             gert::InfershapeContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID")),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ExtractImagePatchesInfershape, extract_image_patches_nhwc_stride_nc_not_one)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ExtractImagePatches", {{{{1, 3, 3, 1}, {1, 3, 3, 1}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {
+            gert::InfershapeContextPara::OpAttr("ksizes",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 2, 2, 1})),
+            gert::InfershapeContextPara::OpAttr("strides",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 2})),
+            gert::InfershapeContextPara::OpAttr("rates",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID")),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ExtractImagePatchesInfershape, extract_image_patches_nchw_rate_nc_not_one)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "ExtractImagePatches", {{{{1, 1, 3, 3}, {1, 1, 3, 3}}, ge::DT_FLOAT, ge::FORMAT_NCHW}},
+        {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NCHW}},
+        {
+            gert::InfershapeContextPara::OpAttr("ksizes",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 2, 2})),
+            gert::InfershapeContextPara::OpAttr("strides",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("rates",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 2, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID")),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ExtractImagePatchesInfershape, extract_image_patches_outc_mul_overflow)
+{
+    // inC * kH * kW 超过 INT64_MAX，须报错而不是把回绕后的负 outC 写入输出维度。
+    gert::InfershapeContextPara infershapeContextPara(
+        "ExtractImagePatches", {{{{1, 4, 4, 2}, {1, 4, 4, 2}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {
+            gert::InfershapeContextPara::OpAttr(
+                "ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 3037000500, 3037000500, 1})),
+            gert::InfershapeContextPara::OpAttr("strides",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("rates",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("VALID")),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(ExtractImagePatchesInfershape, extract_image_patches_efffilter_mul_overflow)
+{
+    // (kH - 1) * rateH + 1 超过 INT64_MAX，须报错而不是让溢出的 effFilter 参与推导。
+    gert::InfershapeContextPara infershapeContextPara(
+        "ExtractImagePatches", {{{{1, 4, 4, 1}, {1, 4, 4, 1}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NHWC}},
+        {
+            gert::InfershapeContextPara::OpAttr(
+                "ksizes", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 4294967296, 2, 1})),
+            gert::InfershapeContextPara::OpAttr("strides",
+                                                Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 1, 1})),
+            gert::InfershapeContextPara::OpAttr(
+                "rates", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 4294967295, 1, 1})),
+            gert::InfershapeContextPara::OpAttr("padding", Ops::Cv::AnyValue::CreateFrom<std::string>("SAME")),
         });
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
 }

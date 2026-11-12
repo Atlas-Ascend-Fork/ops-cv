@@ -117,7 +117,7 @@ where:
   <tr>
     <td>Graph mode invocation</td>
     <td><a href="./examples/arch35/test_geir_extract_image_patches.cpp">test_geir_extract_image_patches</a></td>
-    <td>Refer to <a href="../../docs/zh/invocation/quick_op_invocation.md">Operator Invocation</a> to complete operator compilation and verification.</td>
+    <td>Call the ExtractImagePatches operator by building a graph with the <a href="./op_graph/extract_image_patches_proto.h">operator IR</a>. Refer to <a href="../../docs/zh/invocation/quick_op_invocation.md">operator invocation</a> to complete operator compilation and verification.</td>
   </tr>
 </tbody>
 </table>

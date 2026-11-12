@@ -115,7 +115,7 @@ $$
   <tr>
     <td>图模式调用</td>
     <td><a href="./examples/arch35/test_geir_extract_image_patches.cpp">test_geir_extract_image_patches</a></td>
-    <td>参见<a href="../../docs/zh/invocation/quick_op_invocation.md">算子调用</a>完成算子编译和验证。</td>
+    <td>通过<a href="./op_graph/extract_image_patches_proto.h">算子IR</a>构图方式调用ExtractImagePatches算子，参见<a href="../../docs/zh/invocation/quick_op_invocation.md">算子调用</a>完成算子编译和验证。</td>
   </tr>
 </tbody>
 </table>

@@ -74,6 +74,7 @@ struct ParsedInput {
     int64_t inH = 0;
     int64_t inW = 0;
     int64_t inC = 0;
+    int64_t inputElements = 0; // 输入元素总数（kernel 侧输入偏移的上界）
     bool isStorageNhwc = false;
     bool needAttrNchwToNhwc = false;
 };
@@ -85,6 +86,8 @@ struct OutputParams {
     int64_t totalElements = 0;
     int64_t padHTop = 0;
     int64_t padWLeft = 0;
+    int64_t maxInPosH = 0; // 输入 H 坐标表达式上界：(outH-1)*strideH + (kH-1)*rateH
+    int64_t maxInPosW = 0; // 输入 W 坐标表达式上界：(outW-1)*strideW + (kW-1)*rateW
     int64_t inStrideN = 0;
     int64_t inStrideH = 0;
     int64_t inStrideW = 0;
@@ -160,6 +163,20 @@ static ge::graphStatus ParseInputShape(gert::TilingContext* context, ParsedInput
     pi.inH = storageShape.GetDim(idxH);
     pi.inW = storageShape.GetDim(idxW);
     pi.inC = storageShape.GetDim(idxC);
+    // 输入元素总数是 kernel 侧输入偏移的上界，也是索引位宽选择的判据之一；输入步长
+    // inStride* 为各维子乘积。逐级除法保证乘积不回绕，否则回绕后的小值会欺骗位宽判定。
+    OP_CHECK_IF(
+        (pi.inH > 0 && pi.inW > 0 && pi.inH > INT64_MAX / pi.inW) ||
+            (pi.inW > 0 && pi.inC > 0 && pi.inW > INT64_MAX / pi.inC) ||
+            (pi.inH > 0 && pi.inW > 0 && pi.inC > 0 &&
+             (pi.inH * pi.inW > INT64_MAX / pi.inC || (pi.inN > 0 && pi.inH * pi.inW * pi.inC > INT64_MAX / pi.inN))),
+        OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "x",
+                                                  (std::to_string(pi.inN) + " * " + std::to_string(pi.inH) + " * " +
+                                                   std::to_string(pi.inW) + " * " + std::to_string(pi.inC))
+                                                      .c_str(),
+                                                  "input element count must not overflow the 64-bit range"),
+        return ge::GRAPH_FAILED);
+    pi.inputElements = pi.inN * pi.inH * pi.inW * pi.inC;
     return ge::GRAPH_SUCCESS;
 }
 
@@ -220,6 +237,13 @@ static ge::graphStatus ParseAttrs(gert::TilingContext* context, const ParsedInpu
                      " must both be greater than 0 for " + attrFormatName)
                         .c_str()),
                 return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        strides[DIM_IDX_N] != 1 || strides[idxC] != 1,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "strides", FormatAttrList(stridesData).c_str(),
+                                              ("batch/channel elements at indices 0 and " + std::to_string(attrIdxC) +
+                                               " must both be 1 for " + attrFormatName)
+                                                  .c_str()),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(strides[idxH] <= 0 || strides[idxW] <= 0,
                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                     context->GetNodeName(), "strides", FormatAttrList(stridesData).c_str(),
@@ -227,6 +251,13 @@ static ge::graphStatus ParseAttrs(gert::TilingContext* context, const ParsedInpu
                      " must both be greater than 0 for " + attrFormatName)
                         .c_str()),
                 return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        rates[DIM_IDX_N] != 1 || rates[idxC] != 1,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "rates", FormatAttrList(ratesData).c_str(),
+                                              ("batch/channel elements at indices 0 and " + std::to_string(attrIdxC) +
+                                               " must both be 1 for " + attrFormatName)
+                                                  .c_str()),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(rates[idxH] < 1 || rates[idxW] < 1,
                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                     context->GetNodeName(), "rates", FormatAttrList(ratesData).c_str(),
@@ -248,20 +279,56 @@ static ge::graphStatus ParseAttrs(gert::TilingContext* context, const ParsedInpu
     return ge::GRAPH_SUCCESS;
 }
 
-static void ComputeOutputParams(const ParsedInput& pi, const ParsedAttrs& pa, OutputParams& op)
+static ge::graphStatus ComputeOutputParams(gert::TilingContext* context, const ParsedInput& pi, const ParsedAttrs& pa,
+                                           OutputParams& op)
 {
+    // 乘法前上界检查：溢出会产生负的 effFilter/outC/totalElements 并污染位宽判定与分块参数。
+    OP_CHECK_IF((pa.kH - 1) > (INT64_MAX - 1) / pa.rateH || (pa.kW - 1) > (INT64_MAX - 1) / pa.rateW,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "rates",
+                                                      (std::to_string(pa.kH) + " * " + std::to_string(pa.rateH) + ", " +
+                                                       std::to_string(pa.kW) + " * " + std::to_string(pa.rateW))
+                                                          .c_str(),
+                                                      "(ksizes - 1) * rates + 1 must not overflow the 64-bit range"),
+                return ge::GRAPH_FAILED);
     int64_t effFilterH = (pa.kH - 1) * pa.rateH + 1;
     int64_t effFilterW = (pa.kW - 1) * pa.rateW + 1;
+    OP_CHECK_IF(pi.inC > INT64_MAX / pa.kH || pi.inC * pa.kH > INT64_MAX / pa.kW,
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(
+                    context->GetNodeName(), "x",
+                    (std::to_string(pi.inC) + " * " + std::to_string(pa.kH) + " * " + std::to_string(pa.kW)).c_str(),
+                    "C * kH * kW must not overflow the 64-bit range"),
+                return ge::GRAPH_FAILED);
+    // SAME/VALID 的 outH/outW 公式都含 inH + strideH 形式的加法，先约束其不溢出。
+    OP_CHECK_IF(
+        pi.inH > INT64_MAX - pa.strideH || pi.inW > INT64_MAX - pa.strideW,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "strides",
+                                              (std::to_string(pa.strideH) + ", " + std::to_string(pa.strideW)).c_str(),
+                                              "H + stride_h and W + stride_w must not overflow the 64-bit range"),
+        return ge::GRAPH_FAILED);
+    int64_t strideSpanH = 0; // (outH-1)*strideH，坐标表达式与 padding 计算的公共项
+    int64_t strideSpanW = 0;
     if (pa.isSame) {
         op.outH = (pi.inH + pa.strideH - 1) / pa.strideH;
         op.outW = (pi.inW + pa.strideW - 1) / pa.strideW;
-        int64_t padTotalH = std::max((op.outH - 1) * pa.strideH + effFilterH - pi.inH, (int64_t)0);
-        int64_t padTotalW = std::max((op.outW - 1) * pa.strideW + effFilterW - pi.inW, (int64_t)0);
+        strideSpanH = (op.outH > 0) ? (op.outH - 1) * pa.strideH : 0;
+        strideSpanW = (op.outW > 0) ? (op.outW - 1) * pa.strideW : 0;
+        // padTotal 计算含 strideSpan + effFilter 加法，需可表示。
+        OP_CHECK_IF(strideSpanH > INT64_MAX - effFilterH || strideSpanW > INT64_MAX - effFilterW,
+                    OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                        context->GetNodeName(), "strides",
+                        (std::to_string(pa.strideH) + ", " + std::to_string(pa.strideW)).c_str(),
+                        "stride-derived coordinate expression must not overflow the 64-bit range"),
+                    return ge::GRAPH_FAILED);
+        int64_t padTotalH = std::max(strideSpanH + effFilterH - pi.inH, (int64_t)0);
+        int64_t padTotalW = std::max(strideSpanW + effFilterW - pi.inW, (int64_t)0);
         op.padHTop = padTotalH / 2;
         op.padWLeft = padTotalW / 2;
     } else {
         op.outH = (pi.inH - effFilterH + pa.strideH) / pa.strideH;
         op.outW = (pi.inW - effFilterW + pa.strideW) / pa.strideW;
+        // VALID 下 outH >= 1 蕴含 strideSpanH <= inH - effFilterH，无需再加检查。
+        strideSpanH = (op.outH > 0) ? (op.outH - 1) * pa.strideH : 0;
+        strideSpanW = (op.outW > 0) ? (op.outW - 1) * pa.strideW : 0;
         op.padHTop = 0;
         op.padWLeft = 0;
     }
@@ -270,7 +337,21 @@ static void ComputeOutputParams(const ParsedInput& pi, const ParsedAttrs& pa, Ou
         op.outW = 0;
     }
     op.outC = pi.inC * pa.kH * pa.kW;
+    OP_CHECK_IF(
+        pi.inN > 0 && op.outH > 0 && op.outW > 0 && op.outC > 0 &&
+            (pi.inN > INT64_MAX / op.outH || pi.inN * op.outH > INT64_MAX / op.outW ||
+             pi.inN * op.outH * op.outW > INT64_MAX / op.outC),
+        OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "x",
+                                                  (std::to_string(pi.inN) + " * " + std::to_string(op.outH) + " * " +
+                                                   std::to_string(op.outW) + " * " + std::to_string(op.outC))
+                                                      .c_str(),
+                                                  "output element count must not overflow the 64-bit range"),
+        return ge::GRAPH_FAILED);
     op.totalElements = pi.inN * op.outH * op.outW * op.outC;
+    // kernel 侧坐标 inPos = i*stride + p*rate - pad 以 IDX_T 的带符号版本运算，
+    // 其上界为 strideSpan + effFilter - 1，两条路径下均已被上面的检查覆盖。
+    op.maxInPosH = strideSpanH + effFilterH - 1;
+    op.maxInPosW = strideSpanW + effFilterW - 1;
     // 输入物理步长（逻辑 N/H/W/C 维在 GM 中的步长）
     if (pi.isStorageNhwc) {
         op.inStrideN = pi.inH * pi.inW * pi.inC;
@@ -283,6 +364,7 @@ static void ComputeOutputParams(const ParsedInput& pi, const ParsedAttrs& pa, Ou
         op.inStrideW = 1;
         op.inStrideC = pi.inH * pi.inW;
     }
+    return ge::GRAPH_SUCCESS;
 }
 
 static void FillTilingData(ExtractImagePatchesTilingData* t, const ParsedInput& pi, const ParsedAttrs& pa,
@@ -338,13 +420,15 @@ static ge::graphStatus ExtractImagePatchesTilingFunc(gert::TilingContext* contex
     OP_CHECK_IF(ParseAttrs(context, pi, pa) != ge::GRAPH_SUCCESS, (void)0, return ge::GRAPH_FAILED);
 
     OutputParams op;
-    ComputeOutputParams(pi, pa, op);
+    OP_CHECK_IF(ComputeOutputParams(context, pi, pa, op) != ge::GRAPH_SUCCESS, (void)0, return ge::GRAPH_FAILED);
 
     int64_t perCoreElements = (op.totalElements > 0) ? Ops::Base::CeilDiv(op.totalElements, coreNum) : 0;
     if (perCoreElements > 0 && perCoreElements < PER_CORE_MIN_ELEMENTS) {
         perCoreElements = PER_CORE_MIN_ELEMENTS;
     }
-    perCoreElements = (perCoreElements + BLOCK_ALIGN - 1) / BLOCK_ALIGN * BLOCK_ALIGN;
+    // CeilAlign 在相加前做上界保护；perCoreElements 逼近 INT64_MAX（coreNum==1 且
+    // totalElements 接近 INT64_MAX）时手工 (x + align - 1) 表达式会发生 int64 溢出。
+    perCoreElements = Ops::Base::CeilAlign(perCoreElements, BLOCK_ALIGN);
     int32_t needCoreNum = (op.totalElements > 0) ?
                               static_cast<int32_t>(Ops::Base::CeilDiv(op.totalElements, perCoreElements)) :
                               1;
@@ -374,8 +458,13 @@ static ge::graphStatus ExtractImagePatchesTilingFunc(gert::TilingContext* contex
     auto res = context->SetLocalMemorySize(static_cast<uint32_t>(ubSize - DCACHE_SIZE - STATIC_UB_ESTIMATE));
     OP_CHECK_IF((res != ge::GRAPH_SUCCESS), OP_LOGE(context, "SetLocalMemorySize failed"), return ge::GRAPH_FAILED);
 
-    // Use 32-bit indices when the output element count fits.
-    bool use32Bit = (op.totalElements > 0 && op.totalElements <= INT32_MAX);
+    // 32 位路径（IDX_T=uint32/POS_T=int32）同时服务输出下标、输入偏移与输入坐标：
+    // 输入偏移 inOffset 是输入下标的混合基分解，上界为输入元素总数；坐标 inPos 的绝对值
+    // 上界为 maxInPos*/pad*。任一量超出 INT32_MAX 都会在 kernel 侧回绕后读错输入位置，
+    // 因此位宽选择必须同时覆盖输出元素数与上述输入侧上界。
+    bool use32Bit = (op.totalElements > 0 && op.totalElements <= INT32_MAX && pi.inputElements > 0 &&
+                     pi.inputElements <= INT32_MAX && op.maxInPosH <= INT32_MAX && op.maxInPosW <= INT32_MAX &&
+                     op.padHTop <= INT32_MAX && op.padWLeft <= INT32_MAX);
     uint64_t formatMode = pi.isStorageNhwc ? EXTRACT_IMAGE_PATCHES_TPL_FORMAT_NHWC :
                                              EXTRACT_IMAGE_PATCHES_TPL_FORMAT_NCHW;
     uint64_t idxBit = use32Bit ? EXTRACT_IMAGE_PATCHES_TPL_IDX_32BIT : EXTRACT_IMAGE_PATCHES_TPL_IDX_64BIT;
