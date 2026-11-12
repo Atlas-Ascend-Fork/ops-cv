@@ -37,7 +37,7 @@ TEST_F(l2_upsample_nearest_exact2d_backward_test, l2_upsample_nearest_exact2d_ba
 }
 
 // inputsize nullptr
-TEST_F(l2_upsample_nearest_exact2d_backward_test, l2_upsample_nearest_exact2d_backward_test_outputsize_nullptr)
+TEST_F(l2_upsample_nearest_exact2d_backward_test, l2_upsample_nearest_exact2d_backward_test_inputsize_nullptr)
 {
     auto gradOutput_desc = TensorDesc({1, 1, 5, 5}, ACL_FLOAT, ACL_FORMAT_NCHW);
     auto out_desc = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
@@ -47,6 +47,29 @@ TEST_F(l2_upsample_nearest_exact2d_backward_test, l2_upsample_nearest_exact2d_ba
 
     auto ut = OP_API_UT(aclnnUpsampleNearestExact2dBackward,
                         INPUT(gradOutput_desc, output_size_desc, nullptr, scales_h, scales_w), OUTPUT(out_desc));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_NULLPTR);
+}
+
+// outputsize nullptr
+TEST_F(l2_upsample_nearest_exact2d_backward_test, l2_upsample_nearest_exact2d_backward_test_outputsize_nullptr)
+{
+    auto gradOutput_desc = TensorDesc({1, 1, 4, 4}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto out_desc = TensorDesc({1, 1, 8, 8}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(vector<int64_t>{4, 4});
+    auto input_size_desc = IntArrayDesc(vector<int64_t>{1, 1, 8, 8});
+    const double_t scales_h = 0.5;
+    const double_t scales_w = 0.5;
+
+    auto valid_ut = OP_API_UT(aclnnUpsampleNearestExact2dBackward,
+                              INPUT(gradOutput_desc, output_size_desc, input_size_desc, scales_h, scales_w),
+                              OUTPUT(out_desc));
+    uint64_t valid_workspace_size = 0;
+    EXPECT_EQ(valid_ut.TestGetWorkspaceSize(&valid_workspace_size), ACLNN_SUCCESS);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact2dBackward,
+                        INPUT(gradOutput_desc, nullptr, input_size_desc, scales_h, scales_w), OUTPUT(out_desc));
     uint64_t workspace_size = 0;
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_NULLPTR);
