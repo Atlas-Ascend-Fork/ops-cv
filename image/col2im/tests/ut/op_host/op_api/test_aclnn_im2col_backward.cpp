@@ -194,7 +194,7 @@ TEST_F(l2_im2col_backward_test, ascend910B2_case_BF16)
     // SAMPLE: only test GetWorkspaceSize
     uint64_t workspace_size = 0;
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-    // EXPECT_EQ(aclRet, ACL_SUCCESS);
+    EXPECT_EQ(aclRet, ACL_SUCCESS);
 
     // SAMPLE: precision simulate
     // ut.TestPrecision();
@@ -243,7 +243,7 @@ TEST_F(l2_im2col_backward_test, ascend910B2_case_BF16_FLOAT)
     // SAMPLE: only test GetWorkspaceSize
     uint64_t workspace_size = 0;
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
-    // EXPECT_EQ(aclRet, ACL_SUCCESS);
+    EXPECT_EQ(aclRet, ACL_SUCCESS);
 
     // SAMPLE: precision simulate
     // ut.TestPrecision();
