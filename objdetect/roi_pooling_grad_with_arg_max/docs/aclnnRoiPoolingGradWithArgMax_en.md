@@ -6,10 +6,10 @@
 - <term>Ascend 950PR&950DT products</term>: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- <term>Atlas A3 products</term>: Supported
+- <term>Atlas A3 products</term>: Not supported
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- <term>Atlas A2 products</term>: Supported
+- <term>Atlas A2 products</term>: Not supported
 <!-- end id3 -->
 <!-- npu="310b" id4 -->
 - <term>Atlas 200I/500 A2 inference products</term>: Not supported
@@ -297,13 +297,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
 - rois[:, 1] is less than rois[:, 2] and rois[:, 3] is less than rois[:, 4].
 - rois.shape[0] and gradOutput.shape[0] are less than or equal to 1024.
 - Deterministic computation:
-
-  <!-- npu="A3,910b" id7 -->
-  - <term>Atlas A2 training products/Atlas A2 inference products, Atlas A3 training products/Atlas A3 inference products</term>: aclnnRoiPoolingGradWithArgMax defaults to a deterministic implementation.
-  <!-- end id7 -->
-  <!-- npu="950" id8 -->
-  - <term>Ascend 950PR&950DT products</term>: aclnnRoiPoolingGradWithArgMax defaults to a non-deterministic implementation. Deterministic computation cannot be enabled.
-  <!-- end id8 -->
+  - aclnnRoiPoolingGradWithArgMax defaults to a non-deterministic implementation. Deterministic computation cannot be enabled.
 
 ## Example
 

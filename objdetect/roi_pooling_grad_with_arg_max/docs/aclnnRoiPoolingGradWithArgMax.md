@@ -6,16 +6,16 @@
 - <term>Ascend 950PR&950DT系列产品</term>：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
-- <term>Atlas A3系列产品</term>：支持
+- <term>Atlas A3系列产品</term>：不支持
 <!-- end id2 -->
 <!-- npu="910b" id3 -->
-- <term>Atlas A2系列产品</term>：支持
+- <term>Atlas A2系列产品</term>：不支持
 <!-- end id3 -->
 <!-- npu="310b" id4 -->
 - <term>Atlas 200I/500 A2推理产品</term>：不支持
 <!-- end id4 -->
 <!-- npu="310p" id5 -->
-- <term>Atlas推理系列产品 </term>：不支持
+- <term>Atlas推理系列产品</term>：不支持
 <!-- end id5 -->
 <!-- npu="910" id6 -->
 - <term>Atlas训练系列产品</term>：不支持
@@ -299,13 +299,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
 - rois[:, 1] 小于rois[:, 2] 且rois[:, 3] 小于rois[:, 4]。
 - rois.shape[0]、gradOutput.shape[0]小于等于1024。
 - 确定性计算：
-
-  <!-- npu="A3,910b" id7 -->
-  - <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：aclnnRoiPoolingGradWithArgMax默认确定性实现。
-  <!-- end id7 -->
-  <!-- npu="950" id8 -->
-  - <term>Ascend 950PR&950DT系列产品</term>：aclnnRoiPoolingGradWithArgMax默认非确定性实现，不支持开启。
-  <!-- end id8 -->
+  - aclnnRoiPoolingGradWithArgMax默认非确定性实现，不支持开启。
 
 ## 调用示例
 

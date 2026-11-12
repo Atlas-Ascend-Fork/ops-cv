@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 /*!
  * \file aclnn_roi_pooling_grad_with_arg_max.cpp
@@ -14,6 +14,9 @@
  */
 #include "aclnn_roi_pooling_grad_with_arg_max.h"
 #include "roi_pooling_grad_with_arg_max.h"
+#include <string>
+#include <vector>
+#include "base/err_msg.h"
 #include "aclnn_kernels/cast.h"
 #include "aclnn_kernels/contiguous.h"
 #include "level0/squeeze.h"
@@ -31,8 +34,27 @@
 #include "opdev/shape_utils.h"
 #include "op_api/aclnn_check.h"
 #include "level0/fill.h"
+#include "opdev/platform.h"
 
 using namespace op;
+
+static aclnnStatus CheckSocValid()
+{
+    SocVersion socVersion = GetCurrentPlatformInfo().GetSocVersion();
+    if (!IsRegBase()) {
+        const std::string soc = op::ToString(socVersion).GetString();
+        const std::string reason = "SoC " + soc +
+                                   " is not supported. Supported SoC is regbase (Ascend950). "
+                                   "Kernel is RoiPoolingGradWithArgMax, dtype is FLOAT or FLOAT16, format is ND.";
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_RUNTIME_ERROR, "%s", reason.c_str());
+        const std::vector<const char*> keys = {"opName", "reason"};
+        const std::vector<const char*> values = {"aclnnRoiPoolingGradWithArgMax", reason.c_str()};
+        REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
+        return ACLNN_ERR_RUNTIME_ERROR;
+    }
+    return ACLNN_SUCCESS;
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -220,6 +242,9 @@ aclnnStatus aclnnRoiPoolingGradWithArgMaxGetWorkspaceSize(const aclTensor* gradO
 {
     OP_CHECK_COMM_INPUT(workspaceSize, executor);
 
+    auto ret = CheckSocValid();
+    CHECK_RET(ret == ACLNN_SUCCESS, ret);
+
     L2_DFX_PHASE_1(aclnnRoiPoolingGradWithArgMax,
                    DFX_IN(gradOutput, gradInputRef, rois, argmax, pooledH, pooledW, spatialScale),
                    DFX_OUT(gradInputRef));
@@ -228,7 +253,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMaxGetWorkspaceSize(const aclTensor* gradO
     CHECK_RET(uniqueExecutor.get() != nullptr, ACLNN_ERR_INNER_CREATE_EXECUTOR);
 
     // 固定写法，参数检查
-    auto ret = CheckParams(gradOutput, rois, argmax, gradInputRef, pooledH, pooledW, spatialScale);
+    ret = CheckParams(gradOutput, rois, argmax, gradInputRef, pooledH, pooledW, spatialScale);
     CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
     if (gradOutput->IsEmpty()) {
