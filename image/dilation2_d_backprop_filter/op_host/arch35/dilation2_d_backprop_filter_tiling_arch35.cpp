@@ -540,19 +540,19 @@ static ge::graphStatus Dilation2DBackpropFilterTilingFunc(gert::TilingContext* c
         batchActual = outBpShape.GetDim(0);
     }
     // Batch consistency: fail when both known and mismatched
-    OP_CHECK_IF(batch >= 0 && batchActual > 0 && batchActual != batch,
+    OP_CHECK_IF(batch >= 0 && batchActual >= 0 && batchActual != batch,
                 OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
                     context->GetNodeName(), "x, out_backprop",
                     ("x.N=" + std::to_string(batch) + ", out_bp.N=" + std::to_string(batchActual)),
                     "batch mismatch: out_backprop.N must be the same as x.N"),
                 return ge::GRAPH_FAILED);
-    if (batch < 0 && batchActual > 0) {
+    if (batch < 0 && batchActual >= 0) {
         // Dynamic x.N: adopt actual out_backprop batch
         batch = batchActual;
     }
     // Spatial consistency: theoretical dims are authoritative when fully derivable (static geometry)
     if (inputH >= 0 && inputW >= 0 && filterH >= 0 && filterW >= 0) {
-        OP_CHECK_IF((outHActual > 0 && outHActual != outH) || (outWActual > 0 && outWActual != outW),
+        OP_CHECK_IF((outHActual >= 0 && outHActual != outH) || (outWActual >= 0 && outWActual != outW),
                     OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
                         context->GetNodeName(), "x, filter, out_backprop",
                         ("out_bp.H=" + std::to_string(outHActual) + ", out_bp.W=" + std::to_string(outWActual) +
@@ -561,11 +561,11 @@ static ge::graphStatus Dilation2DBackpropFilterTilingFunc(gert::TilingContext* c
                         "x/filter/strides/rates/padding"),
                     return ge::GRAPH_FAILED);
     } else {
-        // Dynamic input geometry: adopt actual out_backprop spatial dims when positive
-        if (outHActual > 0) {
+        // Dynamic input geometry: adopt actual out_backprop spatial dims when known
+        if (outHActual >= 0) {
             outH = outHActual;
         }
-        if (outWActual > 0) {
+        if (outWActual >= 0) {
             outW = outWActual;
         }
     }
@@ -577,7 +577,7 @@ static ge::graphStatus Dilation2DBackpropFilterTilingFunc(gert::TilingContext* c
     int64_t filterSize = filterH * filterW * depth;
 
     // Empty tensor handling
-    if (filterSize == 0 || totalElements == 0) {
+    if (filterSize <= 0 || totalElements <= 0) {
         bool isDet = (context->GetDeterministic() == 1);
 
         context->SetBlockDim(1);
