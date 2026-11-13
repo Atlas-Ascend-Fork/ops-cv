@@ -62,14 +62,16 @@ static vector<gert::TilingContextPara::OpAttr> MakeRequiredAttrs(int64_t pooledH
 
 // 构造期望 tiling data（先清零，保证尾部填充字节为 0，与 tiling 侧 memset_s 后填充一致）
 static RoiAlignRotatedArch35TilingData MakeExpectTilingData(int64_t totalElements, int32_t needCoreNum,
-                                                            int32_t channels, int32_t height, int32_t width,
-                                                            int32_t pooledH, int32_t pooledW, int32_t samplingRatio,
-                                                            float spatialScale, bool aligned, bool clockwise)
+                                                            int32_t batchSize, int32_t channels, int32_t height,
+                                                            int32_t width, int32_t pooledH, int32_t pooledW,
+                                                            int32_t samplingRatio, float spatialScale, bool aligned,
+                                                            bool clockwise)
 {
     RoiAlignRotatedArch35TilingData expect;
     (void)memset(&expect, 0, sizeof(expect));
     expect.totalElements = totalElements;
     expect.needCoreNum = needCoreNum;
+    expect.batchSize = batchSize;
     expect.channels = channels;
     expect.height = height;
     expect.width = width;
@@ -120,7 +122,7 @@ TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_normal_basi
             {{{32, 4, 2, 2}, {32, 4, 2, 2}}, ge::DT_FLOAT, ge::FORMAT_NCHW}, // y (R,C,pooled_h,pooled_w)
         },
         MakeFullAttrs(2, 2, 1.0f, 0, true, false), &kCompileInfo950, kSoc950, kCoreNum);
-    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(512, 1, 4, 8, 8, 2, 2, 0, 1.0f, true, false);
+    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(512, 1, 1, 4, 8, 8, 2, 2, 0, 1.0f, true, false);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, kExpectTilingKey950, SerializeTilingData(expect),
                     {kSysWorkspaceSize});
     // blockDim 与 needCoreNum 一致，且不超过 ascend950 核数上限
@@ -144,7 +146,8 @@ TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_normal_mult
                                               },
                                               MakeFullAttrs(7, 7, 0.25f, 2, false, true), &kCompileInfo950, kSoc950,
                                               kCoreNum);
-    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(1605632, 64, 64, 56, 56, 7, 7, 2, 0.25f, false, true);
+    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(1605632, 64, 2, 64, 56, 56, 7, 7, 2, 0.25f, false,
+                                                                  true);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, kExpectTilingKey950, SerializeTilingData(expect),
                     {kSysWorkspaceSize});
     TilingInfo tilingInfo;
@@ -166,7 +169,7 @@ TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_optional_at
                                                   {{{8, 8, 8, 4}, {8, 8, 8, 4}}, ge::DT_FLOAT, ge::FORMAT_NCHW},
                                               },
                                               MakeRequiredAttrs(8, 4, 0.5f), &kCompileInfo950, kSoc950, kCoreNum);
-    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(2048, 2, 8, 16, 16, 8, 4, 0, 0.5f, true, false);
+    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(2048, 2, 1, 8, 16, 16, 8, 4, 0, 0.5f, true, false);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, kExpectTilingKey950, SerializeTilingData(expect),
                     {kSysWorkspaceSize});
     TilingInfo tilingInfo;
@@ -189,7 +192,8 @@ TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_boundary_ma
             {{{8192, 1024, 1, 1}, {8192, 1024, 1, 1}}, ge::DT_FLOAT, ge::FORMAT_NCHW},
         },
         MakeFullAttrs(1, 1, 2.0f, 1, true, true), &kCompileInfo950, kSoc950, kCoreNum);
-    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(8388608, 64, 1024, 32, 32, 1, 1, 1, 2.0f, true, true);
+    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(8388608, 64, 1, 1024, 32, 32, 1, 1, 1, 2.0f, true,
+                                                                  true);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, kExpectTilingKey950, SerializeTilingData(expect),
                     {kSysWorkspaceSize});
     TilingInfo tilingInfo;
@@ -212,7 +216,7 @@ TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_empty_rois_
                                               },
                                               MakeFullAttrs(2, 2, 1.0f, 0, true, false), &kCompileInfo950, kSoc950,
                                               kCoreNum);
-    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(0, 1, 4, 8, 8, 2, 2, 0, 1.0f, true, false);
+    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(0, 1, 1, 4, 8, 8, 2, 2, 0, 1.0f, true, false);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, kExpectTilingKey950, SerializeTilingData(expect),
                     {kSysWorkspaceSize});
     TilingInfo tilingInfo;
@@ -368,6 +372,22 @@ TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_v8_channels
     ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
 }
 
+// 反例：x 的 N 超出 INT32_MAX（N 写入 tiling data int32 字段 batchSize，防截断拒绝）
+TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_v8_batch_size_exceed_int32)
+{
+    gert::TilingContextPara tilingContextPara(
+        "RoiAlignRotated",
+        {
+            {{{2147483648, 4, 8, 8}, {2147483648, 4, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_NCHW}, // N=2^31
+            {{{32, 6}, {32, 6}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{32, 4, 2, 2}, {32, 4, 2, 2}}, ge::DT_FLOAT, ge::FORMAT_NCHW},
+        },
+        MakeFullAttrs(2, 2, 1.0f, 0, true, false), &kCompileInfo950, kSoc950, kCoreNum);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
 // 反例：sampling_ratio 超出 INT32_MAX（写入 tiling data int32 字段，防截断拒绝；负值语义等价 0 不拦）
 TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_v8_sampling_ratio_exceed_int32)
 {
@@ -434,7 +454,7 @@ TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_format_nd_n
         },
         MakeFullAttrs(2, 2, 1.0f, 0, true, false), &kCompileInfo950, kSoc950, kCoreNum);
     // 预期：与 normal_basic 同（totalElements=512，单核），ND 不改变 950 契约语义
-    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(512, 1, 4, 8, 8, 2, 2, 0, 1.0f, true, false);
+    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(512, 1, 1, 4, 8, 8, 2, 2, 0, 1.0f, true, false);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, kExpectTilingKey950, SerializeTilingData(expect),
                     {kSysWorkspaceSize});
     TilingInfo tilingInfo;
@@ -456,7 +476,7 @@ TEST_F(RoiAlignRotatedArch35TilingTest, roi_align_rotated_tiling_950_format_nd_e
         },
         MakeFullAttrs(2, 2, 1.0f, 0, true, false), &kCompileInfo950, kSoc950, kCoreNum);
     // 预期：与 empty_rois_r0 同（totalElements=0，单核空转）
-    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(0, 1, 4, 8, 8, 2, 2, 0, 1.0f, true, false);
+    RoiAlignRotatedArch35TilingData expect = MakeExpectTilingData(0, 1, 1, 4, 8, 8, 2, 2, 0, 1.0f, true, false);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, kExpectTilingKey950, SerializeTilingData(expect),
                     {kSysWorkspaceSize});
     TilingInfo tilingInfo;

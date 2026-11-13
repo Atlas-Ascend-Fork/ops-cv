@@ -26,11 +26,13 @@ def parse_bool_str(bool_str):
     return bool_str.strip().lower() == "true"
 
 
-def gen_rois(x_shape, rois_num, spatial_scale, aligned):
+def gen_rois(x_shape, rois_num, spatial_scale, aligned, invalid_batch=False):
     """按列值域生成 rois (R,6) 行主序（SE 数据生成约束）:
     batch_idx ∈ [0,N) 整数语义 float 存储; center_x/center_y 为原图坐标
     （乘 spatial_scale 后落在特征图内）; w/h 为原图尺度宽高(>0);
     angle ∈ [0,π) 弧度。!aligned 用例追加一行极小 ROI 覆盖 max(1,·) 路径。
+    invalid_batch=True 时向行 0/1/2 注入越界 batch_idx（-1/N/N+0.5），
+    复现 L0 随机数据（默认 [-2,2) 随机值截断为 -1/1）触发 kernel 越界读的场景。
     """
     n = int(x_shape[0])
     h = int(x_shape[2])
@@ -50,6 +52,12 @@ def gen_rois(x_shape, rois_num, spatial_scale, aligned):
     if rois_num > 0 and not aligned:
         rois[-1, 3] = 1.5
         rois[-1, 4] = 1.5
+    if invalid_batch and rois_num > 0:
+        # 越界 batch_idx 注入：行 0/1/2 截断取整后 -1 / N / N（N+0.5 向零截断）均落在 [0,N) 之外
+        rois[0, 0] = -1.0
+        rois[1, 0] = float(n)
+        if rois_num > 2:
+            rois[2, 0] = n + 0.5
     return rois.astype(np.float32)
 
 
@@ -109,6 +117,9 @@ def golden_roi_align_rotated(
     offset = 0.5 if aligned else 0.0
     for r in range(r_num):
         batch_idx = int(rois64[r, 0])
+        # 越界 batch_idx：该 ROI 不对应任何特征图平面，输出 0（与 kernel 越界防护语义一致）
+        if batch_idx < 0 or batch_idx >= n:
+            continue
         center_w = float(rois64[r, 1]) * spatial_scale - offset
         center_h = float(rois64[r, 2]) * spatial_scale - offset
         roi_w = float(rois64[r, 3]) * spatial_scale
@@ -157,6 +168,7 @@ def gen_data_and_golden(
     aligned,
     clockwise,
     d_type="float32",
+    invalid_batch=False,
 ):
     d_type_dict = {"float32": np.float32}
     np_type = d_type_dict[d_type]
@@ -166,7 +178,9 @@ def gen_data_and_golden(
     # x 特征图 (N,C,H,W)，小幅度均匀分布避免极端值放大插值误差
     tmp_x = np.random.uniform(-2.0, 2.0, size=tuple(x_shape)).astype(np_type)
     # rois (R,6) 按列值域生成
-    tmp_rois = gen_rois(x_shape, int(rois_shape[0]), spatial_scale, aligned)
+    tmp_rois = gen_rois(
+        x_shape, int(rois_shape[0]), spatial_scale, aligned, invalid_batch
+    )
     tmp_golden = golden_roi_align_rotated(
         tmp_x,
         tmp_rois,
@@ -184,14 +198,15 @@ def gen_data_and_golden(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 10:
+    if len(sys.argv) not in (10, 11):
         print(
-            "Param num must be 10: x_shape rois_shape pooled_h pooled_w spatial_scale"
-            " sampling_ratio aligned clockwise dtype"
+            "Param num must be 10 or 11: x_shape rois_shape pooled_h pooled_w spatial_scale"
+            " sampling_ratio aligned clockwise dtype [invalid_batch]"
         )
         exit(1)
     # 清理bin文件
     os.system("rm -rf *.bin")
+    invalid_batch = parse_bool_str(sys.argv[10]) if len(sys.argv) == 11 else False
     gen_data_and_golden(
         sys.argv[1],
         sys.argv[2],
@@ -202,4 +217,5 @@ if __name__ == "__main__":
         parse_bool_str(sys.argv[7]),
         parse_bool_str(sys.argv[8]),
         sys.argv[9],
+        invalid_batch,
     )

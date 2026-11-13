@@ -23,9 +23,10 @@ struct RoiAlignRotatedArch35TilingData {
     int64_t totalElements = 0; // 输出元素总数 R*C*pooled_h*pooled_w（R=0 时为 0）
     int32_t needCoreNum = 0; // 实际启动核数（Grid-Stride 下 VF 经 gridDim.x 获得，此处仅 DFX 日志用）
     // ---- x 特征图 shape（NCHW 语义）----
-    int32_t channels = 0; // C = x.dim(1)，C ∈ (0, 1024]
-    int32_t height = 0;   // H = x.dim(2)
-    int32_t width = 0;    // W = x.dim(3)
+    int32_t batchSize = 0; // N = x.dim(0)，kernel 侧 batch_idx ∈ [0,N) 越界防护上界
+    int32_t channels = 0;  // C = x.dim(1)，C ∈ (0, 1024]
+    int32_t height = 0;    // H = x.dim(2)
+    int32_t width = 0;     // W = x.dim(3)
     // ---- 属性参数（VF 计算必需）----
     int32_t pooledH = 0;       // 属性 pooled_h，> 0
     int32_t pooledW = 0;       // 属性 pooled_w，> 0

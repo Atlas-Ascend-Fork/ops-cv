@@ -22,6 +22,14 @@
  *   - 采样累加为 mmcv 语义顺序累加（iy 外层、ix 内层，output_val += 四点加权和）；
  *   - 不做任何跨实现位级对齐：sin/cos 硬件单元差异、编译器 FMA 融合决策等固有
  *     位差由容差模型覆盖
+ *   - 极大有限特征值的四点插值先缩小 4 倍，在凸组合值域内校正舍入误差后恢复尺度，
+ *     避免 FLT_MAX 附近的权重舍入导致有限输入产生 Inf
+ *
+ * 越界防护（aic error 规避）：
+ *   - batch_idx 截断取整后按 [0, N) 校验（N = tilingData->batchSize，本仓库
+ *     StackGroupPoints 越界 index 同款语义）：越界 ROI 视为空 ROI，输出 0，
+ *     绝不以其寻址 x GM——随机/脏 rois 数据（如 L0 自动生成用例的 [-2,2) 随机
+ *     batch_idx 截断为 -1/1）会触发 AICORE 越界读导致 aic error
  */
 
 #ifndef ROI_ALIGN_ROTATED_SIMT_H
@@ -42,7 +50,7 @@ static constexpr uint32_t THREAD_NUM = 512;
 
 // ========== VF 属性参数 UB 布局 ==========
 // VF 标量参数须 ≤8 个且限整型，
-// 9 个属性参数超出直传预算，统一打包进单个 __ubuf__ int32_t 线性缓冲区传递：
+// 10 个属性参数超出直传预算，统一打包进单个 __ubuf__ int32_t 线性缓冲区传递：
 //   整型字段按值存放；spatialScale 以 float 位模式（union）存放；bool 以 0/1 存放。
 static constexpr uint32_t OFF_POOLED_W = 0;       // 属性 pooled_w
 static constexpr uint32_t OFF_POOLED_H = 1;       // 属性 pooled_h
@@ -53,7 +61,8 @@ static constexpr uint32_t OFF_SAMPLING_RATIO = 5; // 属性 sampling_ratio
 static constexpr uint32_t OFF_SPATIAL_SCALE = 6;  // 属性 spatial_scale（float 位模式）
 static constexpr uint32_t OFF_ALIGNED = 7;        // 属性 aligned（0/1）
 static constexpr uint32_t OFF_CLOCKWISE = 8;      // 属性 clockwise（0/1）
-static constexpr uint32_t PARAMS_UB_ELEMS = 16;   // 9×4B=36B → 32B 对齐上取整到 64B（16 元素）
+static constexpr uint32_t OFF_BATCH_SIZE = 9;     // N = x.dim(0)，batch_idx 越界防护上界
+static constexpr uint32_t PARAMS_UB_ELEMS = 16;   // 10×4B=40B → 32B 对齐上取整到 64B（16 元素）
 
 // float/int32 位模式互转（无损，禁手写 bf16 位拼接约束不适用）
 union RoiParamWord {
@@ -74,7 +83,7 @@ __simt_callee__ inline void DecodeRoiParams(__gm__ T* roisGm, uint64_t r, float 
                                             float& roiStartH, float& roiStartW, float& sinT, float& cosT)
 {
     const __gm__ T* roiPtr = roisGm + r * 6UL; // (R,6) 行主序寻址，行内 6 字段连续
-    // batch_idx 不校验范围
+    // batch_idx 仅截断取整，范围校验在 ComputeBinValue 统一执行（越界输出 0，防 x GM 越界读）
     batchIdx = static_cast<int32_t>(roiPtr[0]);
     // 像素对齐
     const float offset = aligned ? 0.5f : 0.0f;
@@ -151,9 +160,30 @@ __simt_callee__ inline float BilinearSample(const __gm__ T* chBase, int32_t heig
     const float hx = 1.0f - lx;
     const __gm__ T* rowLo = chBase + static_cast<int64_t>(yLow) * width;
     const __gm__ T* rowHi = chBase + static_cast<int64_t>(yHigh) * width;
+    const float v1 = static_cast<float>(rowLo[xLow]);
+    const float v2 = static_cast<float>(rowLo[xHigh]);
+    const float v3 = static_cast<float>(rowHi[xLow]);
+    const float v4 = static_cast<float>(rowHi[xHigh]);
+    const float maxMagnitude = fmaxf(fmaxf(fabsf(v1), fabsf(v2)), fmaxf(fabsf(v3), fabsf(v4)));
+    constexpr float quarterMax = 0x1.fffffep125f; // FLT_MAX / 4
+    constexpr float finiteMax = 0x1.fffffep127f;  // FLT_MAX
+    if (maxMagnitude > quarterMax && maxMagnitude <= finiteMax) {
+        // 四个权重的浮点和可能略大于 1。先按 2 的幂缩放，给加权求和留出余量；
+        // 双线性插值是凸组合，结果限制在四个特征值之间后恢复尺度，不能直接将 Inf 截断。
+        const float s1 = v1 * 0.25f;
+        const float s2 = v2 * 0.25f;
+        const float s3 = v3 * 0.25f;
+        const float s4 = v4 * 0.25f;
+        const float value = (hy * hx) * s1 + (hy * lx) * s2 + (ly * hx) * s3 + (ly * lx) * s4;
+        if (value != value) {
+            return value; // 保留输入 NaN 的传播；fminf/fmaxf 会忽略单个 NaN
+        }
+        const float lower = fminf(fminf(s1, s2), fminf(s3, s4));
+        const float upper = fmaxf(fmaxf(s1, s2), fmaxf(s3, s4));
+        return fminf(fmaxf(value, lower), upper) * 4.0f;
+    }
     // 四点加权（先四项求和再由调用方累加）
-    return (hy * hx) * static_cast<float>(rowLo[xLow]) + (hy * lx) * static_cast<float>(rowLo[xHigh]) +
-           (ly * hx) * static_cast<float>(rowHi[xLow]) + (ly * lx) * static_cast<float>(rowHi[xHigh]);
+    return (hy * hx) * v1 + (hy * lx) * v2 + (ly * hx) * v3 + (ly * lx) * v4;
 }
 
 /*!
@@ -165,7 +195,7 @@ template <typename T>
 __simt_callee__ inline float ComputeBinValue(__gm__ T* xGm, __gm__ T* roisGm, uint64_t r, int32_t c, int32_t ph,
                                              int32_t pw, int32_t pooledW, int32_t pooledH, int32_t channels,
                                              int32_t height, int32_t width, int32_t samplingRatio, float spatialScale,
-                                             bool aligned, bool clockwise)
+                                             bool aligned, bool clockwise, int32_t batchSize)
 {
     int32_t batchIdx = 0;
     float roiCenterW = 0.0f;
@@ -184,6 +214,11 @@ __simt_callee__ inline float ComputeBinValue(__gm__ T* xGm, __gm__ T* roisGm, ui
                        cosT);
     if (gridH <= 0 || gridW <= 0) {
         return 0.0f; // grid=0（如 aligned=true 时 ROI 宽高为 0）：采样循环不执行，输出 0
+    }
+    // 越界 batch_idx（随机/脏数据，如 [-2,2) 随机值截断为 -1/1 且 N=1）：该 ROI 不对应
+    // 任何特征图平面，输出 0——绝不以其寻址 x GM（越界读会触发 AICORE 异常 → aic error）
+    if (batchIdx < 0 || batchIdx >= batchSize) {
+        return 0.0f;
     }
     // NCHW 特征图寻址: feat[n][c][y][x] = xGm + ((batchIdx*C + c)*H + y)*W + x
     const int64_t hw = static_cast<int64_t>(height) * width;
@@ -221,6 +256,7 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpRoiAlignRotat
     const int32_t height = params[OFF_HEIGHT];
     const int32_t width = params[OFF_WIDTH];
     const int32_t samplingRatio = params[OFF_SAMPLING_RATIO];
+    const int32_t batchSize = params[OFF_BATCH_SIZE];
     RoiParamWord scaleWord;
     scaleWord.i = params[OFF_SPATIAL_SCALE];
     const float spatialScale = scaleWord.f;
@@ -237,7 +273,8 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpRoiAlignRotat
         const int32_t c = static_cast<int32_t>(n2 - r * channels);
         // 单输出元素完整计算（RoI 预处理 + 采样循环 + 平均池化）并写回 GM
         yGm[index] = static_cast<T>(ComputeBinValue<T>(xGm, roisGm, r, c, ph, pw, pooledW, pooledH, channels, height,
-                                                       width, samplingRatio, spatialScale, aligned, clockwise));
+                                                       width, samplingRatio, spatialScale, aligned, clockwise,
+                                                       batchSize));
     }
 }
 
@@ -255,7 +292,7 @@ __aicore__ inline void Process(GM_ADDR x, GM_ADDR rois, GM_ADDR y, const RoiAlig
     __gm__ T* xGm = (__gm__ T*)x;       // 特征图 (N,C,H,W) float32，NCHW 语义
     __gm__ T* roisGm = (__gm__ T*)rois; // RoI (R,6) 行主序
     __gm__ T* yGm = (__gm__ T*)y;       // 输出 (R,C,pooled_h,pooled_w)
-    // 9 个属性参数打包进动态 UB（64B，32B 对齐；scalar 写 UB 后必须 barrier 再 VF）
+    // 10 个属性参数打包进动态 UB（64B，32B 对齐；scalar 写 UB 后必须 barrier 再 VF）
     LocalMemAllocator<AscendC::Hardware::UB> ubAlloc;
     LocalTensor<int32_t> paramsTensor = ubAlloc.Alloc<int32_t>(PARAMS_UB_ELEMS);
     RoiParamWord scaleWord;
@@ -269,6 +306,7 @@ __aicore__ inline void Process(GM_ADDR x, GM_ADDR rois, GM_ADDR y, const RoiAlig
     paramsTensor.SetValue(OFF_SPATIAL_SCALE, scaleWord.i);
     paramsTensor.SetValue(OFF_ALIGNED, tilingData->aligned);
     paramsTensor.SetValue(OFF_CLOCKWISE, tilingData->clockwise);
+    paramsTensor.SetValue(OFF_BATCH_SIZE, tilingData->batchSize);
     DataSyncBarrier<MemDsbT::UB>(); // S→V 写可见性
     // VF 标量参数仅 totalElements（1 个 ≤8），属性经 __ubuf__ 指针间接访问
     asc_vf_call<OpRoiAlignRotatedSimt<T>>(dim3(THREAD_NUM), (uint64_t)tilingData->totalElements, xGm, roisGm, yGm,

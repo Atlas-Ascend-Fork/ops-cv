@@ -15,7 +15,7 @@ English | [简体中文](./README.md)
 |  <term>Kirin X90 processor series products</term> | √ |
 |  <term>Kirin 9030 processor series products</term> | √ |
 
-Note: The data format is ND. The dimension order varies by chip: On <term>Ascend 950PR&950DT products</term>, x uses the NCHW dimension order (N,C,H,W). On other supported chips, x uses the NHWC dimension order (N,H,W,C). For details, see "Constraints".
+Note: The operator is registered with data format ND. The dimension order varies by chip: On <term>Ascend 950PR&950DT products</term>, x uses the NCHW dimension order (N,C,H,W); in graph mode, x also supports explicit NCHW format and rejects NHWC format. On other supported chips, x uses the NHWC dimension order (N,H,W,C). For details, see "Constraints".
 
 ## Function Description
 
@@ -64,14 +64,15 @@ Note: The data format is ND. The dimension order varies by chip: On <term>Ascend
   y[r,c,ph,pw] = \frac{1}{count} \sum_{iy=0}^{grid_h-1} \sum_{ix=0}^{grid_w-1} f(sx,\ sy)
   $$
 
-  Let $x_l=\lfloor sx \rfloor$, $y_l=\lfloor sy \rfloor$, $lx=sx-x_l$, and $ly=sy-y_l$:
+  The following interpolation formula applies to interior sampling points. Boundary sampling points are handled as described in the supplementary notes. Let $x_l=\lfloor sx \rfloor$, $y_l=\lfloor sy \rfloor$, $lx=sx-x_l$, and $ly=sy-y_l$:
 
   $$
   f(sx,\ sy) = (1-ly)(1-lx)\,x[n,c,y_l,x_l] + (1-ly)\,lx\,x[n,c,y_l,x_l+1] + ly\,(1-lx)\,x[n,c,y_l+1,x_l] + ly\,lx\,x[n,c,y_l+1,x_l+1]
   $$
 
   Supplementary notes:
-  - Out-of-boundary (sx<-1, sx>W, sy<-1, or sy>H) sampling points contribute 0. Negative coordinates are clamped to 0. When $x_l \ge W-1$ or $y_l \ge H-1$, the computation degrades to single-point sampling.
+  - Sampling coordinates are checked first: out-of-boundary (sx<-1, sx>W, sy<-1, or sy>H) sampling points contribute 0. For the remaining sampling points, negative coordinates are clamped to 0.
+  - The upper boundary is handled independently for each axis: when $x_l \ge W-1$, both the low and high indices on the x axis are set to W-1, and sx is reset to W-1. The same rule applies to the y axis. If only one axis requires this boundary handling, interpolation weights still apply on the other axis. If both axes require it, the computation reduces to single-point sampling.
   - When aligned=false, w and h are first floored to 1 after scaling, and then the operator computes the bin sizes and sampling coordinates.
 
 ## Parameter Description
@@ -95,9 +96,9 @@ Note: The data format is ND. The dimension order varies by chip: On <term>Ascend
     <tr>
       <td>x</td>
       <td>Input</td>
-      <td>Input feature map, 4D, with data format ND. On <term>Ascend 950PR&950DT products</term>, x uses the NCHW dimension order, with shape (N,C,H,W). On other supported chips, x uses the NHWC dimension order, with shape (N,H,W,C).</td>
+      <td>Input feature map, 4D. On <term>Ascend 950PR&950DT products</term>, graph mode supports ND or NCHW format; both are interpreted in NCHW dimension order, with shape (N,C,H,W). On other supported chips, x uses ND format and NHWC dimension order, with shape (N,H,W,C).</td>
       <td>FLOAT32</td>
-      <td>ND</td>
+      <td>ND; graph mode on 950 also supports NCHW</td>
     </tr>
     <tr>
       <td>rois</td>
@@ -109,21 +110,21 @@ Note: The data format is ND. The dimension order varies by chip: On <term>Ascend
     <tr>
       <td>y</td>
       <td>Output</td>
-      <td>Output feature map, with data format ND, the same as x. On <term>Ascend 950PR&950DT products</term>, the shape is (R,C,pooled_h,pooled_w). On other supported chips, the shape is (R,pooled_h,pooled_w,C).</td>
+      <td>Output feature map, registered with data format ND. On <term>Ascend 950PR&950DT products</term>, the shape is (R,C,pooled_h,pooled_w). On other supported chips, the shape is (R,pooled_h,pooled_w,C).</td>
       <td>FLOAT32</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>pooled_h</td>
       <td>Attr</td>
-      <td>Pooling size of the output in the H dimension. The value must be greater than 0.</td>
+      <td>Pooling size of the output in the H dimension. The value must be greater than 0. On <term>Ascend 950PR&950DT products</term>, it must also not exceed INT32_MAX.</td>
       <td>INT</td>
       <td>-</td>
     </tr>
     <tr>
       <td>pooled_w</td>
       <td>Attr</td>
-      <td>Pooling size of the output in the W dimension. The value must be greater than 0.</td>
+      <td>Pooling size of the output in the W dimension. The value must be greater than 0. On <term>Ascend 950PR&950DT products</term>, it must also not exceed INT32_MAX.</td>
       <td>INT</td>
       <td>-</td>
     </tr>
@@ -137,7 +138,7 @@ Note: The data format is ND. The dimension order varies by chip: On <term>Ascend
     <tr>
       <td>sampling_ratio</td>
       <td>Optional Attr</td>
-      <td>Number of sampling points per dimension in each bin. 0 indicates dense sampling by ceil(bin_size). The value must be greater than or equal to 0. Default value: 0.</td>
+      <td>Number of sampling points per dimension in each bin. 0 indicates dense sampling by ceil(bin_size). The value must be greater than or equal to 0. Default value: 0. On <term>Ascend 950PR&950DT products</term>, it must also not exceed INT32_MAX. For validation rules, see "Constraints".</td>
       <td>INT</td>
       <td>-</td>
     </tr>
@@ -159,18 +160,19 @@ Note: The data format is ND. The dimension order varies by chip: On <term>Ascend
 
 ## Constraints
 
-- The data formats of x, rois, and y of this operator are ND, and the dimension order is determined by the chip:
-  - <term>Ascend 950PR&950DT products</term>: x uses the NCHW dimension order (N,C,H,W), rois is (R,6), and y is (R,C,pooled_h,pooled_w).
+- The operator registers x, rois, and y with data format ND, and the dimension order is determined by the chip:
+  - <term>Ascend 950PR&950DT products</term>: In graph mode, x supports ND or explicit NCHW format; both are interpreted in NCHW dimension order (N,C,H,W). NHWC and other formats for x are rejected. rois uses ND format with shape (R,6), and y has shape (R,C,pooled_h,pooled_w).
   - <term>Atlas A2 products</term>, <term>Atlas A3 products</term>, <term>Kirin X90 processor series products</term>, and <term>Kirin 9030 processor series products</term>: x uses the NHWC dimension order (N,H,W,C), rois is (6,R), and y is (R,pooled_h,pooled_w,C).
-- The shape of the input x must be 4D.
+- The shape of the input x must be 4D. On <term>Ascend 950PR&950DT products</term>, N, C, H, and W must each not exceed INT32_MAX.
 - The shape of the input rois must be 2D. On <term>Ascend 950PR&950DT products</term>, when R=0, the operator outputs an empty tensor (0,C,pooled_h,pooled_w). Other supported chips require R≥1.
-- RoI value constraints (the operator does not check them, and the caller must ensure them): batch_idx∈[0,N), where N is the size of dimension 0 of the input x; angle∈[0,π), in radians; and no element can be NaN/Inf.
-- Attribute constraints: pooled_h>0 and pooled_w>0 (checked by the operator); spatial_scale>0 and sampling_ratio>=0 (not checked by the operator, and the caller must ensure them).
+- RoI value constraints: batch_idx∈[0,N), where N is the size of dimension 0 of the input x; angle∈[0,π), in radians; and no element can be NaN/Inf. Values such as angle are guaranteed by the caller; when batch_idx is out of range, the operator does not report an error and treats the RoI as an empty RoI, outputting 0 (no out-of-bounds read is performed).
+- Attribute constraints: pooled_h>0 and pooled_w>0 are checked by the operator. The caller must ensure spatial_scale>0 and sampling_ratio>=0; the operator does not check these two conditions.
+- On <term>Ascend 950PR&950DT products</term>, the operator also checks integer ranges: pooled_h and pooled_w must not exceed INT32_MAX, and sampling_ratio must be within [INT32_MIN,INT32_MAX]. Values outside these ranges are rejected to prevent truncation when stored as 32-bit parameters. The caller must still ensure sampling_ratio>=0. INT32_MIN=-2147483648 and INT32_MAX=2147483647.
 - Only the FLOAT32 data type is supported, and the data types of x, rois, and y must be the same. Only the continuous layout is supported.
 
 ## Invocation
 
 | Invocation Method   | Sample Code           | Description                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| Graph mode | [test_geir_roi_align_rotated](examples/arch35/test_geir_roi_align_rotated.cpp) | Invokes the RoiAlignRotated operator through the [operator IR](./op_graph/roi_align_rotated_proto.h) API (<term>Ascend 950PR&950DT products</term>: ND, x uses the NCHW dimension order, and the sample includes negative test cases for the format gate). |
+| Graph mode | [test_geir_roi_align_rotated](examples/arch35/test_geir_roi_align_rotated.cpp) | Invokes the RoiAlignRotated operator through the [operator IR](./op_graph/roi_align_rotated_proto.h) API (<term>Ascend 950PR&950DT products</term>: x supports ND or NCHW format, both interpreted in NCHW dimension order, and the sample includes negative test cases for NHWC format rejection). |
 | Graph mode | [test_geir_roi_align_rotated](examples/test_geir_roi_align_rotated.cpp) | Invokes the RoiAlignRotated operator through the [operator IR](./op_graph/roi_align_rotated_proto.h) API (<term>Atlas A2 products</term>, <term>Atlas A3 products</term>, <term>Kirin X90 processor series products</term>, and <term>Kirin 9030 processor series products</term>: ND, x uses the NHWC dimension order, and rois is transposed to (6,R)). |

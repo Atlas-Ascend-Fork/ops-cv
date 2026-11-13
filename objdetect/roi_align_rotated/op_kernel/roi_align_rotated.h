@@ -318,10 +318,15 @@ private:
         int32_t output_index = ComputeOutputIndex(progress);
 
         for (uint32_t j = 0; j < rois_num; j++) {
-            float batch_idx = RoisBatchIdx.GetValue(j);
-            batch_idx = static_cast<int32_t>(batch_idx);
+            int32_t batch_idx = static_cast<int32_t>(RoisBatchIdx.GetValue(j));
 
             if (output_index < (total_rois_num * pooled_height * pooled_width)) {
+                if (batch_idx < 0 || static_cast<uint32_t>(batch_idx) >= batch_size) {
+                    // 越界 batch_idx（随机/脏数据，如 [-2,2) 随机值截断为 -1/1 且 N=1）：采样网格清 0
+                    // 按空 ROI 输出 0，绝不以其寻址 inputGM（越界读触发 AICORE 异常 → aic error）
+                    RoiBinGridH.SetValue(j, zero_value);
+                    RoiBinGridW.SetValue(j, zero_value);
+                }
                 ComputeItem(output_index, j, batch_idx, RoisCenterX.GetValue(j), RoisCenterY.GetValue(j));
             }
             output_index += output_shape;

@@ -20,7 +20,12 @@
 #if !defined(__NPU_ARCH__) || __NPU_ARCH__ == 3510
 
 #include "../../../op_kernel/arch35/roi_align_rotated_simt.h"
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstring>
+#include <limits>
+#include <random>
 #include <vector>
 #include <iostream>
 #include <string>
@@ -99,6 +104,7 @@ TEST_F(RoiAlignRotated950Test, test_case_0)
     RoiAlignRotatedArch35TilingData* tilingDatafromBin = reinterpret_cast<RoiAlignRotatedArch35TilingData*>(tiling);
     tilingDatafromBin->totalElements = 8 * 16 * 7 * 7;
     tilingDatafromBin->needCoreNum = 7;
+    tilingDatafromBin->batchSize = 2;
     tilingDatafromBin->channels = 16;
     tilingDatafromBin->height = 32;
     tilingDatafromBin->width = 32;
@@ -154,6 +160,7 @@ TEST_F(RoiAlignRotated950Test, test_case_2)
     RoiAlignRotatedArch35TilingData* tilingDatafromBin = reinterpret_cast<RoiAlignRotatedArch35TilingData*>(tiling);
     tilingDatafromBin->totalElements = 0;
     tilingDatafromBin->needCoreNum = 1;
+    tilingDatafromBin->batchSize = 1;
     tilingDatafromBin->channels = 4;
     tilingDatafromBin->height = 8;
     tilingDatafromBin->width = 8;
@@ -211,6 +218,7 @@ TEST_F(RoiAlignRotated950Test, test_case_1)
     RoiAlignRotatedArch35TilingData* tilingDatafromBin = reinterpret_cast<RoiAlignRotatedArch35TilingData*>(tiling);
     tilingDatafromBin->totalElements = 4 * 8 * 3 * 4;
     tilingDatafromBin->needCoreNum = 1;
+    tilingDatafromBin->batchSize = 1;
     tilingDatafromBin->channels = 8;
     tilingDatafromBin->height = 24;
     tilingDatafromBin->width = 24;
@@ -238,6 +246,203 @@ TEST_F(RoiAlignRotated950Test, test_case_1)
 
     system("cd ./roi_align_rotated_950_data/ && python3 compare_data.py 'float32'");
     free(path_);
+}
+
+// 用例4：越界 batch_idx 回归（L0 随机数据 aic error 防护，issue #51 同类修复验证）
+// x (1,4,8,8) N=1、rois (8,6) 行 0/1/2 注入 batch_idx=-1.0/1.0/1.5（截断取整后 -1/1/1 均越界）、
+// 行 3~7 保持合法 batch_idx=0；pooled 2x2 + sampling_ratio=1：totalElements = 8*4*2*2 = 512 → 单核。
+// kernel 侧预期：越界 ROI 视为空 ROI 输出 0，绝不以越界 batch_idx 读 x GM；
+// 合法 ROI 输出与 golden 一致。x 缓冲 2 倍分配、batch 1 平面位置预填哨兵 99.0：
+// 未修复（越界读 batch 1 平面）时输出非 0 → compare 必失败；修复后不读 → 输出 0 与 golden 一致。
+TEST_F(RoiAlignRotated950Test, test_case_3)
+{
+    const size_t batchFloats = 1 * 4 * 8 * 8; // 真实 x (1,4,8,8) 元素数
+    const size_t xFloats = batchFloats * 2;   // 2 倍分配：越界 batch_idx=1 的读取落点（哨兵区）
+    size_t xByteSize = xFloats * sizeof(float);
+    size_t roisByteSize = 8 * 6 * sizeof(float);
+    size_t yByteSize = 8 * 4 * 2 * 2 * sizeof(float);
+    size_t tiling_data_size = sizeof(RoiAlignRotatedArch35TilingData);
+    uint32_t numBlocks = 1;
+
+    system("cd ./roi_align_rotated_950_data/ && python3 gen_data.py '(1, 4, 8, 8)' '(8, 6)' '2' '2' '1.0' '1' "
+           "'true' 'false' 'float32' 'true'");
+    std::string fileName = "./roi_align_rotated_950_data/float32_input_roi_align_rotated_x.bin";
+    uint8_t* x = (uint8_t*)AscendC::GmAlloc(xByteSize);
+    ReadFile(fileName, xByteSize, x, xByteSize);
+    // 哨兵填充：越界 batch_idx=1 的读取落点预置非 0 值（StackGroupPoints 前置 canary 同款手法）
+    float* xFloat = reinterpret_cast<float*>(x);
+    for (size_t i = batchFloats; i < xFloats; ++i) {
+        xFloat[i] = 99.0f;
+    }
+    fileName = "./roi_align_rotated_950_data/float32_input_roi_align_rotated_rois.bin";
+    uint8_t* rois = (uint8_t*)AscendC::GmAlloc(roisByteSize);
+    ReadFile(fileName, roisByteSize, rois, roisByteSize);
+    uint8_t* y = (uint8_t*)AscendC::GmAlloc(yByteSize);
+    uint8_t* workspace = (uint8_t*)AscendC::GmAlloc(32);
+    uint8_t* tiling = (uint8_t*)AscendC::GmAlloc(tiling_data_size);
+
+    char* path_ = get_current_dir_name();
+    string path(path_);
+
+    RoiAlignRotatedArch35TilingData* tilingDatafromBin = reinterpret_cast<RoiAlignRotatedArch35TilingData*>(tiling);
+    tilingDatafromBin->totalElements = 8 * 4 * 2 * 2;
+    tilingDatafromBin->needCoreNum = 1;
+    tilingDatafromBin->batchSize = 1; // N=1：rois 行 0/1/2 的 batch_idx 截断后 -1/1/1 均越界
+    tilingDatafromBin->channels = 4;
+    tilingDatafromBin->height = 8;
+    tilingDatafromBin->width = 8;
+    tilingDatafromBin->pooledH = 2;
+    tilingDatafromBin->pooledW = 2;
+    tilingDatafromBin->samplingRatio = 1;
+    tilingDatafromBin->spatialScale = 1.0f;
+    tilingDatafromBin->aligned = 1;
+    tilingDatafromBin->clockwise = 0;
+
+    ICPU_SET_TILING_KEY(ROI_ALIGN_ROTATED_UT_TILING_KEY);
+    AscendC::SetKernelMode(KernelMode::AIV_MODE);
+
+    ICPU_RUN_KF(roi_align_rotated_950, numBlocks, x, rois, y, workspace, (uint8_t*)(tilingDatafromBin));
+
+    fileName = "./roi_align_rotated_950_data/float32_output_roi_align_rotated.bin";
+    WriteFile(fileName, y, yByteSize);
+
+    // 释放资源
+    AscendC::GmFree(x);
+    AscendC::GmFree(rois);
+    AscendC::GmFree(y);
+    AscendC::GmFree(workspace);
+    AscendC::GmFree(tiling);
+
+    // compare_data.py 退出码 0=PASSED / 非 0=FAILED：越界 ROI（行 0/1/2）输出须为 0，
+    // 未防护越界读（读到哨兵 99）时 golden 比对失败，回归用例 FAIL
+    const int cmpRet = std::system("cd ./roi_align_rotated_950_data/ && python3 compare_data.py 'float32'");
+    EXPECT_EQ(cmpRet, 0);
+    free(path_);
+}
+
+static std::vector<float> RunExtremeFeatureKernel(const std::vector<float>& features, const std::vector<float>& rois,
+                                                  const RoiAlignRotatedArch35TilingData& tilingData)
+{
+    const size_t xBytes = features.size() * sizeof(float);
+    const size_t roisBytes = rois.size() * sizeof(float);
+    const size_t yBytes = static_cast<size_t>(tilingData.totalElements) * sizeof(float);
+    auto* xGm = static_cast<uint8_t*>(AscendC::GmAlloc(xBytes));
+    auto* roisGm = static_cast<uint8_t*>(AscendC::GmAlloc(roisBytes));
+    auto* yGm = static_cast<uint8_t*>(AscendC::GmAlloc(yBytes));
+    auto* workspaceGm = static_cast<uint8_t*>(AscendC::GmAlloc(32));
+    auto* tilingGm = static_cast<uint8_t*>(AscendC::GmAlloc(sizeof(tilingData)));
+    std::memcpy(xGm, features.data(), xBytes);
+    std::memcpy(roisGm, rois.data(), roisBytes);
+    std::memcpy(tilingGm, &tilingData, sizeof(tilingData));
+
+    ICPU_SET_TILING_KEY(ROI_ALIGN_ROTATED_UT_TILING_KEY);
+    AscendC::SetKernelMode(KernelMode::AIV_MODE);
+    ICPU_RUN_KF(roi_align_rotated_950, 1, xGm, roisGm, yGm, workspaceGm, tilingGm);
+
+    const auto* output = reinterpret_cast<const float*>(yGm);
+    std::vector<float> result(output, output + tilingData.totalElements);
+    AscendC::GmFree(xGm);
+    AscendC::GmFree(roisGm);
+    AscendC::GmFree(yGm);
+    AscendC::GmFree(workspaceGm);
+    AscendC::GmFree(tilingGm);
+    return result;
+}
+
+// L1 rangebound_highpre_032: constant finite features must remain finite at FLT_MAX.
+// Keep its shape, attributes and RoI range; the first RoI is a known overflowing input.
+TEST_F(RoiAlignRotated950Test, test_case_032_finite_extreme_features)
+{
+    constexpr size_t roisNum = 189;
+    RoiAlignRotatedArch35TilingData tilingData{};
+    tilingData.totalElements = roisNum * 3 * 32 * 3;
+    tilingData.needCoreNum = 1;
+    tilingData.batchSize = 2;
+    tilingData.channels = 3;
+    tilingData.height = 5;
+    tilingData.width = 7962;
+    tilingData.pooledH = 32;
+    tilingData.pooledW = 3;
+    tilingData.spatialScale = 1.0f;
+
+    std::mt19937 generator(1234);
+    std::uniform_real_distribution<float> distribution(-0.25f, 0.25f);
+    std::vector<float> rois(roisNum * 6);
+    for (auto& value : rois) {
+        value = distribution(generator);
+    }
+    const std::array<float, 6> overflowRoi = {-0.15424028038978577f, 0.06105438619852066f, -0.031136130914092064f,
+                                              0.14267928898334503f,  0.13998790085315704f, -0.11370369791984558f};
+    std::copy(overflowRoi.begin(), overflowRoi.end(), rois.begin());
+
+    for (const float featureValue : {std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()}) {
+        SCOPED_TRACE(featureValue);
+        const std::vector<float> features(2 * 3 * 5 * 7962, featureValue);
+        const auto output = RunExtremeFeatureKernel(features, rois, tilingData);
+        ASSERT_EQ(std::count_if(output.begin(), output.end(), [](float value) { return !std::isfinite(value); }), 0);
+        for (size_t i = 0; i < output.size(); ++i) {
+            ASSERT_EQ(output[i], featureValue) << "output index " << i;
+        }
+    }
+}
+
+TEST_F(RoiAlignRotated950Test, test_case_mixed_extreme_features)
+{
+    const float maxValue = std::numeric_limits<float>::max();
+    const std::vector<float> features = {maxValue,  -maxValue,        -maxValue,         maxValue,
+                                         maxValue,  maxValue * 0.5f,  maxValue * 0.25f,  0.0f,
+                                         -maxValue, -maxValue * 0.5f, -maxValue * 0.25f, 0.0f};
+    const std::vector<float> rois = {0.0f, 0.125f, 0.75f, 1.0f, 1.0f, 0.0f, 0.0f, 0.5f, 0.5f,
+                                     1.0f, 1.0f,   0.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f};
+    RoiAlignRotatedArch35TilingData tilingData{};
+    tilingData.totalElements = 9;
+    tilingData.needCoreNum = 1;
+    tilingData.batchSize = 1;
+    tilingData.channels = 3;
+    tilingData.height = 2;
+    tilingData.width = 2;
+    tilingData.pooledH = 1;
+    tilingData.pooledW = 1;
+    tilingData.samplingRatio = 1;
+    tilingData.spatialScale = 1.0f;
+
+    const auto output = RunExtremeFeatureKernel(features, rois, tilingData);
+    for (size_t r = 0; r < 3; ++r) {
+        const double lx = rois[r * 6 + 1];
+        const double ly = rois[r * 6 + 2];
+        for (size_t c = 0; c < 3; ++c) {
+            const double expected = (1.0 - ly) * (1.0 - lx) * features[c * 4] + (1.0 - ly) * lx * features[c * 4 + 1] +
+                                    ly * (1.0 - lx) * features[c * 4 + 2] + ly * lx * features[c * 4 + 3];
+            ASSERT_TRUE(std::isfinite(output[r * 3 + c]));
+            EXPECT_NEAR(static_cast<double>(output[r * 3 + c]) / maxValue, expected / maxValue, 1e-6);
+        }
+    }
+}
+
+TEST_F(RoiAlignRotated950Test, test_case_nonfinite_features)
+{
+    const float maxValue = std::numeric_limits<float>::max();
+    const float infinity = std::numeric_limits<float>::infinity();
+    const std::vector<float> features = {maxValue,  infinity, 0.0f, 0.0f,     -maxValue,
+                                         -infinity, 0.0f,     0.0f, maxValue, std::numeric_limits<float>::quiet_NaN(),
+                                         0.0f,      0.0f};
+    const std::vector<float> rois = {0.0f, 0.25f, 0.75f, 1.0f, 1.0f, 0.0f};
+    RoiAlignRotatedArch35TilingData tilingData{};
+    tilingData.totalElements = 3;
+    tilingData.needCoreNum = 1;
+    tilingData.batchSize = 1;
+    tilingData.channels = 3;
+    tilingData.height = 2;
+    tilingData.width = 2;
+    tilingData.pooledH = 1;
+    tilingData.pooledW = 1;
+    tilingData.samplingRatio = 1;
+    tilingData.spatialScale = 1.0f;
+
+    const auto output = RunExtremeFeatureKernel(features, rois, tilingData);
+    EXPECT_EQ(output[0], infinity);
+    EXPECT_EQ(output[1], -infinity);
+    EXPECT_TRUE(std::isnan(output[2]));
 }
 
 #endif // !defined(__NPU_ARCH__) || __NPU_ARCH__ == 3510

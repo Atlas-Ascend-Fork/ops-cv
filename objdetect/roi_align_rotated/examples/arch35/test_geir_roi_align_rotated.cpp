@@ -15,7 +15,7 @@
  * 本示例面向 Ascend 950：x 为 FORMAT_NCHW 或 FORMAT_ND shape (N,C,H,W)（mmcv 契约；ND 为
  * 无布局声明，按 NCHW 维度序解释），rois 为 FORMAT_ND shape (R,6) 行主序，输出
  * y=(R,C,pooled_h,pooled_w)；覆盖 dtype × shape × S/D 双模式全矩阵正向用例（含 ND 等价正例），
- * 以及 format 闸门负向用例（NHWC 输入预期被 tiling ValidateFormat 显式拒绝，run_ok=false 即 PASS）。
+ * 以及 format 闸门负向用例（须确认 NHWC 输入被 tiling ValidateFormat 显式拒绝）。
  *
  * 动态 shape 泛化补充（dyn_list，graph desc 显式声明）：
  *   - 部分 -1（unknown dim，rank 已知）：x={-1,16,8,8}/rois={-1,6} 等组合，未知的 N/R/C 透传到输出；
@@ -31,9 +31,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <fstream>
-#include <string.h>
+#include <cstring>
 #include <stdint.h>
 #include <vector>
 #include <string>
@@ -68,9 +71,11 @@ struct CaseResult {
     bool build_ok;
     bool run_ok;
     bool output_exists;
+    bool output_correct = false;
     int output_count;
     std::string err_msg;
-    bool expect_reject; // 预期 RunGraph 被 tiling 显式拒绝（run_ok=false 即 PASS）
+    bool expect_reject;
+    bool reject_confirmed = false; // 须确认 NHWC 被格式校验拒绝，其他失败不能判通过
 };
 
 // 动态 shape 泛化用例：graph shape（给图引擎，可含 -1/-2）与 real shape（RunGraph 实际下发，
@@ -254,28 +259,133 @@ int32_t GenOnesDataFloat32(vector<int64_t> shapes, Tensor& input_tensor, TensorD
         *(pData + i) = value;
     }
     input_tensor = Tensor(input_tensor_desc, (uint8_t*)pData, data_len);
+    delete[] pData;
     return SUCCESS;
 }
 
 int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& input_tensor_desc, DataType data_type,
                     int value)
 {
-    input_tensor_desc.SetRealDimCnt(shapes.size());
-    size_t size = 1;
-    for (uint32_t i = 0; i < shapes.size(); i++) {
-        size *= shapes[i];
-    }
-    uint32_t data_len = size * GetDataTypeSize(data_type);
-    int32_t* pData = new (std::nothrow) int32_t[size];
-    if (pData == nullptr) {
-        printf("%s - ERROR - [XIR]: GenOnesData alloc failed\n", GetTime().c_str());
+    if (data_type != DT_FLOAT) {
+        printf("%s - ERROR - [XIR]: RoiAlignRotated requires FP32 input\n", GetTime().c_str());
         return FAILED;
     }
-    for (size_t i = 0; i < size; ++i) {
-        *(pData + i) = value;
+    return GenOnesDataFloat32(shapes, input_tensor, input_tensor_desc, static_cast<float>(value));
+}
+
+// x[n,c,h,w] = 1 + 4*n + 0.5*c + 0.25*h + 0.125*w。
+// RoI 位于特征图内部，batch_idx 合法；不同 RoI 覆盖不同 batch 和旋转角度。
+int PrepareInputs(std::vector<ge::Tensor>& input)
+{
+    const auto shape = input[0].GetTensorDesc().GetShape().GetDims();
+    const int64_t batches = shape[0], channels = shape[1], height = shape[2], width = shape[3];
+    std::vector<float> features(batches * channels * height * width);
+    for (int64_t n = 0; n < batches; ++n) {
+        for (int64_t c = 0; c < channels; ++c) {
+            for (int64_t h = 0; h < height; ++h) {
+                for (int64_t w = 0; w < width; ++w) {
+                    features[((n * channels + c) * height + h) * width + w] = 1.0f + 4.0f * n + 0.5f * c + 0.25f * h +
+                                                                              0.125f * w;
+                }
+            }
+        }
     }
-    input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
+    if (input[0].SetData(reinterpret_cast<const uint8_t*>(features.data()), features.size() * sizeof(float)) !=
+        SUCCESS) {
+        return FAILED;
+    }
+    const int64_t count = input[1].GetTensorDesc().GetShape().GetDim(0);
+    std::vector<float> rois(count * 6);
+    const float roiSize = 0.5f * static_cast<float>(std::min(height - 1, width - 1));
+    for (int64_t r = 0; r < count; ++r) {
+        rois[r * 6] = static_cast<float>(r % batches);
+        rois[r * 6 + 1] = 0.5f * width;
+        rois[r * 6 + 2] = 0.5f * height;
+        rois[r * 6 + 3] = roiSize;
+        rois[r * 6 + 4] = roiSize;
+        rois[r * 6 + 5] = 0.2f * static_cast<float>(r % 4);
+    }
+    if (!rois.empty() &&
+        input[1].SetData(reinterpret_cast<const uint8_t*>(rois.data()), rois.size() * sizeof(float)) != SUCCESS) {
+        return FAILED;
+    }
     return SUCCESS;
+}
+
+// 三方验证可通过环境变量指定已创建的目录，导出本示例的真实输入与 NPU 输出。
+bool DumpTensors(uint32_t graphId, const char* kind, const std::vector<ge::Tensor>& tensors)
+{
+    const char* directory = std::getenv("ROI_ALIGN_ROTATED_DUMP_DIR");
+    if (directory == nullptr || directory[0] == '\0') {
+        return true;
+    }
+    for (size_t i = 0; i < tensors.size(); ++i) {
+        const std::string path = std::string(directory) + "/graph" + std::to_string(graphId) + "_" + kind +
+                                 std::to_string(i) + ".bin";
+        std::ofstream file(path, std::ios::binary);
+        if (tensors[i].GetSize() > 0) {
+            file.write(reinterpret_cast<const char*>(tensors[i].GetData()), tensors[i].GetSize());
+        }
+        file.close();
+        if (!file) {
+            std::cerr << "Cannot write " << path << std::endl;
+            return false;
+        }
+    }
+    return true;
+}
+
+bool CheckOutputs(const std::vector<ge::Tensor>& input, const std::vector<ge::Tensor>& output, std::string& error)
+{
+    const auto xShape = input[0].GetTensorDesc().GetShape().GetDims();
+    const int64_t count = input[1].GetTensorDesc().GetShape().GetDim(0);
+    const int64_t channels = xShape[1];
+    const std::vector<int64_t> expectedShape = {count, channels, 7, 7};
+    if (output.size() != 1 || output[0].GetTensorDesc().GetDataType() != DT_FLOAT ||
+        output[0].GetTensorDesc().GetShape().GetDims() != expectedShape ||
+        output[0].GetSize() != static_cast<size_t>(count * channels * 7 * 7) * sizeof(float) ||
+        (count > 0 && output[0].GetData() == nullptr)) {
+        error = "Incorrect output count, dtype, shape, or byte size";
+        return false;
+    }
+
+    // 特征是 h/w 的仿射函数，且所有采样点均在图内：双线性插值及对称采样网格的
+    // 平均值等于 bin 中心处的函数值。用该解析结果逐元素校验，R=0 则校验空输出。
+    double maxError = 0.0;
+    for (int64_t r = 0; r < count; ++r) {
+        float roi[6];
+        std::memcpy(roi, input[1].GetData() + r * sizeof(roi), sizeof(roi));
+        const double cosTheta = std::cos(static_cast<double>(roi[5]));
+        const double sinTheta = std::sin(static_cast<double>(roi[5]));
+        for (int64_t c = 0; c < channels; ++c) {
+            for (int64_t ph = 0; ph < 7; ++ph) {
+                for (int64_t pw = 0; pw < 7; ++pw) {
+                    const double xx = -roi[3] / 2.0 + (pw + 0.5) * roi[3] / 7.0;
+                    const double yy = -roi[4] / 2.0 + (ph + 0.5) * roi[4] / 7.0;
+                    const double sx = xx * cosTheta + yy * sinTheta + roi[1] - 0.5;
+                    const double sy = yy * cosTheta - xx * sinTheta + roi[2] - 0.5;
+                    const double expected = 1.0 + 4.0 * roi[0] + 0.5 * c + 0.25 * sy + 0.125 * sx;
+                    const int64_t index = ((r * channels + c) * 7 + ph) * 7 + pw;
+                    float actual = 0.0f;
+                    std::memcpy(&actual, output[0].GetData() + index * sizeof(float), sizeof(float));
+                    const double diff = std::abs(static_cast<double>(actual) - expected);
+                    if (!std::isfinite(actual) || diff > 1.0e-4 + 1.0e-6 * std::abs(expected)) {
+                        error = "Numerical mismatch at output index " + std::to_string(index);
+                        return false;
+                    }
+                    maxError = std::max(maxError, diff);
+                }
+            }
+        }
+    }
+    printf("  checked %lld FP32 values, max_abs_error=%.9g\n", (long long)(count * channels * 7 * 7), maxError);
+    return true;
+}
+
+bool CasePassed(const CaseResult& result)
+{
+    return result.expect_reject ? (result.build_ok && !result.run_ok && result.reject_confirmed) :
+                                  (result.build_ok && result.run_ok && result.output_exists && result.output_correct);
 }
 
 // RoiAlignRotated 为双输入依赖算子：x 恒为 4 维，rois 恒为 2 维，两输入 shape 不同且存在依赖
@@ -292,6 +402,9 @@ int CreateOppInGraph(RunMode mode, DataType inDtype, Format xFormat, const std::
     // x format=NCHW；rois format 恒 ND
     ADD_INPUT_MODE(1, x, inDtype, xFormat, xShape, mode);
     ADD_INPUT_MODE(2, rois, inDtype, FORMAT_ND, roisShape, mode);
+    if (PrepareInputs(input) != SUCCESS) {
+        return FAILED;
+    }
 
     //   y = (R, C, 7, 7)，R = rois.dim(0)、C = x.dim(1)（NCHW 维度序，ND 输入同样按此解释）
     std::vector<int64_t> yShape = {roisShape[0], xShape[1], 7, 7};
@@ -335,6 +448,10 @@ CaseResult RunOneCase(ge::Session* session, uint32_t graph_id, RunMode mode, Dat
         r.err_msg = "CreateOppInGraph failed";
         return r;
     }
+    if (!DumpTensors(graph_id, "input", input)) {
+        r.err_msg = "Input dump failed";
+        return r;
+    }
     if (!inputs.empty() && !outputs.empty()) {
         graph.SetInputs(inputs).SetOutputs(outputs);
     }
@@ -349,14 +466,26 @@ CaseResult RunOneCase(ge::Session* session, uint32_t graph_id, RunMode mode, Dat
 
     std::vector<ge::Tensor> output;
     ret = session->RunGraph(graph_id, input, output);
+    const AscendString runError = (ret == SUCCESS) ? AscendString("") : ge::GEGetErrorMsgV2();
     session->RemoveGraph(graph_id);
     if (ret != SUCCESS) {
         r.err_msg = "RunGraph failed, ret=" + std::to_string(ret);
+        const std::string message = runError.GetString() == nullptr ? "" : runError.GetString();
+        r.reject_confirmed = expectReject && message.find("NHWC") != std::string::npos &&
+                             message.find("only supports NCHW and ND") != std::string::npos;
+        if (r.reject_confirmed) {
+            r.err_msg = "NHWC rejected as expected";
+        }
         return r;
     }
     r.run_ok = true;
     r.output_count = output.size();
     r.output_exists = (output.size() > 0);
+    r.output_correct = CheckOutputs(input, output, r.err_msg);
+    if (!DumpTensors(graph_id, "output", output)) {
+        r.output_correct = false;
+        r.err_msg = "Output dump failed";
+    }
 
     for (size_t i = 0; i < output.size(); i++) {
         int64_t shape_size = output[i].GetTensorDesc().GetShape().GetShapeSize();
@@ -379,6 +508,9 @@ int CreateOppInGraphDyn(DataType inDtype, const DynCombo& c, std::vector<ge::Ten
     // 动态 graph desc 恒 FORMAT_ND（无布局声明，按 NCHW 维度序解释）
     ADD_INPUT_DYN(1, x, inDtype, c.xReal, c.xGraph);
     ADD_INPUT_DYN(2, rois, inDtype, c.roisReal, c.roisGraph);
+    if (PrepareInputs(input) != SUCCESS) {
+        return FAILED;
+    }
 
     TensorDesc yGraphDesc = TensorDesc(ge::Shape(c.yGraph), FORMAT_ND, inDtype);
     if (c.yGraph.size() == 1 && c.yGraph[0] == -2) {
@@ -420,6 +552,10 @@ CaseResult RunOneDynCase(ge::Session* session, uint32_t graph_id, DataType dtype
         r.err_msg = "CreateOppInGraphDyn failed";
         return r;
     }
+    if (!DumpTensors(graph_id, "input", input)) {
+        r.err_msg = "Input dump failed";
+        return r;
+    }
     if (!inputs.empty() && !outputs.empty()) {
         graph.SetInputs(inputs).SetOutputs(outputs);
     }
@@ -443,6 +579,11 @@ CaseResult RunOneDynCase(ge::Session* session, uint32_t graph_id, DataType dtype
     r.output_count = output.size();
     r.output_exists = (output.size() > 0);
 
+    r.output_correct = CheckOutputs(input, output, r.err_msg);
+    if (!DumpTensors(graph_id, "output", output)) {
+        r.output_correct = false;
+        r.err_msg = "Output dump failed";
+    }
     for (size_t i = 0; i < output.size(); i++) {
         int64_t shape_size = output[i].GetTensorDesc().GetShape().GetShapeSize();
         printf("  [%s] output[%zu] dtype=%d shape_size=%lld\n", c.name.c_str(), i,
@@ -457,29 +598,27 @@ void PrintReport(const std::vector<CaseResult>& results)
     printf("\n");
     printf("==========================================================================================================="
            "==========\n");
-    printf("| %-30s | %-8s | %-9s | %-12s | %-7s | %-8s | %-24s\n", "Case", "Build", "RunGraph", "OutputExists",
-           "OutCnt", "Expect", "ErrMsg");
+    printf("| %-30s | %-8s | %-9s | %-12s | %-7s | %-8s | %-8s | %-24s\n", "Case", "Build", "RunGraph", "OutputExists",
+           "OutCnt", "Expect", "Check", "ErrMsg");
     printf("-----------------------------------------------------------------------------------------------------------"
            "----------\n");
     int pass_cnt = 0;
     int total = results.size();
     for (const auto& r : results) {
-        // 正向用例：build+run+output 三项全 OK 判 PASS；
-        // format 闸门负向用例（expect_reject）：RunGraph 被 tiling ValidateFormat 显式拒绝
-        // （run_ok=false，日志含 "only supports NCHW and ND"）即 PASS
-        bool pass = r.expect_reject ? (!r.run_ok) : (r.build_ok && r.run_ok && r.output_exists);
+        // 正向须校验输出形状与数值；负向须确认具体的 NHWC 格式拒绝原因。
+        bool pass = CasePassed(r);
         if (pass)
             pass_cnt++;
-        printf("| %-30s | %-8s | %-9s | %-12s | %-7d | %-8s | %-24s\n", r.case_name.c_str(), r.build_ok ? "OK" : "FAIL",
-               r.run_ok ? "OK" : "FAIL", r.output_exists ? "OK" : "FAIL", r.output_count,
-               r.expect_reject ? "REJECT" : "OK", r.err_msg.empty() ? "-" : r.err_msg.c_str());
+        printf("| %-30s | %-8s | %-9s | %-12s | %-7d | %-8s | %-8s | %-24s\n", r.case_name.c_str(),
+               r.build_ok ? "OK" : "FAIL", r.run_ok ? "OK" : "FAIL", r.output_exists ? "OK" : "FAIL", r.output_count,
+               r.expect_reject ? "REJECT" : "OK", pass ? "OK" : "FAIL", r.err_msg.empty() ? "-" : r.err_msg.c_str());
     }
     printf("==========================================================================================================="
            "==========\n");
     printf("Summary: %d/%d passed\n", pass_cnt, total);
 }
 
-int main(int argc, char* argv[])
+int main()
 {
     printf("%s - INFO - [XIR]: Start to initialize ge using ge global options\n", GetTime().c_str());
     // 设置全局选项
@@ -504,7 +643,7 @@ int main(int argc, char* argv[])
 
     // shape 场景矩阵：本算子为双输入依赖算子（x 恒 4 维，rois 恒 2 维），每个场景给出一组
     // (x_shape, rois_shape) 合法组合， 保证输出 y=(R,C,pooled_h,pooled_w)
-    // 可正常构图运行，N/C/H/W/R 在算子约束内变化（C 上界 1024，R 上界 8192）。
+    // 可正常构图运行，本示例中的最大 C 为 1024，最大 R 为 32。
     // 场景裁剪说明：参考模板的标量{1}/1维{64}/8维{2,2,2,2,2,2,2,2}场景对本算子不合法——本算子 rank 固定
     // （x 必须 4 维、rois 必须 2 维），构造标量/1 维/8 维输入会导致构图 infershape 校验失败，故按边界场景
     // 裁剪规则跳过；模板的空tensor场景{0,8}适配为本算子的合法空输入边界 R=0（rois={0,6}，输出 (0,C,7,7) 空tensor）。
@@ -526,7 +665,7 @@ int main(int argc, char* argv[])
 
     // 950 上 x format=NHWC 时tiling ValidateFormat 显式拒绝。shape 按 NCHW
     // 构造（x (N,C,H,W)、rois (R,6) 行主序，使 infershape 通过），确保拒绝发生在 tiling 闸门；
-    // 预期 RunGraph 失败（run_ok=false 即 PASS，错误日志含 "only supports NCHW and ND"）。
+    // 预期 RunGraph 失败，且须确认错误包含 NHWC 与 "only supports NCHW and ND"。
     // ND 为无布局声明，950 按 NCHW 维度序正常承接（见 shape_list 的 regular_nd 正向用例）。
     struct RejectCombo {
         Format xFormat;
@@ -588,7 +727,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    // format 路由负向用例（S 模式单档）：ND/NHWC 输入预期被 tiling 显式拒绝
+    // format 路由负向用例（S 模式单档）：NHWC 输入预期被 tiling 显式拒绝
     for (const auto& d : dtype_list) {
         for (const auto& rej : reject_list) {
             std::string case_name = d.name + "_" + rej.name;
@@ -616,8 +755,7 @@ int main(int argc, char* argv[])
 
     bool all_pass = true;
     for (const auto& r : results) {
-        // 正向：三项全 OK；负向（expect_reject）：RunGraph 被拒绝（run_ok=false）
-        bool pass = r.expect_reject ? (!r.run_ok) : (r.build_ok && r.run_ok && r.output_exists);
+        bool pass = CasePassed(r);
         if (!pass) {
             all_pass = false;
         }

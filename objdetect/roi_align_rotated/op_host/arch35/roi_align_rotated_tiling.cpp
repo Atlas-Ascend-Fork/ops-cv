@@ -93,6 +93,7 @@ struct Arch35TilingState {
     int32_t needCoreNum = 1;
     // shape 缓存（NCHW）
     int64_t roisNum = 0;
+    int64_t batchSize = 0;
     int64_t channels = 0;
     int64_t height = 0;
     int64_t width = 0;
@@ -180,14 +181,15 @@ ge::graphStatus ValidateShape(gert::TilingContext* context, Arch35TilingState& s
                 OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "rois", roisLast.c_str(),
                                                       "rois dim[1] must be 6 (rotated ROI, row-major)"),
                 return ge::GRAPH_FAILED);
-    // C/H/W 写入 tiling data 的 int32 字段，超界拒绝（防 FillTilingData 截断）
+    // N/C/H/W 写入 tiling data 的 int32 字段，超界拒绝（防 FillTilingData 截断）
     const std::string xShapeMsg = Ops::Base::ToString(xShape);
-    OP_CHECK_IF(xShape.GetDim(DIM_C) > MAX_INT32_VALUE || xShape.GetDim(DIM_H) > MAX_INT32_VALUE ||
-                    xShape.GetDim(DIM_W) > MAX_INT32_VALUE,
+    OP_CHECK_IF(xShape.GetDim(DIM_N) > MAX_INT32_VALUE || xShape.GetDim(DIM_C) > MAX_INT32_VALUE ||
+                    xShape.GetDim(DIM_H) > MAX_INT32_VALUE || xShape.GetDim(DIM_W) > MAX_INT32_VALUE,
                 OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "x", xShapeMsg.c_str(),
-                                                      "C/H/W must not exceed INT32_MAX"),
+                                                      "N/C/H/W must not exceed INT32_MAX"),
                 return ge::GRAPH_FAILED);
     st.roisNum = roisShape.GetDim(DIM_N);
+    st.batchSize = xShape.GetDim(DIM_N);
     st.channels = xShape.GetDim(DIM_C);
     st.height = xShape.GetDim(DIM_H);
     st.width = xShape.GetDim(DIM_W);
@@ -268,6 +270,7 @@ void ComputeTiling(Arch35TilingState& st, RoiAlignRotatedArch35TilingData* tilin
 // ========== FillTilingData（shape/属性字段填充）==========
 void FillTilingData(RoiAlignRotatedArch35TilingData* tiling, const Arch35TilingState& st)
 {
+    tiling->batchSize = static_cast<int32_t>(st.batchSize);
     tiling->channels = static_cast<int32_t>(st.channels);
     tiling->height = static_cast<int32_t>(st.height);
     tiling->width = static_cast<int32_t>(st.width);
@@ -283,12 +286,12 @@ void FillTilingData(RoiAlignRotatedArch35TilingData* tiling, const Arch35TilingS
 void DumpTilingData(gert::TilingContext* context, const RoiAlignRotatedArch35TilingData* tiling)
 {
     OP_LOGD(context,
-            "RoiAlignRotatedArch35TilingData: totalElements=%ld, needCoreNum=%d, channels=%d, height=%d, "
+            "RoiAlignRotatedArch35TilingData: totalElements=%ld, needCoreNum=%d, batchSize=%d, channels=%d, height=%d, "
             "width=%d, pooledH=%d, pooledW=%d, samplingRatio=%d, spatialScale=%.6f, aligned=%d, "
             "clockwise=%d",
-            tiling->totalElements, tiling->needCoreNum, tiling->channels, tiling->height, tiling->width,
-            tiling->pooledH, tiling->pooledW, tiling->samplingRatio, tiling->spatialScale, tiling->aligned,
-            tiling->clockwise);
+            tiling->totalElements, tiling->needCoreNum, tiling->batchSize, tiling->channels, tiling->height,
+            tiling->width, tiling->pooledH, tiling->pooledW, tiling->samplingRatio, tiling->spatialScale,
+            tiling->aligned, tiling->clockwise);
 }
 } // namespace
 

@@ -204,4 +204,101 @@ TEST_F(roi_align_rotated_test, test_case_rois_num_9_tight_gm)
 }
 
 TEST_F(roi_align_rotated_test, test_case_multi_loop_tail) { RunRoiAlignRotatedKernel(24, 24, 0, 24, 1, 1, 3072, 1, 1); }
+
+// 越界 batch_idx 回归（L0 随机数据 aic error 防护）：
+// rois (6,R) 行 0/1/3 注入 batch_idx=1.0/1.5/2.0（N=1 截断取整后均越界 [0,1)）、行 2 合法（0.0）。
+// 未防护时 kernel 以越界 batch 寻址 inputGM 触发 AICORE 越界读（aic error）；
+// 修复后采样网格清 0 按空 ROI 输出 0。input 双倍分配、batch 1 平面预填哨兵 99.0
+// （StackGroupPoints 前置 canary 同款手法）：未修复读到哨兵输出非 0，修复后不读输出 0。
+TEST_F(roi_align_rotated_test, test_case_invalid_batch_idx)
+{
+    const uint32_t batch = 1;
+    const uint32_t channels = 8;
+    const uint32_t input_h = 8;
+    const uint32_t input_w = 8;
+    const uint32_t rois_num = 4;
+    const int32_t pooled_h = 2;
+    const int32_t pooled_w = 2;
+    const size_t planeFloats = static_cast<size_t>(input_h) * input_w * channels;
+    const size_t inputAllocBytes = planeFloats * 2 * sizeof(float); // 双倍：batch 1 平面为哨兵区
+    const size_t roisByteSize = 6UL * rois_num * sizeof(float);
+    const size_t outputByteSize = static_cast<size_t>(rois_num) * pooled_h * pooled_w * channels * sizeof(float);
+    const size_t tiling_data_size = sizeof(RoiAlignRotatedTilingData);
+
+    uint8_t* input = (uint8_t*)AscendC::GmAlloc(inputAllocBytes);
+    uint8_t* rois = (uint8_t*)AscendC::GmAlloc(roisByteSize);
+    uint8_t* output = (uint8_t*)AscendC::GmAlloc(outputByteSize);
+    uint8_t* workspace = (uint8_t*)AscendC::GmAlloc(1024 * 16 * 1024);
+    uint8_t* tiling = (uint8_t*)AscendC::GmAlloc(tiling_data_size);
+    ASSERT_NE(input, nullptr);
+    ASSERT_NE(rois, nullptr);
+    ASSERT_NE(output, nullptr);
+
+    // batch 0 平面填 1.0（有效数据），batch 1 平面填哨兵 99.0（越界 batch_idx=1 的读取落点）
+    float* inputFloat = reinterpret_cast<float*>(input);
+    for (size_t i = 0; i < planeFloats; ++i) {
+        inputFloat[i] = 1.0f;
+    }
+    for (size_t i = planeFloats; i < planeFloats * 2; ++i) {
+        inputFloat[i] = 99.0f;
+    }
+    // rois (6,R) 转置布局：仅 batch_idx 平面注入越界值，其余字段同 FillRoisNCHW6R
+    float* roisFloat = reinterpret_cast<float*>(rois);
+    for (uint32_t i = 0; i < rois_num; ++i) {
+        roisFloat[0 * rois_num + i] = (i == 2) ? 0.0f : ((i == 1) ? 1.5f : ((i == 3) ? 2.0f : 1.0f));
+        roisFloat[1 * rois_num + i] = 4.0f;
+        roisFloat[2 * rois_num + i] = 4.0f;
+        roisFloat[3 * rois_num + i] = 4.0f;
+        roisFloat[4 * rois_num + i] = 4.0f;
+        roisFloat[5 * rois_num + i] = 0.0f;
+    }
+    std::memset(output, 0, outputByteSize);
+
+    RoiAlignRotatedTilingData* tilingData = reinterpret_cast<RoiAlignRotatedTilingData*>(tiling);
+    std::memset(tiling, 0, tiling_data_size);
+    tilingData->aligned = 0;
+    tilingData->clockwise = 0;
+    tilingData->numBlocks = 1;
+    tilingData->rois_num_per_Lcore = rois_num;
+    tilingData->rois_num_per_Score = 0;
+    tilingData->Lcore_num = 1;
+    tilingData->Score_num = 0;
+    tilingData->input_buffer_size = 32;
+    tilingData->tileNum = 8;
+    tilingData->batch_size = batch;
+    tilingData->channels = channels;
+    tilingData->channels_aligned = channels;
+    tilingData->input_h = input_h;
+    tilingData->input_w = input_w;
+    tilingData->rois_num_aligned = 8;
+    tilingData->tail_num = 8 - rois_num;
+    tilingData->spatial_scale = 1;
+    tilingData->sampling_ratio = 1;
+    tilingData->pooled_height = pooled_h;
+    tilingData->pooled_width = pooled_w;
+    tilingData->ub_total_size = 196608;
+
+    ICPU_SET_TILING_KEY(1);
+    AscendC::SetKernelMode(KernelMode::AIV_MODE);
+    ICPU_RUN_KF(roi_align_rotated, 1, input, rois, output, workspace, tiling);
+
+    const float* out = reinterpret_cast<const float*>(output);
+    const size_t per_roi = static_cast<size_t>(pooled_h) * pooled_w * channels;
+    // 行 0/1/3：越界 batch_idx → 空 ROI，输出全 0
+    for (uint32_t r : {0U, 1U, 3U}) {
+        for (size_t i = 0; i < per_roi; ++i) {
+            EXPECT_EQ(out[static_cast<size_t>(r) * per_roi + i], 0.0f);
+        }
+    }
+    // 行 2：合法 batch_idx=0 → 采样 batch 0 平面（全 1），输出非 0
+    for (size_t i = 0; i < per_roi; ++i) {
+        EXPECT_GT(std::fabs(out[2 * per_roi + i]), 1e-6f);
+    }
+
+    AscendC::GmFree(input);
+    AscendC::GmFree(rois);
+    AscendC::GmFree(output);
+    AscendC::GmFree(workspace);
+    AscendC::GmFree(tiling);
+}
 #endif // !defined(__NPU_ARCH__) || __NPU_ARCH__ != 3510
