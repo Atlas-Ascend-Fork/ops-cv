@@ -77,18 +77,18 @@ English | [简体中文](./README.md)
     \end{cases}
     $$
 
-    - Denote:
+    - Let the input sizes along the D, H, and W axes be $self.dim[2]$, $self.dim[3]$, and $self.dim[4]$, respectively. Clamp both neighboring indices on each axis to the valid input index range, then calculate the interpolation weights as follows:
 
       $$
-      x_{0} =int(x'),x_{1} =int(x')+1, lambda_{0} = x_{1}-x', lambda_{1} =   1-lambda_{0}
-      $$
-
-      $$
-      y_{0} =int(y'),y_{1} =int(y')+1, lambdb_{0} = y_{1}-y', lambdb_{1} =   1-lambdb_{0}
+      x_{0} = min(int(x'), self.dim[2]-1), x_{1} = min(x_{0}+1, self.dim[2]-1), lambda_{1} = min(max(x'-x_{0},0),1), lambda_{0} = 1-lambda_{1}
       $$
 
       $$
-      z_{0} =int(z'),z_{1} =int(z')+1, lambdc_{0} = z_{1}-z', lambdc_{1} =   1-lambdc_{0}
+      y_{0} = min(int(y'), self.dim[3]-1), y_{1} = min(y_{0}+1, self.dim[3]-1), lambdb_{1} = min(max(y'-y_{0},0),1), lambdb_{0} = 1-lambdb_{1}
+      $$
+
+      $$
+      z_{0} = min(int(z'), self.dim[4]-1), z_{1} = min(z_{0}+1, self.dim[4]-1), lambdc_{1} = min(max(z'-z_{0},0),1), lambdc_{0} = 1-lambdc_{1}
       $$
 
     - The following formula applies:
