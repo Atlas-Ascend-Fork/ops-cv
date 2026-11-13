@@ -3,15 +3,15 @@
 ## 前提说明
 
 - 如需编译执行算子API，请确保基础环境已搭建完成，包括驱动、固件、CANN软件包、ops包等。
-- 算子API的调用流程和编译运行操作详情请参见[《应用开发（C&C++）》](https://hiascend.com/document/redirect/CannCommunityadevguide)中“单算子调用>单算子API执行>调用aclnn接口示例代码”。
+- 算子API的调用流程和编译运行操作详情请参见《[应用开发（C&C++）](https://hiascend.com/document/redirect/CannCommunityadevguide)》中“单算子调用>单算子API执行>调用aclnn接口示例代码”。
 
 ## 编译前准备
 
-本章以开发和运行环境合设场景为例，即带AI处理器的机器既作为开发环境又作为运行环境。该场景下，代码开发和代码运行在同一台机器上。这里以**GridSample算子**为例，其他算子的调用逻辑、流程、编译脚本与GridSample算子大致一样，请根据实际情况自行修改API调用脚本（\*.cpp）和编译脚本(CMakeLists)。
+本章以开发和运行环境合设场景为例，即带AI处理器的机器既作为开发环境又作为运行环境。该场景下，代码开发和代码运行在同一台机器上。这里以**GridSample算子**为例，其他算子的调用逻辑、流程、编译脚本与GridSample算子大致一样，请根据实际情况自行修改API调用脚本（\*.cpp）和编译脚本（CMakeLists）。
 
 - **示例代码**
 
-   已知GridSample算子功能是提供一个输入tensor以及一个对应的grid网格，然后根据grid中每个位置提供的坐标信息，将input中对应位置的像素值填充到网格指定的位置，得到最终的输出。您可以从[aclnnGridSampler2D](../../../image/grid_sample/docs/aclnnGridSampler2D.md)中“调用示例”获取示例代码，并将代码文件命名为“**test\_grid\_sampler2\_d.cpp**”。
+   已知GridSample算子功能是提供一个输入Tensor以及一个对应的grid网格，然后根据grid中每个位置提供的坐标信息，将input中对应位置的像素值填充到网格指定的位置，得到最终的输出。您可以从[aclnnGridSampler2D](../../../image/grid_sample/docs/aclnnGridSampler2D.md)中“调用示例”获取示例代码，并将代码文件命名为“**test\_grid\_sampler2\_d.cpp**”。
 
 - **CMakeLists文件**
 
@@ -82,7 +82,7 @@
   1. 提前准备好算子的调用代码（\*.cpp）和编译脚本（CMakeLists.txt）。
   2. 配置环境变量。
 
-    安装CANN软件后，使用CANN运行用户登录环境，执行如下命令生效环境变量。
+    安装CANN软件后，使用CANN运行用户登录环境，执行如下命令使环境变量生效：
 
         ```sh
         source ${INSTALL_DIR}/set_env.sh
@@ -90,7 +90,7 @@
 
      其中${INSTALL_DIR}为CANN软件安装后文件存储路径，请根据实际情况替换。
   3. 编译并运行。
-        - 进入CMakeLists.txt所在目录，执行如下命令，新建build目录存放生成的编译文件。
+        - 进入CMakeLists.txt所在目录，执行如下命令，新建build目录存放生成的编译文件：
 
             ```sh
             mkdir -p build
@@ -127,7 +127,7 @@
         resultData[8] is: 10.000000
         ```
 
-        若执行结果报错，未出现预期结果，可以使用aclGetRecentErrMsg接口获取报错具体信息。
+        若执行结果报错，未出现预期结果，可以使用aclGetRecentErrMsg接口获取报错的具体信息。
         调用aclnnGridSampler2DGetWorkspaceSize报错获取异常信息示例如下：
 
         ```cpp

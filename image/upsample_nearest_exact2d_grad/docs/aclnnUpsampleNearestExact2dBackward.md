@@ -26,7 +26,7 @@
 - 接口功能：[aclnnUpsampleNearestExact2d](../../upsample_nearest/docs/aclnnUpsampleNearestExact2d.md)的反向传播。
 - 计算公式：
 
-  对于输入gradOut(N, C, h, w)，输出gradInput上任意一点(N, C, H, W)，则有：
+  对于输入gradOut(N，C，h，w)，输出gradInput上任意一点(N，C，H，W)，则有：
 
   $$
   gradInput(N, C, H, W) = \sum_{h = srcH}^{srcHUp - 1}\sum_{w = srcW}^{srcWUp - 1}gradOut(N, C, h, w)
@@ -109,7 +109,7 @@ aclnnStatus aclnnUpsampleNearestExact2dBackward(
     </tr></thead>
   <tbody>
     <tr>
-      <td>gradOutput（aclTensor*）</td>
+      <td>gradOutput(aclTensor*)</td>
       <td>输入</td>
       <td>表示反向计算的梯度Tensor，对应公式中的`gradOutput`。</td>
       <td><ul><li>支持空Tensor。</li><li>当数据格式为ND时，默认按照NCHW格式处理。</li></ul></td>
@@ -119,7 +119,7 @@ aclnnStatus aclnnUpsampleNearestExact2dBackward(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示输入`gradOutput`在H和W维度上的空间大小。</td>
       <td>size为2，且各元素均大于零。</td>
@@ -129,7 +129,7 @@ aclnnStatus aclnnUpsampleNearestExact2dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>inputSize（aclIntArray*）</td>
+      <td>inputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示输出`out`分别在N、C、H和W维度上的空间大小。</td>
       <td>size为4，且各元素均大于零。</td>
@@ -139,7 +139,7 @@ aclnnStatus aclnnUpsampleNearestExact2dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesH（double）</td>
+      <td>scalesH(double)</td>
       <td>输入</td>
       <td>表示输出`out`的height维度乘数，对应公式中的`scalesH`。</td>
       <td>不能传入负值。</td>
@@ -149,7 +149,7 @@ aclnnStatus aclnnUpsampleNearestExact2dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesW（double）</td>
+      <td>scalesW(double)</td>
       <td>输入</td>
       <td>表示输出`out`的width维度乘数，对应公式中的`scalesW`。</td>
       <td>不能传入负值。</td>
@@ -159,7 +159,7 @@ aclnnStatus aclnnUpsampleNearestExact2dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示反向计算的输出张量，对应公式中的`gradInput`。</td>
       <td><ul><li>支持空Tensor。</li><li>数据类型和数据格式与入参`gradOutput`保持一致。</li><li>shape的N轴、C轴与入参`gradOutput`保持一致。</li></ul></td>
@@ -169,7 +169,7 @@ aclnnStatus aclnnUpsampleNearestExact2dBackward(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -179,7 +179,7 @@ aclnnStatus aclnnUpsampleNearestExact2dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>

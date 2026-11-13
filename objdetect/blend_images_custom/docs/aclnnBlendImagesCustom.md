@@ -80,7 +80,7 @@ aclnnStatus aclnnBlendImagesCustom(
     </tr></thead>
   <tbody>
     <tr>
-      <td class="tg-0pky">rgb（aclTensor*）</td>
+      <td class="tg-0pky">rgb(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">输入tensor。</td>
       <td class="tg-0pky">-</td>
@@ -90,7 +90,7 @@ aclnnStatus aclnnBlendImagesCustom(
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">alpha（aclTensor*）</td>
+      <td class="tg-0pky">alpha(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">输入tensor。</td>
       <td class="tg-0pky">-</td>
@@ -100,7 +100,7 @@ aclnnStatus aclnnBlendImagesCustom(
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0lax">frame（aclTensor*）</td>
+      <td class="tg-0lax">frame(aclTensor*)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">输入tensor。</td>
       <td class="tg-0lax">-</td>
@@ -110,7 +110,7 @@ aclnnStatus aclnnBlendImagesCustom(
       <td class="tg-0lax">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">out（aclTensor*）</td>
+      <td class="tg-0pky">out(aclTensor*)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">输出tensor。</td>
       <td class="tg-0pky">-</td>
@@ -120,7 +120,7 @@ aclnnStatus aclnnBlendImagesCustom(
       <td class="tg-0pky">-</td>
     </tr>
     <tr>
-      <td class="tg-0pky">workspaceSize（uint64_t*）</td>
+      <td class="tg-0pky">workspaceSize(uint64_t*)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">返回需要在Device侧申请的workspace大小。</td>
       <td class="tg-0pky">-</td>
@@ -130,7 +130,7 @@ aclnnStatus aclnnBlendImagesCustom(
       <td class="tg-0pky">-</td>
     </tr>
     <tr>
-      <td class="tg-0pky">executor（aclOpExecutor**）</td>
+      <td class="tg-0pky">executor(aclOpExecutor**)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">返回op执行器，包括了算子计算流程。</td>
       <td class="tg-0pky">-</td>
@@ -170,7 +170,7 @@ aclnnStatus aclnnBlendImagesCustom(
       <td>rgb、alpha、frame的数据类型和数据格式不在支持的范围之内。</td>
     </tr>
     <tr>
-      <td>rgb、alpha、frame的shape无法做broadcast，rgb和frame支持HWC(C=3), alpha支持HWC(C=1)。</td>
+      <td>rgb、alpha、frame的shape无法做broadcast，rgb和frame支持HWC(C=3)，alpha支持HWC(C=1)。</td>
     </tr>
   </tbody>
   </table>

@@ -102,7 +102,7 @@ aclnnStatus aclnnUpsampleNearestExact2d(
     </tr></thead>
   <tbody>
     <tr>
-      <td>self（aclTensor*）</td>
+      <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>表示进行上采样的输入张量，对应公式中的输入`self`。</td>
       <td><ul><li>支持空Tensor。</li><li>当数据格式为ND时，默认按照NCHW格式处理。</li></ul></td>
@@ -112,7 +112,7 @@ aclnnStatus aclnnUpsampleNearestExact2d(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示指定`out`在H和W维度上的空间大小，对应公式中的`outputSize`。</td>
       <td>size为2。</td>
@@ -122,7 +122,7 @@ aclnnStatus aclnnUpsampleNearestExact2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesH（double）</td>
+      <td>scalesH(double)</td>
       <td>输入</td>
       <td>表示指定H方向空间大小的缩放乘数，对应公式中的`scalesH`。</td>
       <td>不能传入负值。</td>
@@ -132,7 +132,7 @@ aclnnStatus aclnnUpsampleNearestExact2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesW（double）</td>
+      <td>scalesW(double)</td>
       <td>输入</td>
       <td>表示指定W方向空间大小的缩放乘数，对应公式中的`scalesW`。</td>
       <td>不能传入负值。</td>
@@ -142,7 +142,7 @@ aclnnStatus aclnnUpsampleNearestExact2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示采样后的输出张量，对应公式中的输出`out`。</td>
       <td><ul><li>支持空Tensor。</li><li>数据类型与入参`self`保持一致。</li><li>shape的N轴、C轴与入参`self`保持一致。</li></ul></td>
@@ -152,7 +152,7 @@ aclnnStatus aclnnUpsampleNearestExact2d(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -162,7 +162,7 @@ aclnnStatus aclnnUpsampleNearestExact2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>
@@ -288,7 +288,7 @@ aclnnStatus aclnnUpsampleNearestExact2d(
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
 <!-- end id8 -->
-- 当输入scalesH取值大于0时，参数self、outputSize、scalesH需要满足如下约束：
+- 当输入scalesH的取值大于0时，参数self、outputSize、scalesH需要满足如下约束：
 
   $$
   outputSize\_H = floor(self\_H * scalesH)

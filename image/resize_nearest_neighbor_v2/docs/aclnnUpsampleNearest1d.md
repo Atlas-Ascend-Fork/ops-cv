@@ -79,17 +79,17 @@ aclnnStatus aclnnUpsampleNearest1d(
     </tr></thead>
   <tbody>
     <tr>
-      <td>self（aclTensor*）</td>
+      <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>表示进行上采样的输入数据，对应公式中的`self`。</td>
-      <td><ul><li>不支持空Tensor。</li><li>输入维度必须是3维。当数据类型是DOUBLE、UINT8时，输入shape的`L`维度必须小于2^24。</li></ul></td>
+      <td><ul><li>不支持空Tensor。。</li><li>输入维度必须是3维。当数据类型是DOUBLE、UINT8时，输入shape的`L`维度必须小于2^24。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16、DOUBLE、UINT8</td>
       <td>NCL</td>
       <td>3</td>
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示输出out在L维度上的空间大小。</td>
       <td>size为1，且取值大于0。</td>
@@ -99,17 +99,17 @@ aclnnStatus aclnnUpsampleNearest1d(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示进行上采样的输出结果，对应公式中的`out`。</td>
-      <td><ul><li>不支持空Tensor</li><li>数据类型与入参`self`的数据类型保持一致。</li></ul></td>
+      <td><ul><li>不支持空Tensor。</li><li>数据类型与入参`self`的数据类型保持一致。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16、DOUBLE、UINT8</td>
       <td>NCL</td>
       <td>3</td>
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -119,7 +119,7 @@ aclnnStatus aclnnUpsampleNearest1d(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>
@@ -159,7 +159,7 @@ aclnnStatus aclnnUpsampleNearest1d(
     <tr>
       <td>ACLNN_ERR_PARAM_NULLPTR</td>
       <td>161001</td>
-      <td>如果传入参数是必选输入，输出或者必选属性，且是空指针。</td>
+      <td>如果传入参数是必选输入、输出或者必选属性，且是空指针。</td>
     </tr>
     <tr>
       <td rowspan="8">ACLNN_ERR_PARAM_INVALID</td>

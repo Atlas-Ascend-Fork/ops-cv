@@ -130,7 +130,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
     </tr></thead>
   <tbody>
     <tr>
-      <td>gradOut（aclTensor*）</td>
+      <td>gradOut(aclTensor*)</td>
       <td>输入</td>
       <td>表示反向计算的梯度Tensor，对应公式中的`gradOut`。</td>
       <td>不支持空Tensor。</td>
@@ -140,7 +140,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示输入`gradOut`在D、H和W维度上的空间大小。</td>
       <td>size为3，且各元素均大于零。</td>
@@ -150,7 +150,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>inputSize（aclIntArray*）</td>
+      <td>inputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示输出`gradInput`的空间大小。</td>
       <td><ul><li>size为5，且最后两个元素均大于零。</li><li>当输入`gradOut`的数据格式为NCDHW时，表示输出`gradInput`分别在N、C、D、H和W维度上的空间大小；当输入`gradOut`的数据格式为NDHWC时，表示输出`gradInput`分别在N、D、H、W和C维度上的空间大小。</li></ul></td>
@@ -160,7 +160,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesD（double）</td>
+      <td>scalesD(double)</td>
       <td>输入</td>
       <td>表示输出`gradInput`的depth维度乘数，对应公式中的`scalesD`。</td>
       <td>-</td>
@@ -170,7 +170,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesH（double）</td>
+      <td>scalesH(double)</td>
       <td>输入</td>
       <td>表示输出`gradInput`的height维度乘数，对应公式中的`scalesH`。</td>
       <td>-</td>
@@ -180,7 +180,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesW（double）</td>
+      <td>scalesW(double)</td>
       <td>输入</td>
       <td>表示输出`gradInput`的width维度乘数，对应公式中的`scalesW`。</td>
       <td>-</td>
@@ -190,7 +190,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>gradInput（aclTensor*）</td>
+      <td>gradInput(aclTensor*)</td>
       <td>输出</td>
       <td>表示反向计算的输出张量，对应公式中的`gradInput`。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式与入参`gradOut`保持一致。</li></ul></td>
@@ -200,7 +200,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回用户需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -210,7 +210,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>
@@ -244,7 +244,7 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
     <tr>
       <td>ACLNN_ERR_PARAM_NULLPTR</td>
       <td>161001</td>
-      <td>如果传入参数是必选输入，输出或者必选属性，且是空指针。</td>
+      <td>如果传入参数是必选输入、输出或者必选属性，且是空指针。</td>
     </tr>
     <tr>
       <td rowspan="10">ACLNN_ERR_PARAM_INVALID</td>
@@ -337,10 +337,9 @@ aclnnStatus aclnnUpsampleNearest3dBackward(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
-
-  - N \* C \* gradOut_D \* gradOut_H < 2^31
-  - gradInput_W * gradInput_H < 2^31
-- 参数gradOut、gradInput的数据格式不为NCDHW或NDHWC时，输入其他数据格式默认按NCDHW处理。
+    - N \* C \* gradOut_D \* gradOut_H < 2^31
+    - gradInput_W * gradInput_H < 2^31
+  - 参数gradOut、gradInput的数据格式不为NCDHW或NDHWC时，输入其他数据格式默认按NCDHW处理。
 - 当输入scalesD、scalesH、scalesW的取值均大于0时，参数inputSize、outputSize、scalesD、scalesH、scalesW需要满足如下约束：
 
   $$

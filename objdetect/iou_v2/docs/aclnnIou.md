@@ -93,7 +93,7 @@ aclnnStatus aclnnIou(
       <td class="tg-0pky">bBoxes（aclTensor*）</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">预测矩形框。</td>
-      <td class="tg-0pky"><ul><li>shape中的m为bounding boxes的数量。</li><li>shape中的4指[x0, y0, x1, y1]，(x0, y0)和(x1, y1)分别表示矩形框的左上角和右下角，需满足x1 > x0, y1 > y0。</li></ul></td>
+      <td class="tg-0pky"><ul><li>shape中的m为bounding boxes的数量。</li><li>shape中的4指[x0, y0, x1, y1]，(x0, y0)和(x1, y1)分别表示矩形框的左上角和右下角，需满足x1 > x0，y1 > y0。</li></ul></td>
       <td class="tg-0pky">FLOAT、FLOAT16、BFLOAT16</td>
       <td class="tg-0pky">ND</td>
       <td class="tg-0pky">为(m, 4)。</td>
@@ -103,7 +103,7 @@ aclnnStatus aclnnIou(
       <td class="tg-0pky">gtBoxes（aclTensor*）</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">真值矩形框。</td>
-      <td class="tg-0pky"><ul><li>n为bounding boxes的数量。</li><li>4指[x2, y2, x3, y3]，(x2, y2)和(x3, y3)分别表示矩形框的左上角和右下角，需满足x3 > x2, y3 > y2。</li><li>数据类型需要和bBoxes保持一致。</li></ul></td>
+      <td class="tg-0pky"><ul><li>n为bounding boxes的数量。</li><li>4指[x2, y2, x3, y3]，(x2, y2)和(x3, y3)分别表示矩形框的左上角和右下角，需满足x3 > x2，y3 > y2。</li><li>数据类型需要和bBoxes保持一致。</li></ul></td>
       <td class="tg-0pky">FLOAT、FLOAT16、BFLOAT16</td>
       <td class="tg-0pky">ND</td>
       <td class="tg-0pky">为(n, 4)。</td>
@@ -113,7 +113,7 @@ aclnnStatus aclnnIou(
       <td class="tg-0lax">mode（char*）</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">用于选择计算方式"iou"或"iof"。</td>
-      <td class="tg-0lax"><ul><li>“iou”：计算交并比。</li><li>“iof”：计算前景交叉比。</li></ul></td>
+      <td class="tg-0lax"><ul><li>"iou"：计算交并比。</li><li>"iof"：计算前景交叉比。</li></ul></td>
       <td class="tg-0lax">String</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">-</td>

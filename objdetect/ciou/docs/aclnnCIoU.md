@@ -276,7 +276,7 @@ aclnnStatus aclnnCIoU(
 
 - 确定性计算：
   - aclnnCIoU默认确定性实现。
-- 若输入格式为[x0, y0, x1, y1]，(x0, y0)和(x1, y1)分别表示矩形框的左上角和右下角，需满足x1 > x0, y1 > y0。
+- 若输入格式为[x0, y0, x1, y1]，(x0, y0)和(x1, y1)分别表示矩形框的左上角和右下角，需满足x1 > x0，y1 > y0。
 - M和N需要一致。
 - `isCross`目前仅支持`false`。
 
@@ -284,7 +284,7 @@ aclnnStatus aclnnCIoU(
 
 示例代码如下，仅供参考，具体编译和执行过程请参考[编译与运行样例](../../../docs/zh/context/compile_and_run_sample.md)。
 
-```Cpp
+```cpp
 #include <iostream>
 #include <vector>
 #include "acl/acl.h"

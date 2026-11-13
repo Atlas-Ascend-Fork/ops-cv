@@ -31,7 +31,7 @@
     2. 根据这个浮点数坐标，计算前后相邻的原始图像的点。
     3. 分别计算相邻点到对应目标点的权重，按照权重相乘累加即可得到目标点值。
   - 具体计算逻辑：
-    缩放方式分为角对齐和边对齐，角对齐（alignCorners为true）表示按照原始图片左上角像素中心点对齐，边对齐（alignCorners为false）表示按照原始图片左上角顶点及两条边对齐，在计算缩放系数和坐标位置时存在差异。则有以下公式：
+    缩放方式分为角对齐和边对齐，角对齐（alignCorners为true）表示按照原始图片左上角像素中心点对齐，边对齐（alignCorners为false）表示按照原始图片左上角顶点及两条边对齐，在计算缩放系数和坐标位置时存在差异，则有以下公式：
 
     $$
     scale =\begin{cases}
@@ -119,7 +119,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
     </tr></thead>
   <tbody>
     <tr>
-      <td>gradOut（aclTensor*）</td>
+      <td>gradOut(aclTensor*)</td>
       <td>输入</td>
       <td>表示反向计算的梯度Tensor，对应公式中的`gradOut`。</td>
       <td><ul><li>不支持空Tensor。</li><li>当数据格式为ND时，默认按照NCL格式处理。</li></ul></td>
@@ -129,7 +129,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示输入`gradOut`在L维度上的空间大小，对应公式中的`outputSize`。</td>
       <td>size为1，且取值大于0。</td>
@@ -139,9 +139,9 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>inputSize（aclIntArray*）</td>
+      <td>inputSize(aclIntArray*)</td>
       <td>输入</td>
-      <td>表示输出out分别在N、C、L维度上的空间大小，对应公式中的`inputSize`</td>
+      <td>表示输出out分别在N、C、L维度上的空间大小，对应公式中的`inputSize`。</td>
       <td>size为3，且各元素均大于零。</td>
       <td>INT64</td>
       <td>-</td>
@@ -149,7 +149,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>alignCorners（bool）</td>
+      <td>alignCorners(bool)</td>
       <td>输入</td>
       <td>BOOL类型参数，对应公式中的`alignCorners`。</td>
       <td><ul><li>如果设置为True，则输入和输出张量按其角像素的中心点对齐，保留角像素处的值；</li><li>如果设置为False，则输入和输出张量通过其角像素的角点对齐，并且插值使用边缘值对边界外的值进行填充。</li></ul></td>
@@ -159,7 +159,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>scales（double）</td>
+      <td>scales(double)</td>
       <td>输入</td>
       <td>表示输出out的L维度乘数，对应公式中的`scales`。</td>
       <td>取值不大于500。</td>
@@ -169,7 +169,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示反向计算的输出Tensor，对应公式中的`gradInput`。</td>
       <td><ul><li>不支持空Tensor</li><li>输出维度必须是3维。数据类型、数据格式与入参`gradOut`保持一致。</li></ul></td>
@@ -179,7 +179,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -189,7 +189,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>
@@ -322,8 +322,8 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
     - N代表输入和输出的N轴。
     - C代表输入和输出的C轴。
     - dtype代表输入张量的数据类型。
-  - N * C < 2^31
-- 入参`gradOut`和出参`out`的数据格式不为NCL或ND时，输入其他数据格式默认按照NCL处理。
+    - N * C < 2^31
+  - 入参`gradOut`和出参`out`的数据格式不为NCL或ND时，输入其他数据格式默认按照NCL处理。
 
 <!-- npu="A3,910b" id9 -->
 - <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：反向接口的输入数据缩小倍数必须小于等于500，即：

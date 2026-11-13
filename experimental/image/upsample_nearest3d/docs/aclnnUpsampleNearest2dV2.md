@@ -89,7 +89,7 @@ aclnnStatus aclnnUpsampleNearest2dV2(
     </tr></thead>
   <tbody>
     <tr>
-      <td>self（aclTensor*）</td>
+      <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>表示进行上采样的输入数据，对应公式中的`self`。</td>
       <td><ul><li>支持空Tensor。</li><li>当数据类型为DOUBLE、UINT8时，self的H轴和W轴均必须小于2^24。</li><li>其他数据类型时，self的所有维度取值均小于等于(2^31-1)。</li></ul></td>
@@ -99,7 +99,7 @@ aclnnStatus aclnnUpsampleNearest2dV2(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示指定`out`在H和W维度上的空间大小。</td>
       <td><ul><li>各元素均不等于零。</li><li>size为2。</li></ul></td>
@@ -109,7 +109,7 @@ aclnnStatus aclnnUpsampleNearest2dV2(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesH（float）</td>
+      <td>scalesH(float)</td>
       <td>输入</td>
       <td>表示指定空间大小纵轴的乘数，对应公式中的`scalesH`。</td>
       <td>-</td>
@@ -119,7 +119,7 @@ aclnnStatus aclnnUpsampleNearest2dV2(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesW（float）</td>
+      <td>scalesW(float)</td>
       <td>输入</td>
       <td>表示指定空间大小横轴的乘数，对应公式中的`scalesW`。</td>
       <td>-</td>
@@ -129,7 +129,7 @@ aclnnStatus aclnnUpsampleNearest2dV2(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示进行上采样的输出结果，对应公式中的`out`。</td>
       <td><ul><li>支持空Tensor。</li><li>数据类型和数据格式与入参self保持一致。</li><li>当数据类型为FLOAT32、BFLOAT16、FLOAT16时，out的所有维度取值均小于等于(2^31-1)。</li><li>shape的N轴、C轴与入参self保持一致。</li></ul></td>
@@ -139,7 +139,7 @@ aclnnStatus aclnnUpsampleNearest2dV2(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回用户需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -149,7 +149,7 @@ aclnnStatus aclnnUpsampleNearest2dV2(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>

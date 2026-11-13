@@ -28,7 +28,7 @@
 
   考虑一个形状为$(C×\prod(kernel\_size),L)$或$(N,C×\prod(kernel\_size),L)$的gradOutput张量，其中$N$是批处理维度，$C$是通道维度。
 
-  此操作将gradOutput重排为形状为$(C,spatial\_size[0],spatial\_size[1])$或$(N,C,spatial\_size[0],spatial\_size[1])$的out张量。
+  此操作将gradOutput重排为形状为$(C，spatial\_size[0]，spatial\_size[1])$或$(N，C，spatial\_size[0]，spatial\_size[1])$的out张量。
 
   其中：
   - $C×\prod(kernel\_size)$是每个滑窗块内的值的数量，而$L$是这些块的总数：
@@ -95,7 +95,7 @@ aclnnStatus aclnnIm2colBackward(
       <td>gradOutput</td>
       <td>输入</td>
       <td>输入tensor。</td>
-      <td>shape为(C×kernel_size[0]×kernel_size[1],L)或(N,C×kernel_size[0]×kernel_size[1],L)。</td>
+      <td>shape为(C×kernel_size[0]×kernel_size[1]，L)或(N，C×kernel_size[0]×kernel_size[1]，L)。</td>
       <td>BFLOAT16、FLOAT16、FLOAT</td>
       <td>ND</td>
       <td>支持2维和3维</td>
@@ -104,7 +104,7 @@ aclnnStatus aclnnIm2colBackward(
     <tr>
       <td>inputSize</td>
       <td>输入</td>
-      <td>输入张量的空间尺寸，即[H, W]。</td>
+      <td>输入张量的空间尺寸，即[H，W]。</td>
       <td>值大于0。</td>
       <td>INT64</td>
       <td>-</td>

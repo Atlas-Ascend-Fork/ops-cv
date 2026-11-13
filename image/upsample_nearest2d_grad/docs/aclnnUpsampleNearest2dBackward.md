@@ -119,7 +119,7 @@ aclnnStatus aclnnUpsampleNearest2dBackward(
       <td>gradOut（aclTensor*）</td>
       <td>输入</td>
       <td>表示反向计算的梯度Tensor，对应公式中的`gradOutput`。</td>
-      <td><ul><li>H / W轴不支持空Tensor。</li><li>支持NCHW和NHWC。</li><li>输入维度必须是4维。</li></ul></td>
+      <td><ul><li>H/W轴不支持空Tensor。</li><li>支持NCHW和NHWC。</li><li>输入维度必须是4维。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16</td>
       <td>NCHW、NHWC</td>
       <td>4</td>
@@ -168,7 +168,7 @@ aclnnStatus aclnnUpsampleNearest2dBackward(
     <tr>
       <td>gradInput（aclTensor*）</td>
       <td>输出</td>
-      <td>表示反向计算的输出张量，对应公式中的`gradInput`</td>
+      <td>表示反向计算的输出张量，对应公式中的`gradInput`。</td>
       <td><ul><li>H/W轴不支持空Tensor。</li><li>数据类型和数据格式与入参`gradOut`保持一致。</li><li>shape的N轴、C轴与入参`gradOut`保持一致。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16</td>
       <td>NCHW、NHWC</td>
@@ -309,7 +309,7 @@ aclnnStatus aclnnUpsampleNearest2dBackward(
   该关系为提示性约束，不作为入参校验的拒绝条件：接口不会因违反该关系而返回错误码（第一段接口的返回码场景已在上文返回值章节列全），仅影响实现内部的执行分支选择。违反该关系时，接口仍按outputSize、inputSize的实际取值完成计算。
 
 - 参数`gradOut`、`gradInput`及inputSize各元素的单维上限约束：
-  - 每个维度（含inputSize各元素）的取值需小于等于2^31-1（INT32_MAX），超出上限第一段返回161002（参数不合法）。
+  - 每个维度（含inputSize各元素）的取值需小于等于2^31-1（INT32_MAX），超出上限，第一段返回161002（参数不合法）。
 - 确定性计算：
   - aclnnUpsampleNearest2dBackward默认确定性实现。
 

@@ -143,7 +143,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
     </tr></thead>
   <tbody>
     <tr>
-      <td>self（aclTensor*）</td>
+      <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>表示进行上采样的输入张量，对应公式中的`self`。</td>
       <td><ul><li>不支持空Tensor。</li><li>当数据类型为DOUBLE时，仅支持NHWC格式。</li></ul></td>
@@ -153,9 +153,9 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
-      <td>指定输出空间大小，表示指定`out`在H和W维度上的空间大小。对应公式中的`outputSize`。</td>
+      <td>指定`out`在H和W维度上的空间大小。对应公式中的`outputSize`。</td>
       <td>size为2，且各元素均大于零。</td>
       <td>INT64</td>
       <td>-</td>
@@ -163,7 +163,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>alignCorners（bool）</td>
+      <td>alignCorners(bool)</td>
       <td>输入</td>
       <td>决定是否对齐角像素点，对应公式中的`alignCorners`。</td>
       <td>如果设置为True，则输入和输出张量按其角像素的中心点对齐，保留角像素处的值；如果设置为False，则输入和输出张量通过其角像素的角点对齐，并使用边缘值对边界外的值进行填充。</td>
@@ -173,7 +173,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesH（double）</td>
+      <td>scalesH(double)</td>
       <td>输入</td>
       <td>指定空间大小的height维度乘数，对应公式中的`scalesH`。</td>
       <td>不能传入负值。</td>
@@ -183,7 +183,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesW（double）</td>
+      <td>scalesW(double)</td>
       <td>输入</td>
       <td>指定空间大小的width维度乘数，对应公式中的`scalesW`。</td>
       <td>不能传入负值。</td>
@@ -193,7 +193,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示采样后的输出张量，对应公式中的`out`。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式与入参`self`的数据类型和数据格式保持一致。</li><li>当数据类型为DOUBLE时，仅支持NHWC格式。</li><li>shape仅支持4维，且N轴和C轴与输入self shape的N轴和C轴保持一致。</li></ul></td>
@@ -203,7 +203,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -213,7 +213,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>

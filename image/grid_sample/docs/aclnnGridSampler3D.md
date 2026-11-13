@@ -77,7 +77,7 @@
       $$
 
       其中：
-      - $f(x, y, z)$是原图像在$(x, y, z)$的像素值,$(x, y, z)$是(x, y, z)周围的八个坐标。
+      - $f(x, y, z)$是原图像在$(x, y, z)$的像素值，$(x, y, z)$是(x, y, z)周围的八个坐标。
       - $w(i, j, k)$是双线性插值周边8个点的权重，计算公式为：
 
         $$
@@ -211,7 +211,7 @@ aclnnStatus aclnnGridSampler3D(
     <tr>
       <td>paddingMode（int64_t）</td>
       <td>输入</td>
-      <td>表示grid范围外填充模式。即当grid有超过[-1, 1]范围的值，则按照paddingMode定义的方式处理相应的输出。对应公式描述中的`paddingMode`。</td>
+      <td>表示grid范围外填充模式，即当grid有超过[-1, 1]范围的值，则按照paddingMode定义的方式处理相应的输出。对应公式描述中的`paddingMode`。</td>
       <td>支持0：zeros、1：border、2：reflection三种模式。</td>
       <td>-</td>
       <td>-</td>
@@ -351,7 +351,7 @@ aclnnStatus aclnnGridSampler3D(
 
 ## 约束说明
 
-- 输入`input`的$（D轴的大小 * H轴的大小 * W轴的大小） < INT32的最大值$。
+- 输入`input`的$(D轴的大小 * H轴的大小 * W轴的大小) < INT32的最大值$。
 - 确定性计算：
   - aclnnGridSampler3D默认确定性实现。
 

@@ -141,7 +141,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
     </tr></thead>
   <tbody>
     <tr>
-      <td>x（aclTensor*）</td>
+      <td>x(aclTensor*)</td>
       <td>输入</td>
       <td>输入特征图，格式为NCHW，(N, C, H, W)。</td>
       <td><ul><li>支持空Tensor；当x或rois为空时，接口返回成功，并将y与argmax填0，此时argmax中的0不表示有效特征图索引。</li><li>输入维度必须为4维。</li><li>N小于等于1024。</li></ul></td>
@@ -151,17 +151,17 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>√</td>
     </tr>
     <tr>
-      <td>rois（aclTensor*）</td>
+      <td>rois(aclTensor*)</td>
       <td>输入</td>
       <td>ROI框，每行5个元素：batch_idx, x1, y1, x2, y2。</td>
-      <td><ul><li>支持空Tensor。</li><li>shape为（num_rois，5）。</li><li>第0维小于等于1024。</li><li>x1, y1, x2, y2大于等于0.0。</li></ul></td>
+      <td><ul><li>支持空Tensor。</li><li>shape为(num_rois, 5)。</li><li>第0维小于等于1024。</li><li>x1, y1, x2, y2大于等于0.0。</li></ul></td>
       <td>FLOAT32、FLOAT16</td>
       <td>ND</td>
       <td>2</td>
       <td>√</td>
     </tr>
     <tr>
-      <td>pooled_h（int64_t）</td>
+      <td>pooled_h(int64_t)</td>
       <td>输入</td>
       <td>池化输出高度。</td>
       <td>必须大于0。</td>
@@ -171,7 +171,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>-</td>
     </tr>
     <tr>
-      <td>pooled_w（int64_t）</td>
+      <td>pooled_w(int64_t)</td>
       <td>输入</td>
       <td>池化输出宽度。</td>
       <td>必须大于0。</td>
@@ -181,7 +181,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>-</td>
     </tr>
     <tr>
-      <td>spatial_scale_h（float）</td>
+      <td>spatial_scale_h(float)</td>
       <td>输入</td>
       <td>ROI坐标映射到特征图时在高度方向的缩放比例。</td>
       <td>必须大于0。</td>
@@ -191,7 +191,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>-</td>
     </tr>
     <tr>
-      <td>spatial_scale_w（float）</td>
+      <td>spatial_scale_w(float)</td>
       <td>输入</td>
       <td>ROI坐标映射到特征图时在宽度方向的缩放比例。</td>
       <td>必须大于0。</td>
@@ -201,9 +201,9 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>-</td>
     </tr>
     <tr>
-      <td>y（aclTensor*）</td>
+      <td>y(aclTensor*)</td>
       <td>输出</td>
-      <td>池化结果，shape为（num_rois，C，pooled_h，pooled_w）。</td>
+      <td>池化结果，shape为(num_rois, C, pooled_h, pooled_w)。</td>
       <td><ul><li>数据类型与x一致。</li></ul></td>
       <td>FLOAT32、FLOAT16</td>
       <td>ND</td>
@@ -211,7 +211,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>√</td>
     </tr>
     <tr>
-      <td>argmax（aclTensor*）</td>
+      <td>argmax(aclTensor*)</td>
       <td>输出</td>
       <td>每个池化格点最大值在通道内的线性偏移索引。</td>
       <td><ul><li>shape与y一致。</li></ul></td>
@@ -221,7 +221,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -231,7 +231,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>
@@ -272,7 +272,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
       <td rowspan="4">161002</td>
       <td>x、rois、y、argmax的数据类型或格式不在支持范围内。</td>
     </tr>
-    <tr><td>x的shape不是4维（NCHW）。</td>
+    <tr><td>x的shape不是4维(NCHW)。</td>
     </tr>
     <tr><td>rois的shape第二维不是5。</td>
     </tr>
@@ -327,7 +327,7 @@ aclnnStatus aclnnRoiPoolingWithArgMax(
 
 - 确定性计算：
   - aclnnRoiPoolingWithArgMax默认确定性实现。
-- x.shape[0] 表示输入 batch 数；y、argmax 的 shape[0] 等于 rois.shape[0]（num_rois）
+- x.shape[0] 表示输入 batch 数；y、argmax 的 shape[0] 等于 rois.shape[0]（num_rois）。
 
 ## 调用示例
 

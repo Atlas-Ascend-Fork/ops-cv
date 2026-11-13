@@ -80,7 +80,7 @@
     z_s = z / w * 0.49999 + 0.5
     $$
 
-  - 点$v$相对于三角形 $(v_0, v_1, v_2)$的重心坐标$(\alpha, \beta, \gamma)$
+  - 点$v$相对于三角形$(v_0, v_1, v_2)$的重心坐标$(\alpha, \beta, \gamma)$
 
     1. 分别计算三角形$(v_0, v_1, v_2)$、$(v_0, v, v_2)$和$(v_0, v_1, v)$的有向面积$area$、$beta\_tri$和$gamma\_tri$
     2. 若$area$为0，则$\alpha = \beta = \gamma = -1$，否则
@@ -91,13 +91,13 @@
       \alpha = 1 - \beta - \gamma
       $$
 
-  - 由顶点$v_0 = (x_0, y_0, z_0)$，$v_1 = (x_1, y_1, z_1)$和$v_2 = (x_2, y_2, z_2)$组成的三角形的有向面积
+  - 由顶点$v_0 = (x_0, y_0, z_0)$、$v_1 = (x_1, y_1, z_1)$和$v_2 = (x_2, y_2, z_2)$组成的三角形的有向面积
 
     $$
     area = (x_2 - x_0) * (y_1 - y_0) - (x_1 - x_0) * (y_2 - y_0)
     $$
 
-  - 结合重心坐标$(\alpha, \beta, \gamma)$和三角形屏幕坐标$(v_0 = (x_0, y_0, z_0), v_1 = (x_1, y_1, z_1), v_2 = (x_2, y_2, z_2))$计算像素点$v = (x, y)$ 的深度$depth$
+  - 结合重心坐标$(\alpha, \beta, \gamma)$和三角形屏幕坐标$(v_0 = (x_0, y_0, z_0), v_1 = (x_1, y_1, z_1), v_2 = (x_2, y_2, z_2))$计算像素点$v = (x, y)$的深度$depth$
 
     $$
     depth = \alpha * z_0 + \beta * z_1 + \gamma * z_2
@@ -109,9 +109,9 @@
     depth\_thres = d(x, y) * 0.49999 + 0.5 + occlusion\_truncation
     $$
 
-  - 根据重心坐标$(\alpha, \beta, \gamma)$判断顶点是否在三角形内
+  - 根据重心坐标$(\alpha, \beta, \gamma)$判断顶点是否在三角形内：
     如果$\alpha >= 0$且$\beta >= 0$且$\gamma >= 0$则点在三角形内（包括在三角形边上），否则点不在三角形内。
-  - 结合重心坐标$(\lambda_0, \lambda_1, \lambda_2)$以及三角形的三个顶点坐标$v_0 = (x_0, y_0, z_0, w_0)$，$v_1 = (x_1, y_1, z_1, w_1)$和$v_2 = (x_2, y_2, z_2, w_2)$计算透视矫正插值$(\lambda_0^{corrected}, \lambda_1^{corrected}, \lambda_2^{corrected})$
+  - 结合重心坐标$(\lambda_0, \lambda_1, \lambda_2)$以及三角形的三个顶点坐标$v_0 = (x_0, y_0, z_0, w_0)$、$v_1 = (x_1, y_1, z_1, w_1)$和$v_2 = (x_2, y_2, z_2, w_2)$计算透视矫正插值$(\lambda_0^{corrected}, \lambda_1^{corrected}, \lambda_2^{corrected})$
 
     $$
     \lambda_i^{corrected} = \frac{\lambda_i / w_i} { \sum (\lambda_j / w_j)}
@@ -171,7 +171,7 @@ aclnnStatus aclnnRasterizer(
     </tr></thead>
   <tbody>
     <tr>
-      <td>v（aclTensor*）</td>
+      <td>v(aclTensor*)</td>
       <td>输入</td>
       <td>表示空间中顶点坐标的输入张量。</td>
       <td><ul><li>不支持空Tensor。</li><li>shape为(numVertices, 4)，其中numVertices表示顶点数量，为正整数。每个顶点坐标表示为(x, y, z, w)。</li></ul></td>
@@ -181,7 +181,7 @@ aclnnStatus aclnnRasterizer(
       <td>×</td>
     </tr>
     <tr>
-      <td>f（aclTensor*）</td>
+      <td>f(aclTensor*)</td>
       <td>输入</td>
       <td>表示空间中的面的输入张量。</td>
       <td><ul><li>不支持空Tensor。</li><li>shape为(numFaces, 3)，其中numFaces表示空间中面的数量，为正整数。每个面是一个三角形，三角形每个顶点表示为顶点在v中的索引，因此f中元素取值应当是对v中元素的合法索引，即取值范围为[0, numVertices-1]。由调用者保证f中元素合法。</li></ul></td>
@@ -191,7 +191,7 @@ aclnnStatus aclnnRasterizer(
       <td>×</td>
     </tr>
     <tr>
-      <td>dOptional（aclTensor*）</td>
+      <td>dOptional(aclTensor*)</td>
       <td>输入</td>
       <td>表示深度图的输入张量，用于计算深度阈值。</td>
       <td><ul><li>可选输入，支持空Tensor。</li><li>非空Tensor时，shape为(height, width)。</li><li>此参数不生效。</li></ul></td>
@@ -201,7 +201,7 @@ aclnnStatus aclnnRasterizer(
       <td>×</td>
     </tr>
     <tr>
-      <td>width（int64_t）</td>
+      <td>width(int64_t)</td>
       <td>输入</td>
       <td>屏幕宽度。</td>
       <td>取值范围[1, 4096]。</td>
@@ -211,7 +211,7 @@ aclnnStatus aclnnRasterizer(
       <td>-</td>
     </tr>
     <tr>
-      <td>height（int64_t）</td>
+      <td>height(int64_t)</td>
       <td>输入</td>
       <td>屏幕高度。</td>
       <td>取值范围[1, 4096]。</td>
@@ -221,7 +221,7 @@ aclnnStatus aclnnRasterizer(
       <td>-</td>
     </tr>
     <tr>
-      <td>occlusionTruncation（double）</td>
+      <td>occlusionTruncation(double)</td>
       <td>输入</td>
       <td>遮挡截断，用于计算深度阈值。</td>
       <td>此参数不生效。</td>
@@ -231,7 +231,7 @@ aclnnStatus aclnnRasterizer(
       <td>-</td>
     </tr>
   <tr>
-      <td>useDepthPrior（int64_t）</td>
+      <td>useDepthPrior(int64_t)</td>
       <td>输入</td>
       <td>表示是否应用深度先验。</td>
       <td><ul><li>值为0或1。1表示应用深度先验，0表示不应用深度先验。</li><li>当前算子不支持应用深度先验，因此值固定为0。</li></ul></td>
@@ -241,7 +241,7 @@ aclnnStatus aclnnRasterizer(
       <td>-</td>
     </tr>
     <tr>
-      <td>findicesOut（aclTensor*）</td>
+      <td>findicesOut(aclTensor*)</td>
       <td>输出</td>
       <td>表示屏幕中每个像素点最小深度对应的面的索引。</td>
       <td><ul><li>不支持空Tensor。</li><li>shape为(height, width)，其中height是屏幕高度，width是屏幕宽度。</li></ul></td>
@@ -251,7 +251,7 @@ aclnnStatus aclnnRasterizer(
       <td>×</td>
     </tr>
   <tr>
-      <td>barycentricOut（aclTensor*）</td>
+      <td>barycentricOut(aclTensor*)</td>
       <td>输出</td>
       <td>表示屏幕中每个像素点相对于最小深度对应的面的重心坐标透视矫正插值的输出张量。</td>
       <td><ul><li>不支持空Tensor。</li><li>shape为(height, width, 3)，其中height是屏幕高度，width是屏幕宽度。</li></ul></td>
@@ -261,7 +261,7 @@ aclnnStatus aclnnRasterizer(
       <td>×</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -271,7 +271,7 @@ aclnnStatus aclnnRasterizer(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>

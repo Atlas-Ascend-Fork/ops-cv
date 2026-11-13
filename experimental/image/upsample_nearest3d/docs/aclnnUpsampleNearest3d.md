@@ -96,7 +96,7 @@ aclnnStatus aclnnUpsampleNearest3d(
     </tr></thead>
   <tbody>
     <tr>
-      <td>self（aclTensor*）</td>
+      <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>表示进行上采样的输入张量。对应公式中的`self`。</td>
       <td><ul><li>不支持空Tensor。</li><li>当数据格式为ND时，默认按照NCDHW格式处理。</li><li>self的所有维度取值均小于等于(2^31-1)。</li><li>shape的C、D、H、W维的size大于0。</li></ul></td>
@@ -106,7 +106,7 @@ aclnnStatus aclnnUpsampleNearest3d(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>指定输出out在D、H、W维度上的空间大小。对应公式中的`outputSize`。</td>
       <td>size为3，各元素取值均大于零。</td>
@@ -116,7 +116,7 @@ aclnnStatus aclnnUpsampleNearest3d(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesD（double）</td>
+      <td>scalesD(double)</td>
       <td>输入</td>
       <td>指定输出out的depth维度乘数，对应公式中的`scalesD`。</td>
       <td>-</td>
@@ -126,7 +126,7 @@ aclnnStatus aclnnUpsampleNearest3d(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesH（double）</td>
+      <td>scalesH(double)</td>
       <td>输入</td>
       <td>指定输出out的height维度乘数，对应公式中的`scalesH`。</td>
       <td>-</td>
@@ -136,7 +136,7 @@ aclnnStatus aclnnUpsampleNearest3d(
       <td>-</td>
     </tr>
     <tr>
-      <td>scalesW（double）</td>
+      <td>scalesW(double)</td>
       <td>输入</td>
       <td>指定输出out的width维度乘数，对应公式中的`scalesW`。</td>
       <td>-</td>
@@ -146,7 +146,7 @@ aclnnStatus aclnnUpsampleNearest3d(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示采样后的输出张量，对应公式中的`out`。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式需与入参self的数据类型和数据格式保持一致。</li><li>输入和输出shape的N、C轴必须相同。</li><li>out的所有维度取值均小于等于(2^31-1)。</li></ul></td>
@@ -156,7 +156,7 @@ aclnnStatus aclnnUpsampleNearest3d(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回用户需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -166,7 +166,7 @@ aclnnStatus aclnnUpsampleNearest3d(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>

@@ -46,7 +46,7 @@ aclnnStatus aclnnThreeInterpolateBackward(
 
 ## 功能说明
 
-- 算子功能：根据grad_x, idx, weight进行三点插值计算梯度得到grad_y。
+- 算子功能：根据grad_x、idx、weight进行三点插值计算梯度得到grad_y。
 
 - 计算公式：
 
@@ -85,7 +85,7 @@ aclnnStatus aclnnThreeInterpolateBackward(
       <td class="tg-0pky">grad_x（aclTensor*）</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">网络反向传播前一步的梯度值。</td>
-      <td class="tg-0lax">shape支持（b, c, n）</td>
+      <td class="tg-0lax">shape支持（b, c, n）。</td>
       <td class="tg-0lax">FLOAT、FLOAT16</td>
       <td class="tg-0lax">NCHW、ND</td>
       <td class="tg-0lax">-</td>
@@ -114,7 +114,7 @@ aclnnStatus aclnnThreeInterpolateBackward(
     <tr>
       <td class="tg-0lax">m（int）</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">输出grad_y最低维度的大小（即前向three_interpolate输入特征的点数），用于infershape时推导grad_y的形状。</td>
+      <td class="tg-0lax">输出grad_y最低维度的大小（即前向three_interpolate输入特征的点数），用于InferShape时推导grad_y的形状。</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -182,7 +182,7 @@ aclnnStatus aclnnThreeInterpolateBackward(
       <td class="tg-0pky">grad_x、idx、weight、m、grad_y的数据类型和数据格式不在支持的范围内。</td>
     </tr>
     <tr>
-      <td class="tg-0lax">当grad_x、idx、weight、grad_y不为空指针，其数据类型和数据格式或shape不在支持的范围内。</td>
+      <td class="tg-0lax">当grad_x、idx、weight、grad_y不为空指针时，其数据类型和数据格式或shape不在支持的范围内。</td>
     </tr>
   </tbody>
   </table>
@@ -233,7 +233,7 @@ aclnnStatus aclnnThreeInterpolateBackward(
 ## 约束说明
 
 - idx中的取值范围为[0, m)（非负且小于m），越界取值（负数或大于等于m）不保证计算结果的正确性。
-- grad_x、idx、weight、grad_y之间需满足维度对应关系：idx与weight的shape一致且为（b, n, 3），其b、n维分别与grad_x的b、n维一致；grad_y的b、c维与grad_x一致且m维等于属性m。shape不一致时接口返回ACLNN_ERR_PARAM_INVALID。
+- grad_x、idx、weight、grad_y之间需满足维度对应关系：idx与weight的shape一致且为（b, n, 3），其b、n维分别与grad_x的b、n维一致；grad_y的b、c维与grad_x一致且m维等于属性m，shape不一致时接口返回ACLNN_ERR_PARAM_INVALID。
 - `weight`与`grad_x`、`grad_y`的数据类型必须一致。
 - 维度上界：`grad_x`各轴（B、C、N）与属性`m`须在`[0, INT32_MAX]`范围内，且`B*C*N`、`B*C*M`的元素总数须不超过`INT64_MAX/8`；超出范围时算子返回失败。
 - `grad_y`为纯输出：其初始内容会被整行覆盖（先清零再累加），调用方无需预置初值。
@@ -261,7 +261,7 @@ aclnnStatus aclnnThreeInterpolateBackward(
 示例代码如下，仅供参考，具体编译和执行过程请参考[编译与运行样例](../../../docs/zh/context/compile_and_run_sample.md)。
 
 <!-- npu="A3,910b" id12 -->
-- <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>:
+- <term>Atlas A2系列产品</term>、<term>Atlas A3系列产品</term>：
 
   > 说明：
   >

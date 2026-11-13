@@ -50,10 +50,10 @@
   其中：
 
   - alignCorners为true，表示输入和输出张量的角像素点对齐；alignCorners为false，表示输入和输出张量的边像素点对齐。
-  - $kW$、$kH$分别表示W方向和H方向影响插值点大小的点的数量
+  - $kW$、$kH$分别表示W方向和H方向影响插值点大小的点的数量。
   - 如果$scaleH >= 1$，则$kH = floor(scaleH) * 2 + 1$，否则$kH = 3$
   - 如果$scaleW >= 1$，则$kW = floor(scaleW) * 2 + 1$，否则$kW = 3$
-  - $f(h_i, w_j)$是原图像在$(h_i, w_j)$的像素值
+  - $f(h_i, w_j)$是原图像在$(h_i, w_j)$的像素值。
   - $w(i)$、$w(j)$是双线性抗锯齿插值的W方向和H方向权重，计算公式为：
 
     $$
@@ -133,7 +133,7 @@ aclnnStatus aclnnUpsampleBilinear2dAA(
     <tr>
       <td>outputSize（aclIntArray*）</td>
       <td>输入</td>
-      <td>指定输出空间大小，表示指定`out`在H和W维度上的空间大小。对应公式中的`outputSize`。</td>
+      <td>指定输出空间大小，表示指定`out`在H和W维度上的空间大小，对应公式中的`outputSize`。</td>
       <td>size为2，且各元素均大于零。</td>
       <td>INT64</td>
       <td>-</td>

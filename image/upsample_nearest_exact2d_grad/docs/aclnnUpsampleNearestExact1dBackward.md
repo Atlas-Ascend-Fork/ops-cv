@@ -95,7 +95,7 @@ aclnnStatus aclnnUpsampleNearestExact1dBackward(
     </tr></thead>
   <tbody>
     <tr>
-      <td>gradOutput（aclTensor*）</td>
+      <td>gradOutput(aclTensor*)</td>
       <td>输入</td>
       <td>公式中的输入`gradOutput`，表示反向计算的梯度Tensor。</td>
       <td><ul><li>不支持空Tensor。</li><li>当数据格式为ND时，默认按照NCL格式处理。</li></ul></td>
@@ -105,7 +105,7 @@ aclnnStatus aclnnUpsampleNearestExact1dBackward(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示输入gradOutput在L维度上的空间大小。</td>
       <td>size为1，且取值大于零。</td>
@@ -115,7 +115,7 @@ aclnnStatus aclnnUpsampleNearestExact1dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>inputSize（aclIntArray*）</td>
+      <td>inputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示输出out分别在N、C和L维度上的空间大小。</td>
       <td>size为3，且各元素均大于零。</td>
@@ -125,7 +125,7 @@ aclnnStatus aclnnUpsampleNearestExact1dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>scales（double）</td>
+      <td>scales(double)</td>
       <td>输入</td>
       <td>公式中的`scalesL`，表示输出out的缩放系数。</td>
       <td>不能传入负值。</td>
@@ -135,7 +135,7 @@ aclnnStatus aclnnUpsampleNearestExact1dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>公式中的输出`gradInput`，表示反向计算的输出张量。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式与入参`gradOutput`保持一致。</li><li>shape的N轴、C轴与入参`gradOutput`保持一致。</li></ul></td>
@@ -145,7 +145,7 @@ aclnnStatus aclnnUpsampleNearestExact1dBackward(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回用户需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -155,7 +155,7 @@ aclnnStatus aclnnUpsampleNearestExact1dBackward(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>
@@ -189,7 +189,7 @@ aclnnStatus aclnnUpsampleNearestExact1dBackward(
     <tr>
       <td>ACLNN_ERR_PARAM_NULLPTR</td>
       <td>161001</td>
-      <td>如果传入参数是必选输入，输出或者必选属性，且是空指针。</td>
+      <td>如果传入参数是必选输入、输出或者必选属性，且是空指针。</td>
     </tr>
     <tr>
       <td rowspan="6">ACLNN_ERR_PARAM_INVALID</td>

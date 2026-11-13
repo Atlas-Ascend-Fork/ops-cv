@@ -79,7 +79,7 @@ aclnnStatus aclnnRoiAlign(
     </tr></thead>
   <tbody>
     <tr>
-      <td class="tg-0pky">self（aclTensor*）</td>
+      <td class="tg-0pky">self(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">输入tensor。</td>
       <td class="tg-0pky">必须与rois/out数据类型一致。</td>
@@ -89,7 +89,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">rois（aclTensor*）</td>
+      <td class="tg-0pky">rois(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">感兴趣区域。</td>
       <td class="tg-0pky"><ul><li>必须与self/out数据类型一致。</li><li>坐标格式为(x1, y1, x2, y2)，且满足0 <= x1 <= x2 <= W/spatialScale、0 <= y1 <= y2 <= H/spatialScale。</li></ul></td>
@@ -99,7 +99,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0lax">batchIndices（aclTensor*）</td>
+      <td class="tg-0lax">batchIndices(aclTensor*)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">表示每batch对应图像的索引。</td>
       <td class="tg-0lax">元素需满足 0 &lt;= v &lt; self.shape[0]，由调用方保证；算子不对索引取值做运行时校验。</td>
@@ -109,9 +109,9 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">√</td>
     </tr>
     <tr>
-      <td class="tg-0lax">mode（char*）</td>
+      <td class="tg-0lax">mode(char*)</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">支持"avg"和"max"。池化模式。</td>
+      <td class="tg-0lax">池化模式，支持"avg"和"max"。</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">String</td>
       <td class="tg-0lax">-</td>
@@ -119,7 +119,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
-      <td class="tg-0lax">outputHeight（int）</td>
+      <td class="tg-0lax">outputHeight(int)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">输出图像的高度。</td>
       <td class="tg-0lax">建议传值1。</td>
@@ -129,7 +129,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
-      <td class="tg-0lax">outputWidth（int）</td>
+      <td class="tg-0lax">outputWidth(int)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">输出图像的宽度。</td>
       <td class="tg-0lax">建议传值1。</td>
@@ -139,7 +139,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
-      <td class="tg-0lax">samplingRatio（int）</td>
+      <td class="tg-0lax">samplingRatio(int)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">用于计算每个输出元素在H和W方向上的采样频率。</td>
       <td class="tg-0lax">建议传值0。</td>
@@ -149,7 +149,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
-      <td class="tg-0lax">spatialScale（float）</td>
+      <td class="tg-0lax">spatialScale(float)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">乘法空间尺度因子，将ROI坐标从其输入空间尺度转换为池化时使用的尺度，即输入特征图X相对于输入图像的空间尺度。</td>
       <td class="tg-0lax">建议传值1.0。</td>
@@ -159,9 +159,9 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
-      <td class="tg-0lax">out（aclTensor*）</td>
+      <td class="tg-0lax">out(aclTensor*)</td>
       <td class="tg-0lax">输出</td>
-      <td class="tg-0lax">输出Tensor</td>
+      <td class="tg-0lax">输出Tensor。</td>
       <td class="tg-0lax">必须与self/rois数据类型一致。</td>
       <td class="tg-0lax">FLOAT、FLOAT16</td>
       <td class="tg-0lax">NCHW</td>
@@ -169,7 +169,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">workspaceSize（uint64_t*）</td>
+      <td class="tg-0pky">workspaceSize(uint64_t*)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">返回需要在Device侧申请的workspace大小。</td>
       <td class="tg-0pky">-</td>
@@ -179,9 +179,9 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0pky">-</td>
     </tr>
     <tr>
-      <td class="tg-0pky">executor（aclOpExecutor**）</td>
+      <td class="tg-0pky">executor(aclOpExecutor**)</td>
       <td class="tg-0pky">输出</td>
-      <td class="tg-0pky">返回op执行器，包括了算子计算流程。</td>
+      <td class="tg-0pky">返回op执行器，包含了算子计算流程。</td>
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">-</td>

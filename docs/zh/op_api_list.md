@@ -2,7 +2,7 @@
 
 ## 使用说明
 
-为方便调用算子，提供一套基于C的API（以aclnn为前缀API），无需提供IR（Intermediate Representation）定义，方便高效构建模型与应用开发，该方式被称为“单算子API调用”，简称aclnn调用。
+为方便调用算子，提供一套基于C的API（以aclnn为前缀的API），无需提供IR（Intermediate Representation）定义，方便高效构建模型与应用开发，该方式被称为“单算子API调用”，简称aclnn调用。
 
 - **头文件/库文件**
 
@@ -13,7 +13,7 @@
 
   ${INSTALL_DIR}表示CANN安装后文件路径；\$\{ops\_project\}表示算子仓名（如math、nn、cv、transformer），请改为实际算子仓名。
 
-- **V版本演进说明**
+- **版本演进说明**
 
   请注意，部分API存在多个V版本，使用时选择最高V版本即可（高版本API已兼容低版本API的所有能力）。
 
@@ -29,15 +29,15 @@
 | 接口名      | 说明     | 确定性说明（A2/A3） | 确定性说明（Ascend 950） |
 | -------------- | --------------------------- | --------------------------- | --------------------------- |
 | [aclnnMrgbaCustom](../../objdetect/mrgba_custom/docs/aclnnMrgbaCustom.md) | 完成张量rgb和张量alpha的透明度乘法计算。 | - | - |
-| [aclnnBackgroundReplace](../../objdetect/background_replace/docs/aclnnBackgroundReplace.md) | 将输入的新的背景图片与已有图片进行融合，通过掩码的方式将背景替换为新的背景。 | - |- |
+| [aclnnBackgroundReplace](../../objdetect/background_replace/docs/aclnnBackgroundReplace.md) | 将输入的新背景图片与已有图片进行融合，通过掩码的方式将背景替换为新的背景。 | - |- |
 | [aclnnBlendImagesCustom](../../objdetect/blend_images_custom/docs/aclnnBlendImagesCustom.md) | 完成张量rgb、frame和alpha的透明度乘法计算。 | - | - |
 | [aclnnGridSampler2D](../../image/grid_sample/docs/aclnnGridSampler2D.md) | 根据网格定义的坐标，从输入张量中采样像素值并重映射到输出空间。 |默认确定性实现|默认确定性实现|
 | [aclnnGridSampler3D](../../image/grid_sample/docs/aclnnGridSampler3D.md) | 根据网格定义的坐标，从输入张量中采样像素值并重映射到输出空间。 |默认确定性实现|默认确定性实现|
 | [aclnnGridSampler2DBackward](../../image/grid_sampler2_d_grad/docs/aclnnGridSampler2DBackward.md) | [aclnnGridSampler2D](../../image/grid_sample/docs/aclnnGridSampler2D.md)的反向传播，完成张量input与张量grid的梯度计算。 |默认非确定性实现，支持配置开启|默认非确定性实现，支持配置开启|
 | [aclnnGridSampler3DBackward](../../image/grid_sampler3_d_grad/docs/aclnnGridSampler3DBackward.md) | [aclnnGridSampler3D](../../image/grid_sample/docs/aclnnGridSampler3D.md)的反向传播，完成张量input与张量grid的梯度计算。 |默认非确定性实现，支持配置开启|默认非确定性实现，支持配置开启|
-| [aclnnRasterizer](../../image/rasterizer/docs/aclnnRasterizer.md) | 实现光栅化计算。根据给定的三维空间中的点和面，获取屏幕中每个像素点的最小深度及其对应的面片索引，并计算该面片的重心坐标透视矫正插值。      |默认确定性实现|默认确定性实现|
+| [aclnnRasterizer](../../image/rasterizer/docs/aclnnRasterizer.md) | 实现光栅化计算，根据给定的三维空间中的点和面，获取屏幕中每个像素点的最小深度及其对应的面片索引，并计算该面片的重心坐标透视矫正插值。      |默认确定性实现|默认确定性实现|
 | [aclnnResize](../../image/resize_bilinear_v2/docs/aclnnResize.md) | 根据scales调整输入张量的大小。                               |默认确定性实现|默认确定性实现|
-| [aclnnThreeInterpolateBackward](../../image/three_interpolate_backward/docs/aclnnThreeInterpolateBackward.md) | 根据grad_x, idx, weight进行三点插值计算梯度得到grad_y。      |默认非确定性实现，不支持配置开启|默认确定性实现|
+| [aclnnThreeInterpolateBackward](../../image/three_interpolate_backward/docs/aclnnThreeInterpolateBackward.md) | 根据grad_x、idx、weight进行三点插值计算梯度得到grad_y。      |默认非确定性实现，不支持配置开启|默认确定性实现|
 | [aclnnUpsampleNearest1d](../../image/resize_nearest_neighbor_v2/docs/aclnnUpsampleNearest1d.md) | 对由多个输入通道组成的输入信号应用最近邻插值算法进行上采样。 |默认确定性实现|默认确定性实现|
 | [aclnnUpsampleNearest2d](../../image/resize_nearest_neighbor_v2/docs/aclnnUpsampleNearest2d.md) | 对由多个输入通道组成的输入信号应用最近邻插值算法进行上采样。 |默认确定性实现|默认确定性实现|
 | [aclnnUpsampleTrilinear3d](../../image/resize_upsample_trilinear/docs/aclnnUpsampleTrilinear3d.md) | 对由多个输入通道组成的输入信号应用三线性插值算法进行上采样。 |默认确定性实现|默认确定性实现|
@@ -66,8 +66,8 @@
 | [aclnnUpsampleNearestExact3dBackward](../../image/upsample_nearest_exact3d_grad/docs/aclnnUpsampleNearestExact3dBackward.md) | [aclnnUpsampleNearestExact3d](../../image/upsample_nearest_exact3d/docs/aclnnUpsampleNearestExact3d.md)的反向传播。 |默认确定性实现|默认确定性实现|
 | [aclnnUpsampleTrilinear3dBackward](../../image/upsample_trilinear3d_backward/docs/aclnnUpsampleTrilinear3dBackward.md) | [aclnnUpsampleTrilinear3d](../../image/resize_upsample_trilinear/docs/aclnnUpsampleTrilinear3d.md)的反向传播。 |默认确定性实现| - |
 | [aclnnCIoU](../../objdetect/ciou/docs/aclnnCIoU.md)          | 用于边界框回归的损失函数，在IoU的基础上同时考虑了中心点距离、宽高比和重叠面积，以更全面地衡量预测框与真实框之间的差异。 | - |默认确定性实现|
-| [aclnnIou](../../objdetect/iou_v2/docs/aclnnIou.md)          | 计算两组矩形框（预测框bBox与真值框gtBox）的交并比（IOU）或前景交叉比（IOF），用于评估其重叠程度。 |默认确定性实现|默认确定性实现|
-| [aclnnNonMaxSuppression](../../objdetect/non_max_suppression_v6/docs/aclnnNonMaxSuppression.md)          | 删除分数小于scoreThreshold的边界框，筛选出与之前被选中部分重叠较高（IOU较高）的框。 | - |- |
+| [aclnnIou](../../objdetect/iou_v2/docs/aclnnIou.md)          | 计算两组矩形框（预测框bBox与真值框gtBox）的交并比（IoU）或前景交叉比（IOF），用于评估其重叠程度。 |默认确定性实现|默认确定性实现|
+| [aclnnNonMaxSuppression](../../objdetect/non_max_suppression_v6/docs/aclnnNonMaxSuppression.md)          | 删除分数小于scoreThreshold的边界框，筛选出与之前被选中部分重叠较高（IoU较高）的框。 | - |- |
 | [aclnnRoiAlign](../../objdetect/roi_align/docs/aclnnRoiAlign.md) | RoIAlign是一种池化层，用于非均匀输入尺寸的特征图，并输出固定尺寸的特征图。 |默认确定性实现|默认确定性实现|
 | [aclnnRoiAlignV2](../../objdetect/roi_align/docs/aclnnRoiAlignV2.md) | RoIAlign是一种池化层，用于非均匀输入尺寸的特征图，并输出固定尺寸的特征图。 |默认确定性实现|- |
 | [aclnnRoiAlignV2Backward](../../objdetect/roi_align_grad/docs/aclnnRoiAlignV2Backward.md) |[aclnnRoiAlignV2](../../objdetect/roi_align/docs/aclnnRoiAlignV2.md)的反向传播。 |默认非确定性实现，支持配置开启|默认确定性实现|

@@ -85,7 +85,7 @@ aclnnStatus aclnnUpsampleNearest2d(
     </tr></thead>
   <tbody>
     <tr>
-      <td>self（aclTensor*）</td>
+      <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>公式中的`self`，表示进行上采样的输入数据。</td>
       <td>不支持空Tensor。</td>
@@ -95,7 +95,7 @@ aclnnStatus aclnnUpsampleNearest2d(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示指定`out`在H和W维度上的空间大小。</td>
       <td><ul><li>各元素均不等于零。</li><li>size为2。</li></ul></td>
@@ -105,7 +105,7 @@ aclnnStatus aclnnUpsampleNearest2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>公式中的`out`，表示进行上采样的输出结果。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式需要与入参self保持一致。</li><li>shape的N轴、C轴与入参self保持一致。</li></ul></td>
@@ -115,7 +115,7 @@ aclnnStatus aclnnUpsampleNearest2d(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回用户需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -125,7 +125,7 @@ aclnnStatus aclnnUpsampleNearest2d(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>
@@ -165,7 +165,7 @@ aclnnStatus aclnnUpsampleNearest2d(
     <tr>
       <td>ACLNN_ERR_PARAM_NULLPTR</td>
       <td>161001</td>
-      <td>如果传入参数是必选输入，输出或者必选属性，且是空指针。</td>
+      <td>如果传入参数是必选输入、输出或者必选属性，且是空指针。</td>
     </tr>
     <tr>
       <td rowspan="8">ACLNN_ERR_PARAM_INVALID</td>

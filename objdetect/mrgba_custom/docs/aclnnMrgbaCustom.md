@@ -23,7 +23,7 @@
 
 ## 功能说明
 
-- 接口功能：完成张量rgb和张量alpha的透明度乘法计算
+- 接口功能：完成张量rgb和张量alpha的透明度乘法计算。
 
 - 计算公式：
 
@@ -36,8 +36,8 @@
 
 ## 函数原型
 
-每个算子分为[两段式接口](../../../docs/zh/context/two_phase_api.md)，必须先调用"aclnnMrgbaCustomGetWorkspaceSize"接口获取计算所需
-workspace大小以及包含了算子计算流程的执行器，再调用"aclnnMrgbaCustom"接口执行计算。
+每个算子分为[两段式接口](../../../docs/zh/context/two_phase_api.md)，必须先调用“aclnnMrgbaCustomGetWorkspaceSize”接口获取计算所需
+workspace大小以及包含了算子计算流程的执行器，再调用“aclnnMrgbaCustom”接口执行计算。
 
 ```Cpp
 aclnnStatus aclnnMrgbaCustomGetWorkspaceSize(
@@ -83,7 +83,7 @@ aclnnStatus aclnnMrgbaCustom(
     </tr></thead>
   <tbody>
     <tr>
-      <td class="tg-0pky">rgb（aclTensor*）</td>
+      <td class="tg-0pky">rgb(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">公式中的rgb。</td>
       <td class="tg-0pky">-</td>
@@ -93,7 +93,7 @@ aclnnStatus aclnnMrgbaCustom(
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">alpha（aclTensor*）</td>
+      <td class="tg-0pky">alpha(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">公式中的alpha。</td>
       <td class="tg-0pky">-</td>
@@ -103,7 +103,7 @@ aclnnStatus aclnnMrgbaCustom(
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">out（aclTensor*）</td>
+      <td class="tg-0pky">out(aclTensor*)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">输出tensor。</td>
       <td class="tg-0pky">-</td>
@@ -113,7 +113,7 @@ aclnnStatus aclnnMrgbaCustom(
       <td class="tg-0pky">-</td>
     </tr>
     <tr>
-      <td class="tg-0pky">workspaceSize（uint64_t*）</td>
+      <td class="tg-0pky">workspaceSize(uint64_t*)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">返回需要在Device侧申请的workspace大小。</td>
       <td class="tg-0pky">-</td>
@@ -123,7 +123,7 @@ aclnnStatus aclnnMrgbaCustom(
       <td class="tg-0pky">-</td>
     </tr>
     <tr>
-      <td class="tg-0pky">executor（aclOpExecutor**）</td>
+      <td class="tg-0pky">executor(aclOpExecutor**)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">返回op执行器，包括了算子计算流程。</td>
       <td class="tg-0pky">-</td>
@@ -214,7 +214,7 @@ aclnnStatus aclnnMrgbaCustom(
 ## 约束说明
 
 - 确定性计算：
-  - aclnnMrgbaCustom默认确定性实现
+  - aclnnMrgbaCustom默认确定性实现。
 
 ## 调用示例
 

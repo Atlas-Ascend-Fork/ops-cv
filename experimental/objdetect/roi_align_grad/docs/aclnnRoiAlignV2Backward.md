@@ -75,7 +75,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <th class="tg-0pky">数据类型</th>
       <th class="tg-0pky">数据格式</th>
       <th class="tg-0pky">维度(shape)</th>
-      <th class="tg-0pky">非连续tensor</th>
+      <th class="tg-0pky">非连续Tensor</th>
     </tr></thead>
   <tbody>
     <tr>
@@ -85,7 +85,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <td class="tg-0pky">必须与boxes、gradInput数据类型一致。</td>
       <td class="tg-0pky">FLOAT</td>
       <td class="tg-0pky">NCHW</td>
-      <td class="tg-0pky">4维，shape为（K，C，pooledHeight，pooledWidth）<br>表示反向传播的输入梯度张量一个batch内有K个元素，每个元素有C个尺寸为pooledHeight * pooledWidth的特征图。<br>K需要与boxes第0维保持一致。</td>
+      <td class="tg-0pky">4维，shape为（K, C, pooledHeight, pooledWidth）<br>表示反向传播的输入梯度张量一个batch内有K个元素，每个元素有C个尺寸为pooledHeight * pooledWidth的特征图。<br>K需要与boxes第0维保持一致。</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
@@ -95,7 +95,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <td class="tg-0pky">必须与gradOutput、gradInput数据类型一致。</td>
       <td class="tg-0pky">FLOAT</td>
       <td class="tg-0pky">ND</td>
-      <td class="tg-0pky">2维，shape为（K，5）<br>5代表box相关信息（image_id，x1，y1，x2，y2）。<br>image_id取值范围[0, B)，向下取整到图像id，B为inputShape第一个值。<br>坐标满足0 <= x1 <= x2 <= inputWidth/spatialScale、0 <= y1 <= y2 <= inputHeight/spatialScale。</td>
+      <td class="tg-0pky">2维，shape为（K, 5）<br>5代表box相关信息（image_id, x1, y1, x2, y2）。<br>image_id取值范围[0, B)，向下取整到图像id，B为inputShape第一个值。<br>坐标满足0 <= x1 <= x2 <= inputWidth/spatialScale、0 <= y1 <= y2 <= inputHeight/spatialScale。</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>

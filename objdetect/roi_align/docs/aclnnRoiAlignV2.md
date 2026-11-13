@@ -74,7 +74,7 @@ aclnnStatus aclnnRoiAlignV2(
       <th class="tg-0pky">数据类型</th>
       <th class="tg-0pky">数据格式</th>
       <th class="tg-0pky">维度(shape)</th>
-      <th class="tg-0pky">非连续tensor</th>
+      <th class="tg-0pky">非连续Tensor</th>
     </tr></thead>
   <tbody>
     <tr>
@@ -84,7 +84,7 @@ aclnnStatus aclnnRoiAlignV2(
       <td class="tg-0pky">必须与boxes、out数据类型一致。</td>
       <td class="tg-0pky">FLOAT、FLOAT16</td>
       <td class="tg-0pky">NCHW</td>
-      <td class="tg-0pky">4维，为（B, C, inputHeight, inputWidth）<br>表示输入张量一个batch内有B张图像，每个图像有C个尺寸为inputHeight * inputWidth的特征图。<br>B、C、inputHeight、inputWidth不支持0维。</td>
+      <td class="tg-0pky">4维，为（B，C，inputHeight，inputWidth）<br>表示输入张量一个batch内有B张图像，每个图像有C个尺寸为inputHeight * inputWidth的特征图。<br>B、C、inputHeight、inputWidth不支持0维。</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
@@ -94,7 +94,7 @@ aclnnStatus aclnnRoiAlignV2(
       <td class="tg-0pky">必须与self、out数据类型一致。</td>
       <td class="tg-0pky">FLOAT、FLOAT16</td>
       <td class="tg-0pky">ND</td>
-      <td class="tg-0pky">2维，为（K, 5）<br>5代表box相关信息（image_id, x1, y1, x2, y2）<br>K需要与out第0维保持一致。<br>image_id取值范围[0, B)，向下取整到图像id，B为self第0维大小。坐标满足0 &lt;= x1 &lt;= x2 &lt;= inputWidth/spatialScale、0 <= y1 <= y2 <= inputHeight/spatialScale。</td>
+      <td class="tg-0pky">2维，为（K，5）<br>5代表box相关信息（image_id，x1，y1，x2，y2）<br>K需要与out第0维保持一致。<br>image_id取值范围[0, B)，向下取整到图像id，B为self第0维大小。坐标满足0 &lt;= x1 &lt;= x2 &lt;= inputWidth/spatialScale、0 &lt;= y1 &lt;= y2 &lt;= inputHeight/spatialScale。</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>

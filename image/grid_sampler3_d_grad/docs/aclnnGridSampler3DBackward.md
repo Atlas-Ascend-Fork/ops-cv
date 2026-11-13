@@ -48,25 +48,25 @@
 
     grid中的(x, y, z)需要先反归一化到input像素坐标(ix, iy, iz)，同时计算梯度乘子`gix_mult`、`giy_mult`、`giz_mult`（用于后续dgrid计算）：
 
-    - alignCorners = true：
+      - alignCorners = true：
 
-      $$
-      ix = \frac{(x+1)}{2} \cdot (W_{in} - 1), \quad gix\_mult = \frac{W_{in} - 1}{2} \\
-      iy = \frac{(y+1)}{2} \cdot (H_{in} - 1), \quad giy\_mult = \frac{H_{in} - 1}{2} \\
-      iz = \frac{(z+1)}{2} \cdot (D_{in} - 1), \quad giz\_mult = \frac{D_{in} - 1}{2}
-      $$
+        $$
+        ix = \frac{(x+1)}{2} \cdot (W_{in} - 1), \quad gix\_mult = \frac{W_{in} - 1}{2} \\
+        iy = \frac{(y+1)}{2} \cdot (H_{in} - 1), \quad giy\_mult = \frac{H_{in} - 1}{2} \\
+        iz = \frac{(z+1)}{2} \cdot (D_{in} - 1), \quad giz\_mult = \frac{D_{in} - 1}{2}
+        $$
 
-    - alignCorners = false：
+      - alignCorners = false：
 
-      $$
-      ix = \frac{(x+1) \cdot W_{in} - 1}{2}, \quad gix\_mult = \frac{W_{in}}{2} \\
-      iy = \frac{(y+1) \cdot H_{in} - 1}{2}, \quad giy\_mult = \frac{H_{in}}{2} \\
-      iz = \frac{(z+1) \cdot D_{in} - 1}{2}, \quad giz\_mult = \frac{D_{in}}{2}
-      $$
+        $$
+        ix = \frac{(x+1) \cdot W_{in} - 1}{2}, \quad gix\_mult = \frac{W_{in}}{2} \\
+        iy = \frac{(y+1) \cdot H_{in} - 1}{2}, \quad giy\_mult = \frac{H_{in}}{2} \\
+        iz = \frac{(z+1) \cdot D_{in} - 1}{2}, \quad giz\_mult = \frac{D_{in}}{2}
+        $$
   2. paddingMode对梯度乘子的影响：
-     - paddingMode="zeros"，`gix_mult`不变
-     - paddingMode="border"，$gix\_mult = gix\_mult × grad\_clip$（反归一化后的像素坐标不满足$0 < coord < (size - 1)$时grad_clip=0，否则为1）
-     - paddingMode="reflection"，$gix\_mult = gix\_mult × grad\_refl × grad\_clip$（grad_refl是反射坐标变换函数对输入坐标的导数，表示反射后输出坐标随输入坐标变化的方向和速率。取值为-1，0，1）。
+      - paddingMode="zeros"，`gix_mult`不变
+      - paddingMode="border"，$gix\_mult = gix\_mult × grad\_clip$（反归一化后的像素坐标不满足$0 < coord < (size - 1)$时grad_clip=0，否则为1）
+      - paddingMode="reflection"，$gix\_mult = gix\_mult × grad\_refl × grad\_clip$（grad_refl是反射坐标变换函数对输入坐标的导数，表示反射后输出坐标随输入坐标变化的方向和速率。取值为-1、0、1）。
   3. 各插值模式的梯度公式：
      - Bilinear
 
@@ -176,7 +176,7 @@
           dx(N, C, \text{round}(iz), \text{round}(iy), \text{round}(ix)) \mathrel{+}= grad(N, C, D_{out}, H_{out}, W_{out})
           $$
 
-       - dgrid：最邻近插值对坐标不可导，因此 **dgrid = 0**。
+       - dgrid：最近邻插值对坐标不可导，因此 **dgrid = 0**。
 
 ## 函数原型
 
@@ -245,7 +245,7 @@ aclnnStatus aclnnGridSampler3DBackward(
       <td>input（aclTensor*）</td>
       <td>输入</td>
       <td>表示反向传播的输入张量，对应公式描述中的`input`。</td>
-      <td><ul><li>支持空Tensor。</li><li>当数据类型为DOUBLE时，数据格式不支持NDHWC。</li><li>`input`和`gradOutput`的N轴和C轴的值保持一致，且`input`的D，H，W值不可为0。</li></ul></td>
+      <td><ul><li>支持空Tensor。</li><li>当数据类型为DOUBLE时，数据格式不支持NDHWC。</li><li>`input`和`gradOutput`的N轴和C轴的值保持一致，且`input`的D、H、W值不可为0。</li></ul></td>
       <td>BFLOAT16、FLOAT16、FLOAT32、DOUBLE</td>
       <td>NCDHW、NDHWC</td>
       <td>5</td>
@@ -274,7 +274,7 @@ aclnnStatus aclnnGridSampler3DBackward(
     <tr>
       <td>paddingMode（int64_t）</td>
       <td>输入</td>
-      <td>表示填充模式，即当grid有超过[-1，1]范围的值，则按照paddingMode定义的方式处理相应的输出。对应公式描述中的`paddingMode`。</td>
+      <td>表示填充模式，即当grid有超过[-1, 1]范围的值，则按照paddingMode定义的方式处理相应的输出，对应公式描述中的`paddingMode`。</td>
       <td>支持0：zeros、1：border、2：reflection三种模式。</td>
       <td>-</td>
       <td>-</td>

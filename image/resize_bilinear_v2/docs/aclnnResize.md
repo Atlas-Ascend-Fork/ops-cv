@@ -86,7 +86,7 @@ aclnnStatus aclnnResize(
     </tr></thead>
   <tbody>
     <tr>
-      <td>self（aclTensor*）</td>
+      <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>输入的张量，对应公式中的`self`。</td>
       <td>不支持空Tensor。</td>
@@ -96,7 +96,7 @@ aclnnStatus aclnnResize(
       <td>√</td>
     </tr>
     <tr>
-      <td>scales（aclFloatArray*）</td>
+      <td>scales(aclFloatArray*)</td>
       <td>输入</td>
       <td>指定self张量调整的倍数，对应公式中的`scales`。</td>
       <td><ul><li>长度和self维度相同。</li><li>当前仅支持调整self的H与W维，scales其他的N与C维度需保持为1。</li></ul></td>
@@ -106,7 +106,7 @@ aclnnStatus aclnnResize(
       <td>-</td>
     </tr>
     <tr>
-      <td>mode（char*）</td>
+      <td>mode(char*)</td>
       <td>输入</td>
       <td>表示插值模式。</td>
       <td>只支持nearest或bilinear。</td>
@@ -116,7 +116,7 @@ aclnnStatus aclnnResize(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>输出张量，对应公式中的`out`。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据格式、数据类型与入参`self`保持一致。</li><li>shape的N轴、C轴与入参`self`保持一致。</li><li>shape的H轴和W轴符合out_dimension = floor(self_dimension * scales)。</li></ul></td>
@@ -126,7 +126,7 @@ aclnnStatus aclnnResize(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -136,7 +136,7 @@ aclnnStatus aclnnResize(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>

@@ -80,7 +80,7 @@ aclnnStatus aclnnUpsampleNearest1dV2(
     </tr></thead>
   <tbody>
     <tr>
-      <td>self（aclTensor*）</td>
+      <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>表示进行上采样的输入数据，对应公式中的`self`。</td>
       <td><ul><li>不支持空Tensor。</li>
@@ -91,7 +91,7 @@ aclnnStatus aclnnUpsampleNearest1dV2(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示输出out在L维度上的空间大小。</td>
       <td>size为1，且取值大于0。</td>
@@ -101,7 +101,7 @@ aclnnStatus aclnnUpsampleNearest1dV2(
       <td>-</td>
     </tr>
     <tr>
-      <td>scaleL（float）</td>
+      <td>scaleL(float)</td>
       <td>输入</td>
       <td>表示指定空间大小的乘数，对应公式中的`scaleL`。</td>
       <td>-</td>
@@ -111,7 +111,7 @@ aclnnStatus aclnnUpsampleNearest1dV2(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示进行上采样的输出结果，对应公式中的`out`。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据类型与入参`self`的数据类型保持一致。out的所有维度取值均小于等于(2^31-1)，当数据类型为DOUBLE、UINT8时，out的L维取值必须同时小于等于(2^24)。</li></ul></td>
@@ -121,7 +121,7 @@ aclnnStatus aclnnUpsampleNearest1dV2(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -131,7 +131,7 @@ aclnnStatus aclnnUpsampleNearest1dV2(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>

@@ -30,7 +30,7 @@
 
     $$\text{IoU} = \frac{\text{Area}(A \cap B)}{\text{Area}(A \cup B)} = \frac{\text{Area}(A \cap B)}{\text{Area}(A) + \text{Area}(B) - \text{Area}(A \cap B)}$$
 
-  - 阈值比较规则
+  - 阈值比较规则：
 
     IoU抑制采用**严格大于**比较，等价于以下代数变换：
 
@@ -93,27 +93,27 @@ aclnnStatus aclnnNonMaxSuppression(
     </tr></thead>
   <tbody>
     <tr>
-      <td class="tg-0pky">boxes（aclTensor*）</td>
+      <td class="tg-0pky">boxes(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">输入tensor。</td>
-      <td class="tg-0pky">每个batch的框数量（spatial_dimension）上限为50000。</td>
+      <td class="tg-0pky">每个batch的框数量(spatial_dimension)上限为50000。</td>
       <td class="tg-0pky">FLOAT、FLOAT16</td>
       <td class="tg-0pky">ND</td>
       <td class="tg-0pky">[num_batches, spatial_dimension, 4]</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">scores（aclTensor*）</td>
+      <td class="tg-0pky">scores(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">输入tensor。</td>
-      <td class="tg-0pky">每个batch的框数量（spatial_dimension）上限为50000。</td>
+      <td class="tg-0pky">每个batch的框数量(spatial_dimension)上限为50000。</td>
       <td class="tg-0pky">FLOAT、FLOAT16</td>
       <td class="tg-0pky">ND</td>
       <td class="tg-0pky">[num_batches, num_classes, spatial_dimension]</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0lax">maxOutputBoxesPerClass（aclIntArray*）</td>
+      <td class="tg-0lax">maxOutputBoxesPerClass(aclIntArray*)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">表示每个批次每个类别选择的最大框数。</td>
       <td class="tg-0lax">数值须大于0，上限为700。</td>
@@ -123,9 +123,9 @@ aclnnStatus aclnnNonMaxSuppression(
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
-      <td class="tg-0lax">iouThreshold（aclFloatArray*）</td>
+      <td class="tg-0lax">iouThreshold(aclFloatArray*)</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">表示判断框相对于IOU是否重叠过多的阈值。</td>
+      <td class="tg-0lax">表示判断框相对于IoU是否重叠过多的阈值。</td>
       <td class="tg-0lax">取值范围[0, 1]。</td>
       <td class="tg-0lax">FLOAT</td>
       <td class="tg-0lax">-</td>
@@ -133,7 +133,7 @@ aclnnStatus aclnnNonMaxSuppression(
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
-      <td class="tg-0lax">scoreThreshold（aclFloatArray*）</td>
+      <td class="tg-0lax">scoreThreshold(aclFloatArray*)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">表示根据得分决定何时移除框的阈值。</td>
       <td class="tg-0lax">一般浮点标量。常见场景使用[0, 1]概率分数，不作为接口硬性约束。</td>
@@ -143,7 +143,7 @@ aclnnStatus aclnnNonMaxSuppression(
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
-      <td class="tg-0lax">centerPointBox（int）</td>
+      <td class="tg-0lax">centerPointBox(int)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">用于决定边界框格式。</td>
       <td class="tg-0lax"><ul><li>取值范围[0, 1]。</li><li>当等于0时，主要用于TensorFlow模型，数据以(y1, x1, y2, x2)形式提供，其中(y1, x1)、(y2, x2)是对角线框角坐标，需要用户自行保证x1 < x2、y1 < y2。</li><li>当等于1时，主要用于PyTorch模型，数据以(x_center, y_center, width, height)形式提供。</li></ul></td>
@@ -153,7 +153,7 @@ aclnnStatus aclnnNonMaxSuppression(
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
-      <td class="tg-0lax">selectedIndices（aclTensor*）</td>
+      <td class="tg-0lax">selectedIndices(aclTensor*)</td>
       <td class="tg-0lax">输出</td>
       <td class="tg-0lax">输出Tensor</td>
       <td class="tg-0lax">-</td>
@@ -163,7 +163,7 @@ aclnnStatus aclnnNonMaxSuppression(
       <td class="tg-0lax">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">workspaceSize（uint64_t*）</td>
+      <td class="tg-0pky">workspaceSize(uint64_t*)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">返回需要在Device侧申请的workspace大小。</td>
       <td class="tg-0pky">-</td>
@@ -173,7 +173,7 @@ aclnnStatus aclnnNonMaxSuppression(
       <td class="tg-0pky">-</td>
     </tr>
     <tr>
-      <td class="tg-0pky">executor（aclOpExecutor**）</td>
+      <td class="tg-0pky">executor(aclOpExecutor**)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">返回op执行器，包括了算子计算流程。</td>
       <td class="tg-0pky">-</td>
@@ -223,16 +223,16 @@ aclnnStatus aclnnNonMaxSuppression(
       <td>boxes、scores需为3维。</td>
     </tr>
     <tr>
-      <td>boxes第0维必须等于scores第0维度。</td>
+      <td>boxes第0维必须等于scores第0维。</td>
     </tr>
     <tr>
-      <td>boxes第1维必须等于scores第2维度。</td>
+      <td>boxes第1维必须等于scores第2维。</td>
     </tr>
     <tr>
       <td>boxes第2维必须等于4。</td>
     </tr>
     <tr>
-      <td>每个batch的框数量（spatial_dimension）超过50000。</td>
+      <td>每个batch的框数量(spatial_dimension)超过50000。</td>
     </tr>
     <tr>
       <td>iouThreshold、centerPointBox、maxOutputBoxesPerClass数值不在支持的范围内。</td>
@@ -286,7 +286,7 @@ aclnnStatus aclnnNonMaxSuppression(
 ## 约束说明
 
 - 参数maxOutputBoxesPerClass必须大于0，上限为700。输入参数boxes和scores的数据类型要求保持一致。
-- 每个batch的框数量（boxes的spatial_dimension / scores的spatial_dimension）上限为50000。
+- 每个batch的框数量(boxes的spatial_dimension / scores的spatial_dimension)上限为50000。
 - 在FLOAT16场景下，算子进行排序和计算对比可能会引入计算误差。
 - 确定性计算：
   - aclnnNonMaxSuppression默认确定性实现。

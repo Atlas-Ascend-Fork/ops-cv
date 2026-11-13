@@ -89,7 +89,7 @@ aclnnStatus aclnnUpsampleNearestExact1d(
     </tr></thead>
   <tbody>
     <tr>
-      <td>self（aclTensor*）</td>
+      <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>公式中的输入`self`，表示进行上采样的输入张量。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据格式为ND时，默认按照NCL格式处理。</li></ul></td>
@@ -99,7 +99,7 @@ aclnnStatus aclnnUpsampleNearestExact1d(
       <td>√</td>
     </tr>
     <tr>
-      <td>outputSize（aclIntArray*）</td>
+      <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
       <td>表示指定`out`在L维度上的空间大小。</td>
       <td>size为1，取值大于零。</td>
@@ -109,7 +109,7 @@ aclnnStatus aclnnUpsampleNearestExact1d(
       <td>-</td>
     </tr>
     <tr>
-      <td>scales（double）</td>
+      <td>scales(double)</td>
       <td>输入</td>
       <td>公式中的输入scales，指定空间大小的缩放乘数。</td>
       <td>-</td>
@@ -119,7 +119,7 @@ aclnnStatus aclnnUpsampleNearestExact1d(
       <td>-</td>
     </tr>
     <tr>
-      <td>out（aclTensor*）</td>
+      <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>公式中的输出`out`，表示采样后的输出张量。</td>
       <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式需要与入参`self`保持一致。</li></ul></td>
@@ -129,7 +129,7 @@ aclnnStatus aclnnUpsampleNearestExact1d(
       <td>√</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回用户需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -139,7 +139,7 @@ aclnnStatus aclnnUpsampleNearestExact1d(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>
@@ -274,7 +274,7 @@ aclnnStatus aclnnUpsampleNearestExact1d(
 
 示例代码如下，仅供参考，具体编译和执行过程请参考[编译与运行样例](../../../docs/zh/context/compile_and_run_sample.md)。
 
-```Cpp
+```cpp
 #include <iostream>
 #include <vector>
 #include "acl/acl.h"

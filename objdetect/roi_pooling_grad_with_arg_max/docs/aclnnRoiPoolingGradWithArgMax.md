@@ -36,7 +36,7 @@
   [i = i^*(r,j)]  = \begin{cases} 1, & i = i^*(r,j) \\ 0, & otherwise \end{cases}
   $$
 
-  判决函数`[i = i^*(r,j)]`表示i节点是否被候选区域r的第j个输出节点选为最大值输出
+  判决函数`[i = i^*(r,j)]`表示i节点是否被候选区域r的第j个输出节点选为最大值输出。
 
 ## 函数原型
 
@@ -90,7 +90,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
     </tr></thead>
   <tbody>
     <tr>
-      <td>gradOutput（aclTensor*）</td>
+      <td>gradOutput(aclTensor*)</td>
       <td>输入</td>
       <td>梯度输入。</td>
       <td>-</td>
@@ -100,7 +100,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>√</td>
     </tr>
       <tr>
-      <td>gradInputRef（aclTensor*）</td>
+      <td>gradInputRef(aclTensor*)</td>
       <td>输入/输出</td>
       <td>输出结果。</td>
       <td>-</td>
@@ -110,7 +110,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>√</td>
     </tr>
       <tr>
-      <td>rois（aclTensor*）</td>
+      <td>rois(aclTensor*)</td>
       <td>输入</td>
       <td>ROI区域。</td>
       <td>-</td>
@@ -120,7 +120,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>√</td>
     </tr>
       <tr>
-      <td>argmax（aclTensor*）</td>
+      <td>argmax(aclTensor*)</td>
       <td>输入</td>
       <td>指定目标梯度的索引。</td>
       <td>-</td>
@@ -130,7 +130,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>√</td>
     </tr>
     <tr>
-      <td>pooledH（int64_t）</td>
+      <td>pooledH(int64_t)</td>
       <td>属性</td>
       <td>池化高度。</td>
       <td>-</td>
@@ -140,7 +140,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>-</td>
     </tr>
       <tr>
-      <td>pooledW（int64_t）</td>
+      <td>pooledW(int64_t)</td>
       <td>属性</td>
       <td>池化宽度。</td>
       <td>-</td>
@@ -150,7 +150,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>-</td>
     </tr>
     <tr>
-      <td>spatialScale（double）</td>
+      <td>spatialScale(double)</td>
       <td>属性</td>
       <td>输入坐标映射到ROI坐标的缩放比例。</td>
       <td>-</td>
@@ -160,7 +160,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>-</td>
     </tr>
     <tr>
-      <td>workspaceSize（uint64_t*）</td>
+      <td>workspaceSize(uint64_t*)</td>
       <td>输出</td>
       <td>返回用户需要在Device侧申请的workspace大小。</td>
       <td>-</td>
@@ -170,7 +170,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>-</td>
     </tr>
     <tr>
-      <td>executor（aclOpExecutor**）</td>
+      <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
       <td>返回op执行器，包含了算子计算流程。</td>
       <td>-</td>
@@ -305,7 +305,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
 
 示例代码如下，仅供参考，具体编译和执行过程请参考[编译与运行样例](../../../docs/zh/context/compile_and_run_sample.md)。
 
-```Cpp
+```cpp
 #include <iostream>
 #include <vector>
 #include "acl/acl.h"

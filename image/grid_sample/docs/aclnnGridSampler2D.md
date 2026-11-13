@@ -198,7 +198,7 @@ aclnnStatus aclnnGridSampler2D(
       <td>input（aclTensor*）</td>
       <td>输入</td>
       <td>进行插值计算的输入张量，对应公式中描述的`input`。</td>
-      <td><ul><li>支持空Tensor。</li><li>支持shape为(N, C, H<sub>in</sub>, W<sub>in</sub>)。H*W < INT32的最大值。`input`的shape最后两维的维度值不能为0。</li></ul></td>
+      <td><ul><li>支持空Tensor。</li><li>支持shape为(N, C, H<sub>in</sub>, W<sub>in</sub>)，H*W < INT32的最大值。`input`的shape最后两维的维度值不能为0。</li></ul></td>
       <td>FLOAT32、FLOAT16、DOUBLE、BFLOAT16</td>
       <td>ND</td>
       <td>4</td>
@@ -218,7 +218,7 @@ aclnnStatus aclnnGridSampler2D(
       <td>interpolationMode（int64_t）</td>
       <td>输入</td>
       <td>表示插值模式，对应公式描述中的`interpolationMode`。</td>
-      <td>支持0：bilinear（双线性插值）、1：nearest（最邻近插值）、2：bicubic（双三次插值）三种模式。</td>
+      <td>支持0：bilinear（双线性插值）、1：nearest（最近邻插值）、2：bicubic（双三次插值）三种模式。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -277,7 +277,7 @@ aclnnStatus aclnnGridSampler2D(
   </tbody>
   </table>
 
-  DOUBLE数据通过AI CPU执行，支持bilinear和nearest插值，不支持bicubic。上表列出接口整体支持的数据类型，各产品的具体限制如下。
+  DOUBLE数据通过AI CPU执行，支持bilinear和nearest插值，不支持bicubic。上表列出的是接口整体支持的数据类型，各产品的具体限制如下：
 
   <!-- npu="910" id7 -->
   - <term>Atlas训练系列产品</term>：
@@ -313,7 +313,7 @@ aclnnStatus aclnnGridSampler2D(
     - 入参`paddingMode`为zeros。
     - 参数`input`、`grid`、`out`的数据类型为FLOAT32或FLOAT16，且满足以下数据类型对应的shape条件。
     - FLOAT32：参数`input`的shape需要满足C维的值为32或者C*H*W < 20480。
-    - FLOAT16：参数`input`的shape需要满足C*H*W < 20480。input和grid先转换为FLOAT32进行计算，结果再转换回FLOAT16；仅满足C维的值为32不能使用此AI Core路径。
+    - FLOAT16：参数`input`的shape需要满足C*H*W < 20480。input和grid先转换为FLOAT32进行计算，结果再转换回FLOAT16；仅满足C维的值为32时不能使用此AI Core路径。
     - 参数`input`的数据格式不支持NHWC。
   <!-- end id10 -->
 

@@ -81,9 +81,9 @@ aclnnStatus aclnnBackgroundReplace(
     </tr></thead>
   <tbody>
     <tr>
-      <td class="tg-0pky">bkg（aclTensor*）</td>
+      <td class="tg-0pky">bkg(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
-      <td class="tg-0pky">输入tensor。</td>
+      <td class="tg-0pky">输入Tensor。</td>
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">UINT8、FLOAT16</td>
       <td class="tg-0pky">ND</td>
@@ -91,9 +91,9 @@ aclnnStatus aclnnBackgroundReplace(
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">src（aclTensor*）</td>
+      <td class="tg-0pky">src(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
-      <td class="tg-0pky">输入tensor。</td>
+      <td class="tg-0pky">输入Tensor。</td>
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">UINT8、FLOAT16</td>
       <td class="tg-0pky">ND</td>
@@ -101,9 +101,9 @@ aclnnStatus aclnnBackgroundReplace(
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
-      <td class="tg-0lax">mask（aclTensor*）</td>
+      <td class="tg-0lax">mask(aclTensor*)</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">输入tensor。</td>
+      <td class="tg-0lax">输入Tensor。</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">FLOAT16</td>
       <td class="tg-0lax">ND</td>
@@ -111,9 +111,9 @@ aclnnStatus aclnnBackgroundReplace(
       <td class="tg-0lax">√</td>
     </tr>
     <tr>
-      <td class="tg-0pky">out（aclTensor*）</td>
+      <td class="tg-0pky">out(aclTensor*)</td>
       <td class="tg-0pky">输出</td>
-      <td class="tg-0pky">输出tensor。</td>
+      <td class="tg-0pky">输出Tensor。</td>
       <td class="tg-0pky">数据类型和shape与输入背景图片bkg一致。</td>
       <td class="tg-0pky">UINT8、FLOAT16</td>
       <td class="tg-0pky">ND</td>
@@ -121,7 +121,7 @@ aclnnStatus aclnnBackgroundReplace(
       <td class="tg-0pky">-</td>
     </tr>
     <tr>
-      <td class="tg-0pky">workspaceSize（uint64_t*）</td>
+      <td class="tg-0pky">workspaceSize(uint64_t*)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">返回需要在Device侧申请的workspace大小。</td>
       <td class="tg-0pky">-</td>
@@ -131,7 +131,7 @@ aclnnStatus aclnnBackgroundReplace(
       <td class="tg-0pky">-</td>
     </tr>
     <tr>
-      <td class="tg-0pky">executor（aclOpExecutor**）</td>
+      <td class="tg-0pky">executor(aclOpExecutor**)</td>
       <td class="tg-0pky">输出</td>
       <td class="tg-0pky">返回op执行器，包括了算子计算流程。</td>
       <td class="tg-0pky">-</td>
