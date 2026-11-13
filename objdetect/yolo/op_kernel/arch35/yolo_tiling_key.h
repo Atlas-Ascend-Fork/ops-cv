@@ -29,9 +29,10 @@
 #define YOLO_MODE_2 1
 #define YOLO_MODE_3 2
 #define YOLO_MODE_4 3
+#define YOLO_MODE_1_CHANNEL_PERMUTE 5
 
 ASCENDC_TPL_ARGS_DECL(Yolo, ASCENDC_TPL_UINT_DECL(schMode, 4, ASCENDC_TPL_UI_LIST, YOLO_MODE_1, YOLO_MODE_2,
-                                                  YOLO_MODE_3, YOLO_MODE_4));
+                                                  YOLO_MODE_3, YOLO_MODE_4, YOLO_MODE_1_CHANNEL_PERMUTE));
 
 ASCENDC_TPL_SEL(ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_KERNEL_TYPE_SEL(ASCENDC_TPL_AIV_ONLY),
                                      ASCENDC_TPL_UINT_SEL(schMode, ASCENDC_TPL_UI_LIST, YOLO_MODE_1),
@@ -44,6 +45,9 @@ ASCENDC_TPL_SEL(ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_KERNEL_TYPE_SEL(ASCENDC_TPL_AIV
                                      ASCENDC_TPL_TILING_STRUCT_SEL(YoloTilingData)),
                 ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_KERNEL_TYPE_SEL(ASCENDC_TPL_AIV_ONLY),
                                      ASCENDC_TPL_UINT_SEL(schMode, ASCENDC_TPL_UI_LIST, YOLO_MODE_4),
+                                     ASCENDC_TPL_TILING_STRUCT_SEL(YoloTilingData)),
+                ASCENDC_TPL_ARGS_SEL(ASCENDC_TPL_KERNEL_TYPE_SEL(ASCENDC_TPL_AIV_ONLY),
+                                     ASCENDC_TPL_UINT_SEL(schMode, ASCENDC_TPL_UI_LIST, YOLO_MODE_1_CHANNEL_PERMUTE),
                                      ASCENDC_TPL_TILING_STRUCT_SEL(YoloTilingData)));
 
 #endif // YOLO_TILING_KEY_H_

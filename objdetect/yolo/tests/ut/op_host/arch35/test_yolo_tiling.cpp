@@ -63,6 +63,72 @@ TEST_F(YoloTiling, yolo_v3_mode1_fp32)
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
+TEST_F(YoloTiling, yolo_v3_mode1_fp32_channel_permute)
+{
+    struct YoloCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Yolo",
+        {
+            {{{5, 44000, 19, 30}, {5, 44000, 19, 30}}, ge::DT_FLOAT, ge::FORMAT_ND}, // input x: (N, C, H, W)
+        },
+        {
+            {{{5, 176, 592}, {5, 176, 592}}, ge::DT_FLOAT, ge::FORMAT_ND},     // output coord_data
+            {{{5, 25104}, {5, 25104}}, ge::DT_FLOAT, ge::FORMAT_ND},           // output obj_prob
+            {{{5, 995, 25104}, {5, 995, 25104}}, ge::DT_FLOAT, ge::FORMAT_ND}, // output classes_prob
+        },
+        {
+            gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(44)),
+            gert::TilingContextPara::OpAttr("coords", Ops::Cv::AnyValue::CreateFrom<int64_t>(4)),
+            gert::TilingContextPara::OpAttr("classes", Ops::Cv::AnyValue::CreateFrom<int64_t>(995)),
+            gert::TilingContextPara::OpAttr("yolo_version", Ops::Cv::AnyValue::CreateFrom<std::string>("V3")),
+            gert::TilingContextPara::OpAttr("softmax", Ops::Cv::AnyValue::CreateFrom<bool>(true)),
+            gert::TilingContextPara::OpAttr("background", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+        },
+        &compileInfo,
+        "Ascend950",              // soc version
+        64,                       // number of cores
+        262144,                   // ubsize
+        4096);                    // max tiling data size
+    uint64_t expectTilingKey = 4; // YOLO_MODE_1_CHANNEL_PERMUTE (encoded SEL index)
+    string expectTilingData = "188978561029 995 570 592 25104 ";
+    std::vector<size_t> expectWorkspaces = {YOLO_EXPECT_WORKSPACE_SIZE};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+TEST_F(YoloTiling, yolo_v3_mode1_fp32_channel_permute_ub_too_small)
+{
+    struct YoloCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Yolo",
+        {
+            {{{5, 44000, 19, 30}, {5, 44000, 19, 30}}, ge::DT_FLOAT, ge::FORMAT_ND}, // input x: (N, C, H, W)
+        },
+        {
+            {{{5, 176, 592}, {5, 176, 592}}, ge::DT_FLOAT, ge::FORMAT_ND},     // output coord_data
+            {{{5, 25104}, {5, 25104}}, ge::DT_FLOAT, ge::FORMAT_ND},           // output obj_prob
+            {{{5, 995, 25104}, {5, 995, 25104}}, ge::DT_FLOAT, ge::FORMAT_ND}, // output classes_prob
+        },
+        {
+            gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(44)),
+            gert::TilingContextPara::OpAttr("coords", Ops::Cv::AnyValue::CreateFrom<int64_t>(4)),
+            gert::TilingContextPara::OpAttr("classes", Ops::Cv::AnyValue::CreateFrom<int64_t>(995)),
+            gert::TilingContextPara::OpAttr("yolo_version", Ops::Cv::AnyValue::CreateFrom<std::string>("V3")),
+            gert::TilingContextPara::OpAttr("softmax", Ops::Cv::AnyValue::CreateFrom<bool>(true)),
+            gert::TilingContextPara::OpAttr("background", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+        },
+        &compileInfo,
+        "Ascend950",              // soc version
+        64,                       // number of cores
+        253951,                   // ubsize: one byte less than the channel-permute UB budget
+        4096);                    // max tiling data size
+    uint64_t expectTilingKey = 0; // YOLO_MODE_1
+    string expectTilingData = "188978561029 995 570 592 25104 ";
+    std::vector<size_t> expectWorkspaces = {YOLO_EXPECT_WORKSPACE_SIZE};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
 TEST_F(YoloTiling, yolo_v2_mode1_fp16)
 {
     struct YoloCompileInfo {

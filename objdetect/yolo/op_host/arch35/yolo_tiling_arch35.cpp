@@ -273,6 +273,28 @@ static ge::graphStatus YoloTilingFunc(gert::TilingContext* context)
     int32_t yoloMode = DetermineYoloMode(context);
     OP_CHECK_IF(yoloMode < 0, OP_LOGE(context, "DetermineYoloMode error"), return ge::GRAPH_FAILED);
 
+    // Ascend950PR channel-permute path: the DMA-through-UB kernel only exists for this generation.
+    // Its queues + ones buffer need CHANNEL_PERMUTE_UB_BYTES of dynamic UB, which is only what is
+    // left after the DCache/static reservation below, so gate on that budget instead of raw ubSize.
+    constexpr uint64_t CHANNEL_PERMUTE_UB_BYTES = 122880; // measured TPipe budget of the kernel
+    constexpr uint64_t CHANNEL_PERMUTE_MIN_UB = DCACHE_SIZE + STATIC_UB_ESTIMATE + CHANNEL_PERMUTE_UB_BYTES;
+    constexpr int64_t CHANNEL_PERMUTE_PAD_MIN = 16;
+    constexpr int64_t CHANNEL_PERMUTE_PAD_MAX = 32;
+    constexpr int64_t CHANNEL_PERMUTE_UNIT_FLOATS = 25080; // boxes * HW of the frozen geometry
+    constexpr int64_t CHANNEL_PERMUTE_ROW_FLOATS = 640;    // kernel ROW_STAGE_FLOATS (coord row stage)
+    bool useChannelPermute = false;
+    if (yoloMode == YOLO_MODE_1 && ubSize >= CHANNEL_PERMUTE_MIN_UB) {
+        fe::PlatFormInfos* channelPermutePlatform = context->GetPlatformInfo();
+        if (channelPermutePlatform != nullptr) {
+            platform_ascendc::PlatformAscendC ascendcPlatform(channelPermutePlatform);
+            useChannelPermute = (ascendcPlatform.GetSocVersion() == platform_ascendc::SocVersion::ASCEND950);
+        }
+        if (useChannelPermute) {
+            auto xDesc = context->GetInputDesc(0);
+            useChannelPermute = (xDesc != nullptr && xDesc->GetDataType() == ge::DT_FLOAT);
+        }
+    }
+
     // Core splitting: two-step method
     int64_t totalPoints = 0;
     OP_CHECK_IF(!SafeMul(N, boxes, totalPoints) || !SafeMul(totalPoints, HW, totalPoints),
@@ -329,8 +351,20 @@ static ge::graphStatus YoloTilingFunc(gert::TilingContext* context)
     tiling->ceilHW = ceilHW;
     tiling->ceilBoxesHw = ceilBoxesHw;
 
-    context->SetBlockDim(static_cast<uint32_t>(needCoreNum));
-    context->SetTilingKey(GET_TPL_TILING_KEY(static_cast<uint64_t>(yoloMode)));
+    // The channel-permute path owns every AIV core and requires the kernel's frozen geometry:
+    // boxes * HW == UNIT_FLOATS, the coord row stage fits ROW_STAGE_FLOATS, and both pads fit the
+    // Duplicate band. Keep this in sync with the gate in yolo_simd_channel_permute.h.
+    if (useChannelPermute) {
+        const int64_t unitFloats = boxes * HW;
+        const int64_t padCls = ceilBoxesHw - unitFloats;
+        const int64_t padCoord = ceilHW - HW;
+        useChannelPermute = (unitFloats == CHANNEL_PERMUTE_UNIT_FLOATS && ceilHW <= CHANNEL_PERMUTE_ROW_FLOATS &&
+                             padCls >= CHANNEL_PERMUTE_PAD_MIN && padCls <= CHANNEL_PERMUTE_PAD_MAX &&
+                             padCoord >= CHANNEL_PERMUTE_PAD_MIN && padCoord <= CHANNEL_PERMUTE_PAD_MAX);
+    }
+    context->SetBlockDim(static_cast<uint32_t>(useChannelPermute ? coreNum : needCoreNum));
+    context->SetTilingKey(
+        GET_TPL_TILING_KEY(static_cast<uint64_t>(useChannelPermute ? YOLO_MODE_1_CHANNEL_PERMUTE : yoloMode)));
 
     // Workspace
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);

@@ -21,6 +21,9 @@
  */
 
 #include "arch35/yolo_simt.h"
+// Ascend950PR-only body: its fast path is compiled under __NPU_ARCH__ == 3510; every other
+// generation keeps the legacy NsYolo bodies below.
+#include "arch35/yolo_simd_channel_permute.h"
 
 template <uint32_t schMode>
 __global__ __aicore__ void yolo(GM_ADDR x, GM_ADDR coord_data, GM_ADDR obj_prob, GM_ADDR classes_prob,
@@ -35,6 +38,10 @@ __global__ __aicore__ void yolo(GM_ADDR x, GM_ADDR coord_data, GM_ADDR obj_prob,
         NsYolo::Process<DTYPE_X, YOLO_MODE_2>(x, coord_data, obj_prob, classes_prob, &tilingData);
     } else if constexpr (schMode == YOLO_MODE_3) {
         NsYolo::Process<DTYPE_X, YOLO_MODE_3>(x, coord_data, obj_prob, classes_prob, &tilingData);
+    } else if constexpr (schMode == YOLO_MODE_1_CHANNEL_PERMUTE) {
+        // Ascend950PR path (the DMA body itself is guarded by __NPU_ARCH__ == 3510 and falls back to
+        // the legacy NsYolo::Process<DTYPE_X, YOLO_MODE_1>); the host only encodes this key on that SoC.
+        NsYoloChannelPermute::Process<DTYPE_X>(x, coord_data, obj_prob, classes_prob, &tilingData);
     } else {
         NsYolo::Process<DTYPE_X, YOLO_MODE_4>(x, coord_data, obj_prob, classes_prob, &tilingData);
     }
