@@ -43,7 +43,7 @@
 
 ## 函数原型
 
-每个算子分为[两段式接口](../../../docs/zh/context/two_phase_api.md)，必须先调用**aclnnUpsampleNearestExact1dGetWorkspaceSize**接口获取计算所需workspace大小以及包含了算子计算流程的执行器，再调用`aclnnUpsampleNearestExact1d`接口执行计算。
+每个算子分为[两段式接口](../../../docs/zh/context/two_phase_api.md)，必须先调用`aclnnUpsampleNearestExact1dGetWorkspaceSize`接口获取计算所需workspace大小以及包含了算子计算流程的执行器，再调用`aclnnUpsampleNearestExact1d`接口执行计算。
 
 ```cpp
 aclnnStatus aclnnUpsampleNearestExact1dGetWorkspaceSize(
@@ -111,7 +111,7 @@ aclnnStatus aclnnUpsampleNearestExact1d(
     <tr>
       <td>scales(double)</td>
       <td>输入</td>
-      <td>公式中的输入scales，指定空间大小的缩放乘数。</td>
+      <td>公式中的输入`scales`，指定空间大小的缩放乘数。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>

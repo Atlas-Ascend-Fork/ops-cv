@@ -65,7 +65,7 @@
 
 ## 函数原型
 
-每个算子分为[两段式接口](../../../docs/zh/context/two_phase_api.md)，必须先调用“aclnnUpsampleLinear1dGetWorkspaceSize”接口获取入参并根据计算流程计算所需workspace大小，再调用“aclnnUpsampleLinear1d”接口执行计算。
+每个算子分为[两段式接口](../../../docs/zh/context/two_phase_api.md)，必须先调用`aclnnUpsampleLinear1dGetWorkspaceSize`接口获取入参并根据计算流程计算所需workspace大小，再调用`aclnnUpsampleLinear1d`接口执行计算。
 
 ```Cpp
 aclnnStatus aclnnUpsampleLinear1dGetWorkspaceSize(
@@ -281,7 +281,7 @@ aclnnStatus aclnnUpsampleLinear1d(
 
 ## 约束说明
 
-- 入参`self`和出参`out`的数据格式不为ND或NCL时，输入其他数据格式会默认按照NCL处理。
+- 入参`self`和出参`out`的数据格式仅支持ND和NCL，当数据格式为ND时默认按照NCL格式处理。
 - 参数self、outputSize、scale需要满足如下约束：
 
   $$

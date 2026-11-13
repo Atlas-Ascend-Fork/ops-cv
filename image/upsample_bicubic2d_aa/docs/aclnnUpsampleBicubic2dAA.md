@@ -23,7 +23,7 @@
 
 ## 功能说明
 
-- 接口功能：对由多个输入通道组成的输入信号应用双三次抗锯齿算法进行上采样。如果输入Tensor x的shape为(N, C, H, W)，则输出Tensor out的shape为(N, C, outputSize[0], outputSize[1])。
+- 接口功能：对由多个输入通道组成的输入信号应用双三次抗锯齿算法进行上采样。如果输入张量x的shape为(N, C, H, W)，则输出张量out的shape为(N, C, outputSize[0], outputSize[1])。
 
 - 计算公式：对于一个二维插值点$(N, C, h, w)$，插值$out(N, C, h, w)$可以表示为：
 

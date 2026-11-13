@@ -118,7 +118,7 @@ aclnnStatus aclnnUpsampleNearest2dBackward(
     <tr>
       <td>gradOut（aclTensor*）</td>
       <td>输入</td>
-      <td>表示反向计算的梯度Tensor，对应公式中的`gradOutput`。</td>
+      <td>表示反向计算的梯度Tensor，对应公式中的`gradOut`。</td>
       <td><ul><li>H/W轴不支持空Tensor。</li><li>支持NCHW和NHWC。</li><li>输入维度必须是4维。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16</td>
       <td>NCHW、NHWC</td>

@@ -115,7 +115,7 @@ aclnnStatus aclnnNonMaxSuppression(
     <tr>
       <td class="tg-0lax">maxOutputBoxesPerClass(aclIntArray*)</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">表示每个批次每个类别选择的最大框数。</td>
+      <td class="tg-0lax">表示每个batch每个类别选择的最大框数。</td>
       <td class="tg-0lax">数值须大于0，上限为700。</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -175,7 +175,7 @@ aclnnStatus aclnnNonMaxSuppression(
     <tr>
       <td class="tg-0pky">executor(aclOpExecutor**)</td>
       <td class="tg-0pky">输出</td>
-      <td class="tg-0pky">返回op执行器，包括了算子计算流程。</td>
+      <td class="tg-0pky">返回op执行器，包含了算子计算流程。</td>
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">-</td>

@@ -23,7 +23,7 @@
 
 ## 功能说明
 
-- 算子功能：对两个输入矩形框集合，计算交并比（IOU）或前景交叉比（IOF），用于评价预测框（bBox）和真值框（gtBox）的重叠度。
+- 算子功能：对两个输入矩形框集合，计算交并比（IOU）或前景交叉比（IOF），用于评价预测矩形框（bBoxes）和真值矩形框（gtBoxes）的重叠度。
 - 计算公式：
 
   $$
@@ -43,7 +43,7 @@
 
 每个算子分为[两段式接口](../../../docs/zh/context/two_phase_api.md)，必须先调用“aclnnIouGetWorkspaceSize”接口获取计算所需workspace大小以及包含了算子计算流程的执行器，再调用“aclnnIou”接口执行计算。
 
-```Cpp
+```cpp
 aclnnStatus aclnnIouGetWorkspaceSize(
   const aclTensor*        bBoxes,
   const aclTensor*        gtBoxes,
@@ -55,7 +55,7 @@ aclnnStatus aclnnIouGetWorkspaceSize(
   aclOpExecutor**         executor)
 ```
 
-```Cpp
+```cpp
 aclnnStatus aclnnIou(
   void*                   workspace,
   uint64_t                workspaceSize,
@@ -122,7 +122,7 @@ aclnnStatus aclnnIou(
     <tr>
       <td class="tg-0lax">eps（float）</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">防止除零，计算面积时，长和宽都会加上eps。</td>
+      <td class="tg-0lax">防止除零，计算面积时，长和宽都会加上eps，取值范围需满足eps≥0。</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">FLOAT</td>
       <td class="tg-0lax">-</td>

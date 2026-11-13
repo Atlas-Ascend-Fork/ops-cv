@@ -31,7 +31,7 @@
     2. 根据这个浮点数坐标，计算前后相邻的原始图像的点。
     3. 分别计算相邻点到对应目标点的权重，按照权重相乘累加即可得到目标点值。
   - 具体计算逻辑：
-    缩放方式分为角对齐和边对齐，角对齐（alignCorners为true）表示按照原始图片左上角像素中心点对齐，边对齐（alignCorners为false）表示按照原始图片左上角顶点及两条边对齐，在计算缩放系数和坐标位置时存在差异，则有以下公式：
+    缩放方式分为角对齐和边对齐，角对齐（alignCorners为true）表示按照原始图像左上角像素中心点对齐，边对齐（alignCorners为false）表示按照原始图片左上角顶点及两条边对齐，在计算缩放系数和坐标位置时存在差异，则有以下公式：
 
     $$
     scale =\begin{cases}
@@ -62,7 +62,7 @@
       {V(p_{x})} = {V(p_{x0})} * {lambda_{0}} + {V(p_{x1})} * {lambda_{1}}
       $$
 
-    - 假设：正向插值的输出图像out $(x)$受原图像input $(x_i)$影响，则有：
+    - 假设：正向插值的输出图像out $(x)$受原始图像input $(x_i)$影响，则有：
 
       $$
       gradInput(x_i) += gradOut(x) * lambda(x_i)
@@ -162,7 +162,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
       <td>scales(double)</td>
       <td>输入</td>
       <td>表示输出out的L维度乘数，对应公式中的`scales`。</td>
-      <td>取值不大于500。</td>
+      <td>取值范围为大于0且不大于500。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -171,8 +171,8 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
     <tr>
       <td>out(aclTensor*)</td>
       <td>输出</td>
-      <td>表示反向计算的输出Tensor，对应公式中的`gradInput`。</td>
-      <td><ul><li>不支持空Tensor</li><li>输出维度必须是3维。数据类型、数据格式与入参`gradOut`保持一致。</li></ul></td>
+      <td>表示反向计算的输出张量，对应公式中的`gradInput`。</td>
+      <td><ul><li>不支持空Tensor。</li><li>输出维度必须是3维。数据类型、数据格式与入参`gradOut`保持一致。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16</td>
       <td>NCL</td>
       <td>3</td>
@@ -333,7 +333,7 @@ aclnnStatus aclnnUpsampleLinear1dBackward(
   $$
 <!-- end id9 -->
 
-- 参数inputSize、outputSize、scales需要满足如下约束：
+- 参数`inputSize`、`outputSize`、`scales`需要满足如下约束：
 
   $$
   outputSize = floor(inputSize\_L * scales)

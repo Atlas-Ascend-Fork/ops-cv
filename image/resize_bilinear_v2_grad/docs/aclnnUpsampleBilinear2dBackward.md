@@ -152,7 +152,7 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
     <tr>
       <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
-      <td>表示输入`gradOutput`在H和W维度上的空间大小，对应公式中的`outputSize`。</td>
+      <td>表示输入`gradOut`在H和W维度上的空间大小，对应公式中的`outputSize`。</td>
       <td>size为2，且各元素均大于零。</td>
       <td>INT64</td>
       <td>-</td>
@@ -173,7 +173,7 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
       <td>alignCorners(bool)</td>
       <td>输入</td>
       <td>决定是否对齐角像素点，对应公式中的`alignCorners`。</td>
-      <td>如果设置为True，则输入和输出张量按其角像素的中心点对齐，保留角像素处的值；如果设置为False，则输入和输出张量通过其角像素的角点对齐，并且插值使用边缘值填充用于外界边值，使此操作在保持不变时独立于输入大小scalesH和scalesW。</td>
+      <td>如果设置为True，则输入和输出张量按其角像素的中心点对齐，保留角像素处的值；如果设置为False，则输入和输出张量通过其角像素的角点对齐，并且插值使用边缘值对边界外的值进行填充，使此操作在不同输入大小下保持一致的行为。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>

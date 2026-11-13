@@ -27,7 +27,7 @@
 
 - 计算公式：
 
-  $findices$记录每个像素点最小深度对应的面索引，$barycentric$记录每个顶点相对于$findices$中记录的面的重心坐标透视矫正插值。
+  $findices$记录每个像素点最小深度对应的面片索引，$barycentric$记录每个顶点相对于$findices$中记录的面的重心坐标透视矫正插值。
   计算过程中使用的Z-Buffer记录每个像素点$(x, y)$的最小深度$z_{\min}(x, y)$以及该深度对应的三角形面片索引$\text{face\_idx}(x, y)$。
 
   计算过程如下：
@@ -41,9 +41,9 @@
      b. 计算$v_c$相对于三角形$f$的重心坐标$(\alpha, \beta, \gamma)$
      c. 根据$(\alpha, \beta, \gamma)$判断$v_c$是否在三角形内部。若$v_c$不在三角形内部，则处理矩形内下个像素点，否则执行下述步骤
      d. 使用$(\alpha, \beta, \gamma)$和$(v_{s0}, v_{s1}, v_{s2})$得到当前像素的深度值depth
-     e. 若启用了深度先验，则使用深度先验图计算深度阈值depth_thres；否则，直接执行下一步“Z-Buffer更新”
+     e. 若启用了深度先验，则使用深度图计算深度阈值depth_thres；否则，直接执行下一步“Z-Buffer更新”
 
-        - 使用深度先验图计算深度阈值depth_thres
+        - 使用深度图计算深度阈值depth_thres
         - 如果depth < depth_thres，处理矩形内下个像素点，否则执行下述步骤
 
      f. Z-Buffer更新：
@@ -109,7 +109,7 @@
     depth\_thres = d(x, y) * 0.49999 + 0.5 + occlusion\_truncation
     $$
 
-  - 根据重心坐标$(\alpha, \beta, \gamma)$判断顶点是否在三角形内：
+  - 根据重心坐标$(\alpha, \beta, \gamma)$判断点是否在三角形内：
     如果$\alpha >= 0$且$\beta >= 0$且$\gamma >= 0$则点在三角形内（包括在三角形边上），否则点不在三角形内。
   - 结合重心坐标$(\lambda_0, \lambda_1, \lambda_2)$以及三角形的三个顶点坐标$v_0 = (x_0, y_0, z_0, w_0)$、$v_1 = (x_1, y_1, z_1, w_1)$和$v_2 = (x_2, y_2, z_2, w_2)$计算透视矫正插值$(\lambda_0^{corrected}, \lambda_1^{corrected}, \lambda_2^{corrected})$
 

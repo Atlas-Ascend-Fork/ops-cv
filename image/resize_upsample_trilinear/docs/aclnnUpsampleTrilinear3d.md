@@ -169,7 +169,7 @@ aclnnStatus aclnnUpsampleTrilinear3d(
     <tr>
       <td>outputSize(aclIntArray*)</td>
       <td>输入</td>
-      <td>表示出参`out`在D、H和W维度上的空间大小，对应公式中的`outputSize`。</td>
+      <td>表示输出`out`在D、H和W维度上的空间大小，对应公式中的`outputSize`。</td>
       <td>size为3，且各元素均大于零。</td>
       <td>INT64</td>
       <td>-</td>
@@ -189,7 +189,7 @@ aclnnStatus aclnnUpsampleTrilinear3d(
     <tr>
       <td>scalesD(double)</td>
       <td>输入</td>
-      <td>表示输出`out`的depth维度乘数，对应公式中的`scales_d`。</td>
+      <td>表示输出`out`的深度维度乘数，对应公式中的`scales_d`。</td>
       <td>取值小于等于50。</td>
       <td>-</td>
       <td>-</td>
@@ -199,7 +199,7 @@ aclnnStatus aclnnUpsampleTrilinear3d(
     <tr>
       <td>scalesH(double)</td>
       <td>输入</td>
-      <td>表示输出`out`的height维度乘数，对应公式中的`scales_h`。</td>
+      <td>表示输出`out`的高度维度乘数，对应公式中的`scales_h`。</td>
       <td>取值小于等于50。</td>
       <td>-</td>
       <td>-</td>
@@ -209,7 +209,7 @@ aclnnStatus aclnnUpsampleTrilinear3d(
     <tr>
       <td>scalesW(double)</td>
       <td>输入</td>
-      <td>表示输出`out`的width维度乘数，对应公式中的`scales_w`。</td>
+      <td>表示输出`out`的宽度维度乘数，对应公式中的`scales_w`。</td>
       <td>取值小于等于50。</td>
       <td>-</td>
       <td>-</td>
@@ -239,7 +239,7 @@ aclnnStatus aclnnUpsampleTrilinear3d(
     <tr>
       <td>executor(aclOpExecutor**)</td>
       <td>输出</td>
-      <td>返回op执行器，包含了算子计算流程。</td>
+      <td>返回OP执行器，包含了算子计算流程。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -338,7 +338,7 @@ aclnnStatus aclnnUpsampleTrilinear3d(
     <tr>
       <td>executor</td>
       <td>输入</td>
-      <td>op执行器，包含了算子计算流程。</td>
+      <td>OP执行器，包含了算子计算流程。</td>
     </tr>
     <tr>
       <td>stream</td>

@@ -293,7 +293,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
 - gradOutput、argmax、gradInputRef的shape大小为4，rois的shape大小为2。
 - gradOutput、argmax、rois的shape[0]相等。
 - gradOutput、argmax的shape[1]相等。
-- gradOutput、argmax的shape[2]等于pooledH和shape[3]等于pooledW。
+- gradOutput、argmax的shape[2]等于pooledH，shape[3]等于pooledW。
 - rois的值大于等于0。
 - pooledH、pooledW大于0。
 - rois[:, 1] 小于rois[:, 2] 且rois[:, 3] 小于rois[:, 4]。

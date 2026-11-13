@@ -105,7 +105,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">INT32、INT64</td>
       <td class="tg-0lax">-</td>
-      <td class="tg-0lax">size大小为4，值为（B, C, inputHeight, inputWidth）<br>表示正向RoiAlign的输入张量一个batch内有B张图像，每个图像有C个尺寸为inputHeight * inputWidth的特征图。<br>B、C、inputHeight、inputWidth均需大于0。</td>
+      <td class="tg-0lax">size大小为4，值为（B，C，inputHeight，inputWidth）<br>表示正向RoiAlign的输入张量一个batch内有B张图像，每个图像有C个尺寸为inputHeight * inputWidth的特征图。<br>B、C、inputHeight、inputWidth均需大于0。</td>
       <td class="tg-0lax">-</td>
     </tr>
     <tr>
@@ -165,7 +165,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <td class="tg-0pky">必须与gradOutput、boxes数据类型一致。</td>
       <td class="tg-0pky">FLOAT</td>
       <td class="tg-0pky">NCHW</td>
-      <td class="tg-0pky">4维，shape为（B, C, inputHeight, inputWidth）</td>
+      <td class="tg-0pky">4维，shape为（B，C，inputHeight，inputWidth）</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>

@@ -332,7 +332,7 @@ aclnnStatus aclnnUpsampleNearestExact3dBackward(
 - 参数`gradOut`、`gradInput`的shape约束：
   - 每个维度的取值小于等于2^20。
   - 参数`gradInput`的N轴和C轴与`gradOut`保持一致。
-  - 内存占用需小于60GB。内存占用的计算公式如下：
+  - 存储占用需小于60GB。存储占用的计算公式如下：
 
     $$
     N * C * (gradOut\_D * gradOut\_H * gradOut\_W + gradInput\_D * gradInput\_H * gradInput\_W + gradOut\_D * gradOut\_H * gradInput\_W + gradOut\_D * gradInput\_H * gradInput\_W) * sizeof(dtype) < 60 * 1024 * 1024 * 1024

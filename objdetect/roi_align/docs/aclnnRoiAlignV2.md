@@ -265,7 +265,7 @@ aclnnStatus aclnnRoiAlignV2(
 
 - 确定性计算：
   - aclnnRoiAlignV2默认确定性实现。
-- self：B、C、inputHeight、inputWidth 均不支持 0 维。
+- self：B、C、inputHeight、inputWidth均不支持0维。
 - pooledHeight 和 pooledWidth 需小于等于 INT32_MAX（2147483647）。
 - samplingRatio：需满足 `0 <= 值 <= 46340`（即 floor(sqrt(INT32_MAX))）。
 

@@ -27,7 +27,6 @@
 | ACLNN_ERR_INNER_NOT_TRANS_EXECUTOR     |  561102      |   内部异常：API内部未调用uniqueExecutor ReleaseTo。      |
 | ACLNN_ERR_INNER_NULLPTR            |   561103     |    内部异常：aclnn API内部发生异常，出现了nullptr的异常。     |
 | ACLNN_ERR_INNER_WRONG_ATTR_INFO_SIZE     |   561104     |   内部异常：aclnn API内部发生异常，算子的属性个数异常。      |
-| ACLNN_ERR_INNER_KEY_CONFLICT（废弃）     |   561105     |    **已废弃，请使用最新ACLNN_ERR_INNER_KEY_CONFLICT。**     |
 | ACLNN_ERR_INNER_KEY_CONFLICT |   561105     |   内部异常：aclnn API内部发生异常，算子的kernel匹配的hash key发生冲突。 |
 | ACLNN_ERR_INNER_INVALID_IMPL_MODE     |   561106     |   内部异常：aclnn API内部发生异常，算子的实现模式参数错误。    |
 | ACLNN_ERR_INNER_OPP_PATH_NOT_FOUND     |  561107     |  内部异常：aclnn API内部发生异常，没有检测到需要配置的环境变量ASCEND_OPP_PATH。       |

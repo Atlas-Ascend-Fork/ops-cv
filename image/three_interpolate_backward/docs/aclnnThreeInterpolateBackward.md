@@ -237,7 +237,7 @@ aclnnStatus aclnnThreeInterpolateBackward(
 - `weight`与`grad_x`、`grad_y`的数据类型必须一致。
 - 维度上界：`grad_x`各轴（B、C、N）与属性`m`须在`[0, INT32_MAX]`范围内，且`B*C*N`、`B*C*M`的元素总数须不超过`INT64_MAX/8`；超出范围时算子返回失败。
 - `grad_y`为纯输出：其初始内容会被整行覆盖（先清零再累加），调用方无需预置初值。
-- 属性m必须大于0。
+- 输入参数m必须大于0。
 - 空Tensor支持：当`grad_x`为空Tensor（b==0或c==0）时，`grad_y`为对应的空Tensor；当`grad_x`非空但n==0（`idx`/`weight`为空、`grad_y`非空）时，`grad_y`全部置0。
 <!-- npu="950" id7 -->
 - <term>Ascend 950PR&950DT系列产品</term>：支持动态shape（`-1`表示未知维度、`-2`表示未知秩），实际执行时形状须已具体化。

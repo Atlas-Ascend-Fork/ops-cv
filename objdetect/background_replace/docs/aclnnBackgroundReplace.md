@@ -87,7 +87,7 @@ aclnnStatus aclnnBackgroundReplace(
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">UINT8、FLOAT16</td>
       <td class="tg-0pky">ND</td>
-      <td class="tg-0pky">HWC(C=1、3)。</td>
+      <td class="tg-0pky">HWC(C=1、3)，H、W与bkg一致。</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
@@ -97,7 +97,7 @@ aclnnStatus aclnnBackgroundReplace(
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">UINT8、FLOAT16</td>
       <td class="tg-0pky">ND</td>
-      <td class="tg-0pky">HWC(C=1、3)。</td>
+      <td class="tg-0pky">HWC(C=1、3)，H、W与bkg一致。</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
@@ -117,7 +117,7 @@ aclnnStatus aclnnBackgroundReplace(
       <td class="tg-0pky">数据类型和shape与输入背景图片bkg一致。</td>
       <td class="tg-0pky">UINT8、FLOAT16</td>
       <td class="tg-0pky">ND</td>
-      <td class="tg-0pky">HWC(C=1、3)。</td>
+      <td class="tg-0pky">HWC(C=1、3)，H、W与bkg一致。</td>
       <td class="tg-0pky">-</td>
     </tr>
     <tr>

@@ -142,7 +142,7 @@ aclnnStatus aclnnUpsampleNearest1dBackward(
       <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示反向计算的输出张量，对应公式中的'out'。</td>
-      <td><ul><li>L轴不支持空Tensor。</li><li>数据类型与`gradOut`保持一致。</li><li>输入必须是3维。</li></ul></td>
+      <td><ul><li>L轴不支持空Tensor。</li><li>数据类型与`gradOut`保持一致。</li><li>输入维度必须是3维。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16、DOUBLE</td>
       <td>NCL、ND</td>
       <td>3</td>
@@ -272,7 +272,7 @@ aclnnStatus aclnnUpsampleNearest1dBackward(
   outputSize = floor(inputSize\_L * scales)
   $$
 
-- 参数`gradOut`、`out`及inputSize各元素的单维上限约束：
+- 参数`gradOut`、`out`及`inputSize`各元素的单维上限约束：
   - 每个维度（含inputSize各元素）的取值需小于等于2^31-1（INT32_MAX），超出上限第一段返回161002（参数不合法）。
 - 确定性计算：
   - aclnnUpsampleNearest1dBackward默认确定性实现。
