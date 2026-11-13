@@ -23,6 +23,10 @@ const aclTensor* ROIAlign(const aclTensor* self, const aclTensor* rois, const ac
 const aclTensor* ROIAlignV2(const aclTensor* self, const aclTensor* boxes, float spatialScale, int64_t outputHeight,
                             int64_t outputWidth, int64_t samplingRatio, const char* mode, int64_t roiEndMode,
                             aclOpExecutor* executor);
+
+const aclTensor* ROIAlignV2(const aclTensor* self, const aclTensor* boxes, const aclTensor* batchIndices,
+                            float spatialScale, int64_t outputHeight, int64_t outputWidth, int64_t samplingRatio,
+                            const char* mode, int64_t roiEndMode, aclOpExecutor* executor);
 } // namespace l0op
 
 #endif // OP_API_INC_LEVEL0_ROI_ALIGN_H_

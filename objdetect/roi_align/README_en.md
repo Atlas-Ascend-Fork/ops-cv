@@ -60,7 +60,7 @@ In the formula, the coordinate mapping is controlled by the `roi_end_mode` attri
     <tr>
       <td>rois_n</td>
       <td>Input (Optional)</td>
-      <td>Batch quantity corresponding to each ROI, with shape (K,).</td>
+      <td>Batch index corresponding to each ROI, with shape (K,). The i-th element specifies the batch index used by the i-th ROI. When provided, it overrides batch_idx in the i-th row of rois; otherwise, batch_idx in rois is used.</td>
       <td>INT32</td>
       <td>ND</td>
     </tr>
@@ -95,14 +95,14 @@ In the formula, the coordinate mapping is controlled by the `roi_end_mode` attri
     <tr>
       <td>sample_num</td>
       <td>Attr (Optional)</td>
-      <td>A positive value indicates that each bin uses this number of sampling points in the H and W directions respectively. 0 indicates that the operator determines the number of sampling points by rounding up the bin size of each ROI in the H and W directions. Default value: 2.</td>
+      <td>A positive value indicates that each bin uses this number of sampling points in the H and W directions respectively. 0 indicates that the operator determines the number of sampling points by rounding up the bin size of each ROI in the H and W directions. Value range: [0, 46340] (floor(sqrt(INT32_MAX))). Default value: 2.</td>
       <td>Int</td>
       <td>-</td>
     </tr>
     <tr>
       <td>roi_end_mode</td>
       <td>Attr (Optional)</td>
-      <td>Coordinate transformation mode: 0 means no offset; 1 means adding 1 before scaling; >=2 means subtracting the 0.5 offset. Default value: 1.</td>
+      <td>Coordinate transformation mode: 0 means no offset; 1 means adding 1 before scaling; 2 means subtracting the 0.5 offset; 3 means subtracting the 0.5 offset (equivalent to 2). Only 0, 1, 2, and 3 are supported. Default value: 1.</td>
       <td>Int</td>
       <td>-</td>
     </tr>
@@ -117,26 +117,21 @@ In the formula, the coordinate mapping is controlled by the `roi_end_mode` attri
 
 ## Constraints
 
-- features must be a 4D tensor (N, C, H, W).
+- features must be a 4D tensor (N, C, H, W) in ND format.
 - rois must be a 2D tensor (K, 5), and each row is in the format [batch_idx, x1, y1, x2, y2].
-- 0 <= batch_idx <= N - 1, 0 <= x1 < x2, and 0 <= y1 < y2.
+- batch_idx must be within [0, N), where N is the size of dimension 0 of input features. If it is out of range, the operator does not report an error: the ROI is treated as an empty ROI and outputs 0 (no out-of-bounds read is performed). 0 <= x1 <= x2 <= W / spatial_scale, and 0 <= y1 <= y2 <= H / spatial_scale (x1 == x2 or y1 == y2 is valid; for roi_end_mode 0/1 the ROI extent in that direction is clamped to a minimum of 1.0).
 - features and rois must use the same dtype (float16 or float32).
-- pooled_height and pooled_width must be >= 1.
-- spatial_scale must be > 0.
+- rois_n (optional) must be a 1D INT32 tensor with length K (the number of rois rows); the i-th element is the batch index of the i-th ROI and overrides batch_idx in the i-th row of rois.
+- pooled_height and pooled_width must satisfy 1 <= value <= INT32_MAX (2147483647).
+- sample_num must satisfy 0 <= value <= 46340 (floor(sqrt(INT32_MAX))).
+- roi_end_mode only supports 0, 1, 2, and 3.
+- pool_mode only supports "avg" and "max".
+- spatial_scale must be finite and > 0.
 
 ## Invocation
 
-<table><thead>
-  <tr>
-    <th>Invocation Method</th>
-    <th>Sample</th>
-    <th>Description</th>
-  </tr></thead>
-<tbody>
-  <tr>
-    <td>Graph-mode invocation</td>
-    <td><a href="./examples/arch35/test_geir_roi_align.cpp">test_geir_roi_align</a></td>
-    <td>Refer to <a href="../../docs/zh/invocation/quick_op_invocation.md">Operator Invocation</a> to complete operator compilation and verification.</td>
-  </tr>
-</tbody>
-</table>
+| Invocation Method | Sample Code | Description |
+|----------|----------|------|
+| aclnn API | [test_aclnn_roi_align](examples/test_aclnn_roi_align.cpp) | Call the ROIAlign operator through the [aclnnRoiAlign](docs/aclnnRoiAlign_en.md) interface. |
+| aclnn API | [test_aclnn_roi_align_v2](examples/test_aclnn_roi_align_v2.cpp) | Call the ROIAlign operator through the [aclnnRoiAlignV2](docs/aclnnRoiAlignV2_en.md) interface. |
+| GE graph mode | [test_geir_roi_align](examples/arch35/test_geir_roi_align.cpp) | Call the ROIAlign operator by building a graph through [operator IR](op_graph/roi_align_proto.h). Refer to [Operator Invocation](../../docs/zh/invocation/quick_op_invocation.md) to complete operator compilation and verification. |

@@ -101,4 +101,47 @@ const aclTensor* ROIAlignV2(const aclTensor* self, const aclTensor* boxes, float
 
     return out;
 }
+
+const aclTensor* ROIAlignV2(const aclTensor* self, const aclTensor* boxes, const aclTensor* batchIndices,
+                            float spatialScale, int64_t outputHeight, int64_t outputWidth, int64_t samplingRatio,
+                            const char* mode, int64_t roiEndMode, aclOpExecutor* executor)
+{
+    L0_DFX(ROIAlignV2, self, boxes, batchIndices, spatialScale, outputHeight, outputWidth, samplingRatio, mode,
+           roiEndMode);
+
+    op::Shape outStorageShape = self->GetStorageShape();
+    op::Shape outOriginalShape = self->GetOriginalShape();
+    op::Shape roisStorageShape = boxes->GetStorageShape();
+    auto numRois = roisStorageShape.GetDim(0);
+    outStorageShape.SetDim(DIM_0, numRois);
+    outStorageShape.SetDim(DIM_2, outputHeight);
+    outStorageShape.SetDim(DIM_3, outputWidth);
+    outOriginalShape.SetDim(DIM_0, numRois);
+    outOriginalShape.SetDim(DIM_2, outputHeight);
+    outOriginalShape.SetDim(DIM_3, outputWidth);
+
+    auto out = executor->AllocTensor(outStorageShape, outOriginalShape, self->GetDataType(), self->GetStorageFormat(),
+                                     self->GetOriginalFormat());
+    if (out == nullptr) {
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                               "ROIAlignV2 AllocTensor returned nullptr; propagate allocator first error");
+        return nullptr;
+    }
+
+    // 调用device的RoiAlign算子
+    auto ret = ADD_TO_LAUNCHER_LIST_AICORE(
+        ROIAlign, OP_INPUT(self, boxes, batchIndices), OP_OUTPUT(out),
+        OP_ATTR(spatialScale, outputHeight, outputWidth, samplingRatio, roiEndMode, mode));
+    if (ret != ACLNN_SUCCESS) {
+        const std::string reason = "ADD_TO_LAUNCHER_LIST_AICORE failed, rc=" +
+                                   std::to_string(static_cast<int32_t>(ret)) + ". Kernel is ROIAlign.";
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "%s", reason.c_str());
+        const std::vector<const char*> keys = {"opName", "reason"};
+        const std::vector<const char*> values = {"ROIAlign", reason.c_str()};
+        REPORT_PREDEFINED_ERR_MSG("EZ1009", keys, values);
+        return nullptr;
+    }
+
+    return out;
+}
 } // namespace l0op

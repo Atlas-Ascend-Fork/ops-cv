@@ -25,6 +25,7 @@
 #include "op_host/tiling_templates_registry.h"
 #include "../../op_kernel/arch35/roi_align_tiling_data.h"
 #include "../../op_kernel/arch35/roi_align_tiling_key.h"
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -180,6 +181,13 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
     auto outputShape = context->GetOutputShape(IDX_OUTPUT);
     ROI_ALIGN_CHECK_NULL(context, outputShape);
 
+    // N 写入 tiling data 的 int32 字段（kernel 侧 batchIdx 越界防护上界），超界拒绝（防截断）
+    int64_t nDim = featuresShape.GetDim(FEATURES_DIM_N);
+    const std::string featuresShapeMsg = Ops::Base::ToString(featuresShape);
+    OP_CHECK_IF(nDim < 0 || nDim > INT32_MAX,
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "features", featuresShapeMsg.c_str(),
+                                                      "N must be within [0, INT32_MAX]"),
+                return ge::GRAPH_FAILED);
     int64_t cDim = featuresShape.GetDim(FEATURES_DIM_C);
     int64_t hDim = featuresShape.GetDim(FEATURES_DIM_H);
     int64_t wDim = featuresShape.GetDim(FEATURES_DIM_W);
@@ -188,6 +196,7 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
     int64_t H = hDim;
     int64_t W = wDim;
     int64_t K = kDim;
+    bool featuresEmpty = featuresShape.GetDim(FEATURES_DIM_N) == 0 || H == 0 || W == 0;
     // Get attributes by index (matching REG_OP attr order):
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
     ROI_ALIGN_CHECK_NULL(context, attrs);
@@ -195,57 +204,48 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
     const int64_t* pooledHPtr = attrs->GetInt(ATTR_IDX_POOLED_HEIGHT);
     const int64_t* pooledWPtr = attrs->GetInt(ATTR_IDX_POOLED_WIDTH);
     const int64_t* sampleNumPtr = attrs->GetInt(ATTR_IDX_SAMPLE_NUM);
-    OP_CHECK_IF(*pooledHPtr > INT32_MAX,
-                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "pooled_height", std::to_string(*pooledHPtr).c_str(),
-                                          "<= INT32_MAX"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(*pooledWPtr > INT32_MAX,
-                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "pooled_width", std::to_string(*pooledWPtr).c_str(),
-                                          "<= INT32_MAX"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(*sampleNumPtr > std::sqrt(INT32_MAX),
-                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "sample_num", std::to_string(*sampleNumPtr).c_str(),
-                                          "<= sqrt(INT32_MAX)"),
-                return ge::GRAPH_FAILED);
     const int64_t* roiEndModePtr = attrs->GetInt(ATTR_IDX_ROI_END_MODE);
     const char* poolModeStr = attrs->GetStr(ATTR_IDX_POOL_MODE);
 
     float spatialScale = (spatialScalePtr != nullptr) ? *spatialScalePtr : DEFAULT_SPATIAL_SCALE;
-    int32_t pooledH = (pooledHPtr != nullptr) ? static_cast<int32_t>(*pooledHPtr) : DEFAULT_POOLED_SIZE;
-    int32_t pooledW = (pooledWPtr != nullptr) ? static_cast<int32_t>(*pooledWPtr) : DEFAULT_POOLED_SIZE;
-    int32_t sampleNum = (sampleNumPtr != nullptr) ? static_cast<int32_t>(*sampleNumPtr) : DEFAULT_SAMPLE_NUM;
-    int32_t roiEndMode = (roiEndModePtr != nullptr) ? static_cast<int32_t>(*roiEndModePtr) : DEFAULT_ROI_END_MODE;
+    int64_t pooledHRaw = (pooledHPtr != nullptr) ? *pooledHPtr : DEFAULT_POOLED_SIZE;
+    int64_t pooledWRaw = (pooledWPtr != nullptr) ? *pooledWPtr : DEFAULT_POOLED_SIZE;
+    int64_t sampleNumRaw = (sampleNumPtr != nullptr) ? *sampleNumPtr : DEFAULT_SAMPLE_NUM;
+    int64_t roiEndModeRaw = (roiEndModePtr != nullptr) ? *roiEndModePtr : DEFAULT_ROI_END_MODE;
+
+    // Validate int64 attributes before narrowing to int32.
+    OP_CHECK_IF(pooledHRaw < MIN_POOLED_SIZE || pooledHRaw > INT32_MAX,
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "pooled_height", std::to_string(pooledHRaw).c_str(),
+                                          ">= 1 and <= INT32_MAX"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(pooledWRaw < MIN_POOLED_SIZE || pooledWRaw > INT32_MAX,
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "pooled_width", std::to_string(pooledWRaw).c_str(),
+                                          ">= 1 and <= INT32_MAX"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(sampleNumRaw < 0 || sampleNumRaw > static_cast<int64_t>(std::sqrt(INT32_MAX)),
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "sample_num", std::to_string(sampleNumRaw).c_str(),
+                                          ">= 0 and <= sqrt(INT32_MAX)"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(roiEndModeRaw < ROI_END_MODE_MIN || roiEndModeRaw > ROI_END_MODE_MAX,
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "roi_end_mode", std::to_string(roiEndModeRaw).c_str(),
+                                          "0, 1, 2 or 3"),
+                return ge::GRAPH_FAILED);
+    // README约束#6: spatial_scale 必须为有限值且 > 0
+    OP_CHECK_IF(!std::isfinite(spatialScale) || spatialScale <= 0.0f,
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "spatial_scale", std::to_string(spatialScale).c_str(),
+                                          "must be finite and > 0"),
+                return ge::GRAPH_FAILED);
     // SE约束: pool_mode 必须为 "avg" 或 "max"
     OP_CHECK_IF(poolModeStr != nullptr && strcmp(poolModeStr, "avg") != 0 && strcmp(poolModeStr, "max") != 0,
                 OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "pool_mode", poolModeStr, "\"avg\" or \"max\""),
                 return ge::GRAPH_FAILED);
+
+    int32_t pooledH = static_cast<int32_t>(pooledHRaw);
+    int32_t pooledW = static_cast<int32_t>(pooledWRaw);
+    int32_t sampleNum = static_cast<int32_t>(sampleNumRaw);
+    int32_t roiEndMode = static_cast<int32_t>(roiEndModeRaw);
     int32_t poolMode = (poolModeStr != nullptr && strcmp(poolModeStr, "max") == 0) ? ROI_ALIGN_POOL_MAX :
                                                                                      ROI_ALIGN_POOL_AVG;
-    // SE约束: sample_num 必须 >= 0
-    OP_CHECK_IF(
-        sampleNum < 0,
-        OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "sample_num", std::to_string(sampleNum).c_str(), ">= 0"),
-        return ge::GRAPH_FAILED);
-    // SE约束: roi_end_mode 取值范围为 {0, 1, 2, 3}
-    OP_CHECK_IF(roiEndMode < ROI_END_MODE_MIN || roiEndMode > ROI_END_MODE_MAX,
-                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "roi_end_mode", std::to_string(roiEndMode).c_str(),
-                                          "0, 1, 2 or 3"),
-                return ge::GRAPH_FAILED);
-
-    // README约束#5: pooled_height 和 pooled_width 必须 >= 1
-    OP_CHECK_IF(
-        pooledH < MIN_POOLED_SIZE,
-        OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "pooled_height", std::to_string(pooledH).c_str(), ">= 1"),
-        return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        pooledW < MIN_POOLED_SIZE,
-        OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "pooled_width", std::to_string(pooledW).c_str(), ">= 1"),
-        return ge::GRAPH_FAILED);
-    // README约束#6: spatial_scale 必须 > 0
-    OP_CHECK_IF(spatialScale <= 0.0f,
-                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "spatial_scale", std::to_string(spatialScale).c_str(),
-                                          "must be > 0"),
-                return ge::GRAPH_FAILED);
 
     // Check optional input rois_n
     int32_t hasRoisN = ROIS_N_ABSENT;
@@ -267,11 +267,20 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
                 roisNStorageShape.GetDim(ROIS_DIM_ROIS_N_COUNT) != K,
                 OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "rois_n",
                                           std::to_string(roisNStorageShape.GetDim(ROIS_DIM_ROIS_N_COUNT)).c_str(),
-                                          "rois_n count must equal rois K"),
+                                          "rois_n must contain one batch index per rois row (length K)"),
                 return ge::GRAPH_FAILED);
             hasRoisN = ROIS_N_PRESENT;
         }
     }
+
+    // Bounds-check the four-way product before multiplication: each factor except K/C is bounded, but
+    // K * C * pooled_height * pooled_width can still exceed INT64_MAX and wrap around.
+    const std::string elementCount = std::to_string(K) + " * " + std::to_string(C) + " * " +
+                                     std::to_string(pooledHRaw) + " * " + std::to_string(pooledWRaw);
+    OP_CHECK_IF(K > 0 && C > 0 && K > INT64_MAX / C / pooledHRaw / pooledWRaw,
+                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "totalElements", elementCount.c_str(),
+                                          "K * C * pooled_height * pooled_width must not exceed INT64_MAX"),
+                return ge::GRAPH_FAILED);
 
     // Compute total output elements
     int64_t totalElements = K * C * pooledH * pooledW;
@@ -296,9 +305,10 @@ static ge::graphStatus ROIAlignTilingFunc(gert::TilingContext* context)
 
     tiling->totalElements = totalElements;
     tiling->needCoreNum = static_cast<int32_t>(needCoreNum);
+    tiling->batchSize = static_cast<int32_t>(nDim);
     tiling->channels = C;
-    tiling->height = H;
-    tiling->width = W;
+    tiling->height = featuresEmpty ? 0 : H;
+    tiling->width = featuresEmpty ? 0 : W;
     tiling->pooledHeight = pooledH;
     tiling->pooledWidth = pooledW;
     tiling->sampleNum = sampleNum;

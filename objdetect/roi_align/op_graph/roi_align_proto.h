@@ -23,12 +23,12 @@ namespace ge {
 
 * @par Inputs:
 * Three inputs, including:
-* @li features: A 5HD Tensor of type float32 or float16.
+* @li features: A 4D ND Tensor of type float32 or float16, with shape (N, C, H, W).
 * @li rois: ROI position. A 2D Tensor with the same type as "features" (float32 or float16) and shape (N, 5).
 * "N" indicates the number of ROIs, and "5" indicates the indexes of images where the ROIs are located,
 * "x0", "y0", "x1", and "y1".
-* @li rois_n: Optional INT32 input with shape (N), where N equals the number of ROIs.
-* Each element is the corresponding ROI batch index and overrides the index in `rois`. \n
+* @li rois_n: Optional 1D INT32 input with length K, where K equals the number of ROIs (rows of `rois`).
+* Each element is the corresponding ROI batch index and overrides the index in `rois`.
 
 * @par Attributes:
 * @li spatial_scale: A required attribute of type float32, specifying the scaling ratio of "features" to the original
@@ -48,9 +48,9 @@ output. If this attribute is set to "0",
 and "max". \n
 
 * @par Outputs:
-* y: Outputs the feature sample of each ROI position. The format is 5HD Tensor of type float32 or float16.
-* The axis N is the number of input ROIs. Axes H, W, and C are consistent
-* with the values of "pooled_height",
+* y: Outputs the feature sample of each ROI position, with shape (K, C, pooled_height, pooled_width).
+* The format is ND Tensor of type float32 or float16. K is the number of input ROIs.
+* Axes H, W, and C are consistent with the values of "pooled_height",
 * "pooled_width", and "features", respectively.
 */
 REG_OP(ROIAlign)

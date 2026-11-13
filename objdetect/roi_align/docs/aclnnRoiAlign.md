@@ -121,7 +121,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">outputHeight(int)</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">输出图像的高度。</td>
+      <td class="tg-0lax">输出图像的高度。取值范围[1, INT32_MAX]。</td>
       <td class="tg-0lax">建议传值1。</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -131,7 +131,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">outputWidth(int)</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">输出图像的宽度。</td>
+      <td class="tg-0lax">输出图像的宽度。取值范围[1, INT32_MAX]。</td>
       <td class="tg-0lax">建议传值1。</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -141,7 +141,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">samplingRatio(int)</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">用于计算每个输出元素在H和W方向上的采样频率。</td>
+      <td class="tg-0lax">用于计算每个输出元素在H和W方向上的采样频率。取值范围[0, 46340]（即floor(sqrt(INT32_MAX))）。</td>
       <td class="tg-0lax">建议传值0。</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -242,7 +242,10 @@ aclnnStatus aclnnRoiAlign(
       <td>mode仅支持"avg"和"max"两种取值。</td>
     </tr>
     <tr>
-      <td>samplingRatio需大于等于0。</td>
+      <td>outputHeight和outputWidth需大于等于1且不超过INT32_MAX。</td>
+    </tr>
+    <tr>
+      <td>samplingRatio需大于等于0且不超过46340（floor(sqrt(INT32_MAX))）。</td>
     </tr>
     <tr>
       <td>spatialScale需为有限值且大于0。</td>
@@ -298,6 +301,8 @@ aclnnStatus aclnnRoiAlign(
 - 确定性计算：
   - aclnnRoiAlign默认确定性实现。
 - batchIndices：每个元素需满足 `0 <= v < self.shape[0]`，由调用方保证合法；算子不对索引取值做运行时校验。
+- outputHeight/outputWidth：需满足 `1 <= 值 <= INT32_MAX`。
+- samplingRatio：需满足 `0 <= 值 <= 46340`（即 floor(sqrt(INT32_MAX))）。
 - spatialScale：需为有限值且大于 0。
 
 ## 调用示例
@@ -413,9 +418,9 @@ int main() {
   aclTensor* out = nullptr;
 
   std::vector<float> selfHostData = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
-  std::vector<float> roisHostData = {-2.0, -2.0, 22.0, 22.0};
+  std::vector<float> roisHostData = {0.0, 0.0, 24.0, 24.0};
   std::vector<int32_t> batchIndicesHostData = {0};
-  std::vector<float> outHostData = {4.5, 6.5, 8.5, 16.5, 18.5, 20.5, 28.5, 30.5, 32.5};
+  std::vector<float> outHostData = {8.0, 10.0, 11.75, 20.0, 22.0, 23.75, 30.5, 32.5, 34.25};
 
   // 创建self aclTensor
   ret = CreateAclNchTensor(selfHostData, selfShape, &selfDeviceAddr, aclDataType::ACL_FLOAT, &self);

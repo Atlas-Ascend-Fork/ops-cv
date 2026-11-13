@@ -24,6 +24,7 @@
 struct ROIAlignTilingData {
     int64_t totalElements; // K * C * pooledHeight * pooledWidth
     int32_t needCoreNum;   // actual core count
+    int32_t batchSize;     // N = features dim(0), upper bound for kernel-side batchIdx [0, N) check
     int64_t channels;      // C
     int64_t height;        // H
     int64_t width;         // W

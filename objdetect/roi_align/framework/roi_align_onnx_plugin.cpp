@@ -20,6 +20,14 @@ using namespace std;
 using namespace ge;
 using ge::Operator;
 
+namespace ge {
+REG_OP(CastLike)
+    .INPUT(x, TensorType({BasicType(), DT_BOOL, DT_STRING}))
+    .INPUT(target, TensorType({BasicType(), DT_BOOL, DT_STRING}))
+    .OUTPUT(y, TensorType({BasicType(), DT_BOOL, DT_STRING}))
+    .OP_END_FACTORY_REG(CastLike)
+} // namespace ge
+
 namespace domi {
 using json = nlohmann::json;
 
@@ -176,8 +184,8 @@ static Status ParseOpToGraphRoiAlign(const ge::Operator& op, Graph& graph)
 
     std::vector<int64_t> axes = {-1};
     auto unsqueeze_op = op::Unsqueeze((ori_name + "_unsqueeze").c_str()).set_input_x(data2).set_attr_axes(axes);
-    auto cast_op = op::Cast((ori_name + "_cast").c_str()).set_input_x(unsqueeze_op).set_attr_dst_type(DT_FLOAT);
-    auto cast1_op = op::Cast((ori_name + "_cast1").c_str()).set_input_x(data1).set_attr_dst_type(DT_FLOAT);
+    auto cast_op = op::CastLike((ori_name + "_cast").c_str()).set_input_x(unsqueeze_op).set_input_target(data0);
+    auto cast1_op = op::CastLike((ori_name + "_cast1").c_str()).set_input_x(data1).set_input_target(data0);
     auto concat_op = op::Concat((ori_name + "_concat").c_str())
                          .create_dynamic_input_x(2)
                          .set_dynamic_input_x(0, cast_op)

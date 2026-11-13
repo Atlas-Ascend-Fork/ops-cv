@@ -3,7 +3,7 @@
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- <term>Ascend 950PR&950DT products</term>: Not supported
+- <term>Ascend 950PR&950DT products</term>: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
 - <term>Atlas A3 products</term>: Supported
@@ -121,7 +121,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">outputHeight (int)</td>
       <td class="tg-0lax">Input</td>
-      <td class="tg-0lax">Height of the output image.</td>
+      <td class="tg-0lax">Height of the output image. Value range: [1, INT32_MAX].</td>
       <td class="tg-0lax">It is recommended to set this parameter to 1.</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -131,7 +131,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">outputWidth (int)</td>
       <td class="tg-0lax">Input</td>
-      <td class="tg-0lax">Width of the output image.</td>
+      <td class="tg-0lax">Width of the output image. Value range: [1, INT32_MAX].</td>
       <td class="tg-0lax">It is recommended to set this value to 1.</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -141,7 +141,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">samplingRatio（int）</td>
       <td class="tg-0lax">Input</td>
-      <td class="tg-0lax">Used to compute the sampling frequency for each output element in the H and W directions.</td>
+      <td class="tg-0lax">Used to compute the sampling frequency for each output element in the H and W directions. Value range: [0, 46340] (floor(sqrt(INT32_MAX))).</td>
       <td class="tg-0lax">It is recommended to pass 0.</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -243,7 +243,10 @@ aclnnStatus aclnnRoiAlign(
       <td>mode only supports "avg" and "max".</td>
     </tr>
     <tr>
-      <td>samplingRatio must be greater than or equal to 0.</td>
+      <td>outputHeight and outputWidth must be greater than or equal to 1 and not greater than INT32_MAX.</td>
+    </tr>
+    <tr>
+      <td>samplingRatio must be greater than or equal to 0 and not greater than 46340 (floor(sqrt(INT32_MAX))).</td>
     </tr>
     <tr>
       <td>spatialScale must be greater than 0.</td>
@@ -298,6 +301,9 @@ aclnnStatus aclnnRoiAlign(
 
 - Deterministic computation:
   - aclnnRoiAlign defaults to a deterministic implementation.
+- outputHeight/outputWidth: must satisfy `1 <= value <= INT32_MAX`.
+- samplingRatio: must satisfy `0 <= value <= 46340` (floor(sqrt(INT32_MAX))).
+- spatialScale: must be finite and greater than 0.
 
 ## Example
 
@@ -412,9 +418,9 @@ int main() {
   aclTensor* out = nullptr;
 
   std::vector<float> selfHostData = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
-  std::vector<float> roisHostData = {-2.0, -2.0, 22.0, 22.0};
+  std::vector<float> roisHostData = {0.0, 0.0, 24.0, 24.0};
   std::vector<int32_t> batchIndicesHostData = {0};
-  std::vector<float> outHostData = {4.5, 6.5, 8.5, 16.5, 18.5, 20.5, 28.5, 30.5, 32.5};
+  std::vector<float> outHostData = {8.0, 10.0, 11.75, 20.0, 22.0, 23.75, 30.5, 32.5, 34.25};
 
   // Create self aclTensor
   ret = CreateAclNchTensor(selfHostData, selfShape, &selfDeviceAddr, aclDataType::ACL_FLOAT, &self);

@@ -121,9 +121,9 @@ int main()
 
     std::vector<float> selfHostData = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18,
                                        19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
-    std::vector<float> roisHostData = {-2.0, -2.0, 22.0, 22.0};
+    std::vector<float> roisHostData = {0.0, 0.0, 24.0, 24.0};
     std::vector<int32_t> batchIndicesHostData = {0};
-    std::vector<float> outHostData = {4.5, 6.5, 8.5, 16.5, 18.5, 20.5, 28.5, 30.5, 32.5};
+    std::vector<float> outHostData = {8.0, 10.0, 11.75, 20.0, 22.0, 23.75, 30.5, 32.5, 34.25};
 
     // 创建self aclTensor
     ret = CreateAclNchTensor(selfHostData, selfShape, &selfDeviceAddr, aclDataType::ACL_FLOAT, &self);

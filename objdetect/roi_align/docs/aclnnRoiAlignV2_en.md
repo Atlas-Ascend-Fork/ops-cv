@@ -3,7 +3,7 @@
 ## Applicable Products
 
 <!-- npu="950" id1 -->
-- <term>Ascend 950PR&950DT products</term>: Not supported
+- <term>Ascend 950PR&950DT products</term>: Supported
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
 - <term>Atlas A3 products</term>: Supported
@@ -101,7 +101,7 @@ aclnnStatus aclnnRoiAlignV2(
       <td class="tg-0lax">pooledHeight (int64_t)</td>
       <td class="tg-0lax">Input</td>
       <td class="tg-0lax">Height of the output image after pooling.</td>
-      <td class="tg-0lax">-</td>
+      <td class="tg-0lax">Must be less than or equal to INT32_MAX (2147483647).</td>
       <td class="tg-0lax">INT64</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">-</td>
@@ -111,7 +111,7 @@ aclnnStatus aclnnRoiAlignV2(
       <td class="tg-0lax">pooledWidth (int64_t)</td>
       <td class="tg-0lax">Input</td>
       <td class="tg-0lax">Width of the output image after pooling.</td>
-      <td class="tg-0lax">-</td>
+      <td class="tg-0lax">Must be less than or equal to INT32_MAX (2147483647).</td>
       <td class="tg-0lax">INT64</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">-</td>
@@ -131,7 +131,7 @@ aclnnStatus aclnnRoiAlignV2(
       <td class="tg-0lax">samplingRatio (int64_t)</td>
       <td class="tg-0lax">Input</td>
       <td class="tg-0lax">Sampling frequency used to calculate each output element in the H and W directions.</td>
-      <td class="tg-0lax">Must be greater than or equal to 0.</td>
+      <td class="tg-0lax">Must be greater than or equal to 0 and not greater than 46340 (floor(sqrt(INT32_MAX))).</td>
       <td class="tg-0lax">INT64</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">-</td>
@@ -203,15 +203,18 @@ aclnnStatus aclnnRoiAlignV2(
       <td>The input self, boxes, or out is a null pointer.</td>
     </tr>
     <tr>
-      <td rowspan="3">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="3">161002</td>
+      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="4">161002</td>
       <td>The data type and data format of self, boxes, and out are not within the supported range.</td>
     </tr>
     <tr>
       <td>The shapes of self, boxes, and out do not meet the constraint restrictions.</td>
     </tr>
     <tr>
-      <td>spatialScale must be greater than 0, and samplingRatio must be greater than or equal to 0.</td>
+      <td>pooledHeight or pooledWidth exceeds INT32_MAX (2147483647).</td>
+    </tr>
+    <tr>
+      <td>spatialScale must be greater than 0, and samplingRatio must be greater than or equal to 0 and not greater than 46340 (floor(sqrt(INT32_MAX))).</td>
     </tr>
   </tbody>
   </table>
@@ -263,6 +266,8 @@ aclnnStatus aclnnRoiAlignV2(
 
 - Deterministic computation:
   - aclnnRoiAlignV2 defaults to a deterministic implementation.
+- pooledHeight and pooledWidth must be less than or equal to INT32_MAX (2147483647).
+- samplingRatio: must satisfy `0 <= value <= 46340` (floor(sqrt(INT32_MAX))).
 
 ## Example
 
@@ -374,8 +379,8 @@ int main() {
   aclTensor* out = nullptr;
 
   std::vector<float> selfHostData = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
-  std::vector<float> boxesHostData = {0.0, -2.0, -2.0, 22.0, 22.0};
-  std::vector<float> outHostData = {4.5, 6.5, 8.5, 16.5, 18.5, 20.5, 28.5, 30.5, 32.5};
+  std::vector<float> boxesHostData = {0.0, 0.0, 0.0, 24.0, 24.0};
+  std::vector<float> outHostData = {8.0, 10.0, 11.75, 20.0, 22.0, 23.75, 30.5, 32.5, 34.25};
 
   // Create self aclTensor
   ret = CreateAclNchTensor(selfHostData, selfShape, &selfDeviceAddr, aclDataType::ACL_FLOAT, &self);

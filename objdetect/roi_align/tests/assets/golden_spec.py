@@ -16,13 +16,98 @@ ACLNN/E2E 的 golden 直接收到 torch.Tensor，无需转换。
 字符串形式（golden = "torch.abs"）由框架自动处理转换，所有路径通用。
 """
 
-__spec__ = {"roi_align": "RoiAlignKernelSpec", "aclnnRoiAlign": "AclnnRoiAlignSpec"}
+__spec__ = {
+    "roi_align": "RoiAlignKernelSpec",
+    "aclnnRoiAlign": "AclnnRoiAlignSpec",
+    "aclnnRoiAlignV2": "AclnnRoiAlignV2Spec",
+}
 
 import torch
 import numpy as np
 from torchvision.ops import roi_align as tv_roi_align
 
 torch.set_printoptions(precision=6, sci_mode=False)
+
+
+def _f32_scale(v):
+    """Round spatial_scale to the operator's Float (fp32) attribute precision.
+
+    The REG_OP attribute ``spatial_scale`` is Float (fp32), while the CSV value
+    is a Python double.  Using the unrounded double in the reference makes ROI
+    coordinates near the feature border differ by ~1e-7 from the operator,
+    flipping out-of-bounds samples at the exact ROI edge.
+    """
+    return float(np.float32(v))
+
+
+def _third_party_roi_align_torch(
+    features,
+    boxes,
+    pooled_height,
+    pooled_width,
+    spatial_scale,
+    sample_num,
+    pool_mode,
+    roi_end_mode,
+):
+    """Independent ROIAlign reference used only by the third_party providers.
+
+    ``avg`` uses the third-party ``torchvision.ops.roi_align`` interface; ``max``
+    (unsupported by torchvision) reuses the composed torch operators from the
+    golden implementation.
+    """
+    features = torch.as_tensor(features)
+    boxes = torch.as_tensor(boxes)
+    spatial_scale = _f32_scale(spatial_scale)
+    if isinstance(pool_mode, int):
+        pool_mode = "avg" if pool_mode == 0 else "max"
+    elif not isinstance(pool_mode, str):
+        pool_mode = str(pool_mode)
+
+    orig_dtype = features.dtype
+    if orig_dtype in (torch.float16, torch.bfloat16):
+        compute_dtype = torch.float32
+    else:
+        compute_dtype = orig_dtype
+
+    features_c = features.to(compute_dtype)
+    boxes_c = boxes.to(compute_dtype)
+    n, c, height, width = features_c.shape
+    k = boxes_c.shape[0]
+    if features_c.numel() == 0 or boxes_c.numel() == 0:
+        return [
+            torch.zeros(
+                (k, c, pooled_height, pooled_width),
+                dtype=orig_dtype,
+                device=features.device,
+            )
+        ]
+
+    if pool_mode == "avg":
+        rois = boxes_c
+        if roi_end_mode == 1:
+            rois = boxes_c.clone()
+            rois[:, 1:5] = rois[:, 1:5] + 1.0
+        output = tv_roi_align(
+            features_c,
+            rois,
+            output_size=(pooled_height, pooled_width),
+            spatial_scale=spatial_scale,
+            sampling_ratio=sample_num,
+            aligned=(roi_end_mode >= 2),
+        )
+    else:
+        output = RoiAlignKernelSpec._roi_align_torch_compose(
+            features_c,
+            boxes_c,
+            spatial_scale,
+            pooled_height,
+            pooled_width,
+            sample_num,
+            roi_end_mode,
+            pool_mode,
+        )
+    return [output.to(orig_dtype)]
 
 
 class RoiAlignKernelSpec:
@@ -48,10 +133,22 @@ class RoiAlignKernelSpec:
         C = data.shape[0]
 
         # @constraint: 越界点返回 0（与算子 kernel 边界行为一致）
-        out_of_bounds = (y < -1.0) | (y > height) | (x < -1.0) | (x > width)
+        # 非有限坐标（NaN/Inf）同样按越界处理，避免后续 long 转换溢出。
+        out_of_bounds = (
+            (y < -1.0)
+            | (y > height)
+            | (x < -1.0)
+            | (x > width)
+            | ~torch.isfinite(y)
+            | ~torch.isfinite(x)
+        )
 
-        y = torch.clamp(y, min=0.0)
-        x = torch.clamp(x, min=0.0)
+        # 极端 spatial_scale 会把坐标放大到 1e38 量级，floor→long 会溢出成负索引；
+        # 先夹到安全索引范围，越界点最后由 out_of_bounds 置 0。
+        y = torch.nan_to_num(y, nan=0.0, posinf=float(max(height - 1, 0)), neginf=0.0)
+        x = torch.nan_to_num(x, nan=0.0, posinf=float(max(width - 1, 0)), neginf=0.0)
+        y = torch.clamp(y, min=0.0, max=float(max(height - 1, 0)))
+        x = torch.clamp(x, min=0.0, max=float(max(width - 1, 0)))
 
         y_low = torch.floor(y).long()
         x_low = torch.floor(x).long()
@@ -130,111 +227,158 @@ class RoiAlignKernelSpec:
             (K, C, pooled_height, pooled_width), dtype=features_t.dtype
         ).to(device)
 
-        for n in range(K):
-            batch_idx = int(rois_t[n, 0].item())
-            x1 = torch.tensor(rois_t[n, 1].item(), dtype=features_t.dtype).to(device)
-            y1 = torch.tensor(rois_t[n, 2].item(), dtype=features_t.dtype).to(device)
-            x2 = torch.tensor(rois_t[n, 3].item(), dtype=features_t.dtype).to(device)
-            y2 = torch.tensor(rois_t[n, 4].item(), dtype=features_t.dtype).to(device)
+        # 单块元素上限，控制 C × block_h × grid_h × block_w × grid_w 的峰值内存。
+        # 大 pooled 用例（pooled_h/pooled_w 达 1e4~1e5）靠二维分块避免物化整张网格。
+        max_block_elems = 4_000_000
+        one = torch.tensor(1.0, dtype=features_t.dtype).to(device)
+        half = torch.tensor(0.5, dtype=features_t.dtype).to(device)
 
-            if roi_end_mode == 0:
-                roi_start_w = x1 * spatial_scale
-                roi_start_h = y1 * spatial_scale
-            elif roi_end_mode == 1:
-                roi_start_w = (
-                    x1 + torch.tensor(1.0, dtype=features_t.dtype).to(device)
-                ) * spatial_scale
-                roi_start_h = (
-                    y1 + torch.tensor(1.0, dtype=features_t.dtype).to(device)
-                ) * spatial_scale
-            else:
-                roi_start_w = x1 * spatial_scale - torch.tensor(
-                    0.5, dtype=features_t.dtype
+        with torch.no_grad():
+            for n in range(K):
+                batch_idx = int(rois_t[n, 0].item())
+                x1 = torch.tensor(rois_t[n, 1].item(), dtype=features_t.dtype).to(
+                    device
+                )
+                y1 = torch.tensor(rois_t[n, 2].item(), dtype=features_t.dtype).to(
+                    device
+                )
+                x2 = torch.tensor(rois_t[n, 3].item(), dtype=features_t.dtype).to(
+                    device
+                )
+                y2 = torch.tensor(rois_t[n, 4].item(), dtype=features_t.dtype).to(
+                    device
+                )
+
+                if roi_end_mode == 0:
+                    roi_start_w = x1 * spatial_scale
+                    roi_start_h = y1 * spatial_scale
+                elif roi_end_mode == 1:
+                    roi_start_w = (x1 + one) * spatial_scale
+                    roi_start_h = (y1 + one) * spatial_scale
+                else:
+                    roi_start_w = x1 * spatial_scale - half
+                    roi_start_h = y1 * spatial_scale - half
+                roi_width = torch.addcmul(-x1 * spatial_scale, x2, spatial_scale)
+                roi_height = torch.addcmul(-y1 * spatial_scale, y2, spatial_scale)
+
+                # @constraint: roi_end_mode 0/1 时强制 roi_width/height 最小为 1.0
+                if roi_end_mode <= 1:
+                    roi_width = torch.clamp(roi_width, min=one)
+                    roi_height = torch.clamp(roi_height, min=one)
+
+                bin_size_h = roi_height / torch.tensor(
+                    pooled_height, dtype=features_t.dtype
                 ).to(device)
-                roi_start_h = y1 * spatial_scale - torch.tensor(
-                    0.5, dtype=features_t.dtype
+                bin_size_w = roi_width / torch.tensor(
+                    pooled_width, dtype=features_t.dtype
                 ).to(device)
-            roi_width = torch.addcmul(-x1 * spatial_scale, x2, spatial_scale)
-            roi_height = torch.addcmul(-y1 * spatial_scale, y2, spatial_scale)
 
-            # @constraint: roi_end_mode 0/1 时强制 roi_width/height 最小为 1.0（与 torchvision aligned=False 及 kernel 行为一致）
-            if roi_end_mode <= 1:
-                roi_width = torch.clamp(
-                    roi_width, min=torch.tensor(1.0, dtype=features_t.dtype).to(device)
-                )
-                roi_height = torch.clamp(
-                    roi_height, min=torch.tensor(1.0, dtype=features_t.dtype).to(device)
-                )
-
-            bin_size_h = roi_height / torch.tensor(
-                pooled_height, dtype=features_t.dtype
-            ).to(device)
-            bin_size_w = roi_width / torch.tensor(
-                pooled_width, dtype=features_t.dtype
-            ).to(device)
-
-            if sample_num > 0:
-                roi_bin_grid_h = sample_num
-                roi_bin_grid_w = sample_num
-            else:
-                roi_bin_grid_h = int(
-                    torch.ceil(
-                        roi_height / torch.tensor(pooled_height, dtype=features_t.dtype)
+                if sample_num > 0:
+                    roi_bin_grid_h = sample_num
+                    roi_bin_grid_w = sample_num
+                else:
+                    roi_bin_grid_h = max(
+                        1,
+                        int(
+                            torch.ceil(
+                                roi_height
+                                / torch.tensor(
+                                    pooled_height, dtype=features_t.dtype
+                                ).to(device)
+                            ).item()
+                        ),
                     )
-                    .to(device)
-                    .item()
-                )
-                roi_bin_grid_w = int(
-                    torch.ceil(
-                        roi_width / torch.tensor(pooled_width, dtype=features_t.dtype)
+                    roi_bin_grid_w = max(
+                        1,
+                        int(
+                            torch.ceil(
+                                roi_width
+                                / torch.tensor(pooled_width, dtype=features_t.dtype).to(
+                                    device
+                                )
+                            ).item()
+                        ),
                     )
-                    .to(device)
-                    .item()
+
+                iy = (
+                    torch.arange(roi_bin_grid_h, dtype=features_t.dtype).to(device)
+                    + half
                 )
+                ix = (
+                    torch.arange(roi_bin_grid_w, dtype=features_t.dtype).to(device)
+                    + half
+                )
+                off_h = (iy * bin_size_h) / roi_bin_grid_h
+                off_w = (ix * bin_size_w) / roi_bin_grid_w
 
-            if roi_bin_grid_h <= 0:
-                roi_bin_grid_h = 1
-            if roi_bin_grid_w <= 0:
-                roi_bin_grid_w = 1
+                feat = features_t[batch_idx]
 
-            # torch.arange + tensor arithmetic: 生成采样点坐标
-            iy = torch.arange(roi_bin_grid_h, dtype=features_t.dtype).to(device) + 0.5
-            ix = torch.arange(roi_bin_grid_w, dtype=features_t.dtype).to(device) + 0.5
-            ph = torch.arange(pooled_height, dtype=features_t.dtype).to(device)
-            pw = torch.arange(pooled_width, dtype=features_t.dtype).to(device)
+                # 按 (pooled_h, pooled_w) 二维分块；块内中间量不超过 max_block_elems。
+                bh, bw = pooled_height, pooled_width
+                elem_per_bh_bw = max(int(C) * roi_bin_grid_h * roi_bin_grid_w, 1)
+                while bh * bw * elem_per_bh_bw > max_block_elems and (bh > 1 or bw > 1):
+                    if bh >= bw and bh > 1:
+                        bh = (bh + 1) // 2
+                    else:
+                        bw = (bw + 1) // 2
 
-            yy_tmp = torch.addcmul(roi_start_h, ph[:, None], bin_size_h)
-            yy = yy_tmp + (iy[None, :] * bin_size_h) / roi_bin_grid_h
+                for ph0 in range(0, pooled_height, bh):
+                    ph1 = min(ph0 + bh, pooled_height)
+                    phv = torch.arange(ph0, ph1, dtype=features_t.dtype).to(device)
+                    yy = roi_start_h + phv[:, None] * bin_size_h + off_h[None, :]
+                    for pw0 in range(0, pooled_width, bw):
+                        pw1 = min(pw0 + bw, pooled_width)
+                        pwv = torch.arange(pw0, pw1, dtype=features_t.dtype).to(device)
+                        xx = roi_start_w + pwv[:, None] * bin_size_w + off_w[None, :]
 
-            xx_tmp = torch.addcmul(roi_start_w, pw[:, None], bin_size_w)
-            xx = xx_tmp + (ix[None, :] * bin_size_w) / roi_bin_grid_w
+                        grid_y, grid_x = torch.meshgrid(
+                            yy.reshape(-1), xx.reshape(-1), indexing="ij"
+                        )
+                        ys = grid_y.reshape(-1)
+                        xs = grid_x.reshape(-1)
 
-            yy_flat = yy.reshape(-1)
-            xx_flat = xx.reshape(-1)
+                        sampled = RoiAlignKernelSpec._bilinear_interpolate_torch(
+                            feat, H, W, ys, xs
+                        )
+                        sampled = sampled.view(
+                            C, ph1 - ph0, roi_bin_grid_h, pw1 - pw0, roi_bin_grid_w
+                        )
 
-            # torch.meshgrid: 构建采样网格
-            grid_y, grid_x = torch.meshgrid(yy_flat, xx_flat, indexing="ij")
-            ys = grid_y.reshape(-1)
-            xs = grid_x.reshape(-1)
+                        if pool_mode == "max":
+                            block = sampled.amax(dim=2).amax(dim=3)
+                        else:
+                            block = sampled.mean(dim=2).mean(dim=3)
+                        output[n, :, ph0:ph1, pw0:pw1] = block
 
-            # 双线性插值: torch.floor + clamp + advanced indexing
-            feat = features_t[batch_idx]
-            sampled = RoiAlignKernelSpec._bilinear_interpolate_torch(feat, H, W, ys, xs)
-
-            sampled = sampled.view(
-                C, pooled_height, roi_bin_grid_h, pooled_width, roi_bin_grid_w
-            )
-
-            # @constraint: pool_mode 池化
-            if pool_mode == "max":
-                output[n] = sampled.amax(dim=2).amax(dim=3)
-            else:
-                output[n] = sampled.mean(dim=2).mean(dim=3)
+                        del sampled, block, grid_y, grid_x, ys, xs
 
         return output
 
     @staticmethod
-    def _gen_rois(fm_shape, spatial_scale, rois, rois_n):
+    def _is_boundary_case(testcase_name):
+        """Infer boundary/OOB intent from the case name.
+
+        The CSV has no flag that reaches ``customize_inputs``; the case name is
+        the available signal.  Existing boundary cases use ``bound`` /
+        ``rangebound`` / ``upboundary`` in their names.
+        """
+        name = str(testcase_name or "").lower()
+        return any(
+            k in name for k in ("boundary", "rangebound", "upboundary", "bound_")
+        )
+
+    @staticmethod
+    def _gen_rois(
+        fm_shape,
+        spatial_scale,
+        rois,
+        rois_n,
+        *,
+        roi_end_mode=1,
+        pooled_height=1,
+        pooled_width=1,
+        boundary_mode=False,
+    ):
         """Generate valid ROI coordinates within feature map bounds.
 
         Args:
@@ -263,37 +407,61 @@ class RoiAlignKernelSpec:
             else:
                 return t.numpy(), None
         fm_h, fm_w = fm_shape[2], fm_shape[3]
-        roi_w_max = fm_w / spatial_scale
-        roi_h_max = fm_h / spatial_scale
+        dtype = np.finfo(rois.dtype)
+        dtype_max = float(dtype.max)
+        scale = _f32_scale(spatial_scale)
+        ph = max(int(pooled_height), 1)
+        pw = max(int(pooled_width), 1)
+
+        if boundary_mode:
+            # Boundary/OOB coverage: keep the original full-range generation that
+            # intentionally lets the ROI reach (or cross) the feature border.
+            roi_w_max = min(fm_w / scale, dtype_max)
+            roi_h_max = min(fm_h / scale, dtype_max)
+        else:
+            # Normal functional cases: leave at least one bin of margin and
+            # account for the roi_end_mode offset, so no sample lands on x==W.
+            margin_w = max(fm_w / pw, 1e-3)
+            margin_h = max(fm_h / ph, 1e-3)
+            end_w = fm_w - margin_w
+            end_h = fm_h - margin_h
+            if roi_end_mode == 0:
+                roi_w_max = end_w / scale
+                roi_h_max = end_h / scale
+            elif roi_end_mode == 1:
+                roi_w_max = end_w / scale - 1.0
+                roi_h_max = end_h / scale - 1.0
+            else:
+                roi_w_max = (end_w + 0.5) / scale
+                roi_h_max = (end_h + 0.5) / scale
+            roi_w_max = max(min(roi_w_max, dtype_max), 1e-3)
+            roi_h_max = max(min(roi_h_max, dtype_max), 1e-3)
         K = rois.shape[0]
         max_value = fm_shape[0]
         if fm_shape[0] == 0:
             max_value = K
+        exact_int = 2 ** (dtype.nmant + 1)
+        max_value = min(max_value, exact_int)
         rois[:, 0] = np.sort(
             np.random.choice(
                 a=np.arange(max_value).astype(rois.dtype, copy=False), size=K
             )
         )
-        x1 = np.random.uniform(0, roi_w_max, size=K).astype(rois.dtype, copy=False)
-        y1 = np.random.uniform(0, roi_h_max, size=K).astype(rois.dtype, copy=False)
+        # Same shape of distribution in both modes; only the cap differs:
+        #   boundary_mode -> cap at W/scale (ROI reach/cross the border)
+        #   normal        -> cap inside W by >=1 bin (no sample lands on W)
+        x1 = np.random.uniform(0, roi_w_max, size=K)
+        y1 = np.random.uniform(0, roi_h_max, size=K)
         x2 = np.minimum(
-            x1
-            + np.random.uniform(1e-3, max(roi_w_max, 1e-3), size=K).astype(
-                rois.dtype, copy=False
-            ),
-            roi_w_max,
+            x1 + np.random.uniform(1e-3, max(roi_w_max, 1e-3), size=K), roi_w_max
         )
         y2 = np.minimum(
-            y1
-            + np.random.uniform(1e-3, max(roi_h_max, 1e-3), size=K).astype(
-                rois.dtype, copy=False
-            ),
-            roi_h_max,
+            y1 + np.random.uniform(1e-3, max(roi_h_max, 1e-3), size=K), roi_h_max
         )
-        rois[:, 1] = x1
-        rois[:, 2] = y1
-        rois[:, 3] = x2
-        rois[:, 4] = y2
+        rois[:, 1] = x1.astype(rois.dtype)
+        rois[:, 2] = y1.astype(rois.dtype)
+        rois[:, 3] = x2.astype(rois.dtype)
+        rois[:, 4] = y2.astype(rois.dtype)
         if rois_n is not None:
             rois_n = rois[:, 0].astype(rois_n.dtype)
         return rois, rois_n
@@ -353,14 +521,17 @@ class RoiAlignKernelSpec:
             pool_mode = "avg" if pool_mode == 0 else "max"
         elif not isinstance(pool_mode, str):
             pool_mode = str(pool_mode)
+        spatial_scale = _f32_scale(spatial_scale)
 
         # Convert numpy inputs to torch tensors
         features_t = torch.as_tensor(features).contiguous()
         rois_t = torch.as_tensor(rois).contiguous()
         orig_dtype = features_t.dtype
         if features_t.numel() == 0 or rois_t.numel() == 0:
-            t = torch.tensor([])
-            return [t.numpy()]
+            k = rois_t.shape[0] if rois_t.dim() > 0 else 0
+            c = features_t.shape[1] if features_t.dim() > 1 else 0
+            out = torch.zeros((k, c, pooled_height, pooled_width), dtype=orig_dtype)
+            return [out.numpy()]
 
         # @constraint: fp16/bf16 提升至 fp32 计算（与 kernel ReadAsFloat/WriteAsType 行为一致）
         if orig_dtype == torch.float16:
@@ -448,14 +619,31 @@ class RoiAlignKernelSpec:
             tuple (features, rois, rois_n) — modified input arrays
         """
         feature_shape = features.shape
+        boundary_mode = RoiAlignKernelSpec._is_boundary_case(
+            kwargs.get("testcase_name")
+        )
         if rois_n is not None:
             rois, rois_n = RoiAlignKernelSpec._gen_rois(
-                feature_shape, spatial_scale, rois, rois_n
+                feature_shape,
+                spatial_scale,
+                rois,
+                rois_n,
+                roi_end_mode=roi_end_mode,
+                pooled_height=pooled_height,
+                pooled_width=pooled_width,
+                boundary_mode=boundary_mode,
             )
             return (features, rois, rois_n)
         else:
             rois, _ = RoiAlignKernelSpec._gen_rois(
-                feature_shape, spatial_scale, rois, None
+                feature_shape,
+                spatial_scale,
+                rois,
+                None,
+                roi_end_mode=roi_end_mode,
+                pooled_height=pooled_height,
+                pooled_width=pooled_width,
+                boundary_mode=boundary_mode,
             )
             return (features, rois, None)
 
@@ -474,16 +662,15 @@ class RoiAlignKernelSpec:
             pool_mode=0,
             **kwargs,
         ):
-            return RoiAlignKernelSpec.golden(
+            return _third_party_roi_align_torch(
                 features,
                 rois,
-                rois_n,
-                spatial_scale=spatial_scale,
-                pooled_height=pooled_height,
-                pooled_width=pooled_width,
-                sample_num=sample_num,
-                roi_end_mode=roi_end_mode,
-                pool_mode=pool_mode,
+                pooled_height,
+                pooled_width,
+                spatial_scale,
+                sample_num,
+                pool_mode,
+                roi_end_mode,
             )
 
     third_party = {"torch": KernelThirdPartyImpl}
@@ -509,7 +696,8 @@ class AclnnRoiAlignSpec:
         - batchIndices is a separate [K] int32 tensor
         - batchIndices is cast to rois dtype, reshaped to [K, 1], concatenated with rois → [K, 5]
         - mode is a string ("avg" / "max")
-        - roi_end_mode is not exposed, fixed to REG_OP default (1)
+        - roi_end_mode is not exposed, fixed to 0 (aclnn v1 launcher passes 0; the
+          REG_OP/kernel default value is 1)
         - samplingRatio=0 means adaptive (same as sample_num=0 in REG_OP)
 
         Args:
@@ -534,11 +722,13 @@ class AclnnRoiAlignSpec:
         pooled_height = args[4]
         pooled_width = args[5]
         sample_num = args[6]
-        spatial_scale = args[7]
+        spatial_scale = _f32_scale(args[7])
         if features.numel() == 0 or rois.numel() == 0:
-            return torch.full(
-                (rois.shape[0], features.shape[1], pooled_height, pooled_width), 0
-            )
+            return [
+                features.new_zeros(
+                    (rois.shape[0], features.shape[1], pooled_height, pooled_width)
+                )
+            ]
 
         # @constraint: batchIndices cast to rois dtype, reshape [K,1], concat with rois → [K, 5]
         batchIndices_cast = batchIndices.to(rois.dtype).reshape(-1, 1)
@@ -634,7 +824,16 @@ class AclnnRoiAlignSpec:
         temp_rois = np.zeros((num_rois, 5), dtype=rois.numpy().dtype)
         batch_indices_np = batchIndices.numpy()
         temp_rois, batch_indices_np = RoiAlignKernelSpec._gen_rois(
-            feature_shape, spatialScale, temp_rois, batch_indices_np
+            feature_shape,
+            spatialScale,
+            temp_rois,
+            batch_indices_np,
+            roi_end_mode=0,
+            pooled_height=args[4],
+            pooled_width=args[5],
+            boundary_mode=RoiAlignKernelSpec._is_boundary_case(
+                kwargs.get("testcase_name")
+            ),
         )
         rois_np = temp_rois[:, 1:5].copy()
         rois[:] = torch.from_numpy(rois_np).to(dtype=rois_dtype)
@@ -644,7 +843,105 @@ class AclnnRoiAlignSpec:
 
     class AclnnThirdPartyImpl:
         def __call__(self, *args, **kwargs):
-            return AclnnRoiAlignSpec.golden(*args, **kwargs)
+            features = torch.as_tensor(args[0])
+            rois = torch.as_tensor(args[1])
+            batch_indices = torch.as_tensor(args[2]).to(rois.dtype).reshape(-1, 1)
+            boxes = torch.cat([batch_indices, rois], dim=1)
+            return _third_party_roi_align_torch(
+                features,
+                boxes,
+                args[4],
+                args[5],
+                args[7],
+                args[6],
+                args[3],
+                0,
+            )
+
+    third_party = {"torch": AclnnThirdPartyImpl}
+    tolerance = {
+        "float16": {"standard": "cross_check", "level": "L1"},
+        "float32": {"standard": "cross_check", "level": "L1"},
+    }
+
+
+class AclnnRoiAlignV2Spec:
+    """ACLNN V2 流程 — golden 直接收到 torch.Tensor"""
+
+    @staticmethod
+    def golden(*args, **kwargs):
+        """
+        Aclnn golden for aclnnRoiAlignV2.
+        All the parameters (name & order) follow \
+            function `aclnnRoiAlignV2GetWorkspaceSize` in @aclnn_roi_align_v2.cpp \
+            without `workspaceSize` & `executor`.
+
+        aclnnRoiAlignV2 differs from aclnnRoiAlign:
+        - boxes is [K, 5] (already contains batch_index column)
+        - aligned is a bool; it maps to roi_end_mode 2 (aligned) / 0 (not aligned)
+        - pool_mode is fixed to "avg"
+        - samplingRatio <= 0 means adaptive
+
+        Args:
+            self: features tensor [N, C, H, W], float16/float32
+            boxes: rois tensor [K, 5], columns [batch_index, x1, y1, x2, y2]
+            pooledHeight: pooled output height
+            pooledWidth: pooled output width
+            spatialScale: spatial scaling factor
+            samplingRatio: sampling points per bin, <=0 for adaptive
+            aligned: whether to use aligned coordinate transform
+            out: output tensor [K, C, pooledHeight, pooledWidth] (for shape reference)
+            **kwargs: tensor_{dtypes,formats}, scalar_dtypes, short_soc_version, testcase_name
+
+        Returns:
+            Output tensor [K, C, pooledHeight, pooledWidth]
+        """
+        features = args[0]
+        boxes = args[1]
+        pooled_height = args[2]
+        pooled_width = args[3]
+        spatial_scale = _f32_scale(args[4])
+        sample_num = args[5]
+        aligned = args[6]
+
+        if features.numel() == 0 or boxes.numel() == 0:
+            return [
+                features.new_zeros(
+                    (boxes.shape[0], features.shape[1], pooled_height, pooled_width)
+                )
+            ]
+
+        # @constraint: boxes 与 features 保持同一 dtype（torchvision.ops.roi_align 要求一致）
+        if boxes.dtype != features.dtype:
+            boxes = boxes.to(features.dtype)
+
+        # @constraint: aligned=True → roi_end_mode=2；否则 roi_end_mode=0（与 V2 API 一致）
+        roi_end_mode = 2 if bool(aligned) else 0
+
+        outputs = RoiAlignKernelSpec.golden(
+            features,
+            boxes,
+            spatial_scale=spatial_scale,
+            pooled_height=pooled_height,
+            pooled_width=pooled_width,
+            sample_num=sample_num,
+            roi_end_mode=roi_end_mode,
+            pool_mode="avg",
+        )
+        return [torch.as_tensor(output) for output in outputs]
+
+    class AclnnThirdPartyImpl:
+        def __call__(self, *args, **kwargs):
+            return _third_party_roi_align_torch(
+                torch.as_tensor(args[0]),
+                torch.as_tensor(args[1]),
+                args[2],
+                args[3],
+                args[4],
+                args[5],
+                "avg",
+                2 if bool(args[6]) else 0,
+            )
 
     third_party = {"torch": AclnnThirdPartyImpl}
     tolerance = {

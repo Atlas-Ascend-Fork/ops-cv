@@ -141,6 +141,30 @@ int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& in
     return SUCCESS;
 }
 
+int32_t GenRoisData(const vector<int64_t>& shapes, Tensor& input_tensor, TensorDesc& input_tensor_desc,
+                    DataType data_type, const vector<float>& values)
+{
+    input_tensor_desc.SetRealDimCnt(shapes.size());
+    size_t size = 1;
+    for (size_t i = 0; i < shapes.size(); i++) {
+        size *= static_cast<size_t>(shapes[i]);
+    }
+    if (data_type != ge::DT_FLOAT || values.size() != size) {
+        return FAILED;
+    }
+    uint32_t data_len = size * GetDataTypeSize(data_type);
+    float* pData = new (std::nothrow) float[size];
+    if (pData == nullptr) {
+        return FAILED;
+    }
+    for (size_t i = 0; i < size; ++i) {
+        pData[i] = values[i];
+    }
+    input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
+    delete[] pData;
+    return SUCCESS;
+}
+
 int32_t WriteDataToFile(string bin_file, uint64_t data_size, uint8_t* inputData)
 {
     FILE* fp = fopen(bin_file.c_str(), "wb");
@@ -178,6 +202,17 @@ int CreateOppInGraph(DataType inDtype, std::vector<ge::Tensor>& input, std::vect
     std::vector<int64_t> outputShape = {2, 4, 4, 4};
     ADD_INPUT(1, features, inDtype, featuresShape);
     ADD_INPUT(2, rois, inDtype, roisShape);
+
+    // The generic ADD_INPUT fills every element with the same constant, which is invalid for rois.
+    // rows: [batch_idx, x1, y1, x2, y2]; N=1 so batch_idx must be 0, and coordinates stay in
+    // [0, W/spatial_scale] x [0, H/spatial_scale] with x1 <= x2, y1 <= y2 (W=H=8, scale=1).
+    const vector<float> roisValues = {0.0f, 1.0f, 1.0f, 5.0f, 5.0f, 0.0f, 2.0f, 2.0f, 7.0f, 6.0f};
+    ret = GenRoisData(roisShape, tensor_placeholder2, placeholder2_desc, inDtype, roisValues);
+    if (ret != SUCCESS) {
+        printf("%s - ERROR - [XIR]: Generate rois data failed\n", GetTime().c_str());
+        return FAILED;
+    }
+    input.back() = tensor_placeholder2;
 
     ADD_OUTPUT(1, y, inDtype, outputShape);
 

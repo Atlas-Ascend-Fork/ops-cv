@@ -11,6 +11,7 @@
 #include "aclnn_kernels/contiguous.h"
 #include "aclnn_kernels/transpose.h"
 #include "aclnn_kernels/reshape.h"
+#include "aclnn_kernels/slice.h"
 
 namespace l0op {
 const aclTensor* Contiguous(const aclTensor* x, aclOpExecutor* executor)
@@ -135,6 +136,26 @@ const aclTensor* Fill(const aclTensor* dims, const aclTensor* value, const aclIn
     (void)outShape;
     (void)executor;
     return value;
+}
+
+const aclTensor* Slice(const aclTensor* x, const aclTensor* y, const aclTensor* offset, const aclTensor* size,
+                       aclOpExecutor* executor)
+{
+    (void)x;
+    (void)y;
+    (void)offset;
+    (void)size;
+    (void)executor;
+    return x;
+}
+
+const aclTensor* Slice(const aclTensor* x, const aclIntArray* offsets, const aclIntArray* size, aclOpExecutor* executor)
+{
+    (void)x;
+    (void)offsets;
+    (void)size;
+    (void)executor;
+    return x;
 }
 
 aclTensor* ConcatD(const aclTensorList* inputs, int64_t dim, op::DataType outDtype, aclOpExecutor* executor)

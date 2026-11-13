@@ -120,16 +120,6 @@ static ge::graphStatus InferShapeROIAlign(gert::InferShapeContext* context)
     // Compute output shape: [K, C, pooledH, pooledW]
     int64_t K = roisShape->GetDim(ROIS_DIM_K);
     int64_t C = featuresShape->GetDim(FEATURES_DIM_C);
-    if (featuresShape->GetDim(0) == 0 || featuresShape->GetDim(FEATURES_DIM_H) == 0 ||
-        featuresShape->GetDim(FEATURES_DIM_W) == 0) {
-        outShape->SetDimNum(OUTPUT_DIM_NUM);
-        outShape->SetDim(0, 0);
-        outShape->SetDim(1, C);
-        outShape->SetDim(FEATURES_DIM_H, pooledH);
-        outShape->SetDim(FEATURES_DIM_W, pooledW);
-        OP_LOGD(opName, "End InferShapeROIAlign from empty tensor");
-        return GRAPH_SUCCESS;
-    }
     outShape->SetDimNum(OUTPUT_DIM_NUM);
     outShape->SetDim(0, K);
     outShape->SetDim(1, C);

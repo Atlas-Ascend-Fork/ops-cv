@@ -57,6 +57,134 @@ static constexpr float BIN_CENTER_OFFSET = 0.5f;
 static constexpr int32_t ADAPTIVE_SAMPLE_NUM = 0;
 static constexpr int32_t MIN_SAMPLE_COUNT = 1;
 
+// ===== Double-float (Dekker) arithmetic =====
+// AIV forbids double operations.  The torchvision reference computes the ROI
+// coordinate chain in double.  For the rare ROI whose right/bottom edge sits on
+// the feature border we emulate that chain with a (hi, lo) float pair; the
+// common path stays float32.
+struct Df {
+    float hi; // RN(value)
+    float lo; // residual, value = hi + lo
+};
+
+__simt_callee__ __aicore__ inline Df DfFromF32(float x) { return Df{x, 0.0f}; }
+
+__simt_callee__ __aicore__ inline Df DfTwoSum(float a, float b)
+{
+    Df r;
+    r.hi = a + b;
+    const float v = r.hi - a;
+    r.lo = (a - (r.hi - v)) + (b - v);
+    return r;
+}
+
+__simt_callee__ __aicore__ inline Df DfQuickTwoSum(float a, float b)
+{
+    Df r;
+    r.hi = a + b;
+    r.lo = b - (r.hi - a);
+    return r;
+}
+
+__simt_callee__ __aicore__ inline Df DfTwoProd(float a, float b)
+{
+    constexpr float split = 4097.0f; // 2^12 + 1
+    Df r;
+    r.hi = a * b;
+    float t = split * a;
+    const float ah = t - (t - a);
+    const float al = a - ah;
+    t = split * b;
+    const float bh = t - (t - b);
+    const float bl = b - bh;
+    r.lo = ((ah * bh - r.hi) + ah * bl + al * bh) + al * bl;
+    return r;
+}
+
+__simt_callee__ __aicore__ inline Df DfAdd(Df a, Df b)
+{
+    if (isinf(a.hi) || isnan(a.hi) || isinf(b.hi) || isnan(b.hi)) {
+        return Df{a.hi + b.hi, 0.0f};
+    }
+    Df s = DfTwoSum(a.hi, b.hi);
+    const Df t = DfTwoSum(a.lo, b.lo);
+    s.lo += t.hi;
+    s = DfQuickTwoSum(s.hi, s.lo);
+    s.lo += t.lo;
+    return DfQuickTwoSum(s.hi, s.lo);
+}
+
+__simt_callee__ __aicore__ inline Df DfMul(Df a, Df b)
+{
+    if (isinf(a.hi) || isnan(a.hi) || isinf(b.hi) || isnan(b.hi)) {
+        return Df{a.hi * b.hi, 0.0f};
+    }
+    const Df pe = DfTwoProd(a.hi, b.hi);
+    const float e = pe.lo + (a.hi * b.lo + a.lo * b.hi);
+    return DfQuickTwoSum(pe.hi, e);
+}
+
+__simt_callee__ __aicore__ inline Df DfDiv(Df a, Df b)
+{
+    if (b.hi == 0.0f || isinf(b.hi) || isnan(b.hi) || isinf(a.hi) || isnan(a.hi)) {
+        return Df{a.hi / b.hi, 0.0f};
+    }
+    const float q1 = a.hi / b.hi;
+    const Df u = DfTwoProd(q1, b.hi);
+    const float r = ((a.hi - u.hi) + a.lo) - u.lo - q1 * b.lo;
+    const float q2 = r / b.hi;
+    return DfQuickTwoSum(q1, q2);
+}
+
+__simt_callee__ __aicore__ inline Df DfNeg(Df a) { return Df{-a.hi, -a.lo}; }
+__simt_callee__ __aicore__ inline Df DfSub(Df a, Df b) { return DfAdd(a, DfNeg(b)); }
+
+__simt_callee__ __aicore__ inline bool DfLeConst(Df a, float c)
+{
+    if (a.hi < c) {
+        return true;
+    }
+    if (a.hi > c) {
+        return false;
+    }
+    return a.lo <= 0.0f;
+}
+
+__simt_callee__ __aicore__ inline bool DfGeConst(Df a, float c)
+{
+    if (a.hi > c) {
+        return true;
+    }
+    if (a.hi < c) {
+        return false;
+    }
+    return a.lo >= 0.0f;
+}
+
+// Strict comparisons: a < c / a > c. Unlike DfLeConst/DfGeConst, a point exactly
+// on c is treated as in range, matching the float path's out-of-bounds check.
+__simt_callee__ __aicore__ inline bool DfLtConst(Df a, float c)
+{
+    if (a.hi < c) {
+        return true;
+    }
+    if (a.hi > c) {
+        return false;
+    }
+    return a.lo < 0.0f;
+}
+
+__simt_callee__ __aicore__ inline bool DfGtConst(Df a, float c)
+{
+    if (a.hi > c) {
+        return true;
+    }
+    if (a.hi < c) {
+        return false;
+    }
+    return a.lo > 0.0f;
+}
+
 // ===== Type conversion helpers =====
 __simt_callee__ __aicore__ inline float ToFloat(float v) { return v; }
 __simt_callee__ __aicore__ inline float ToFloat(half v) { return __half2float(v); }
@@ -74,7 +202,8 @@ template <typename T>
 __simt_callee__ __aicore__ inline float BilinearInterpolate(__gm__ const T* data, int64_t height, int64_t width,
                                                             float y, float x)
 {
-    if (y < OUT_OF_BOUNDS_MARGIN || y > height || x < OUT_OF_BOUNDS_MARGIN || x > width) {
+    if (!(y >= OUT_OF_BOUNDS_MARGIN && y <= static_cast<float>(height) && x >= OUT_OF_BOUNDS_MARGIN &&
+          x <= static_cast<float>(width))) {
         return 0.0f;
     }
     if (y <= 0) {
@@ -106,6 +235,69 @@ __simt_callee__ __aicore__ inline float BilinearInterpolate(__gm__ const T* data
 
     float ly = y - static_cast<float>(yLow);
     float lx = x - static_cast<float>(xLow);
+    float hy = 1.0f - ly;
+    float hx = 1.0f - lx;
+    float v1 = ReadAsFloat(data[yLow * width + xLow]);
+    float v2 = ReadAsFloat(data[yLow * width + xHigh]);
+    float v3 = ReadAsFloat(data[yHigh * width + xLow]);
+    float v4 = ReadAsFloat(data[yHigh * width + xHigh]);
+
+    return hy * hx * v1 + hy * lx * v2 + ly * hx * v3 + ly * lx * v4;
+}
+
+// ===== Bilinear interpolation (double-float coords, boundary ROI only) =====
+template <typename T>
+__simt_callee__ __aicore__ inline float BilinearInterpolateDf(__gm__ const T* data, int64_t height, int64_t width, Df y,
+                                                              Df x)
+{
+    // Bounds semantics must follow the dtype of the reference implementation:
+    //   - fp16 golden upcasts to fp32, so compare the fp32-rounded coordinate
+    //     (hi) and ignore the Df residual.  The residual can be ~1e-15 above W
+    //     for a mathematically exact x == W and would otherwise flip the
+    //     in/out decision (e.g. RoiAlign_L1_052).
+    //   - fp32 golden computes in fp64, so the full double-float value decides.
+    // y/x == -1, height, width are still in range and get clamped below.
+    bool outOfBounds;
+    if constexpr (std::is_same_v<T, half>) {
+        outOfBounds = y.hi < OUT_OF_BOUNDS_MARGIN || y.hi > static_cast<float>(height) || x.hi < OUT_OF_BOUNDS_MARGIN ||
+                      x.hi > static_cast<float>(width);
+    } else {
+        outOfBounds = DfLtConst(y, OUT_OF_BOUNDS_MARGIN) || DfGtConst(y, static_cast<float>(height)) ||
+                      DfLtConst(x, OUT_OF_BOUNDS_MARGIN) || DfGtConst(x, static_cast<float>(width));
+    }
+    if (outOfBounds) {
+        return 0.0f;
+    }
+    float yf = y.hi;
+    float xf = x.hi;
+    if (yf <= 0) {
+        yf = 0;
+    }
+    if (xf <= 0) {
+        xf = 0;
+    }
+    int32_t yLow = static_cast<int32_t>(yf);
+    int32_t xLow = static_cast<int32_t>(xf);
+    int32_t yHigh = 0;
+    int32_t xHigh = 0;
+
+    if (yLow >= static_cast<int32_t>(height - 1)) {
+        yLow = static_cast<int32_t>(height - 1);
+        yHigh = yLow;
+        yf = static_cast<float>(yLow);
+    } else {
+        yHigh = yLow + 1;
+    }
+    if (xLow >= static_cast<int32_t>(width - 1)) {
+        xLow = static_cast<int32_t>(width - 1);
+        xHigh = xLow;
+        xf = static_cast<float>(xLow);
+    } else {
+        xHigh = xLow + 1;
+    }
+
+    float ly = yf - static_cast<float>(yLow);
+    float lx = xf - static_cast<float>(xLow);
     float hy = 1.0f - ly;
     float hx = 1.0f - lx;
     float v1 = ReadAsFloat(data[yLow * width + xLow]);
@@ -182,6 +374,112 @@ __simt_callee__ __aicore__ inline void ComputeRoiCoords(__gm__ const T* roi, flo
     count = (count > MIN_SAMPLE_COUNT) ? count : MIN_SAMPLE_COUNT;
 }
 
+// ===== ROI coordinate computation — double-float (boundary ROI only) =====
+template <typename T, int32_t ROI_END_MODE>
+__simt_callee__ __aicore__ inline void ComputeRoiCoordsDf(__gm__ const T* roi, float spatialScale, int32_t pooledHeight,
+                                                          int32_t pooledWidth, Df& roiStartW, Df& roiStartH,
+                                                          Df& binSizeH, Df& binSizeW, int32_t& roiBinGridH,
+                                                          int32_t& roiBinGridW, int32_t& count, int32_t sampleNum)
+{
+    Df x1 = DfFromF32(ReadAsFloat(roi[ROI_IDX_X1]));
+    Df y1 = DfFromF32(ReadAsFloat(roi[ROI_IDX_Y1]));
+    Df x2 = DfFromF32(ReadAsFloat(roi[ROI_IDX_X2]));
+    Df y2 = DfFromF32(ReadAsFloat(roi[ROI_IDX_Y2]));
+    Df scale = DfFromF32(spatialScale);
+    Df one = DfFromF32(ROI_PLUS1_OFFSET);
+    Df half = DfFromF32(ROI_HALF_OFFSET);
+    Df roiW;
+    Df roiH;
+    if constexpr (ROI_END_MODE == ROI_ALIGN_MODE_0) {
+        roiStartW = DfMul(x1, scale);
+        roiStartH = DfMul(y1, scale);
+        roiW = DfSub(DfMul(x2, scale), roiStartW);
+        roiH = DfSub(DfMul(y2, scale), roiStartH);
+        if (roiW.hi < MIN_ROI_SIZE) {
+            roiW = one;
+        }
+        if (roiH.hi < MIN_ROI_SIZE) {
+            roiH = one;
+        }
+    } else if constexpr (ROI_END_MODE == ROI_ALIGN_MODE_1) {
+        roiStartW = DfMul(DfAdd(x1, one), scale);
+        roiStartH = DfMul(DfAdd(y1, one), scale);
+        roiW = DfSub(DfMul(DfAdd(x2, one), scale), roiStartW);
+        roiH = DfSub(DfMul(DfAdd(y2, one), scale), roiStartH);
+        if (roiW.hi < MIN_ROI_SIZE) {
+            roiW = one;
+        }
+        if (roiH.hi < MIN_ROI_SIZE) {
+            roiH = one;
+        }
+    } else {
+        roiStartW = DfSub(DfMul(x1, scale), half);
+        roiStartH = DfSub(DfMul(y1, scale), half);
+        roiW = DfSub(DfMul(x2, scale), DfMul(x1, scale));
+        roiH = DfSub(DfMul(y2, scale), DfMul(y1, scale));
+    }
+    binSizeH = DfDiv(roiH, DfFromF32(static_cast<float>(pooledHeight)));
+    binSizeW = DfDiv(roiW, DfFromF32(static_cast<float>(pooledWidth)));
+    if (sampleNum > ADAPTIVE_SAMPLE_NUM) {
+        roiBinGridH = sampleNum;
+        roiBinGridW = sampleNum;
+    } else {
+        float adaptiveH = ceilf(roiH.hi / static_cast<float>(pooledHeight));
+        float adaptiveW = ceilf(roiW.hi / static_cast<float>(pooledWidth));
+        roiBinGridH = static_cast<int32_t>(adaptiveH);
+        roiBinGridW = static_cast<int32_t>(adaptiveW);
+    }
+    count = roiBinGridH * roiBinGridW;
+    count = (count > MIN_SAMPLE_COUNT) ? count : MIN_SAMPLE_COUNT;
+}
+
+// ===== Decide whether the ROI needs the double-float boundary path =====
+// The knife-edge only appears when the ROI's right/bottom edge reaches (or
+// crosses) the feature border.  Keeping this check at ROI granularity means the
+// vast majority of ROIs stay on the plain float32 path.
+template <typename T, int32_t ROI_END_MODE>
+__simt_callee__ __aicore__ inline bool IsNearRoiBoundary(__gm__ const T* roi, float spatialScale, int32_t pooledHeight,
+                                                         int32_t pooledWidth, int64_t height, int64_t width)
+{
+    float x1 = ReadAsFloat(roi[ROI_IDX_X1]);
+    float y1 = ReadAsFloat(roi[ROI_IDX_Y1]);
+    float x2 = ReadAsFloat(roi[ROI_IDX_X2]);
+    float y2 = ReadAsFloat(roi[ROI_IDX_Y2]);
+    float startW;
+    float startH;
+    float endW;
+    float endH;
+    if constexpr (ROI_END_MODE == ROI_ALIGN_MODE_0) {
+        startW = x1 * spatialScale;
+        startH = y1 * spatialScale;
+        endW = x2 * spatialScale;
+        endH = y2 * spatialScale;
+    } else if constexpr (ROI_END_MODE == ROI_ALIGN_MODE_1) {
+        startW = (x1 + ROI_PLUS1_OFFSET) * spatialScale;
+        startH = (y1 + ROI_PLUS1_OFFSET) * spatialScale;
+        endW = (x2 + ROI_PLUS1_OFFSET) * spatialScale;
+        endH = (y2 + ROI_PLUS1_OFFSET) * spatialScale;
+    } else {
+        startW = x1 * spatialScale - ROI_HALF_OFFSET;
+        startH = y1 * spatialScale - ROI_HALF_OFFSET;
+        endW = x2 * spatialScale - ROI_HALF_OFFSET;
+        endH = y2 * spatialScale - ROI_HALF_OFFSET;
+    }
+    float roiW = endW - startW;
+    if (roiW < MIN_ROI_SIZE) {
+        roiW = MIN_ROI_SIZE;
+    }
+    float roiH = endH - startH;
+    if (roiH < MIN_ROI_SIZE) {
+        roiH = MIN_ROI_SIZE;
+    }
+    float binW = roiW / static_cast<float>(pooledWidth);
+    float binH = roiH / static_cast<float>(pooledHeight);
+    float effEndW = startW + roiW;
+    float effEndH = startH + roiH;
+    return (effEndW >= static_cast<float>(width) - binW) || (effEndH >= static_cast<float>(height) - binH);
+}
+
 // ===== Average pooling aggregation — accumulates in float32 =====
 template <typename T>
 __simt_callee__ __aicore__ inline float SampleAndPoolAvg(__gm__ const T* featuresNC, int64_t height, int64_t width,
@@ -225,28 +523,87 @@ __simt_callee__ __aicore__ inline float SampleAndPoolMax(__gm__ const T* feature
     return maxVal;
 }
 
+// ===== Average pooling with double-float coords (boundary ROI only) =====
+template <typename T>
+__simt_callee__ __aicore__ inline float SampleAndPoolAvgDf(__gm__ const T* featuresNC, int64_t height, int64_t width,
+                                                           Df roiStartH, Df roiStartW, Df binSizeH, Df binSizeW,
+                                                           int32_t ph, int32_t pw, int32_t roiBinGridH,
+                                                           int32_t roiBinGridW, int32_t count)
+{
+    float outputVal = 0.0f;
+    Df half = DfFromF32(BIN_CENTER_OFFSET);
+    Df gridH = DfFromF32(static_cast<float>(roiBinGridH));
+    Df gridW = DfFromF32(static_cast<float>(roiBinGridW));
+    Df baseY = DfAdd(roiStartH, DfMul(DfFromF32(static_cast<float>(ph)), binSizeH));
+    Df baseX = DfAdd(roiStartW, DfMul(DfFromF32(static_cast<float>(pw)), binSizeW));
+    for (int32_t iy = 0; iy < roiBinGridH; iy++) {
+        Df yy = DfAdd(baseY, DfMul(DfDiv(DfAdd(DfFromF32(static_cast<float>(iy)), half), gridH), binSizeH));
+        for (int32_t ix = 0; ix < roiBinGridW; ix++) {
+            Df xx = DfAdd(baseX, DfMul(DfDiv(DfAdd(DfFromF32(static_cast<float>(ix)), half), gridW), binSizeW));
+            outputVal += BilinearInterpolateDf<T>(featuresNC, height, width, yy, xx);
+        }
+    }
+    return outputVal / static_cast<float>(count);
+}
+
+// ===== Max pooling with double-float coords (boundary ROI only) =====
+template <typename T>
+__simt_callee__ __aicore__ inline float SampleAndPoolMaxDf(__gm__ const T* featuresNC, int64_t height, int64_t width,
+                                                           Df roiStartH, Df roiStartW, Df binSizeH, Df binSizeW,
+                                                           int32_t ph, int32_t pw, int32_t roiBinGridH,
+                                                           int32_t roiBinGridW)
+{
+    float maxVal = -ASCRT_INF_F;
+    Df half = DfFromF32(BIN_CENTER_OFFSET);
+    Df gridH = DfFromF32(static_cast<float>(roiBinGridH));
+    Df gridW = DfFromF32(static_cast<float>(roiBinGridW));
+    Df baseY = DfAdd(roiStartH, DfMul(DfFromF32(static_cast<float>(ph)), binSizeH));
+    Df baseX = DfAdd(roiStartW, DfMul(DfFromF32(static_cast<float>(pw)), binSizeW));
+    for (int32_t iy = 0; iy < roiBinGridH; iy++) {
+        Df yy = DfAdd(baseY, DfMul(DfDiv(DfAdd(DfFromF32(static_cast<float>(iy)), half), gridH), binSizeH));
+        for (int32_t ix = 0; ix < roiBinGridW; ix++) {
+            Df xx = DfAdd(baseX, DfMul(DfDiv(DfAdd(DfFromF32(static_cast<float>(ix)), half), gridW), binSizeW));
+            float val = BilinearInterpolateDf<T>(featuresNC, height, width, yy, xx);
+            if (val > maxVal || val != val) {
+                maxVal = val;
+            }
+        }
+    }
+    return maxVal;
+}
+
 // ===== Get batch index from rois or rois_n (__simt_callee__) =====
 template <typename T>
-__simt_callee__ __aicore__ inline int32_t GetBatchIdx(__gm__ const T* roi, __gm__ const int32_t* roisN, int32_t n,
+__simt_callee__ __aicore__ inline int32_t GetBatchIdx(__gm__ const T* roi, __gm__ const int32_t* roisN, int64_t n,
                                                       int32_t hasRoisN)
 {
     if (hasRoisN != 0 && roisN != nullptr) {
         return roisN[n];
     }
-    return static_cast<int32_t>(ReadAsFloat(roi[ROI_IDX_BATCH]));
+    float batchVal = ReadAsFloat(roi[ROI_IDX_BATCH]);
+    if (!(batchVal >= 0.0f && batchVal < 2147483648.0f)) {
+        return 0;
+    }
+    return static_cast<int32_t>(batchVal);
 }
 
 // ===== SIMT VF main kernel — all intermediate computation in float32 =====
 template <typename T, int32_t POOL_MODE, int32_t ROI_END_MODE, int32_t IDX_MODE>
 __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpROIAlignSimtKernel(
     int64_t totalElements, int64_t channels, int64_t height, int64_t width, int32_t pooledHeight, int32_t pooledWidth,
-    int32_t sampleNum, float spatialScale, int32_t hasRoisN, __gm__ const T* features, __gm__ const T* rois,
-    __gm__ const int32_t* roisN, __gm__ T* y)
+    int32_t sampleNum, float spatialScale, int32_t hasRoisN, int32_t batchSize, __gm__ const T* features,
+    __gm__ const T* rois, __gm__ const int32_t* roisN, __gm__ T* y)
 {
     using IdxType = std::conditional_t<IDX_MODE == ROI_ALIGN_IDX_INT64, int64_t, int32_t>;
     uint64_t localIdx = static_cast<uint64_t>(blockIdx.x) * static_cast<uint64_t>(blockDim.x) +
                         static_cast<uint64_t>(threadIdx.x);
     uint64_t gridStep = static_cast<uint64_t>(blockDim.x) * static_cast<uint64_t>(gridDim.x);
+    if (height == 0 || width == 0) {
+        for (uint64_t index = localIdx; index < static_cast<uint64_t>(totalElements); index += gridStep) {
+            y[index] = WriteAsType(0.0f, static_cast<T>(0));
+        }
+        return;
+    }
     for (uint64_t index = localIdx; index < static_cast<uint64_t>(totalElements); index += gridStep) {
         IdxType pw = static_cast<IdxType>(index % static_cast<uint64_t>(pooledWidth));
         IdxType ph = static_cast<IdxType>((index / static_cast<uint64_t>(pooledWidth)) %
@@ -256,21 +613,46 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpROIAlignSimtK
             static_cast<uint64_t>(channels));
         IdxType n = static_cast<IdxType>(index / static_cast<uint64_t>(pooledWidth) /
                                          static_cast<uint64_t>(pooledHeight) / static_cast<uint64_t>(channels));
-        __gm__ const T* roi = rois + n * COORDS_PER_ROI;
-        IdxType batchIdx = static_cast<IdxType>(GetBatchIdx<T>(roi, roisN, static_cast<int32_t>(n), hasRoisN));
-        float roiStartW, roiStartH, binSizeH, binSizeW;
-        int32_t roiBinGridH, roiBinGridW, count;
-        ComputeRoiCoords<T, ROI_END_MODE>(roi, spatialScale, pooledHeight, pooledWidth, roiStartW, roiStartH, binSizeH,
-                                          binSizeW, roiBinGridH, roiBinGridW, count, sampleNum);
+        __gm__ const T* roi = rois + static_cast<int64_t>(n) * COORDS_PER_ROI;
+        IdxType batchIdx = static_cast<IdxType>(GetBatchIdx<T>(roi, roisN, n, hasRoisN));
+        // 越界 batchIdx（脏/随机数据，如未初始化槽位读到 N 以外的值）：该 ROI 不对应任何特征图平面，
+        // 按空 ROI 输出 0——绝不以其寻址 features GM（越界读触发 SIMT invalid GM address → aivec 334 / 507035）
+        if (batchIdx < 0 || batchIdx >= static_cast<IdxType>(batchSize)) {
+            y[index] = WriteAsType(0.0f, static_cast<T>(0));
+            continue;
+        }
         __gm__ const T* featuresNC = features + (batchIdx * channels + c) * height * width;
         float result;
-        if constexpr (POOL_MODE == ROI_ALIGN_POOL_AVG) {
-            result = SampleAndPoolAvg<T>(featuresNC, height, width, roiStartH, roiStartW, binSizeH, binSizeW,
-                                         static_cast<int32_t>(ph), static_cast<int32_t>(pw), roiBinGridH, roiBinGridW,
-                                         count);
+        if (IsNearRoiBoundary<T, ROI_END_MODE>(roi, spatialScale, pooledHeight, pooledWidth, height, width)) {
+            // ROI 右/下边界贴到 feature 边界：只有这类 ROI 走 double-float，避免
+            // float32 无法分辨 x-W ~1e-6 导致越界判定翻转。
+            Df roiStartW, roiStartH, binSizeH, binSizeW;
+            int32_t roiBinGridH, roiBinGridW, count;
+            ComputeRoiCoordsDf<T, ROI_END_MODE>(roi, spatialScale, pooledHeight, pooledWidth, roiStartW, roiStartH,
+                                                binSizeH, binSizeW, roiBinGridH, roiBinGridW, count, sampleNum);
+            if constexpr (POOL_MODE == ROI_ALIGN_POOL_AVG) {
+                result = SampleAndPoolAvgDf<T>(featuresNC, height, width, roiStartH, roiStartW, binSizeH, binSizeW,
+                                               static_cast<int32_t>(ph), static_cast<int32_t>(pw), roiBinGridH,
+                                               roiBinGridW, count);
+            } else {
+                result = SampleAndPoolMaxDf<T>(featuresNC, height, width, roiStartH, roiStartW, binSizeH, binSizeW,
+                                               static_cast<int32_t>(ph), static_cast<int32_t>(pw), roiBinGridH,
+                                               roiBinGridW);
+            }
         } else {
-            result = SampleAndPoolMax<T>(featuresNC, height, width, roiStartH, roiStartW, binSizeH, binSizeW,
-                                         static_cast<int32_t>(ph), static_cast<int32_t>(pw), roiBinGridH, roiBinGridW);
+            float roiStartW, roiStartH, binSizeH, binSizeW;
+            int32_t roiBinGridH, roiBinGridW, count;
+            ComputeRoiCoords<T, ROI_END_MODE>(roi, spatialScale, pooledHeight, pooledWidth, roiStartW, roiStartH,
+                                              binSizeH, binSizeW, roiBinGridH, roiBinGridW, count, sampleNum);
+            if constexpr (POOL_MODE == ROI_ALIGN_POOL_AVG) {
+                result = SampleAndPoolAvg<T>(featuresNC, height, width, roiStartH, roiStartW, binSizeH, binSizeW,
+                                             static_cast<int32_t>(ph), static_cast<int32_t>(pw), roiBinGridH,
+                                             roiBinGridW, count);
+            } else {
+                result = SampleAndPoolMax<T>(featuresNC, height, width, roiStartH, roiStartW, binSizeH, binSizeW,
+                                             static_cast<int32_t>(ph), static_cast<int32_t>(pw), roiBinGridH,
+                                             roiBinGridW);
+            }
         }
         y[index] = WriteAsType(result, static_cast<T>(0));
     }
@@ -288,7 +670,7 @@ __aicore__ inline void Process(GM_ADDR features, GM_ADDR rois, GM_ADDR roisN, GM
     asc_vf_call<OpROIAlignSimtKernel<T, POOL_MODE, ROI_END_MODE, IDX_MODE>>(
         dim3(THREAD_NUM), tilingData->totalElements, tilingData->channels, tilingData->height, tilingData->width,
         tilingData->pooledHeight, tilingData->pooledWidth, tilingData->sampleNum, tilingData->spatialScale,
-        tilingData->hasRoisN, featuresGm, roisGm, roisNGm, yGm);
+        tilingData->hasRoisN, tilingData->batchSize, featuresGm, roisGm, roisNGm, yGm);
 }
 
 } // namespace NsROIAlign

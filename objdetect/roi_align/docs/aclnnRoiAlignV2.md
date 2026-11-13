@@ -3,7 +3,7 @@
 ## 产品支持情况
 
 <!-- npu="950" id1 -->
-- <term>Ascend 950PR&950DT系列产品</term>：不支持
+- <term>Ascend 950PR&950DT系列产品</term>：支持
 <!-- end id1 -->
 <!-- npu="A3" id2 -->
 - <term>Atlas A3系列产品</term>：支持
@@ -101,7 +101,7 @@ aclnnStatus aclnnRoiAlignV2(
       <td class="tg-0lax">pooledHeight（int64_t）</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">池化后输出图像的高度。</td>
-      <td class="tg-0lax">-</td>
+      <td class="tg-0lax">需小于等于INT32_MAX（2147483647）。</td>
       <td class="tg-0lax">INT64</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">-</td>
@@ -111,7 +111,7 @@ aclnnStatus aclnnRoiAlignV2(
       <td class="tg-0lax">pooledWidth（int64_t）</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">池化后输出图像的宽度。</td>
-      <td class="tg-0lax">-</td>
+      <td class="tg-0lax">需小于等于INT32_MAX（2147483647）。</td>
       <td class="tg-0lax">INT64</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">-</td>
@@ -131,7 +131,7 @@ aclnnStatus aclnnRoiAlignV2(
       <td class="tg-0lax">samplingRatio（int64_t）</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">用于计算每个输出元素在H和W方向上的采样频率。</td>
-      <td class="tg-0lax">需大于等于0。</td>
+      <td class="tg-0lax">需大于等于0且不超过46340（即floor(sqrt(INT32_MAX))）。</td>
       <td class="tg-0lax">INT64</td>
       <td class="tg-0lax">-</td>
       <td class="tg-0lax">-</td>
@@ -202,15 +202,18 @@ aclnnStatus aclnnRoiAlignV2(
       <td>传入的self、boxes、out是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="3">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="3">161002</td>
+      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="4">161002</td>
       <td>self、boxes和out的数据类型和数据格式不在支持的范围内。</td>
     </tr>
     <tr>
       <td>self、boxes、out的shape不满足约束限制。</td>
     </tr>
     <tr>
-      <td>spatialScale需大于0，samplingRatio需大于等于0。</td>
+      <td>pooledHeight或pooledWidth超过INT32_MAX（2147483647）。</td>
+    </tr>
+    <tr>
+      <td>spatialScale需大于0，samplingRatio需大于等于0且不超过46340（floor(sqrt(INT32_MAX))）。</td>
     </tr>
   </tbody>
   </table>
@@ -263,6 +266,8 @@ aclnnStatus aclnnRoiAlignV2(
 - 确定性计算：
   - aclnnRoiAlignV2默认确定性实现。
 - self：B、C、inputHeight、inputWidth 均不支持 0 维。
+- pooledHeight 和 pooledWidth 需小于等于 INT32_MAX（2147483647）。
+- samplingRatio：需满足 `0 <= 值 <= 46340`（即 floor(sqrt(INT32_MAX))）。
 
 ## 调用示例
 
@@ -374,8 +379,8 @@ int main() {
   aclTensor* out = nullptr;
 
   std::vector<float> selfHostData = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
-  std::vector<float> boxesHostData = {0.0, -2.0, -2.0, 22.0, 22.0};
-  std::vector<float> outHostData = {4.5, 6.5, 8.5, 16.5, 18.5, 20.5, 28.5, 30.5, 32.5};
+  std::vector<float> boxesHostData = {0.0, 0.0, 0.0, 24.0, 24.0};
+  std::vector<float> outHostData = {8.0, 10.0, 11.75, 20.0, 22.0, 23.75, 30.5, 32.5, 34.25};
 
   // 创建self aclTensor
   ret = CreateAclNchTensor(selfHostData, selfShape, &selfDeviceAddr, aclDataType::ACL_FLOAT, &self);
