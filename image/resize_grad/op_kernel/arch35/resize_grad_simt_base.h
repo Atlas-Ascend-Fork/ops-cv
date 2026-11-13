@@ -38,6 +38,15 @@ constexpr uint32_t COPY_THREAD_NUM = 1024;
 
 constexpr float RG_CUBIC_COEFF_A = -0.75f;
 
+// Largest float32 value not exceeding INT32_MAX. At 2^31 the float32 spacing is 128,
+// so 2147483647 is not representable; 2147483520 (2^31 - 128) is the largest safe value.
+// The cubic window adds at most +2, which still fits in int32.
+constexpr float RG_MAX_INDEX_FLOAT32 = 2147483520.0f;
+// Conservative upper bound for 64-bit index conversion. INT64_MAX (~9.22e18) is not
+// exactly representable in float32; 4e18 leaves headroom for the cubic window (+2) and
+// for rounding, while staying far below the int64 limit.
+constexpr float RG_MAX_INDEX_FLOAT64 = 4.0e18f;
+
 __simt_callee__ __aicore__ __attribute__((always_inline)) inline void FfTwoSum(float a, float b, float& s, float& e)
 {
     float sum = a + b;
@@ -240,6 +249,25 @@ __simt_callee__ __aicore__ __attribute__((always_inline)) inline void CalcOutput
     }
 }
 
+template <typename T_IDX2>
+__simt_callee__ __aicore__ __attribute__((always_inline)) inline T_IDX2 ClampFloatToIndex(float value)
+{
+    // Converting a non-finite or out-of-range float to an integer is undefined behaviour.
+    // Clamp in floating point first. Keep the sign: negative floor indices are meaningful
+    // (the caller adds its own -1+i window offset and then clamps to [0, len-1]).
+    if (!(value == value)) {
+        return static_cast<T_IDX2>(0);
+    }
+    constexpr float kMaxIndex = (sizeof(T_IDX2) <= sizeof(int32_t)) ? RG_MAX_INDEX_FLOAT32 : RG_MAX_INDEX_FLOAT64;
+    if (value >= kMaxIndex) {
+        return static_cast<T_IDX2>(kMaxIndex);
+    }
+    if (value <= -kMaxIndex) {
+        return static_cast<T_IDX2>(-kMaxIndex);
+    }
+    return static_cast<T_IDX2>(value);
+}
+
 template <typename T_IDX, typename T_IDX2, bool ALIGN_CORNERS>
 __simt_callee__ __aicore__ __attribute__((always_inline)) inline void CalcIdxStart(float inverseScaleH,
                                                                                    float inverseScaleW, T_IDX yIdxH,
@@ -252,10 +280,10 @@ __simt_callee__ __aicore__ __attribute__((always_inline)) inline void CalcIdxSta
     }
     gradsIdxHStart = static_cast<T_IDX>(
         max(static_cast<T_IDX2>(0),
-            static_cast<T_IDX2>(ceilf((static_cast<float>(yIdxH) - 2.0f + offset) * inverseScaleH - offset))));
+            ClampFloatToIndex<T_IDX2>(ceilf((static_cast<float>(yIdxH) - 2.0f + offset) * inverseScaleH - offset))));
     gradsIdxWStart = static_cast<T_IDX>(
         max(static_cast<T_IDX2>(0),
-            static_cast<T_IDX2>(ceilf((static_cast<float>(yIdxW) - 2.0f + offset) * inverseScaleW - offset))));
+            ClampFloatToIndex<T_IDX2>(ceilf((static_cast<float>(yIdxW) - 2.0f + offset) * inverseScaleW - offset))));
 }
 
 template <typename T, typename T_IDX, int32_t FORMAT>

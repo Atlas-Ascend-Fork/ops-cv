@@ -31,8 +31,6 @@
 #include "array_ops.h"
 #include "ge_ir_build.h"
 
-#include "experiment_ops.h"
-#include "nn_other.h"
 #include "../op_graph/resize_grad_proto.h"
 
 #define FAILED -1
@@ -178,6 +176,22 @@ int32_t GenOnesDataFloat32(vector<int64_t> shapes, Tensor& input_tensor, TensorD
     return SUCCESS;
 }
 
+static uint16_t FloatToHalfBits(float value)
+{
+    uint32_t bits = 0;
+    memcpy(&bits, &value, sizeof(bits));
+    const uint32_t sign = (bits >> 16) & 0x8000U;
+    int32_t exponent = static_cast<int32_t>((bits >> 23) & 0xFFU) - 127 + 15;
+    const uint32_t mantissa = bits & 0x7FFFFFU;
+    if (exponent <= 0) {
+        return static_cast<uint16_t>(sign);
+    }
+    if (exponent >= 31) {
+        return static_cast<uint16_t>(sign | 0x7C00U);
+    }
+    return static_cast<uint16_t>(sign | (static_cast<uint32_t>(exponent) << 10) | (mantissa >> 13));
+}
+
 int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& input_tensor_desc, DataType data_type,
                     int value)
 {
@@ -186,16 +200,59 @@ int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& in
     for (uint32_t i = 0; i < shapes.size(); i++) {
         size *= shapes[i];
     }
-    uint32_t data_len = size * GetDataTypeSize(data_type);
-    int32_t* pData = new (std::nothrow) int32_t[size];
+    const uint32_t elem_size = GetDataTypeSize(data_type);
+    const uint32_t data_len = size * elem_size;
+    uint8_t* pData = new (std::nothrow) uint8_t[static_cast<size_t>(data_len)];
     if (pData == nullptr) {
         printf("%s - ERROR - [XIR]: GenOnesData alloc failed\n", GetTime().c_str());
         return FAILED;
     }
     for (size_t i = 0; i < size; ++i) {
-        *(pData + i) = value;
+        uint8_t* dst = pData + i * elem_size;
+        switch (data_type) {
+            case DT_FLOAT: {
+                float v = static_cast<float>(value);
+                memcpy(dst, &v, sizeof(v));
+                break;
+            }
+            case DT_FLOAT16: {
+                uint16_t v = FloatToHalfBits(static_cast<float>(value));
+                memcpy(dst, &v, sizeof(v));
+                break;
+            }
+            case DT_INT32: {
+                int32_t v = static_cast<int32_t>(value);
+                memcpy(dst, &v, sizeof(v));
+                break;
+            }
+            case DT_INT64: {
+                int64_t v = static_cast<int64_t>(value);
+                memcpy(dst, &v, sizeof(v));
+                break;
+            }
+            case DT_INT16: {
+                int16_t v = static_cast<int16_t>(value);
+                memcpy(dst, &v, sizeof(v));
+                break;
+            }
+            case DT_UINT8: {
+                uint8_t v = static_cast<uint8_t>(value);
+                memcpy(dst, &v, sizeof(v));
+                break;
+            }
+            case DT_INT8: {
+                int8_t v = static_cast<int8_t>(value);
+                memcpy(dst, &v, sizeof(v));
+                break;
+            }
+            default:
+                printf("%s - ERROR - [XIR]: GenOnesData does not support dtype %d\n", GetTime().c_str(),
+                       static_cast<int32_t>(data_type));
+                delete[] pData;
+                return FAILED;
+        }
     }
-    input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
+    input_tensor = Tensor(input_tensor_desc, pData, data_len);
     delete[] pData;
     return SUCCESS;
 }

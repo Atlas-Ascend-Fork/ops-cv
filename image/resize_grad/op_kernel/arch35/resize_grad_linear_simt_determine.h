@@ -35,7 +35,7 @@ __simt_callee__ __aicore__ __attribute__((always_inline)) inline float ComputeLi
     float outW = outWStart;
     while (inW < lenDstW) {
         float posOutW = fmaxf(0.0f, outW);
-        T_IDX2 wFloorIdx = static_cast<T_IDX2>(floorf(posOutW));
+        T_IDX2 wFloorIdx = ClampFloatToIndex<T_IDX2>(floorf(posOutW));
         T_IDX wTempIdx = static_cast<T_IDX>(min(wFloorIdx, static_cast<T_IDX2>(srcL1)));
         float lep1 = posOutW - static_cast<float>(wTempIdx); // λ（第二贡献点权重）
         float gradsValue = static_cast<float>(grads[nc * lenDstW + inW]);
@@ -68,9 +68,9 @@ __simt_callee__ __aicore__ __attribute__((always_inline)) inline void SimtLinear
         T_IDX wIdx = yGmIdx - nc * lenSrcW; // W_in 向坐标
         T_IDX inW = 0;
         if (wIdx > static_cast<T_IDX>(1)) {
-            inW = static_cast<T_IDX>(
-                max(static_cast<T_IDX2>(0),
-                    static_cast<T_IDX2>(ceilf((static_cast<float>(wIdx) - 1.0f + offset) * inverseScaleW - offset))));
+            inW = static_cast<T_IDX>(max(
+                static_cast<T_IDX2>(0),
+                ClampFloatToIndex<T_IDX2>(ceilf((static_cast<float>(wIdx) - 1.0f + offset) * inverseScaleW - offset))));
         }
         float outW = CalcSourceIndex<T_IDX, ALIGN_CORNERS>(scaleW, inW);
         float acc = 0.0f;

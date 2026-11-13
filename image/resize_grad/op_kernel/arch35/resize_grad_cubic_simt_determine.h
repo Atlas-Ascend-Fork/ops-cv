@@ -88,7 +88,7 @@ __simt_callee__ __aicore__ __attribute__((always_inline)) inline float CalcWBoun
             CalcCubicCoefficientsPair(tw0, tw1, cwHi, cwLo);
             float gradsValue = GetInputValue<T, T_IDX, FORMAT>(grads, lenN, lenC, lenDstH, lenDstW, idxN, idxC,
                                                                gradsIdxH, gradsIdxW);
-            T_IDX2 fwIdx = static_cast<T_IDX2>(fw);
+            T_IDX2 fwIdx = ClampFloatToIndex<T_IDX2>(fw);
             for (T_IDX2 j = 0; j < 4; j++) {
                 T_IDX yTempIdxW = static_cast<T_IDX>(
                     max(static_cast<T_IDX2>(0), min(fwIdx - 1 + j, static_cast<T_IDX2>(lenSrcW) - 1)));
@@ -135,7 +135,7 @@ __simt_callee__ __aicore__ __attribute__((always_inline)) inline float CalcHBoun
             CalcCubicCoefficientPair(dw0, dw1, cw0, cw1);
             float gradsValue = GetInputValue<T, T_IDX, FORMAT>(grads, lenN, lenC, lenDstH, lenDstW, idxN, idxC,
                                                                gradsIdxH, gradsIdxW);
-            T_IDX2 fhIdx = static_cast<T_IDX2>(fh);
+            T_IDX2 fhIdx = ClampFloatToIndex<T_IDX2>(fh);
             for (T_IDX2 i = 0; i < 4; i++) {
                 T_IDX yTempIdxH = static_cast<T_IDX>(
                     max(static_cast<T_IDX2>(0), min(fhIdx - 1 + i, static_cast<T_IDX2>(lenSrcH) - 1)));
@@ -174,8 +174,8 @@ __simt_callee__ __aicore__ __attribute__((always_inline)) inline float CalcCorne
         CalcCubicCoefficientsPair(tw0, tw1, cwHi, cwLo);
         float gradsValue = GetInputValue<T, T_IDX, FORMAT>(grads, lenN, lenC, lenDstH, lenDstW, idxN, idxC, gradsIdxH,
                                                            gradsIdxW);
-        T_IDX2 fhIdx = static_cast<T_IDX2>(fh);
-        T_IDX2 fwIdx = static_cast<T_IDX2>(fw);
+        T_IDX2 fhIdx = ClampFloatToIndex<T_IDX2>(fh);
+        T_IDX2 fwIdx = ClampFloatToIndex<T_IDX2>(fw);
         for (T_IDX2 i = 0; i < 4; i++) {
             T_IDX yTempIdxH = static_cast<T_IDX>(
                 max(static_cast<T_IDX2>(0), min(fhIdx - 1 + i, static_cast<T_IDX2>(lenSrcH) - 1)));

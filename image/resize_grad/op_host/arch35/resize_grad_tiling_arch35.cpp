@@ -30,6 +30,7 @@
 namespace optiling {
 
 constexpr size_t kGradsIdx = 0;
+constexpr size_t kRoiIdx = 1;
 constexpr size_t kScalesIdx = 2;
 constexpr size_t kOriginalSizeIdx = 3;
 constexpr size_t kOutputYIdx = 0;
@@ -85,12 +86,17 @@ static ge::graphStatus ValidateAttr(gert::TilingContext* context, bool& isLinear
                                                       "mode \"linear\" only supports \"NCHW\""),
                 return ge::GRAPH_FAILED);
 
-    const float* cubicCoeffA = attrs->GetFloat(kAttrCubicCoeffAIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, cubicCoeffA);
-    OP_CHECK_IF(std::fabs(*cubicCoeffA - kCubicCoeffAExpected) > kCubicCoeffATol,
-                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "cubic_coeff_a", std::to_string(*cubicCoeffA).c_str(),
-                                          "-0.75"),
-                return ge::GRAPH_FAILED);
+    // cubic_coeff_a is only consumed by cubic mode (README); do not constrain linear calls.
+    if (!isLinear) {
+        const float* cubicCoeffA = attrs->GetFloat(kAttrCubicCoeffAIdx);
+        OP_CHECK_NULL_WITH_CONTEXT(context, cubicCoeffA);
+        // NaN must be rejected: fabs(NaN - expected) > tol evaluates to false.
+        OP_CHECK_IF(
+            !std::isfinite(*cubicCoeffA) || !(std::fabs(*cubicCoeffA - kCubicCoeffAExpected) <= kCubicCoeffATol),
+            OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "cubic_coeff_a", std::to_string(*cubicCoeffA).c_str(),
+                                      "-0.75"),
+            return ge::GRAPH_FAILED);
+    }
 
     return ge::GRAPH_SUCCESS;
 }
@@ -126,6 +132,15 @@ static ge::graphStatus ValidateDtype(gert::TilingContext* context)
         OP_CHECK_IF(scalesDesc->GetDataType() != ge::DT_FLOAT,
                     OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "scales",
                                               Ops::Base::ToString(scalesDesc->GetDataType()).c_str(), "FLOAT"),
+                    return ge::GRAPH_FAILED);
+    }
+
+    auto roiDesc = context->GetOptionalInputDesc(kRoiIdx);
+    if (roiDesc != nullptr) {
+        ge::DataType roiDtype = roiDesc->GetDataType();
+        OP_CHECK_IF(roiDtype != ge::DT_FLOAT16 && roiDtype != ge::DT_FLOAT && roiDtype != ge::DT_DOUBLE,
+                    OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "roi", Ops::Base::ToString(roiDtype).c_str(),
+                                              "FLOAT16 and FLOAT and DOUBLE"),
                     return ge::GRAPH_FAILED);
     }
 
@@ -169,9 +184,11 @@ static ge::graphStatus ValidateShape(gert::TilingContext* context, bool isLinear
                                                  (std::to_string(scalesStorageShape.GetDimNum()) + "D").c_str(), "1D"),
                     return ge::GRAPH_FAILED);
         int64_t scalesNum = scalesStorageShape.GetShapeSize();
-        OP_CHECK_IF(scalesNum != (isLinear ? 1 : 2),
+        // Dynamic TBE broadcasts a single element to H/W; two elements are per-axis.
+        const bool scalesCountOk = isLinear ? (scalesNum == 1) : (scalesNum == 1 || scalesNum == 2);
+        OP_CHECK_IF(!scalesCountOk,
                     OP_LOGE_FOR_INVALID_SHAPESIZE(context->GetNodeName(), "scales", std::to_string(scalesNum).c_str(),
-                                                  std::to_string(isLinear ? 1 : 2).c_str()),
+                                                  isLinear ? "1" : "1 or 2"),
                     return ge::GRAPH_FAILED);
     }
 
@@ -231,7 +248,8 @@ static float AreaScale(int64_t inSize, int64_t outSize, bool alignCorners, float
     if (alignCorners) {
         return (outSize > 1) ? static_cast<float>(inSize - 1) / static_cast<float>(outSize - 1) : 0.0f;
     }
-    if (scaleValue > 0.0f) {
+    // Non-finite values do not take effect; fall back to the size ratio.
+    if (std::isfinite(scaleValue) && scaleValue > 0.0f) {
         return 1.0f / scaleValue;
     }
     return (outSize > 0) ? static_cast<float>(inSize) / static_cast<float>(outSize) : 0.0f;
@@ -242,7 +260,7 @@ static double AreaScaleF64(int64_t inSize, int64_t outSize, bool alignCorners, f
     if (alignCorners) {
         return (outSize > 1) ? static_cast<double>(inSize - 1) / static_cast<double>(outSize - 1) : 0.0;
     }
-    if (scaleValue > 0.0f) {
+    if (std::isfinite(scaleValue) && scaleValue > 0.0f) {
         return 1.0 / static_cast<double>(scaleValue);
     }
     return (outSize > 0) ? static_cast<double>(inSize) / static_cast<double>(outSize) : 0.0;
@@ -318,8 +336,32 @@ static ge::graphStatus ResizeGradTilingFunc(gert::TilingContext* context)
     float scales[2] = {0.0f, 0.0f};
     bool hasScales = false;
     int64_t scalesNum = isLinear ? 1 : 2;
+    auto scalesShape = context->GetOptionalInputShape(kScalesIdx);
+    if (scalesShape != nullptr) {
+        scalesNum = scalesShape->GetStorageShape().GetShapeSize();
+    }
     OP_CHECK_IF(GetScales(context, scales, scalesNum, hasScales) != ge::GRAPH_SUCCESS,
                 OP_LOGE(context, "GetScales failed"), return ge::GRAPH_FAILED);
+    if (hasScales) {
+        for (int64_t i = 0; i < scalesNum; ++i) {
+            // Non-finite values (NaN/±Inf) do not take effect and fall back to the size
+            // ratio, matching the documented "not greater than 0" behavior.
+            // A finite positive scale takes effect as 1/scale. Reject values whose reciprocal
+            // is not representable (e.g. 1e-40f -> +inf) so tiling never emits non-finite
+            // scale/coordinate parameters.
+            if (std::isfinite(scales[i]) && scales[i] > 0.0f) {
+                float reciprocal = 1.0f / scales[i];
+                OP_CHECK_IF(!std::isfinite(reciprocal) || !(reciprocal > 0.0f),
+                            OP_LOGE(context->GetNodeName(), "scales[%s] = %s has a non-representable reciprocal",
+                                    std::to_string(i).c_str(), std::to_string(scales[i]).c_str()),
+                            return ge::GRAPH_FAILED);
+            }
+        }
+    }
+
+    const float scaleValueH = hasScales ? scales[0] : 0.0f;
+    // A single cubic element broadcasts to H/W (dynamic TBE); two elements are per-axis.
+    const float scaleValueW = hasScales ? ((!isLinear && scalesNum >= 2) ? scales[1] : scales[0]) : 0.0f;
 
     int64_t lenN = gradsN;
     int64_t lenC = gradsC;
@@ -328,7 +370,18 @@ static ge::graphStatus ResizeGradTilingFunc(gert::TilingContext* context)
     int64_t lenSrcH = isLinear ? 1 : ori[2];
     int64_t lenSrcW = isLinear ? ori[2] : ori[3];
 
-    if (isLinear && hasScales && scales[0] > 0.0f) {
+    // Only the linear dim(2) unknown-dim exemption is allowed. Every dimension used in
+    // total-element math below must be concrete, otherwise a -1 would silently produce a
+    // negative total.
+    OP_CHECK_IF(
+        lenN < 0 || lenC < 0 || lenDstH < 0 || lenDstW < 0 || lenSrcH < 0 || lenSrcW < 0,
+        OP_LOGE(context->GetNodeName(),
+                "dims must be concrete before tiling: N=%s C=%s dstH=%s dstW=%s srcH=%s srcW=%s",
+                std::to_string(lenN).c_str(), std::to_string(lenC).c_str(), std::to_string(lenDstH).c_str(),
+                std::to_string(lenDstW).c_str(), std::to_string(lenSrcH).c_str(), std::to_string(lenSrcW).c_str()),
+        return ge::GRAPH_FAILED);
+
+    if (isLinear && hasScales && std::isfinite(scales[0]) && scales[0] > 0.0f) {
         float expected = static_cast<float>(lenDstW) / static_cast<float>(lenSrcW);
         OP_CHECK_IF(std::fabs(scales[0] - expected) > kLinearScaleTol,
                     OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "scales", std::to_string(scales[0]).c_str(),
@@ -336,17 +389,50 @@ static ge::graphStatus ResizeGradTilingFunc(gert::TilingContext* context)
                     return ge::GRAPH_FAILED);
     }
 
-    float scaleH = isLinear ? 0.0f : AreaScale(lenSrcH, lenDstH, alignCorners, hasScales ? scales[0] : 0.0f);
-    float scaleW = AreaScale(lenSrcW, lenDstW, alignCorners,
-                             (hasScales && !isLinear) ? scales[1] : (hasScales ? scales[0] : 0.0f));
+    float scaleH = isLinear ? 0.0f : AreaScale(lenSrcH, lenDstH, alignCorners, scaleValueH);
+    float scaleW = AreaScale(lenSrcW, lenDstW, alignCorners, scaleValueW);
     float inverseScaleH = (scaleH > 0.0f) ? 1.0f / scaleH : 0.0f;
     float inverseScaleW = (scaleW > 0.0f) ? 1.0f / scaleW : 0.0f;
-    double scaleH64 = isLinear ? 0.0 : AreaScaleF64(lenSrcH, lenDstH, alignCorners, hasScales ? scales[0] : 0.0f);
-    double scaleW64 = AreaScaleF64(lenSrcW, lenDstW, alignCorners,
-                                   (hasScales && !isLinear) ? scales[1] : (hasScales ? scales[0] : 0.0f));
+    // Guard the derived parameters too. A finite positive scales value can still yield a
+    // non-finite inverse (e.g. scales=FLT_MAX -> 1/scales is subnormal -> 1/(1/scales)=+inf),
+    // and a non-finite inverseScale would later be converted to an integer scan origin.
+    OP_CHECK_IF(
+        !std::isfinite(scaleH) || !std::isfinite(scaleW) || !std::isfinite(inverseScaleH) ||
+            !std::isfinite(inverseScaleW),
+        OP_LOGE(context->GetNodeName(), "derived scale parameters are not finite: scaleH=%s scaleW=%s invH=%s invW=%s",
+                std::to_string(scaleH).c_str(), std::to_string(scaleW).c_str(), std::to_string(inverseScaleH).c_str(),
+                std::to_string(inverseScaleW).c_str()),
+        return ge::GRAPH_FAILED);
+    double scaleH64 = isLinear ? 0.0 : AreaScaleF64(lenSrcH, lenDstH, alignCorners, scaleValueH);
+    double scaleW64 = AreaScaleF64(lenSrcW, lenDstW, alignCorners, scaleValueW);
 
-    int64_t yTotal = lenN * lenC * lenSrcH * lenSrcW;
-    bool isCopy = isLinear ? (lenSrcW == lenDstW) : (lenSrcH == lenDstH && lenSrcW == lenDstW);
+    int64_t yTotal = 0;
+    OP_CHECK_IF(__builtin_mul_overflow(lenN, lenC, &yTotal) || __builtin_mul_overflow(yTotal, lenSrcH, &yTotal) ||
+                    __builtin_mul_overflow(yTotal, lenSrcW, &yTotal) || yTotal < 0,
+                OP_LOGE(context->GetNodeName(), "yTotal overflows int64: N=%s C=%s srcH=%s srcW=%s",
+                        std::to_string(lenN).c_str(), std::to_string(lenC).c_str(), std::to_string(lenSrcH).c_str(),
+                        std::to_string(lenSrcW).c_str()),
+                return ge::GRAPH_FAILED);
+
+    // The copy fast path is only correct when the source->destination mapping is the
+    // identity. With half_pixel a positive scale of 1 is also required: equal sizes alone
+    // are not sufficient when scales is set to a value other than 1.
+    constexpr float kIdentityScaleTol = 1e-6f;
+    // Identity requires equal in/out sizes in every case; a scale of ~1 alone is not
+    // sufficient because the copy path iterates the source size and would read past grads
+    // when grads is smaller than original_size.
+    auto identityAxis = [alignCorners](int64_t in, int64_t out, float s) -> bool {
+        if (in != out) {
+            return false;
+        }
+        if (alignCorners || !std::isfinite(s) || !(s > 0.0f)) {
+            return true;
+        }
+        return std::fabs(1.0f / s - 1.0f) <= kIdentityScaleTol;
+    };
+    bool isCopy = isLinear ?
+                      identityAxis(lenSrcW, lenDstW, scaleValueW) :
+                      (identityAxis(lenSrcH, lenDstH, scaleValueH) && identityAxis(lenSrcW, lenDstW, scaleValueW));
 
     uint64_t ubSize = 0;
     int64_t coreNum = 0;
@@ -355,10 +441,21 @@ static ge::graphStatus ResizeGradTilingFunc(gert::TilingContext* context)
                 OP_LOGE(context, "GetPlatformInfo failed"), return ge::GRAPH_FAILED);
 
     int64_t useCoreNum = (yTotal < coreNum) ? yTotal : coreNum;
+    if (useCoreNum <= 0) {
+        // yTotal == 0 is not reachable with the current >0 checks, but keep blockDim valid.
+        useCoreNum = 1;
+    }
     int64_t coreFactor = yTotal / useCoreNum;
     int64_t coreTailFactor = yTotal - coreFactor * useCoreNum;
 
-    int64_t gradsTotal = lenN * lenC * lenDstH * lenDstW;
+    int64_t gradsTotal = 0;
+    OP_CHECK_IF(__builtin_mul_overflow(lenN, lenC, &gradsTotal) ||
+                    __builtin_mul_overflow(gradsTotal, lenDstH, &gradsTotal) ||
+                    __builtin_mul_overflow(gradsTotal, lenDstW, &gradsTotal) || gradsTotal < 0,
+                OP_LOGE(context->GetNodeName(), "gradsTotal overflows int64: N=%s C=%s dstH=%s dstW=%s",
+                        std::to_string(lenN).c_str(), std::to_string(lenC).c_str(), std::to_string(lenDstH).c_str(),
+                        std::to_string(lenDstW).c_str()),
+                return ge::GRAPH_FAILED);
     bool useIdx32 = (gradsTotal < static_cast<int64_t>(INT32_MAX)) && (yTotal < static_cast<int64_t>(INT32_MAX));
     uint64_t tilingKey = 0;
     if (isCopy) {

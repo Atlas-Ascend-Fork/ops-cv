@@ -23,7 +23,7 @@ $$
 y[n,c,h,w] = \sum_{(o_h,o_w)\in S(h,w)} grads[n,c,o_h,o_w] \cdot c_h(o_h) \cdot c_w(o_w)
 $$
 
-  In the formula, $c_h$ and $c_w$ are the cubic convolution interpolation coefficients (the coefficient a is fixed to -0.75), and $S(h,w)$ is the input sampling window covering the output point $[h,w]$. The linear mode is the two-point weighted accumulation of 1D linear interpolation. When the input and output sizes are the same, the calculation degenerates into a pure copy.
+  In the formula, $c_h$ and $c_w$ are the cubic convolution interpolation coefficients (the coefficient a is fixed to -0.75), and $S(h,w)$ is the input sampling window covering the output point $[h,w]$. The linear mode is the two-point weighted accumulation of 1D linear interpolation.
 
 ## Parameter Description
 
@@ -52,15 +52,15 @@ $$
     </tr>
     <tr>
       <td>roi</td>
-      <td>Input (optional)</td>
-      <td>1D tensor, which takes effect only when coordinate_transformation_mode is "tf_crop_and_resize"; this mode is not supported this time, so the parameter is not used.</td>
+      <td>Optional input</td>
+      <td>Tensor, which takes effect only when coordinate_transformation_mode is "tf_crop_and_resize"; this mode is not supported this time, so the parameter is not used.</td>
       <td>FLOAT16, FLOAT32, DOUBLE</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>scales</td>
-      <td>Input (optional)</td>
-      <td>1D float tensor of the scaling coefficients of each dimension, with 2 elements in cubic mode and 1 element in linear mode. It takes effect when an element is greater than 0 (scale=1/scales[i]); when the parameter is omitted or an element is not greater than 0, the coefficients are derived from the sizes.</td>
+      <td>Optional input</td>
+      <td>1D float tensor of the scaling coefficients of each dimension, with 2 elements in cubic mode (a single element is broadcast to H/W) and 1 element in linear mode. A finite positive value takes effect (scale = 1/scales[i]); when the parameter is omitted, an element is non-finite (NaN/+/-Inf), or an element is not greater than 0, the coefficients are derived from the sizes.</td>
       <td>FLOAT32</td>
       <td>ND</td>
     </tr>
@@ -81,7 +81,7 @@ $$
     <tr>
       <td>cubic_coeff_a</td>
       <td>Attr</td>
-      <td>Cubic interpolation coefficient, used only in cubic mode, fixed to -0.75 this time.</td>
+      <td>Cubic interpolation coefficient; used only in cubic mode; ignored in linear mode; in cubic mode it is fixed to -0.75 and must be finite (NaN/+/-Inf is rejected).</td>
       <td>-</td>
       <td>-</td>
     </tr>
@@ -102,7 +102,7 @@ $$
     <tr>
       <td>mode</td>
       <td>Attr</td>
-      <td>Interpolation mode; only "linear" and "cubic" are supported this time, the default value "nearest" is not supported (an error is reported when it is passed in, aligned with the NPU behavior of ResizeGradD).</td>
+      <td>Interpolation mode; only "linear" and "cubic" are supported this time, the default value "nearest" is not supported (an error is reported when it is passed in).</td>
       <td>-</td>
       <td>-</td>
     </tr>
@@ -131,16 +131,16 @@ $$
 
 ## Constraints
 
-- grads and y support only the two dtypes FLOAT16 and FLOAT32, and y.dtype must be the same as grads.dtype.
-- mode supports only "linear" and "cubic"; "nearest" and other values are not supported (aligned with the NPU behavior of ResizeGradD).
-- data_format supports "NCHW" and "HWNC", and the linear mode supports only "NCHW".
-- grads must be 4D: in cubic mode, the NCHW layout is (N,C,H_out,W_out) and the HWNC layout is (H_out,W_out,N,C); in linear mode, it is (N,C,1,W_out) and the 3rd dimension (dim(2)) must be 1.
-- original_size is a value-dependent input: each element must be greater than 0, and the first 2 dimensions (N, C) must be consistent with those of grads; in cubic mode, it must have 4 elements [N,C,H_in,W_in]; in linear mode, it must have 3 elements [N,C,W_in].
-- scales is optional: it has 2 elements in cubic mode and 1 element in linear mode; it takes effect when an element is greater than 0 (scale=1/scales[i]), and when the parameter is omitted or an element is not greater than 0, the coefficients are derived from the input and output sizes; in linear mode, scales[0] must be approximately equal to grads.W/original_size.W (tolerance 1e-4).
-- coordinate_transformation_mode supports only "half_pixel" and "align_corners"; cubic_coeff_a is fixed to -0.75.
-- roi, exclude_outside, extrapolation_value, and nearest_mode are reserved parameters and do not participate in the calculation this time.
-- This implementation is deterministic (accumulation in a fixed order based on gather) and is mathematically equivalent to the scatter semantics.
-- Test description: the white-box idx64 case file 03_resize_grad_whitebox_idx64_tse.csv (378 long-duration cases) is not included in the main TTK process and is scheduled separately as a dedicated long-duration tier.
+- grads: supports only FLOAT16 and FLOAT32, and must be 4D. In cubic mode, the NCHW layout is (N,C,H_out,W_out) and the HWNC layout is (H_out,W_out,N,C); in linear mode, it is (N,C,1,W_out) and the 3rd dimension (dim(2)) must be 1. H_out or W_out may be 0, in which case the output is treated as empty/zero. Non-finite inputs (plus/minus Inf, NaN) in grads are outside the numerical guarantee.
+- y: dtype is the same as grads, and shape is derived from original_size; y is (N,C,H_in,W_in) when data_format is "NCHW" and (H_in,W_in,N,C) when it is "HWNC".
+- original_size: value-dependent input; each element must be greater than 0, and the first 2 dimensions (N, C) must be consistent with those of grads; in cubic mode it must have 4 elements [N,C,H_in,W_in], and in linear mode 3 elements [N,C,W_in].
+- scales: optional; 2 elements in cubic mode (a single element is broadcast to H/W) and 1 element in linear mode; a finite positive value takes effect (scale = 1/scales[i]); extremely small finite positive values may be rejected; when omitted, non-finite (NaN/+/-Inf), or not greater than 0, the coefficients are derived from the input and output sizes; in linear mode, scales[0] must be approximately equal to grads.W/original_size.W (tolerance 1e-4).
+- mode: only "linear" and "cubic" are supported; the default value "nearest" and other values are not supported, so callers must explicitly pass "linear" or "cubic".
+- data_format: supports "NCHW" and "HWNC", default "NCHW"; linear mode supports only "NCHW".
+- coordinate_transformation_mode: only "half_pixel" and "align_corners" are supported, default "half_pixel".
+- cubic_coeff_a: validated only in cubic mode; fixed to -0.75 and must be finite (NaN/Inf is rejected); ignored in linear mode.
+- roi, exclude_outside, extrapolation_value, nearest_mode: reserved parameters and not used in this calculation.
+- Dynamic shape: -1 unknown dims and -2 unknown rank are supported; when the output shape is unknown, the shape of y is unknown. original_size must be a const input to derive a concrete output shape; otherwise the shape of y is unknown.
 
 ## Invocation Description
 
@@ -154,7 +154,7 @@ $$
   <tr>
     <td>Graph mode invocation</td>
     <td><a href="./examples/test_geir_resize_grad.cpp">test_geir_resize_grad</a></td>
-    <td>Refer to <a href="../../docs/zh/invocation/quick_op_invocation.md">operator invocation</a> to complete operator compilation and verification.</td>
+    <td>Refer to <a href="../../docs/zh/invocation/quick_op_invocation.md">operator invocation</a> to complete operator compilation and verification; the operator IR definition is <a href="./op_graph/resize_grad_proto.h">resize_grad_proto.h</a>.</td>
   </tr>
 </tbody>
 </table>

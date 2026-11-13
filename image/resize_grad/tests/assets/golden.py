@@ -18,7 +18,11 @@ The cubic backward is the exact transpose of the bicubic forward: each output
 the clamped-cubic basis. Two accumulation strategies share the identical math
 (only the floating-point accumulation order differs):
 
-* ``acc_mode="scatter"`` (default, two-sided golden): a separable 2D
+* ``ResizeGradTestSpec.golden`` uses ``acc_mode="gather"`` so the reference
+  follows the device's per-output gather order and does not overflow an
+  intermediate tensor for inputs near the float32 upper bound.
+
+* ``acc_mode="scatter"`` (allocation default; kept for independent cross-checks): a separable 2D
   scatter-add implemented with two ``index_add_`` passes (H then W). Each grad
   position scatters its contribution to its 4 clamped output neighbours.
 
@@ -39,6 +43,9 @@ import torch
 
 __spec__ = {
     "resize_grad": "ResizeGradTestSpec",
+    # Also register the GEIR op type (CamelCase) so spec lookup succeeds when TTK is
+    # called with the registered op name instead of the snake_case CSV name.
+    "ResizeGrad": "ResizeGradTestSpec",
 }
 
 
@@ -75,9 +82,22 @@ def _cubic_coeffs(t, a=-0.75):
 def _scale(in_size, out_size, align_corners, s):
     if align_corners:
         return (in_size - 1.0) / (out_size - 1.0) if out_size > 1 else 0.0
-    if s is not None and s > 0.0:
+    # Non-finite scales do not take effect; fall back to the size ratio (matches the operator).
+    if s is not None and math.isfinite(s) and s > 0.0:
         return 1.0 / s
     return float(in_size) / float(out_size)
+
+
+def _is_identity(in_size, out_size, align_corners, s):
+    """True when the source->destination mapping is the identity for this axis.
+
+    Equal sizes are required in every case: a scale of ~1 alone is not sufficient,
+    because the copy fast path iterates the source size. With half_pixel a positive
+    scale other than 1 also changes the mapping even when the sizes match.
+    """
+    if in_size != out_size:
+        return False
+    return abs(float(_scale(in_size, out_size, align_corners, s)) - 1.0) <= 1e-6
 
 
 def _src_idx(scale, dst, align_corners, clamp_neg):
@@ -144,13 +164,18 @@ def _resize_grad_compute(
         assert int(original_size[0]) == n and int(original_size[1]) == c
         h_out, w_out = int(g.shape[2]), int(g.shape[3])
         y = g.new_zeros((n, c, h_in, w_in), dtype=acc_dtype)
+        # Dynamic TBE broadcasts a single scales element to H and W.
+        scale_h = scales[0] if len(scales) > 0 else None
+        scale_w = scales[1] if len(scales) > 1 else scale_h
         if h_out == 0 or w_out == 0:
             pass
-        elif h_in == h_out and w_in == w_out:
+        elif _is_identity(h_in, h_out, align, scale_h) and _is_identity(
+            w_in, w_out, align, scale_w
+        ):
             y = g.to(acc_dtype).clone()
         else:
-            sh = _scale(h_in, h_out, align, scales[0] if len(scales) > 0 else None)
-            sw = _scale(w_in, w_out, align, scales[1] if len(scales) > 1 else None)
+            sh = _scale(h_in, h_out, align, scale_h)
+            sw = _scale(w_in, w_out, align, scale_w)
             gf = g.to(acc_dtype)
             device = g.device
 
@@ -227,7 +252,7 @@ def _resize_grad_compute(
         y = g.new_zeros((n, c, 1, w_in), dtype=acc_dtype)
         if w_out == 0:
             pass
-        elif w_in == w_out:
+        elif _is_identity(w_in, w_out, align, scales[0] if len(scales) > 0 else None):
             y = g.to(acc_dtype).clone()
         else:
             sw = _scale(w_in, w_out, align, scales[0] if len(scales) > 0 else None)
@@ -278,6 +303,10 @@ class ResizeGradTestSpec:
             coordinate_transformation_mode=coordinate_transformation_mode,
             cubic_coeff_a=cubic_coeff_a,
             data_format=data_format,
+            # The device accumulates per output in gather order. Using the same order here
+            # avoids the two-pass scatter intermediate overflowing for inputs near the
+            # float32 upper bound, which is a reference-construction artefact.
+            acc_mode="gather",
         )
         return [result.detach().cpu().numpy()]
 
@@ -313,7 +342,10 @@ class ResizeGradTestSpec:
             return [result]
 
     third_party = {"torch": ThirdPartyImpl}
+    # Use TTK's built-in stat_rel_err thresholds (fp32 2^-13, fp16 2^-10) instead of
+    # declaring local thresholds. stat_rel_err does not promote the golden precision, so
+    # the reference stays in the device dtype.
     tolerance = {
-        "float32": {"standard": "stat_rel_err", "threshold": 1e-4},
-        "float16": {"standard": "stat_rel_err", "threshold": 1e-3},
+        "float32": {"standard": "stat_rel_err"},
+        "float16": {"standard": "stat_rel_err"},
     }

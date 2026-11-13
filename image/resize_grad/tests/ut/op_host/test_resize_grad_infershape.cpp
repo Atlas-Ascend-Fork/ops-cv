@@ -16,6 +16,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <cmath>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -31,18 +32,19 @@ protected:
 
 namespace {
 std::vector<gert::InfershapeContextPara::OpAttr> MakeAttrs(const std::string& mode, const std::string& dataFormat,
-                                                           const std::string& ctm = "half_pixel")
+                                                           const std::string& ctm = "half_pixel",
+                                                           float cubicCoeffA = -0.75f)
 {
     return {
         gert::InfershapeContextPara::OpAttr("coordinate_transformation_mode",
-                                            Ops::Math::AnyValue::CreateFrom<std::string>(ctm)),
-        gert::InfershapeContextPara::OpAttr("cubic_coeff_a", Ops::Math::AnyValue::CreateFrom<float>(-0.75f)),
-        gert::InfershapeContextPara::OpAttr("exclude_outside", Ops::Math::AnyValue::CreateFrom<int64_t>(0)),
-        gert::InfershapeContextPara::OpAttr("extrapolation_value", Ops::Math::AnyValue::CreateFrom<float>(0.0f)),
-        gert::InfershapeContextPara::OpAttr("mode", Ops::Math::AnyValue::CreateFrom<std::string>(mode)),
+                                            Ops::Cv::AnyValue::CreateFrom<std::string>(ctm)),
+        gert::InfershapeContextPara::OpAttr("cubic_coeff_a", Ops::Cv::AnyValue::CreateFrom<float>(cubicCoeffA)),
+        gert::InfershapeContextPara::OpAttr("exclude_outside", Ops::Cv::AnyValue::CreateFrom<int64_t>(0)),
+        gert::InfershapeContextPara::OpAttr("extrapolation_value", Ops::Cv::AnyValue::CreateFrom<float>(0.0f)),
+        gert::InfershapeContextPara::OpAttr("mode", Ops::Cv::AnyValue::CreateFrom<std::string>(mode)),
         gert::InfershapeContextPara::OpAttr("nearest_mode",
-                                            Ops::Math::AnyValue::CreateFrom<std::string>("round_prefer_floor")),
-        gert::InfershapeContextPara::OpAttr("data_format", Ops::Math::AnyValue::CreateFrom<std::string>(dataFormat)),
+                                            Ops::Cv::AnyValue::CreateFrom<std::string>("round_prefer_floor")),
+        gert::InfershapeContextPara::OpAttr("data_format", Ops::Cv::AnyValue::CreateFrom<std::string>(dataFormat)),
     };
 }
 } // namespace
@@ -145,4 +147,167 @@ TEST_F(ResizeGradInfershape, resize_grad_infershape_unknown_rank)
                                                       MakeAttrs("cubic", "NCHW"));
     std::vector<std::vector<int64_t>> expectOutputShape = {};
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+TEST_F(ResizeGradInfershape, resize_grad_infershape_cubic_coeff_a_nan_failed)
+{
+    int64_t oriData[4] = {1, 3, 32, 32};
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeGrad",
+        {
+            {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        MakeAttrs("cubic", "NCHW", "half_pixel", std::nanf("")));
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(ResizeGradInfershape, resize_grad_infershape_cubic_coeff_a_inf_failed)
+{
+    int64_t oriData[4] = {1, 3, 32, 32};
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeGrad",
+        {
+            {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        MakeAttrs("cubic", "NCHW", "half_pixel", INFINITY));
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(ResizeGradInfershape, resize_grad_infershape_grads_rank3_cubic_failed)
+{
+    int64_t oriData[4] = {1, 3, 32, 32};
+    gert::InfershapeContextPara infershapeContextPara("ResizeGrad",
+                                                      {
+                                                          {{{1, 3, 64}, {1, 3, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      MakeAttrs("cubic", "NCHW"));
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(ResizeGradInfershape, resize_grad_infershape_original_size_nonpositive_failed)
+{
+    int64_t oriData[4] = {1, 3, 0, 32};
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeGrad",
+        {
+            {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        MakeAttrs("cubic", "NCHW"));
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(ResizeGradInfershape, resize_grad_infershape_original_size_nc_mismatch_failed)
+{
+    int64_t oriData[4] = {1, 9, 32, 32};
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeGrad",
+        {
+            {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        MakeAttrs("cubic", "NCHW"));
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(ResizeGradInfershape, resize_grad_infershape_linear_unknown_dim2_success)
+{
+    int64_t oriData[3] = {1, 3, 64};
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeGrad",
+        {
+            {{{1, 3, -1, 128}, {1, 3, -1, 128}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1}, {1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{3}, {3}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        MakeAttrs("linear", "NCHW"));
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {1, 3, 1, 64},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+TEST_F(ResizeGradInfershape, resize_grad_infershape_linear_dim2_two_failed)
+{
+    int64_t oriData[3] = {1, 3, 64};
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeGrad",
+        {
+            {{{1, 3, 2, 128}, {1, 3, 2, 128}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1}, {1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{3}, {3}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        MakeAttrs("linear", "NCHW"));
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(ResizeGradInfershape, resize_grad_infershape_unknown_rank_bad_original_size_failed)
+{
+    int64_t oriData[3] = {1, 3, 64};
+    gert::InfershapeContextPara infershapeContextPara(
+        "ResizeGrad",
+        {
+            {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{3}, {3}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData}, // cubic needs 4 elements
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        MakeAttrs("cubic", "NCHW"));
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
+TEST_F(ResizeGradInfershape, resize_grad_infershape_unknown_rank_bad_original_value_failed)
+{
+    int64_t oriData[4] = {1, 3, 0, 32};
+    gert::InfershapeContextPara infershapeContextPara("ResizeGrad",
+                                                      {
+                                                          {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      },
+                                                      MakeAttrs("cubic", "NCHW"));
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
 }

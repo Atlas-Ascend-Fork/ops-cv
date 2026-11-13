@@ -15,6 +15,7 @@
  * \brief test resize grad tiling
  */
 
+#include <cmath>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -38,12 +39,13 @@ namespace {
 struct ResizeGradCompileInfo {};
 
 std::vector<gert::TilingContextPara::OpAttr> MakeAttrs(const std::string& mode, const std::string& dataFormat,
-                                                       const std::string& ctm = "half_pixel")
+                                                       const std::string& ctm = "half_pixel",
+                                                       float cubicCoeffA = -0.75f)
 {
     return {
         gert::TilingContextPara::OpAttr("coordinate_transformation_mode",
                                         Ops::Cv::AnyValue::CreateFrom<std::string>(ctm)),
-        gert::TilingContextPara::OpAttr("cubic_coeff_a", Ops::Cv::AnyValue::CreateFrom<float>(-0.75f)),
+        gert::TilingContextPara::OpAttr("cubic_coeff_a", Ops::Cv::AnyValue::CreateFrom<float>(cubicCoeffA)),
         gert::TilingContextPara::OpAttr("exclude_outside", Ops::Cv::AnyValue::CreateFrom<int64_t>(0)),
         gert::TilingContextPara::OpAttr("extrapolation_value", Ops::Cv::AnyValue::CreateFrom<float>(0.0f)),
         gert::TilingContextPara::OpAttr("mode", Ops::Cv::AnyValue::CreateFrom<std::string>(mode)),
@@ -100,6 +102,36 @@ TEST_F(ResizeGradTiling, resize_grad_tiling_cubic_nchw_fp32)
     EXPECT_FLOAT_EQ(td->scaleW0, 0.5f);
     EXPECT_FLOAT_EQ(td->scaleW1, 0.0f);
     EXPECT_FLOAT_EQ(td->scaleW2, 0.0f);
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_cubic_scales_broadcast_success)
+{
+    // A single cubic scales element broadcasts to both H and W (dynamic TBE behavior).
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    float scalesData[1] = {2.0f};
+    gert::TilingContextPara tilingContextPara(
+        "ResizeGrad",
+        {
+            {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND}, // grads
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},                       // roi
+            {{{1}, {1}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},     // scales: 1 element
+            {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+        },
+        {
+            {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT, ge::FORMAT_ND}, // y
+        },
+        MakeAttrs("cubic", "NCHW"), &compileInfo);
+
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    EXPECT_EQ(tilingInfo.tilingKey, TILING_KEY_CUBIC_DETERMINE);
+
+    auto* td = reinterpret_cast<const ResizeGradTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_FLOAT_EQ(td->scaleH, 0.5f);
+    EXPECT_FLOAT_EQ(td->scaleW, 0.5f);
+    EXPECT_FLOAT_EQ(td->inverseScaleH, 2.0f);
+    EXPECT_FLOAT_EQ(td->inverseScaleW, 2.0f);
 }
 
 TEST_F(ResizeGradTiling, resize_grad_tiling_cubic_hwnc_fp16)
@@ -256,6 +288,63 @@ TEST_F(ResizeGradTiling, resize_grad_tiling_copy_fp32)
     EXPECT_FLOAT_EQ(td->inverseScaleW, 1.0f);
 }
 
+TEST_F(ResizeGradTiling, resize_grad_tiling_grads_storage_nchw_success)
+{
+    // Graph-optimized NCHW storage is contiguous and equivalent to ND for this kernel.
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    float scalesData[2] = {0.0f, 0.0f};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 3, 64, 64}, {1, 3, 64, 64}},
+                                                   ge::DT_FLOAT,
+                                                   ge::FORMAT_ND,
+                                                   false,
+                                                   nullptr,
+                                                   ge::FORMAT_NCHW}, // grads: origin ND, storage NCHW
+                                                  {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 3, 32, 32}, {1, 3, 32, 32}},
+                                                   ge::DT_FLOAT,
+                                                   ge::FORMAT_ND,
+                                                   false,
+                                                   nullptr,
+                                                   ge::FORMAT_NCHW}, // y: origin ND, storage NCHW
+                                              },
+                                              MakeAttrs("cubic", "NCHW"), &compileInfo);
+
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    EXPECT_EQ(tilingInfo.tilingKey, TILING_KEY_CUBIC_DETERMINE);
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_grads_format_nchw_success)
+{
+    // NCHW origin/storage is contiguous and equivalent to ND for this kernel.
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    float scalesData[2] = {0.0f, 0.0f};
+    gert::TilingContextPara tilingContextPara(
+        "ResizeGrad",
+        {
+            {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_NCHW}, // grads
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},                         // roi
+            {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},       // scales
+            {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+        },
+        {
+            {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT, ge::FORMAT_NCHW}, // y
+        },
+        MakeAttrs("cubic", "NCHW"), &compileInfo);
+
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    EXPECT_EQ(tilingInfo.tilingKey, TILING_KEY_CUBIC_DETERMINE);
+}
+
 TEST_F(ResizeGradTiling, resize_grad_tiling_nearest_failed)
 {
     struct ResizeGradCompileInfo compileInfo;
@@ -320,4 +409,201 @@ TEST_F(ResizeGradTiling, resize_grad_tiling_linear_scales_rank0_failed)
     uint64_t expectTilingKey = 0;
     std::vector<size_t> expectWorkspaces = {};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, expectTilingKey, "", expectWorkspaces);
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_cubic_coeff_a_nan_failed)
+{
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    float scalesData[2] = {0.0f, 0.0f};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              MakeAttrs("cubic", "NCHW", "half_pixel", std::nanf("")), &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_scales_nan_fallback_success)
+{
+    // Non-finite scales do not take effect; tiling falls back to the size ratio.
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    float scalesData[2] = {std::nanf(""), std::nanf("")};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              MakeAttrs("cubic", "NCHW"), &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    EXPECT_EQ(tilingInfo.tilingKey, TILING_KEY_CUBIC_DETERMINE);
+    auto* td = reinterpret_cast<const ResizeGradTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_FLOAT_EQ(td->scaleH, 0.5f);
+    EXPECT_FLOAT_EQ(td->scaleW, 0.5f);
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_scales_inf_fallback_success)
+{
+    // +Inf also falls back to the size ratio (intentional: all non-finite values fall back).
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    float scalesData[2] = {INFINITY, INFINITY};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              MakeAttrs("cubic", "NCHW"), &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    EXPECT_EQ(tilingInfo.tilingKey, TILING_KEY_CUBIC_DETERMINE);
+    auto* td = reinterpret_cast<const ResizeGradTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_FLOAT_EQ(td->scaleH, 0.5f);
+    EXPECT_FLOAT_EQ(td->scaleW, 0.5f);
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_linear_unknown_dim2_failed)
+{
+    // Tiling requires concrete dims: an unresolved dim(2) (-1) is rejected.
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[3] = {1, 3, 128};
+    float scalesData[1] = {0.0f};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 3, -1, 128}, {1, 3, -1, 128}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{1}, {1}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{3}, {3}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 3, 1, 128}, {1, 3, 1, 128}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              MakeAttrs("linear", "NCHW"), &compileInfo);
+    uint64_t expectTilingKey = 0;
+    std::vector<size_t> expectWorkspaces = {};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED, expectTilingKey, "", expectWorkspaces);
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_roi_rank2_success)
+{
+    // roi is unused; tiling does not validate its rank (dtype/format are still checked).
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    float scalesData[2] = {0.0f, 0.0f};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{3, 1}, {3, 1}}, ge::DT_FLOAT, ge::FORMAT_ND}, // roi rank-2
+                                                  {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              MakeAttrs("cubic", "NCHW"), &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    EXPECT_EQ(tilingInfo.tilingKey, TILING_KEY_CUBIC_DETERMINE);
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_roi_bool_failed)
+{
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    float scalesData[2] = {0.0f, 0.0f};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{4}, {4}}, ge::DT_BOOL, ge::FORMAT_ND}, // roi bool
+                                                  {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              MakeAttrs("cubic", "NCHW"), &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_scales_one_size_mismatch_not_copy)
+{
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 1, 5, 5};
+    float scalesData[2] = {1.0f, 1.0f};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 1, 3, 3}, {1, 1, 3, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 1, 5, 5}, {1, 1, 5, 5}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              MakeAttrs("cubic", "NCHW"), &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    // scales=1 alone must not enable the copy path when grads and original_size differ.
+    EXPECT_EQ(tilingInfo.tilingKey, TILING_KEY_CUBIC_DETERMINE);
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_scales_reciprocal_nonfinite_failed)
+{
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    float scalesData[2] = {1e-40f, 1e-40f};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              MakeAttrs("cubic", "NCHW"), &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}
+
+TEST_F(ResizeGradTiling, resize_grad_tiling_scales_max_inverse_overflow_failed)
+{
+    struct ResizeGradCompileInfo compileInfo;
+    int64_t oriData[4] = {1, 3, 32, 32};
+    // FLT_MAX passes the finite check, but 1/(1/FLT_MAX) overflows to +inf.
+    float scalesData[2] = {3.40282347e38f, 3.40282347e38f};
+    gert::TilingContextPara tilingContextPara("ResizeGrad",
+                                              {
+                                                  {{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND, true, scalesData},
+                                                  {{{4}, {4}}, ge::DT_INT64, ge::FORMAT_ND, true, oriData},
+                                              },
+                                              {
+                                                  {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              MakeAttrs("cubic", "NCHW"), &compileInfo);
+    TilingInfo tilingInfo;
+    ASSERT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
 }

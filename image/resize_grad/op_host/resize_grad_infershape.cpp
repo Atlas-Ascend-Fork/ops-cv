@@ -69,12 +69,18 @@ static ge::graphStatus ValidateAttrForInfer(gert::InferShapeContext* context, bo
                                                       "mode \"linear\" only supports \"NCHW\""),
                 return ge::GRAPH_FAILED);
 
-    const float* cubicCoeffA = attrs->GetFloat(kAttrCubicCoeffAIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, cubicCoeffA);
-    OP_CHECK_IF(std::fabs(*cubicCoeffA - kCubicCoeffAExpected) > kCubicCoeffATol,
-                OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "cubic_coeff_a", std::to_string(*cubicCoeffA).c_str(),
-                                          "-0.75"),
-                return ge::GRAPH_FAILED);
+    // cubic_coeff_a is only consumed by cubic mode (README); do not constrain linear calls.
+    if (!isLinear) {
+        const float* cubicCoeffA = attrs->GetFloat(kAttrCubicCoeffAIdx);
+        OP_CHECK_NULL_WITH_CONTEXT(context, cubicCoeffA);
+        // NaN must be rejected: fabs(NaN - expected) > tol evaluates to false, which would
+        // otherwise let a non-finite coefficient pass this gate.
+        OP_CHECK_IF(
+            !std::isfinite(*cubicCoeffA) || !(std::fabs(*cubicCoeffA - kCubicCoeffAExpected) <= kCubicCoeffATol),
+            OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "cubic_coeff_a", std::to_string(*cubicCoeffA).c_str(),
+                                      "-0.75"),
+            return ge::GRAPH_FAILED);
+    }
 
     return ge::GRAPH_SUCCESS;
 }
@@ -104,6 +110,47 @@ static bool GetOriValues(const gert::Tensor* oriTensor, int64_t oriNum, int64_t*
     return false;
 }
 
+// original_size is a value-depend input: its rank/length/dtype/values are determinable
+// at Host even when grads rank is still unknown, so validate them before any early return.
+static ge::graphStatus ValidateOriginalSize(gert::InferShapeContext* context, int64_t oriNum, bool& shapeKnown,
+                                            bool& constValues, int64_t* ori)
+{
+    const gert::Shape* oriShape = context->GetRequiredInputShape(kOriginalSizeIdx);
+    OP_CHECK_NULL_WITH_CONTEXT(context, oriShape);
+    shapeKnown = !Ops::Base::IsUnknownRank(*oriShape) && !Ops::Base::IsUnknownShape(*oriShape);
+    if (shapeKnown) {
+        OP_CHECK_IF(oriShape->GetDimNum() != 1,
+                    OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "original_size",
+                                                 (std::to_string(oriShape->GetDimNum()) + "D").c_str(), "1D"),
+                    return ge::GRAPH_FAILED);
+        OP_CHECK_IF(oriShape->GetShapeSize() != oriNum,
+                    OP_LOGE_FOR_INVALID_SHAPESIZE(context->GetNodeName(), "original_size",
+                                                  std::to_string(oriShape->GetShapeSize()).c_str(),
+                                                  std::to_string(oriNum).c_str()),
+                    return ge::GRAPH_FAILED);
+    }
+    const gert::Tensor* oriTensor = context->GetRequiredInputTensor(kOriginalSizeIdx);
+    if (oriTensor == nullptr) {
+        constValues = false;
+        return ge::GRAPH_SUCCESS;
+    }
+    ge::DataType oriDtype = oriTensor->GetDataType();
+    OP_CHECK_IF(oriDtype != ge::DT_INT32 && oriDtype != ge::DT_INT64,
+                OP_LOGE(context->GetNodeName(), "original_size dtype %d is not supported, expected INT32 or INT64",
+                        static_cast<int32_t>(oriDtype)),
+                return ge::GRAPH_FAILED);
+    constValues = GetOriValues(oriTensor, oriNum, ori);
+    if (constValues) {
+        for (int64_t i = 0; i < oriNum; ++i) {
+            OP_CHECK_IF(ori[i] <= 0,
+                        OP_LOGE(context->GetNodeName(), "original_size[%s] = %s must be > 0", std::to_string(i).c_str(),
+                                std::to_string(ori[i]).c_str()),
+                        return ge::GRAPH_FAILED);
+        }
+    }
+    return ge::GRAPH_SUCCESS;
+}
+
 static ge::graphStatus InferShape4ResizeGrad(gert::InferShapeContext* context)
 {
     OP_LOGD(context->GetNodeName(), "Begin to do InferShape4ResizeGrad");
@@ -118,48 +165,60 @@ static ge::graphStatus InferShape4ResizeGrad(gert::InferShapeContext* context)
     gert::Shape* yShape = context->GetOutputShape(kOutputYIdx);
     OP_CHECK_NULL_WITH_CONTEXT(context, yShape);
 
+    int64_t oriNum = isLinear ? 3 : 4;
+    int64_t ori[4] = {ge::UNKNOWN_DIM, ge::UNKNOWN_DIM, ge::UNKNOWN_DIM, ge::UNKNOWN_DIM};
+    bool oriShapeKnown = false;
+    bool oriConst = false;
+    OP_CHECK_IF(ValidateOriginalSize(context, oriNum, oriShapeKnown, oriConst, ori) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context->GetNodeName(), "ValidateOriginalSize failed"), return ge::GRAPH_FAILED);
+
     if (Ops::Base::IsUnknownRank(*gradsShape)) {
         OP_LOGD(context->GetNodeName(), "grads is UnknownRank, set y UnknownRank.");
         Ops::Base::SetUnknownRank(*yShape);
         return ge::GRAPH_SUCCESS;
     }
 
+    // grads must be 4D in both modes. Unknown dims (-1) are allowed; unknown rank was
+    // handled above. The per-mode value constraints are checked later.
+    OP_CHECK_IF(gradsShape->GetDimNum() != kOutputDimNum,
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "grads",
+                                             (std::to_string(gradsShape->GetDimNum()) + "D").c_str(), "4D"),
+                return ge::GRAPH_FAILED);
+
     yShape->SetDimNum(kOutputDimNum);
 
-    const gert::Tensor* oriTensor = context->GetRequiredInputTensor(kOriginalSizeIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, oriTensor);
-    int64_t oriNum = isLinear ? 3 : 4;
-
-    const gert::Shape* oriShape = context->GetRequiredInputShape(kOriginalSizeIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, oriShape);
-    if (Ops::Base::IsUnknownRank(*oriShape) || Ops::Base::IsUnknownShape(*oriShape)) {
+    if (!oriShapeKnown) {
         OP_LOGW(context->GetNodeName(), "original_size shape is unknown, y dims will be unknown.");
         Ops::Base::SetUnknownShape(kOutputDimNum, *yShape);
         return ge::GRAPH_SUCCESS;
     }
-    OP_CHECK_IF(oriShape->GetDimNum() != 1,
-                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "original_size",
-                                             (std::to_string(oriShape->GetDimNum()) + "D").c_str(), "1D"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        oriShape->GetShapeSize() != oriNum,
-        OP_LOGE_FOR_INVALID_SHAPESIZE(context->GetNodeName(), "original_size",
-                                      std::to_string(oriShape->GetShapeSize()).c_str(), std::to_string(oriNum).c_str()),
-        return ge::GRAPH_FAILED);
-
-    int64_t ori[4] = {ge::UNKNOWN_DIM, ge::UNKNOWN_DIM, ge::UNKNOWN_DIM, ge::UNKNOWN_DIM};
-    if (!GetOriValues(oriTensor, oriNum, ori)) {
+    if (!oriConst) {
         OP_LOGW(context->GetNodeName(), "original_size is not const tensor, y dims will be unknown.");
         Ops::Base::SetUnknownShape(kOutputDimNum, *yShape);
         return ge::GRAPH_SUCCESS;
     }
 
+    // N/C consistency still needs known grads dims; skip unknown ones for dynamic graphs.
+    int64_t gradsN = isHwnc ? gradsShape->GetDim(2) : gradsShape->GetDim(0);
+    int64_t gradsC = isHwnc ? gradsShape->GetDim(3) : gradsShape->GetDim(1);
+    OP_CHECK_IF(gradsN >= 0 && ori[0] != gradsN,
+                OP_LOGE(context->GetNodeName(), "original_size[0] = %s must equal grads N (%s) for layout %s",
+                        std::to_string(ori[0]).c_str(), std::to_string(gradsN).c_str(), isHwnc ? "HWNC" : "NCHW"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(gradsC >= 0 && ori[1] != gradsC,
+                OP_LOGE(context->GetNodeName(), "original_size[1] = %s must equal grads C (%s) for layout %s",
+                        std::to_string(ori[1]).c_str(), std::to_string(gradsC).c_str(), isHwnc ? "HWNC" : "NCHW"),
+                return ge::GRAPH_FAILED);
+
     if (isLinear) {
-        OP_CHECK_IF(gradsShape->GetDimNum() != kOutputDimNum || gradsShape->GetDim(2) != 1,
-                    OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "grads",
-                                                          Ops::Base::ToString(*gradsShape).c_str(),
-                                                          "mode \"linear\" requires grads 4D and dim(2)==1"),
-                    return ge::GRAPH_FAILED);
+        // In linear mode a dynamic (unknown) dim(2) is legal; only a known value != 1 is
+        // rejected here. The concrete value is enforced again by tiling.
+        OP_CHECK_IF(
+            gradsShape->GetDimNum() != kOutputDimNum || (gradsShape->GetDim(2) >= 0 && gradsShape->GetDim(2) != 1),
+            OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "grads",
+                                                  Ops::Base::ToString(*gradsShape).c_str(),
+                                                  "mode \"linear\" requires grads 4D and dim(2)==1"),
+            return ge::GRAPH_FAILED);
         yShape->SetDim(0, gradsShape->GetDim(0));
         yShape->SetDim(1, gradsShape->GetDim(1));
         yShape->SetDim(2, 1);
