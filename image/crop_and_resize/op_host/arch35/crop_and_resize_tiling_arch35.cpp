@@ -22,6 +22,7 @@
 #include "image/crop_and_resize/op_kernel/arch35/crop_and_resize_tiling_data.h"
 #include "image/crop_and_resize/op_kernel/arch35/crop_and_resize_tiling_key.h"
 
+#include <limits>
 #include <string>
 
 namespace optiling {
@@ -34,7 +35,7 @@ constexpr int64_t WARP_PER_CORE_MIN = 32;
 constexpr uint32_t DCACHE_SIZE = 128 * 1024;
 constexpr uint32_t STATIC_UB_ESTIMATE = 0;
 
-// 约束阈值常量来自 op_host/crop_and_resize_constraints.h（与 def.cpp/infershape.cpp 共享）
+// 结构/语义常量来自 op_host/crop_and_resize_constraints.h（与 def.cpp/infershape.cpp 共享）
 
 struct CropAndResizeCompileInfo {};
 
@@ -45,12 +46,30 @@ struct CropAndResizeInputInfo {
     int64_t imageWidth = 0;
     int64_t depth = 0;
     int64_t numBoxes = 0;
-    int32_t cropHeight = 0;
-    int32_t cropWidth = 0;
+    int64_t cropHeight = 0;
+    int64_t cropWidth = 0;
     float extrapolationValue = 0.0f;
     ge::DataType xDtype = ge::DT_UNDEFINED;
     bool isNchw = false; // x format 是否为 NCHW：决定 dims→H/W/C 解析来源与 TilingKey 分流
+    bool isNearest = false;
 };
+
+// 非负 int64 乘法溢出检查
+static bool MulOverflowInt64(int64_t lhs, int64_t rhs, int64_t& result)
+{
+    if (lhs < 0 || rhs < 0) {
+        return true;
+    }
+    if (lhs == 0 || rhs == 0) {
+        result = 0;
+        return false;
+    }
+    if (lhs > std::numeric_limits<int64_t>::max() / rhs) {
+        return true;
+    }
+    result = lhs * rhs;
+    return false;
+}
 
 static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& ubSize, int64_t& coreNum,
                                        uint64_t& sysWorkspaceSize)
@@ -69,9 +88,11 @@ static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& u
 // 约束 7：dtype 检查（x/boxes/box_index）
 static ge::graphStatus CheckInputDtypes(gert::TilingContext* context, const CropAndResizeInputInfo& info)
 {
-    if (info.xDtype != ge::DT_FLOAT && info.xDtype != ge::DT_FLOAT16) {
+    if (info.xDtype != ge::DT_FLOAT && info.xDtype != ge::DT_FLOAT16 && info.xDtype != ge::DT_UINT8 &&
+        info.xDtype != ge::DT_UINT16 && info.xDtype != ge::DT_INT8 && info.xDtype != ge::DT_INT16 &&
+        info.xDtype != ge::DT_INT32 && info.xDtype != ge::DT_INT64) {
         OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "x", Ops::Base::ToString(info.xDtype).c_str(),
-                                  "FLOAT16/FLOAT");
+                                  "FLOAT/FLOAT16/UINT8/UINT16/INT8/INT16/INT32/INT64");
         return ge::GRAPH_FAILED;
     }
     ge::DataType boxesDtype = context->GetInputDesc(IDX_BOXES)->GetDataType();
@@ -89,8 +110,8 @@ static ge::graphStatus CheckInputDtypes(gert::TilingContext* context, const Crop
     return ge::GRAPH_SUCCESS;
 }
 
-// 约束 1-9：与 TBE check_supported 对齐
-static ge::graphStatus CheckTbeConstraints(gert::TilingContext* context, const CropAndResizeInputInfo& info)
+// 语义/技术约束：保留正维度、结构一致性
+static ge::graphStatus CheckShapeConstraints(gert::TilingContext* context, const CropAndResizeInputInfo& info)
 {
     if (info.batch <= 0 || info.imageHeight <= 0 || info.imageWidth <= 0 || info.depth <= 0) {
         std::string valMsg = "[" + std::to_string(info.batch) + ", " + std::to_string(info.imageHeight) + ", " +
@@ -98,52 +119,20 @@ static ge::graphStatus CheckTbeConstraints(gert::TilingContext* context, const C
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x", valMsg.c_str(), "all dims must be positive");
         return ge::GRAPH_FAILED;
     }
-    int64_t hw = info.imageHeight * info.imageWidth;
     if (info.cropHeight <= 0 || info.cropWidth <= 0) {
         std::string valMsg = "[" + std::to_string(info.cropHeight) + ", " + std::to_string(info.cropWidth) + "]";
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "crop_size", valMsg.c_str(),
                                               "crop_height and crop_width must be positive");
         return ge::GRAPH_FAILED;
     }
-    if (info.numBoxes <= NUM_BOXES_MIN || info.numBoxes > NUM_BOXES_MAX) {
-        OP_LOGE_FOR_INVALID_VALUE(
-            context->GetNodeName(), "boxes", std::to_string(info.numBoxes).c_str(),
-            ("(" + std::to_string(NUM_BOXES_MIN) + ", " + std::to_string(NUM_BOXES_MAX) + "]").c_str());
-        return ge::GRAPH_FAILED; // 约束2
+    if (info.numBoxes < 0) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "boxes", std::to_string(info.numBoxes).c_str(),
+                                              "num_boxes must be non-negative");
+        return ge::GRAPH_FAILED;
     }
-    if (info.depth < DEPTH_MIN || info.depth > DEPTH_MAX) {
-        // depth 来源 dim 随 format 变化：NCHW 为 x.shape[1]，ND/NHWC 为 x.shape[3]（与 def.cpp depthDesc 对齐）
-        std::string depthDesc = info.isNchw ? "x.shape[1]" : "x.shape[3]";
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x", std::to_string(info.depth).c_str(),
-                                              ("depth (" + depthDesc + ") must be in [" + std::to_string(DEPTH_MIN) +
-                                               ", " + std::to_string(DEPTH_MAX) + "]")
-                                                  .c_str());
-        return ge::GRAPH_FAILED; // 约束3
-    }
-    if (info.cropHeight > CROP_DIM_MAX || info.cropWidth > CROP_DIM_MAX) {
-        std::string valMsg = "[" + std::to_string(info.cropHeight) + ", " + std::to_string(info.cropWidth) + "]";
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "crop_size", valMsg.c_str(),
-                                              "max(crop_h, crop_w) must be <= " + std::to_string(CROP_DIM_MAX));
-        return ge::GRAPH_FAILED; // 约束4
-    }
-    if (hw > HW_MAX) {
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x", std::to_string(hw).c_str(),
-                                              "H*W must be <= " + std::to_string(HW_MAX));
-        return ge::GRAPH_FAILED; // 约束5
-    }
-    int64_t cropArea = static_cast<int64_t>(info.cropHeight) * info.cropWidth;
-    if (cropArea > CROP_AREA_MAX) {
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "crop_size", std::to_string(cropArea).c_str(),
-                                              "crop_h*crop_w must be <= " + std::to_string(CROP_AREA_MAX));
-        return ge::GRAPH_FAILED; // 约束6
-    }
+
     OP_CHECK_IF(CheckInputDtypes(context, info) != ge::GRAPH_SUCCESS, OP_LOGE(context, "dtype check failed"),
                 return ge::GRAPH_FAILED);
-    if (info.xDtype == ge::DT_FLOAT && hw > HW_FP32_MAX) {
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x", std::to_string(hw).c_str(),
-                                              "float32 requires H*W <= " + std::to_string(HW_FP32_MAX));
-        return ge::GRAPH_FAILED; // 约束9
-    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -172,7 +161,7 @@ static ge::graphStatus CheckSafetyConstraints(gert::TilingContext* context)
         return ge::GRAPH_FAILED; // 约束11
     }
 
-    // 约束13: NaN 检查已移至 kernel 运行时（逐 box 检查 boxes 坐标，含 NaN 则填 NaN）
+    // 约束13: 非有限 boxes 处理已移至 kernel 运行时（逐位置判断，填 extrapolationValue）
     // 原因：tiling 阶段在二进制/动态/常量编译模式下 boxes 数据不可用（nullptr），导致 OPTILING_FAILURE
 
     return ge::GRAPH_SUCCESS;
@@ -210,7 +199,7 @@ static ge::graphStatus ExtractInputInfo(gert::TilingContext* context, CropAndRes
     }
     info.batch = xShape.GetDim(0);
     if (info.isNchw) {
-        // NCHW: x = (N, C, H, W)（对齐 TBE check_supported 双分支解析）
+        // NCHW: x = (N, C, H, W)
         info.depth = xShape.GetDim(1);       // C
         info.imageHeight = xShape.GetDim(2); // H
         info.imageWidth = xShape.GetDim(3);  // W
@@ -269,10 +258,12 @@ static ge::graphStatus ExtractAttrs(gert::TilingContext* context, CropAndResizeI
     info.extrapolationValue = *extrapolationValuePtr;
     const char* methodStr = attrs->GetStr(1);
     OP_CHECK_IF(methodStr == nullptr, OP_LOGE(context, "method attr is null"), return ge::GRAPH_FAILED);
-    if (std::string(methodStr) != "bilinear") {
-        OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "method", methodStr, "bilinear");
+    std::string method(methodStr);
+    if (method != "bilinear" && method != "nearest") {
+        OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "method", methodStr, "bilinear/nearest");
         return ge::GRAPH_FAILED;
     }
+    info.isNearest = (method == "nearest");
     return ge::GRAPH_SUCCESS;
 }
 
@@ -280,45 +271,66 @@ static ge::graphStatus ExtractAttrs(gert::TilingContext* context, CropAndResizeI
 static ge::graphStatus ComputeAndSetTiling(gert::TilingContext* context, const CropAndResizeInputInfo& info,
                                            int64_t coreNum, uint64_t ubSize, uint64_t sysWorkspaceSize)
 {
-    // info.numBoxes 为 int64_t，info.cropHeight/cropWidth 为 int32_t，
-    // int64_t * int32_t 运算时 int32_t 隐式提升为 int64_t，结果为 int64_t，无溢出风险
     // warp 级并行域换算：totalPositions 即 warp 位置总数（每 warp 处理一个输出位置），
     // 两步法：先按物理核均分得到每核 warp 位置数（下限 WARP_PER_CORE_MIN），再反推实际核数
-    int64_t totalPositions = info.numBoxes * info.cropHeight * info.cropWidth;
+    int64_t cropHW = 0;
+    int64_t totalPositions = 0;
+    if (MulOverflowInt64(info.cropHeight, info.cropWidth, cropHW) ||
+        MulOverflowInt64(info.numBoxes, cropHW, totalPositions)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "shape", "total positions overflow",
+                                              "num_boxes * crop_h * crop_w must fit int64");
+        return ge::GRAPH_FAILED;
+    }
+    int64_t hw = 0;
+    int64_t imgHWC = 0;
+    int64_t cropHWC = 0;
+    if (MulOverflowInt64(info.imageHeight, info.imageWidth, hw) || MulOverflowInt64(hw, info.depth, imgHWC) ||
+        MulOverflowInt64(cropHW, info.depth, cropHWC)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "shape", "addressing product overflow",
+                                              "H*W*C and crop_h*crop_w*C must fit int64");
+        return ge::GRAPH_FAILED;
+    }
+    (void)imgHWC;
+    (void)cropHWC;
+
     int64_t perCoreWarps = Ops::Base::CeilDiv(totalPositions, coreNum);
     if (perCoreWarps < WARP_PER_CORE_MIN) {
         perCoreWarps = WARP_PER_CORE_MIN;
     }
     int64_t needCoreNum = Ops::Base::CeilDiv(totalPositions, perCoreWarps);
+    // 空 boxes: totalPositions=0 时仍需启动 1 个 block，kernel 入口直接返回
+    if (needCoreNum < 1) {
+        needCoreNum = 1;
+    }
 
     CropAndResizeTilingData* tiling = context->GetTilingData<CropAndResizeTilingData>();
     OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
     OP_CHECK_IF(memset_s(tiling, sizeof(CropAndResizeTilingData), 0, sizeof(CropAndResizeTilingData)) != EOK,
                 OP_LOGE(context, "memset_s tiling data error"), return ge::GRAPH_FAILED);
     tiling->totalPositions = totalPositions;
-    // CropAndResizeTilingData 字段为 int32_t，此处赋值时 info 字段（int64_t）已通过
-    // CheckTbeConstraints 和 CheckSafetyConstraints 校验，值均在 int32_t 范围内：
-    //   batch: 通过 all dims must be positive 检查，实际值由框架约束在合理范围
-    //   imageHeight/imageWidth: 通过 H*W <= 65530 检查，单维值远小于 INT32_MAX
-    //   depth: 通过 [256, 2048] 检查
-    //   numBoxes: 通过 (50, 4000] 检查
-    tiling->batch = static_cast<int32_t>(info.batch);
-    tiling->imageHeight = static_cast<int32_t>(info.imageHeight);
-    tiling->imageWidth = static_cast<int32_t>(info.imageWidth);
-    tiling->depth = static_cast<int32_t>(info.depth);
+    tiling->batch = info.batch;
+    tiling->imageHeight = info.imageHeight;
+    tiling->imageWidth = info.imageWidth;
+    tiling->depth = info.depth;
     tiling->cropHeight = info.cropHeight;
     tiling->cropWidth = info.cropWidth;
-    tiling->numBoxes = static_cast<int32_t>(info.numBoxes);
+    tiling->numBoxes = info.numBoxes;
     tiling->extrapolationValue = info.extrapolationValue;
 
-    context->SetBlockDim(needCoreNum);
+    context->SetBlockDim(static_cast<uint32_t>(needCoreNum));
     OP_CHECK_IF(ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE, OP_LOGE(context, "ubSize too small"),
                 return ge::GRAPH_FAILED);
     context->SetLocalMemorySize(static_cast<uint32_t>(ubSize - DCACHE_SIZE - STATIC_UB_ESTIMATE));
     // layout 经 TilingKey 编码为 kernel 模板参数（NHWC 值 0 与原单值模式二进制兼容，ND/NHWC 路径零回归）
     // 三目结果显式 uint64_t 承接，避免花括号初始化列表 narrowing 报错
-    uint64_t schMode = info.isNchw ? static_cast<uint64_t>(CROP_AND_RESIZE_MODE_BILINEAR_NCHW) :
-                                     static_cast<uint64_t>(CROP_AND_RESIZE_MODE_BILINEAR_NHWC);
+    uint64_t schMode = 0;
+    if (info.isNearest) {
+        schMode = info.isNchw ? static_cast<uint64_t>(CROP_AND_RESIZE_MODE_NEAREST_NCHW) :
+                                static_cast<uint64_t>(CROP_AND_RESIZE_MODE_NEAREST_NHWC);
+    } else {
+        schMode = info.isNchw ? static_cast<uint64_t>(CROP_AND_RESIZE_MODE_BILINEAR_NCHW) :
+                                static_cast<uint64_t>(CROP_AND_RESIZE_MODE_BILINEAR_NHWC);
+    }
     context->SetTilingKey(GET_TPL_TILING_KEY(schMode));
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
@@ -340,8 +352,8 @@ static ge::graphStatus CropAndResizeTilingFunc(gert::TilingContext* context)
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(ExtractAttrs(context, info) != ge::GRAPH_SUCCESS, OP_LOGE(context, "ExtractAttrs failed"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(CheckTbeConstraints(context, info) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "TBE constraints check failed"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(CheckShapeConstraints(context, info) != ge::GRAPH_SUCCESS,
+                OP_LOGE(context, "shape constraints check failed"), return ge::GRAPH_FAILED);
     OP_CHECK_IF(CheckSafetyConstraints(context) != ge::GRAPH_SUCCESS,
                 OP_LOGE(context, "safety constraints check failed"), return ge::GRAPH_FAILED);
     OP_CHECK_IF(ComputeAndSetTiling(context, info, coreNum, ubSize, sysWorkspaceSize) != ge::GRAPH_SUCCESS,
@@ -349,7 +361,7 @@ static ge::graphStatus CropAndResizeTilingFunc(gert::TilingContext* context)
     return ge::GRAPH_SUCCESS;
 }
 
-// Tiling 注册：三段式 + 值依赖（crop_size index=3 shape推导；NaN 检查已移至 kernel 运行时）
+// Tiling 注册：三段式 + 值依赖（crop_size index=3 shape推导；非有限 boxes 处理已移至 kernel 运行时）
 IMPL_OP_OPTILING(CropAndResize)
     .Tiling(CropAndResizeTilingFunc)
     .TilingParse<CropAndResizeCompileInfo>(TilingParseForCropAndResize)

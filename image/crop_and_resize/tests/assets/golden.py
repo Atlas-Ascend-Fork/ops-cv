@@ -10,14 +10,32 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------
 
-"""Golden for crop_and_resize, directly calling tf.image.crop_and_resize (NCHW-aware).
+"""crop_and_resize 在 Kernel/GEIR 测试路径下的 golden。
 
-When x format is NCHW: transpose x to NHWC, compute, transpose result back to
-NCHW (NCHW in, NCHW out, aligning with canndev TBE semantics).
-When x format is ND/NHWC (or input_formats is absent): legacy NHWC path.
+语义：
+    - x 为 ND/NHWC 时按 (N, H, W, C) 解析，y 为 (num_boxes, crop_h, crop_w, C)
+    - x 为 NCHW 时按 (N, C, H, W) 解析，y 为 (num_boxes, C, crop_h, crop_w)
+    - method 支持 bilinear / nearest
+    - boxes 非有限行先置 0，计算后整行覆盖为 extrapolation_value
+    - 输出 dtype 由 boxes dtype 决定：FP16 -> FP16，FP32/其他 -> FP32
 """
 
+__spec__ = {
+    # key 必须与 CSV op_name 完全一致。
+    "crop_and_resize": "CropAndResizeKernelSpec",
+}
+
+import numpy as np
 import tensorflow as tf
+
+_SUPPORTED_METHODS = ("bilinear", "nearest")
+
+
+def _validate_method(method):
+    if method not in _SUPPORTED_METHODS:
+        raise ValueError(
+            f"Unsupported method: {method}, supported methods are {_SUPPORTED_METHODS}"
+        )
 
 
 def _is_nchw_input(input_formats):
@@ -34,10 +52,76 @@ def _is_nchw_input(input_formats):
     return str(x_format).strip().upper() == "NCHW"
 
 
-class CropAndResizeComposeSpec:
-    """Class form — composition for crop_and_resize"""
+def _split_nonfinite_boxes(boxes):
+    boxes_np = np.asarray(boxes)
+    bad = ~np.isfinite(boxes_np).all(axis=1)
+    boxes_for_tf = boxes_np.astype(np.float32, copy=True)
+    if bad.any():
+        boxes_for_tf[bad] = 0.0
+    return boxes_for_tf, bad
 
-    # -- golden — function form --
+
+def _to_tensor(value, dtype, like=None):
+    """按 like 的 device 创建 tensor；like 为 None 时保持默认 CPU。"""
+    device = getattr(like, "device", None) if like is not None else None
+    if device:
+        with tf.device(device):
+            return tf.convert_to_tensor(value, dtype=dtype)
+    return tf.convert_to_tensor(value, dtype=dtype)
+
+
+def _prepare_inputs(x, boxes, box_index, kwargs, preserve_device=False):
+    is_nchw = _is_nchw_input(kwargs.get("input_formats"))
+    boxes_tf_dtype = tf.dtypes.as_dtype(boxes.dtype)
+    out_dtype = (
+        boxes_tf_dtype if boxes_tf_dtype in (tf.float16, tf.float32) else tf.float32
+    )
+
+    if is_nchw:
+        x_tf = tf.cast(tf.transpose(x, (0, 2, 3, 1)), tf.float32)
+    else:
+        x_tf = tf.cast(x, tf.float32)
+
+    boxes_np = boxes.numpy() if hasattr(boxes, "numpy") else np.asarray(boxes)
+    boxes_for_tf, bad_boxes = _split_nonfinite_boxes(boxes_np)
+    like = boxes if preserve_device else None
+    boxes_tf = _to_tensor(boxes_for_tf, tf.float32, like)
+    box_index_tf = _to_tensor(box_index, tf.int32, like)
+    return x_tf, boxes_tf, box_index_tf, out_dtype, is_nchw, bad_boxes
+
+
+def _run_crop_and_resize(
+    x_tf,
+    boxes_tf,
+    box_index_tf,
+    crop_size,
+    out_dtype,
+    is_nchw,
+    bad_boxes,
+    method,
+    extrapolation_value,
+):
+    crop_size_list = [int(crop_size[0]), int(crop_size[1])]
+    extrapolation_value_f = float(extrapolation_value)
+    y_tf = tf.image.crop_and_resize(
+        x_tf,
+        boxes_tf,
+        box_index_tf,
+        crop_size_list,
+        method=method,
+        extrapolation_value=extrapolation_value_f,
+    )
+    y = np.array(y_tf, copy=True)
+    if bad_boxes.any():
+        y[bad_boxes] = np.float32(extrapolation_value_f)
+    if is_nchw:
+        y = np.transpose(y, (0, 3, 1, 2))
+    return y.astype(out_dtype.as_numpy_dtype, copy=False)
+
+
+class CropAndResizeKernelSpec:
+    """Kernel / GEIR 流程 — golden 收到 numpy.ndarray。"""
+
     @staticmethod
     def golden(
         x,
@@ -49,62 +133,26 @@ class CropAndResizeComposeSpec:
         method="bilinear",
         **kwargs,
     ):
-        """
-        Golden function for crop_and_resize.
-        All the parameters (names and order) follow SE doc prototype definition without outputs.
-        All the input Tensors are numpy.ndarray.
-
-        Args:
-            x: input image, (N, H, W, C) for ND/NHWC, (N, C, H, W) for NCHW
-            boxes: crop boxes, shape (num_boxes, 4)
-            box_index: box index per batch, shape (num_boxes,)
-            crop_size: [crop_height, crop_width]
-            extrapolation_value: float, value for out-of-bounds
-            method: "bilinear" only; others rejected
-            **kwargs: {input,output}_{dtypes,ori_shapes,formats,ori_formats},
-                      full_soc_version, short_soc_version, testcase_name
-
-        Returns:
-            Output tensor. (num_boxes, crop_h, crop_w, C) for ND/NHWC input;
-            (num_boxes, C, crop_h, crop_w) for NCHW input.
-        """
-        if method != "bilinear":
-            raise ValueError(
-                f"Unsupported method: {method}, only bilinear is supported by tf.image.crop_and_resize"
-            )
-
-        is_nchw = _is_nchw_input(kwargs.get("input_formats"))
-
-        boxes_tf_dtype = tf.dtypes.as_dtype(boxes.dtype)
-        out_dtype = (
-            boxes_tf_dtype if boxes_tf_dtype in (tf.float16, tf.float32) else tf.float32
+        _validate_method(method)
+        x_tf, boxes_tf, box_index_tf, out_dtype, is_nchw, bad_boxes = _prepare_inputs(
+            x, boxes, box_index, kwargs
         )
-
-        if is_nchw:
-            x_tf = tf.cast(tf.transpose(x, (0, 2, 3, 1)), tf.float32)
-        else:
-            x_tf = tf.cast(x, tf.float32)
-        boxes_tf = tf.cast(boxes, tf.float32)
-        box_index_tf = tf.cast(box_index, tf.int32)
-        crop_size_list = [int(crop_size[0]), int(crop_size[1])]
-        extrapolation_value_f = float(extrapolation_value)
-
-        y_tf = tf.image.crop_and_resize(
+        y = _run_crop_and_resize(
             x_tf,
             boxes_tf,
             box_index_tf,
-            crop_size_list,
-            method="bilinear",
-            extrapolation_value=extrapolation_value_f,
+            crop_size,
+            out_dtype,
+            is_nchw,
+            bad_boxes,
+            method,
+            extrapolation_value,
         )
-        if is_nchw:
-            y_tf = tf.transpose(y_tf, (0, 3, 1, 2))
-        # TF 输出始终为 float32，需转为与 kernel 输出一致的 dtype（out_dtype 取自 boxes dtype）
-        # 当 boxes=FP16 时 kernel 输出 FP16，需做 float32→FP16 截断以对齐精度对比
-        return tf.cast(y_tf, out_dtype).numpy()
+        return [y]
 
-    # -- third_party — dict multi-vendor --
     class ThirdPartyImpl:
+        """TF vendor 小算子拼接；__init__ 预处理，__call__ 只做计算。"""
+
         def __init__(
             self,
             *,
@@ -116,58 +164,40 @@ class CropAndResizeComposeSpec:
             crop_size=None,
             **kwargs,
         ):
-            if method != "bilinear":
-                raise ValueError(
-                    f"Unsupported method: {method}, only bilinear is supported by tf.image.crop_and_resize"
-                )
-            self.is_nchw = _is_nchw_input(kwargs.get("input_formats"))
-
-            boxes_tf_dtype = tf.dtypes.as_dtype(boxes.dtype)
-            self.out_dtype = (
-                boxes_tf_dtype
-                if boxes_tf_dtype in (tf.float16, tf.float32)
-                else tf.float32
-            )
-
-            if self.is_nchw:
-                self.x_tf = tf.cast(tf.transpose(x, (0, 2, 3, 1)), tf.float32)
-            else:
-                self.x_tf = tf.cast(x, tf.float32)
-            self.boxes_tf = tf.cast(boxes, tf.float32)
-            self.box_index_tf = box_index
-            self.crop_size_list = [int(crop_size[0]), int(crop_size[1])]
-            self.extrapolation_value = float(extrapolation_value)
+            _validate_method(method)
+            self.method = method
+            self.crop_size = crop_size
+            self.extrapolation_value = extrapolation_value
+            (
+                self.x_tf,
+                self.boxes_tf,
+                self.box_index_tf,
+                self.out_dtype,
+                self.is_nchw,
+                self.bad_boxes,
+            ) = _prepare_inputs(x, boxes, box_index, kwargs, preserve_device=True)
 
         def __call__(
             self, x=None, boxes=None, box_index=None, crop_size=None, **kwargs
         ):
-            y_tf = tf.image.crop_and_resize(
+            y = _run_crop_and_resize(
                 self.x_tf,
                 self.boxes_tf,
                 self.box_index_tf,
-                self.crop_size_list,
-                method="bilinear",
-                extrapolation_value=self.extrapolation_value,
+                self.crop_size,
+                self.out_dtype,
+                self.is_nchw,
+                self.bad_boxes,
+                self.method,
+                self.extrapolation_value,
             )
-            if self.is_nchw:
-                y_tf = tf.transpose(y_tf, (0, 3, 1, 2))
-            # TF 输出始终为 float32，需转为与 kernel 输出一致的 dtype（out_dtype 取自 boxes dtype）
-            # 当 boxes=FP16 时 kernel 输出 FP16，需做 float32→FP16 截断以对齐精度对比
-            return tf.cast(y_tf, self.out_dtype).numpy()
+            return [y]
 
     third_party = {
         "tf": ThirdPartyImpl,
     }
 
-    # -- tolerance --
     tolerance = {
         "float32": {"standard": "cross_check", "level": "L1"},
         "float16": {"standard": "cross_check", "level": "L1"},
     }
-
-
-# Explicit registration: class names use *Spec suffix (not *TestSpec),
-# so __spec__ dict is needed for discovery.
-__spec__ = {
-    "crop_and_resize": "CropAndResizeComposeSpec",
-}

@@ -84,7 +84,7 @@ static ge::graphStatus ValidateInputShapes(gert::InferShapeContext* context, con
                                      (std::to_string(boxIndexShape.GetDimNum()) + "D").c_str(), "1D");
         return ge::GRAPH_FAILED;
     }
-    // boxes.shape[0]==0 允许：合法空输出，AiCore 由 numBoxes 约束自然 fallback AiCpu
+    // boxes.shape[0]==0 允许：合法空输出
     // 约束10：boxes.shape[0] 必须等于 box_index.shape[0]（双方 UNKNOWN_DIM 豁免；
     // box_index unknown rank 已入口归一化为 -1，同样豁免，运行时校验，与 tiling 层双保险）
     if (boxesShape.GetDim(0) != ge::UNKNOWN_DIM && boxIndexShape.GetDim(0) != ge::UNKNOWN_DIM &&
@@ -100,7 +100,7 @@ static ge::graphStatus ValidateInputShapes(gert::InferShapeContext* context, con
         return ge::GRAPH_FAILED;
     }
     // crop_size.shape[0]==UNKNOWN_DIM 允许（unknown rank 已归一化为 -1，一并覆盖）：
-    // 半动态构图 fallback AiCpu，运行时校验实际 shape，H/W 置 UNKNOWN_DIM
+    // 运行时校验实际 shape，H/W 置 UNKNOWN_DIM
     if (cropSizeShape.GetDim(0) != CROP_SIZE_LEN && cropSizeShape.GetDim(0) != ge::UNKNOWN_DIM) {
         OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "crop_size",
                                                   std::to_string(cropSizeShape.GetDim(0)).c_str(),
@@ -146,9 +146,7 @@ static ge::graphStatus ReadCropSizeValue(gert::InferShapeContext* context, const
                                                   "crop_height and crop_width must be positive");
             return ge::GRAPH_FAILED;
         }
-        // 注：crop<=16 上限不在此检查。该上限是 AiCore tiling 约束而非算子语义，
-        // 由 def.cpp 的 CheckIfAICoreSupported 在引擎分配阶段拒绝并 fallback 到 AiCpu；
-        // 此处拦截会导致 AiCpu 路径（可正确计算 crop>16）也无法通过。
+
     } else {
         OP_LOGD(context->GetNodeName(), "crop_size is non-const tensor, set output dims to UNKNOWN_DIM");
     }
