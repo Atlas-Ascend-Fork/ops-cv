@@ -135,7 +135,7 @@ aclnnStatus aclnnCIoU(
     <tr>
       <td>overlap</td>
       <td>Output</td>
-      <td>The intersection over union or foreground intersection ratio computed from the two inputs.</td>
+      <td>The CIoU value computed from the two inputs, i.e. the intersection over union when mode is "iou" or the intersection over foreground when mode is "iof", minus the center-point distance and aspect ratio penalties. The value may be less than 0.</td>
       <td>-</td>
       <td>FLOAT, FLOAT16</td>
       <td>ND</td>

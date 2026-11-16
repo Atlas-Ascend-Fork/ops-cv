@@ -136,7 +136,7 @@ aclnnStatus aclnnCIoU(
     <tr>
       <td>overlap</td>
       <td>输出</td>
-      <td>根据两个输入计算得到的交并比或前景交叉比。</td>
+      <td>根据两个输入计算得到的CIoU值，即mode为"iou"时的交并比或mode为"iof"时的前景交叉比，减去中心点距离与宽高比两项惩罚项后的结果，可能小于0。</td>
       <td>-</td>
       <td>FLOAT、FLOAT16</td>
       <td>ND</td>
