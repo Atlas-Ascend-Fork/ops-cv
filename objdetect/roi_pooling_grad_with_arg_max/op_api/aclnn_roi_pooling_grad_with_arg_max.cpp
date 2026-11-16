@@ -143,11 +143,13 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* rois, const
         return false;
     }
     if (rois->GetViewShape().GetDim(DIM0) > BATCH_MAX) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected rois dim 0 should be less than 1024.");
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected rois dim 0 to be <= 1024, but got %ld.",
+                rois->GetViewShape().GetDim(DIM0));
         return false;
     }
     if (gradInputRef->GetViewShape().GetDim(DIM0) > BATCH_MAX) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected gradInputRef dim 0 should be less than 1024.");
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected gradInputRef dim 0 to be <= 1024, but got %ld.",
+                gradInputRef->GetViewShape().GetDim(DIM0));
         return false;
     }
     if (argmax->GetViewShape().GetDim(DIM0) != gradOutput->GetViewShape().GetDim(DIM0) ||
@@ -163,7 +165,9 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* rois, const
         return false;
     }
     if (argmax->GetViewShape().GetDim(DIM1) != gradInputRef->GetViewShape().GetDim(DIM1)) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "Expected argmax dim 1 to be equal to x.shape[3] but check failed.");
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                "Expected argmax dim 1 to be equal to gradInputRef dim 1, but got argmax=%ld gradInputRef=%ld.",
+                argmax->GetViewShape().GetDim(DIM1), gradInputRef->GetViewShape().GetDim(DIM1));
         return false;
     }
 
@@ -173,10 +177,11 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* rois, const
 
 static bool CheckAttrValue(int64_t pooledH, int64_t pooledW)
 {
-    OP_CHECK(pooledH > 0 && pooledW > 0,
-             OP_LOGE(ACLNN_ERR_PARAM_INVALID,
-                     "pooledH and pooledW must be greater than zero, but got stride=(%ld,%ld).", pooledH, pooledW),
-             return false);
+    OP_CHECK(
+        pooledH > 0 && pooledW > 0,
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID,
+                "pooledH and pooledW must be greater than zero, but got pooledH=%ld, pooledW=%ld.", pooledH, pooledW),
+        return false);
     return true;
 }
 

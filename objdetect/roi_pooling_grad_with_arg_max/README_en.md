@@ -135,10 +135,9 @@ English | [简体中文](./README.md)
 * gradOutput, argmax, and rois have the same shape[0].
 * gradOutput and argmax have the same shape[1].
 * The shape[2] of gradOutput and argmax equals pooledH, and their shape[3] equals pooledW.
-* The values of rois are greater than or equal to 0.
 * pooledH and pooledW are greater than 0.
-* rois[:, 1] is less than rois[:, 3], and rois[:, 2] is less than rois[:, 4].
 * rois.shape[0] and gradOutput.shape[0] are less than or equal to 1024.
+* The coordinate components of `rois` (x1/y1/x2/y2) are not used in the backward computation and any values are accepted; when `batchId` is out of range, that ROI is silently skipped.
 
 ## Invocation
 

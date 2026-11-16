@@ -133,10 +133,9 @@
 * gradOutput、argmax、rois的shape[0]相等
 * gradOutput、argmax的shape[1]相等
 * gradOutput、argmax的shape[2]等于pooledH和shape[3]等于pooledW
-* rois的值大于等于0
 * pooledH、pooledW大于0。
-* rois[:, 1] 小于rois[:, 3] 且rois[:, 2] 小于rois[:, 4]
 * rois.shape[0]、gradOutput.shape[0]小于等于1024
+* `rois` 的坐标分量（x1/y1/x2/y2）不参与反向计算，任意值均被接受；`batchId` 越界时该 ROI 被静默跳过。
 
 ## 调用说明
 

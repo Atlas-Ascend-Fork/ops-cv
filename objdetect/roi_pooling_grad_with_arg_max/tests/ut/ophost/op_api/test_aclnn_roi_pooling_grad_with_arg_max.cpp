@@ -110,3 +110,59 @@ TEST_F(l2_roi_pooling_grad_with_arg_max_test, case_soc_not_supported_910b)
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
     EXPECT_EQ(aclRet, ACLNN_ERR_RUNTIME_ERROR);
 }
+
+// Cover CheckShape: rois.dim0 > BATCH_MAX(1024)
+TEST_F(l2_roi_pooling_grad_with_arg_max_test, case_rejects_rois_dim0_over_1024)
+{
+    auto grad_out_desc = TensorDesc({1025, 4, 2, 2}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto argmax_desc = TensorDesc({1025, 4, 2, 2}, ACL_INT32, ACL_FORMAT_ND);
+    auto rois_desc = TensorDesc({1025, 5}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_input_ref_desc = TensorDesc({1, 4, 7, 7}, ACL_FLOAT, ACL_FORMAT_ND);
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnRoiPoolingGradWithArgMax,
+                        INPUT(grad_out_desc, grad_input_ref_desc, rois_desc, argmax_desc, 2, 2, 1.0), OUTPUT());
+    uint64_t workspace_size = 0;
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspace_size), ACLNN_ERR_PARAM_INVALID);
+}
+
+// Cover CheckShape: gradInputRef.dim0 > BATCH_MAX(1024)
+TEST_F(l2_roi_pooling_grad_with_arg_max_test, case_rejects_grad_input_dim0_over_1024)
+{
+    auto grad_out_desc = TensorDesc({2, 4, 2, 2}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto argmax_desc = TensorDesc({2, 4, 2, 2}, ACL_INT32, ACL_FORMAT_ND);
+    auto rois_desc = TensorDesc({2, 5}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_input_ref_desc = TensorDesc({1025, 4, 7, 7}, ACL_FLOAT, ACL_FORMAT_ND);
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnRoiPoolingGradWithArgMax,
+                        INPUT(grad_out_desc, grad_input_ref_desc, rois_desc, argmax_desc, 2, 2, 1.0), OUTPUT());
+    uint64_t workspace_size = 0;
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspace_size), ACLNN_ERR_PARAM_INVALID);
+}
+
+// Cover CheckShape: argmax.dim1 != gradInputRef.dim1
+TEST_F(l2_roi_pooling_grad_with_arg_max_test, case_rejects_argmax_channel_mismatch)
+{
+    auto grad_out_desc = TensorDesc({2, 4, 2, 2}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto argmax_desc = TensorDesc({2, 4, 2, 2}, ACL_INT32, ACL_FORMAT_ND);
+    auto rois_desc = TensorDesc({2, 5}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_input_ref_desc = TensorDesc({2, 5, 7, 7}, ACL_FLOAT, ACL_FORMAT_ND);
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnRoiPoolingGradWithArgMax,
+                        INPUT(grad_out_desc, grad_input_ref_desc, rois_desc, argmax_desc, 2, 2, 1.0), OUTPUT());
+    uint64_t workspace_size = 0;
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspace_size), ACLNN_ERR_PARAM_INVALID);
+}
+
+// Cover CheckAttrValue: pooledH/pooledW must be > 0
+TEST_F(l2_roi_pooling_grad_with_arg_max_test, case_rejects_pooled_hw_zero)
+{
+    auto grad_out_desc = TensorDesc({2, 4, 0, 0}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto argmax_desc = TensorDesc({2, 4, 0, 0}, ACL_INT32, ACL_FORMAT_ND);
+    auto rois_desc = TensorDesc({2, 5}, ACL_FLOAT, ACL_FORMAT_ND);
+    auto grad_input_ref_desc = TensorDesc({2, 4, 7, 7}, ACL_FLOAT, ACL_FORMAT_ND);
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    auto ut = OP_API_UT(aclnnRoiPoolingGradWithArgMax,
+                        INPUT(grad_out_desc, grad_input_ref_desc, rois_desc, argmax_desc, 0, 0, 1.0), OUTPUT());
+    uint64_t workspace_size = 0;
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspace_size), ACLNN_ERR_PARAM_INVALID);
+}

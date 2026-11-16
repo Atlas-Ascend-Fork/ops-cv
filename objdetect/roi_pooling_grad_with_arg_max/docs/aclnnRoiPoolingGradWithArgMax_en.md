@@ -205,8 +205,8 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>A null pointer is passed for gradOutput, rois, argmax, or gradInputRef.</td>
     </tr>
     <tr>
-      <td rowspan="11">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="11">161002</td>
+      <td rowspan="9">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="9">161002</td>
       <td>The data types of gradOutput, rois, argmax, and gradInputRef are not within the supported range.</td>
     </tr>
     <tr>
@@ -225,13 +225,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>The shape[2] of gradOutput and argmax equals pooledH, and shape[3] equals pooledW.</td>
     </tr>
     <tr>
-      <td>The values of rois are greater than or equal to 0.</td>
-    </tr>
-    <tr>
       <td>pooledH and pooledW are greater than 0.</td>
-    </tr>
-    <tr>
-      <td>rois[:, 1] is less than rois[:, 3] and rois[:, 2] is less than rois[:, 4].</td>
     </tr>
     <tr>
       <td>rois.shape[0] and gradOutput.shape[0] are less than or equal to 1024.</td>
@@ -292,10 +286,9 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
 - gradOutput, argmax, and rois have equal shape[0].
 - gradOutput and argmax have equal shape[1].
 - The shape[2] of gradOutput and argmax equals pooledH and shape[3] equals pooledW.
-- The values of rois are greater than or equal to 0.
 - pooledH and pooledW are greater than 0.
-- rois[:, 1] is less than rois[:, 3] and rois[:, 2] is less than rois[:, 4].
 - rois.shape[0] and gradOutput.shape[0] are less than or equal to 1024.
+- The coordinate components of `rois` (x1/y1/x2/y2) are not used in the backward computation and any values are accepted; when `batchId` is out of range, that ROI is silently skipped.
 - Deterministic computation:
   - aclnnRoiPoolingGradWithArgMax defaults to a non-deterministic implementation. Deterministic computation cannot be enabled.
 

@@ -205,8 +205,8 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>传入的gradOutput、rois、argmax、gradInputRef是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="11">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="11">161002</td>
+      <td rowspan="9">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="9">161002</td>
       <td>gradOutput、rois、argmax、gradInputRef的数据类型不在支持的范围之内。</td>
     </tr>
     <tr>
@@ -225,13 +225,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>gradOutput、argmax的shape[2]等于pooledH，shape[3]等于pooledW。</td>
     </tr>
     <tr>
-      <td>rois的值大于等于0。</td>
-    </tr>
-    <tr>
       <td>pooledH、pooledW大于0。</td>
-    </tr>
-    <tr>
-      <td>rois[:, 1] 小于rois[:, 3] 且rois[:, 2] 小于rois[:, 4]。</td>
     </tr>
     <tr>
       <td>rois.shape[0]、gradOutput.shape[0]小于等于1024。</td>
@@ -294,10 +288,9 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
 - gradOutput、argmax、rois的shape[0]相等。
 - gradOutput、argmax的shape[1]相等。
 - gradOutput、argmax的shape[2]等于pooledH，shape[3]等于pooledW。
-- rois的值大于等于0。
 - pooledH、pooledW大于0。
-- rois[:, 1] 小于rois[:, 3] 且rois[:, 2] 小于rois[:, 4]。
 - rois.shape[0]、gradOutput.shape[0]小于等于1024。
+- `rois` 的坐标分量（x1/y1/x2/y2）不参与反向计算，任意值均被接受；`batchId` 越界时该 ROI 被静默跳过。
 - 确定性计算：
   - aclnnRoiPoolingGradWithArgMax默认非确定性实现，不支持开启。
 
