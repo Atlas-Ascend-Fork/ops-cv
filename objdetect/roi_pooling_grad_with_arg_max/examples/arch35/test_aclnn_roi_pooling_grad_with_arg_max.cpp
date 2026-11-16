@@ -112,7 +112,7 @@ int main()
     aclTensor* rois = nullptr;
     void* roisDeviceAddr = nullptr;
     std::vector<int64_t> roisShape = {1, 5};
-    std::vector<float> roisHostData = {0.0, 0.0, 1.0, 0.0, 1.0};
+    std::vector<float> roisHostData = {0.0, 0.0, 0.0, 1.0, 1.0};
     ret = CreateAclTensor(roisHostData, roisShape, &roisDeviceAddr, aclDataType::ACL_FLOAT, &rois);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
 

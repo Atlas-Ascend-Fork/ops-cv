@@ -135,7 +135,7 @@
 * gradOutput、argmax的shape[2]等于pooledH和shape[3]等于pooledW
 * rois的值大于等于0
 * pooledH、pooledW大于0。
-* rois[:, 1] 小于rois[:, 2] 且rois[:, 3] 小于rois[:, 4]
+* rois[:, 1] 小于rois[:, 3] 且rois[:, 2] 小于rois[:, 4]
 * rois.shape[0]、gradOutput.shape[0]小于等于1024
 
 ## 调用说明

@@ -137,7 +137,7 @@ English | [简体中文](./README.md)
 * The shape[2] of gradOutput and argmax equals pooledH, and their shape[3] equals pooledW.
 * The values of rois are greater than or equal to 0.
 * pooledH and pooledW are greater than 0.
-* rois[:, 1] is less than rois[:, 2], and rois[:, 3] is less than rois[:, 4].
+* rois[:, 1] is less than rois[:, 3], and rois[:, 2] is less than rois[:, 4].
 * rois.shape[0] and gradOutput.shape[0] are less than or equal to 1024.
 
 ## Invocation

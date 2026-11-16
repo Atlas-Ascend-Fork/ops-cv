@@ -116,7 +116,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>-</td>
       <td>FLOAT16、FLOAT32</td>
       <td>ND</td>
-      <td>2维，shape为(roisN, 5)<br>5指(batchId, x1, x2, y1, y2)</td>
+      <td>2维，shape为(roisN, 5)<br>5指(batchId, x1, y1, x2, y2)</td>
       <td>√</td>
     </tr>
       <tr>
@@ -231,7 +231,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>pooledH、pooledW大于0。</td>
     </tr>
     <tr>
-      <td>rois[:, 1] 小于rois[:, 2] 且rois[:, 3] 小于rois[:, 4]。</td>
+      <td>rois[:, 1] 小于rois[:, 3] 且rois[:, 2] 小于rois[:, 4]。</td>
     </tr>
     <tr>
       <td>rois.shape[0]、gradOutput.shape[0]小于等于1024。</td>
@@ -296,7 +296,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
 - gradOutput、argmax的shape[2]等于pooledH，shape[3]等于pooledW。
 - rois的值大于等于0。
 - pooledH、pooledW大于0。
-- rois[:, 1] 小于rois[:, 2] 且rois[:, 3] 小于rois[:, 4]。
+- rois[:, 1] 小于rois[:, 3] 且rois[:, 2] 小于rois[:, 4]。
 - rois.shape[0]、gradOutput.shape[0]小于等于1024。
 - 确定性计算：
   - aclnnRoiPoolingGradWithArgMax默认非确定性实现，不支持开启。
@@ -412,7 +412,7 @@ int main()
     aclTensor* rois = nullptr;
     void* roisDeviceAddr = nullptr;
     std::vector<int64_t> roisShape = {1, 5};
-    std::vector<float> roisHostData = {0.0, 0.0, 1.0, 0.0, 1.0};
+    std::vector<float> roisHostData = {0.0, 0.0, 0.0, 1.0, 1.0};
     ret = CreateAclTensor(roisHostData, roisShape, &roisDeviceAddr, aclDataType::ACL_FLOAT, &rois);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
 

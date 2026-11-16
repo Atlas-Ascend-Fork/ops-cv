@@ -116,7 +116,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>-</td>
       <td>FLOAT16, FLOAT32</td>
       <td>ND</td>
-      <td>2D, shape is (roisN, 5)<br>5 representing (batchId, x1, x2, y1, y2)</td>
+      <td>2D, shape is (roisN, 5)<br>5 representing (batchId, x1, y1, x2, y2)</td>
       <td>√</td>
     </tr>
       <tr>
@@ -231,7 +231,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <td>pooledH and pooledW are greater than 0.</td>
     </tr>
     <tr>
-      <td>rois[:, 1] is less than rois[:, 2] and rois[:, 3] is less than rois[:, 4].</td>
+      <td>rois[:, 1] is less than rois[:, 3] and rois[:, 2] is less than rois[:, 4].</td>
     </tr>
     <tr>
       <td>rois.shape[0] and gradOutput.shape[0] are less than or equal to 1024.</td>
@@ -294,7 +294,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
 - The shape[2] of gradOutput and argmax equals pooledH and shape[3] equals pooledW.
 - The values of rois are greater than or equal to 0.
 - pooledH and pooledW are greater than 0.
-- rois[:, 1] is less than rois[:, 2] and rois[:, 3] is less than rois[:, 4].
+- rois[:, 1] is less than rois[:, 3] and rois[:, 2] is less than rois[:, 4].
 - rois.shape[0] and gradOutput.shape[0] are less than or equal to 1024.
 - Deterministic computation:
   - aclnnRoiPoolingGradWithArgMax defaults to a non-deterministic implementation. Deterministic computation cannot be enabled.
@@ -410,7 +410,7 @@ int main()
     aclTensor* rois = nullptr;
     void* roisDeviceAddr = nullptr;
     std::vector<int64_t> roisShape = {1, 5};
-    std::vector<float> roisHostData = {0.0, 0.0, 1.0, 0.0, 1.0};
+    std::vector<float> roisHostData = {0.0, 0.0, 0.0, 1.0, 1.0};
     ret = CreateAclTensor(roisHostData, roisShape, &roisDeviceAddr, aclDataType::ACL_FLOAT, &rois);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
 
