@@ -93,3 +93,121 @@ TEST(OnnxYoloPluginTest, ReturnFailedWhenAttributeJsonInvalid)
     ge::Operator op_dest = CreateOperator("yolo");
     EXPECT_EQ(domi::ParseParamsYolo(op_src, op_dest), domi::FAILED);
 }
+
+TEST(OnnxYoloPluginTest, ParseSoftmaxAndBackgroundAttributes)
+{
+    // Regression for V2 models through the ONNX path: softmax/background used to be
+    // hardcoded to false, silently degrading the model to MODE_1. Both must pass through.
+    ge::Operator op_src = CreateSourceOperator(
+        R"({"attribute":[{"name":"boxes","type":2,"i":5},{"name":"coords","type":2,"i":4},)"
+        R"({"name":"classes","type":2,"i":20},{"name":"yolo_version","type":3,"s":"V2"},)"
+        R"({"name":"softmax","type":2,"i":1},{"name":"background","type":2,"i":1},)"
+        R"({"name":"softmaxtree","type":2,"i":0}]})");
+    ge::Operator op_dest = CreateOperator("yolo");
+    bool softmax = false;
+    bool background = false;
+    bool softmaxtree = true;
+
+    EXPECT_EQ(domi::ParseParamsYolo(op_src, op_dest), domi::SUCCESS);
+    EXPECT_EQ(op_dest.GetAttr("softmax", softmax), ge::GRAPH_SUCCESS);
+    EXPECT_TRUE(softmax);
+    EXPECT_EQ(op_dest.GetAttr("background", background), ge::GRAPH_SUCCESS);
+    EXPECT_TRUE(background);
+    EXPECT_EQ(op_dest.GetAttr("softmaxtree", softmaxtree), ge::GRAPH_SUCCESS);
+    EXPECT_FALSE(softmaxtree);
+}
+
+TEST(OnnxYoloPluginTest, ParseDistinctSoftmaxAndBackgroundValues)
+{
+    // Explicit zero must keep false while background stays true: the two attrs must
+    // not be mixed up with each other.
+    ge::Operator op_src = CreateSourceOperator(
+        R"({"attribute":[{"name":"softmax","type":2,"i":0},{"name":"background","type":2,"i":1}]})");
+    ge::Operator op_dest = CreateOperator("yolo");
+    bool softmax = true;
+    bool background = false;
+
+    EXPECT_EQ(domi::ParseParamsYolo(op_src, op_dest), domi::SUCCESS);
+    EXPECT_EQ(op_dest.GetAttr("softmax", softmax), ge::GRAPH_SUCCESS);
+    EXPECT_FALSE(softmax);
+    EXPECT_EQ(op_dest.GetAttr("background", background), ge::GRAPH_SUCCESS);
+    EXPECT_TRUE(background);
+}
+
+TEST(OnnxYoloPluginTest, ParseNonZeroIntAsTrueForBoolAttrs)
+{
+    // Bool attrs follow ONNX int semantics: any non-zero value (including negative)
+    // parses as true, not only literal 1.
+    ge::Operator op_src = CreateSourceOperator(
+        R"({"attribute":[{"name":"softmax","type":2,"i":-1},{"name":"background","type":2,"i":2},)"
+        R"({"name":"softmaxtree","type":2,"i":0}]})");
+    ge::Operator op_dest = CreateOperator("yolo");
+    bool softmax = false;
+    bool background = false;
+    bool softmaxtree = true;
+
+    EXPECT_EQ(domi::ParseParamsYolo(op_src, op_dest), domi::SUCCESS);
+    EXPECT_EQ(op_dest.GetAttr("softmax", softmax), ge::GRAPH_SUCCESS);
+    EXPECT_TRUE(softmax);
+    EXPECT_EQ(op_dest.GetAttr("background", background), ge::GRAPH_SUCCESS);
+    EXPECT_TRUE(background);
+    EXPECT_EQ(op_dest.GetAttr("softmaxtree", softmaxtree), ge::GRAPH_SUCCESS);
+    EXPECT_FALSE(softmaxtree);
+}
+
+TEST(OnnxYoloPluginTest, ParseZeroValueBoolAttrsWhenScalarFieldOmitted)
+{
+    // GE omits "i" when the int is zero: the bool attrs must fall back to false.
+    ge::Operator op_src = CreateSourceOperator(
+        R"({"attribute":[{"name":"softmax","type":2},{"name":"background","type":2},)"
+        R"({"name":"softmaxtree","type":2}]})");
+    ge::Operator op_dest = CreateOperator("yolo");
+    bool softmax = true;
+    bool background = true;
+    bool softmaxtree = true;
+
+    EXPECT_EQ(domi::ParseParamsYolo(op_src, op_dest), domi::SUCCESS);
+    EXPECT_EQ(op_dest.GetAttr("softmax", softmax), ge::GRAPH_SUCCESS);
+    EXPECT_FALSE(softmax);
+    EXPECT_EQ(op_dest.GetAttr("background", background), ge::GRAPH_SUCCESS);
+    EXPECT_FALSE(background);
+    EXPECT_EQ(op_dest.GetAttr("softmaxtree", softmaxtree), ge::GRAPH_SUCCESS);
+    EXPECT_FALSE(softmaxtree);
+}
+
+TEST(OnnxYoloPluginTest, RejectSoftmaxtreeQuickly)
+{
+    // softmaxtree is a Lite interface leftover with no kernel semantics: a true value
+    // must fail fast instead of being silently swallowed.
+    ge::Operator op_src = CreateSourceOperator(
+        R"({"attribute":[{"name":"softmax","type":2,"i":1},{"name":"background","type":2,"i":0},)"
+        R"({"name":"softmaxtree","type":2,"i":1}]})");
+    ge::Operator op_dest = CreateOperator("yolo");
+    bool softmaxtree = false;
+    bool softmax = false;
+
+    EXPECT_EQ(domi::ParseParamsYolo(op_src, op_dest), domi::FAILED);
+    EXPECT_NE(op_dest.GetAttr("softmaxtree", softmaxtree), ge::GRAPH_SUCCESS);
+    EXPECT_NE(op_dest.GetAttr("softmax", softmax), ge::GRAPH_SUCCESS);
+}
+
+TEST(OnnxYoloPluginTest, IgnoreBoolAttrsWhenTypeMismatch)
+{
+    // String-typed entries with the same names must not be consumed by the int-typed
+    // branches: the attrs keep their false defaults.
+    ge::Operator op_src = CreateSourceOperator(
+        R"({"attribute":[{"name":"softmax","type":3,"s":"1"},{"name":"background","type":3,"s":"1"},)"
+        R"({"name":"softmaxtree","type":3,"s":"1"}]})");
+    ge::Operator op_dest = CreateOperator("yolo");
+    bool softmax = true;
+    bool background = true;
+    bool softmaxtree = true;
+
+    EXPECT_EQ(domi::ParseParamsYolo(op_src, op_dest), domi::SUCCESS);
+    EXPECT_EQ(op_dest.GetAttr("softmax", softmax), ge::GRAPH_SUCCESS);
+    EXPECT_FALSE(softmax);
+    EXPECT_EQ(op_dest.GetAttr("background", background), ge::GRAPH_SUCCESS);
+    EXPECT_FALSE(background);
+    EXPECT_EQ(op_dest.GetAttr("softmaxtree", softmaxtree), ge::GRAPH_SUCCESS);
+    EXPECT_FALSE(softmaxtree);
+}

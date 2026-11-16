@@ -50,6 +50,12 @@ static Status ParseParamsYolo(const ge::Operator& op_src, ge::Operator& op_dest)
                         classes = attr.contains("i") ? static_cast<int>(attr["i"].get<int64_t>()) : 0;
                     } else if (name == "yolo_version" && attr.contains("s")) {
                         yolo_version = attr["s"];
+                    } else if (name == "softmax" && type == ATTR_TYPE_INT) {
+                        softmax = attr.contains("i") && (attr["i"].get<int64_t>() != 0);
+                    } else if (name == "background" && type == ATTR_TYPE_INT) {
+                        background = attr.contains("i") && (attr["i"].get<int64_t>() != 0);
+                    } else if (name == "softmaxtree" && type == ATTR_TYPE_INT) {
+                        softmaxtree = attr.contains("i") && (attr["i"].get<int64_t>() != 0);
                     }
                 }
             }
@@ -59,6 +65,13 @@ static Status ParseParamsYolo(const ge::Operator& op_src, ge::Operator& op_dest)
         return FAILED;
     } catch (...) {
         OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
+        return FAILED;
+    }
+
+    // softmaxtree is inherited from Lite for interface compatibility and has no kernel
+    // semantics. Reject it here instead of silently ignoring a true value.
+    if (softmaxtree) {
+        OP_LOGE(GetOpName(op_dest).c_str(), "softmaxtree is not supported, only false is allowed.");
         return FAILED;
     }
 
