@@ -375,11 +375,11 @@ protected:
         }
         addNum += bBoxNotAlign;
         if (i == num1 - 1) {
-            bool isLastCore = GetBlockIdx() == GetBlockNum() - 1;
-            uint32_t lastCoreLen = gtBoxLength % tileLen == 0 ? tileLen : gtBoxLength % tileLen;
-            uint32_t gmLen = isLastCore ? bBoxLength * lastCoreLen : bBoxLength * tileLen;
-            uint32_t blockLen = gmLen - tmpGmOffsetVal + bBoxLength - headNum; // bBoxLength % loopTileLen;
-            blockLen = blockLen > loopTileLen ? loopTileLen : blockLen;
+            uint32_t blockLen = static_cast<uint32_t>(addNum);
+            blockLen = blockLen > loopTileLen ? static_cast<uint32_t>(loopTileLen) : blockLen;
+            if (blockLen == 0) {
+                return;
+            }
 
             AscendC::DataCopyExtParams copyParams{1, static_cast<uint32_t>(blockLen * sizeof(inType)), 0, 0, 0};
 #if __CCE_AICORE__ == 200 // 310p
@@ -412,11 +412,15 @@ protected:
                 CommonCopyOutBoundaryStep(tmpLocal, i, num1, bBoxNotAlign, tmpGmOffset, tmpGmOffset, tmpUbOffset,
                                           addNum, headNum);
             } else {
-                bool isLastCore = GetBlockIdx() == GetBlockNum() - 1;
-                uint32_t lastCoreLen = gtBoxLength % tileLen == 0 ? tileLen : gtBoxLength % tileLen;
-                uint32_t gmLen = isLastCore ? bBoxLength * lastCoreLen : bBoxLength * tileLen;
-                uint32_t blockLen = gmLen - offset; // bBoxLength % loopTileLen;
-                blockLen = blockLen > loopTileLen ? loopTileLen : blockLen;
+                // blockLen 是当前 bBox 切片沿列方向的有效行数，不能再用 gmLen - offset：
+                // gtBoxLoop>=1 时 offset 会 >= 单次 loop 的 gmLen，无符号减法得到 0 或回绕值，导致漏写。
+                uint32_t blockLen = static_cast<uint32_t>(loopTileLen);
+                if (bBoxLoop * loopTileLen + blockLen > bBoxLength) {
+                    blockLen = static_cast<uint32_t>(bBoxLength - bBoxLoop * loopTileLen);
+                }
+                if (blockLen == 0) {
+                    continue;
+                }
                 AscendC::DataCopyExtParams copyParams{1, static_cast<uint32_t>(blockLen * sizeof(inType)), 0, 0, 0};
 #if __CCE_AICORE__ == 200 // 310p
                 DataCopy(outGm[offset], tmpLocal[loopTileLen * i], loopTileLen);
