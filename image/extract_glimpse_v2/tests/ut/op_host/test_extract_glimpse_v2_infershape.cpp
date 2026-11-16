@@ -79,7 +79,7 @@ TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_unknown_shape_t
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
 
-// Unknown rank: input rank unknown ({-2}), output is 4D with unknown N/C, H/W from const size
+// Unknown rank: input rank unknown ({-2}), output is unknown rank (rt1.0 aligned, size not read)
 TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_unknown_rank_test)
 {
     int32_t sizeData[2] = {3, 4};
@@ -92,8 +92,9 @@ TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_unknown_rank_te
                                                       {
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       });
+    // 与rt1.0一致：input为未知rank时直接输出未知rank，不再读取size数据
     std::vector<std::vector<int64_t>> expectOutputShape = {
-        {-1, 3, 4, -1},
+        {-2},
     };
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
@@ -208,7 +209,7 @@ TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_fail_size_short
 }
 
 // Unknown-rank branch shares the same size validation: short buffer must be rejected there too
-TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_fail_size_short_buffer_unknown_rank)
+TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_size_short_buffer_unknown_rank_pass)
 {
     int32_t sizeData[1] = {5};
     gert::InfershapeContextPara infershapeContextPara("ExtractGlimpseV2",
@@ -220,5 +221,9 @@ TEST_F(ExtractGlimpseV2Infershape, extract_glimpse_v2_infershape_fail_size_short
                                                       {
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       });
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+    // 与rt1.0一致：input为未知rank时不读取size，size短buffer不影响结果，输出未知rank
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {-2},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }

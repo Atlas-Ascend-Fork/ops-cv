@@ -50,19 +50,31 @@ static ge::graphStatus InferShape4PasteSubImg(gert::InferShapeContext* context)
         return GRAPH_SUCCESS;
     }
 
-    OP_CHECK_IF(patchShape->GetDimNum() != EXPECTED_RANK_3D || combineShape->GetDimNum() != EXPECTED_RANK_3D,
-                OP_LOGE(context->GetNodeName(), "patch_img and combine_img must be 3D"), return GRAPH_FAILED);
-    OP_CHECK_IF(patchCoordShape->GetDimNum() != EXPECTED_RANK_1D || coreAreaCoordShape->GetDimNum() != EXPECTED_RANK_1D,
-                OP_LOGE(context->GetNodeName(), "patch_coord and core_area_coord must be 1D"), return GRAPH_FAILED);
-    OP_CHECK_IF(patchCoordShape->GetDim(0) != COORD_LEN || coreAreaCoordShape->GetDim(0) != COORD_LEN,
+    // 与rt1.0一致：patch为未知rank时跳过其rank校验（输出仅由combine决定）；combine必须3D无条件校验
+    OP_CHECK_IF(!Ops::Base::IsUnknownRank(*patchShape) && patchShape->GetDimNum() != EXPECTED_RANK_3D,
+                OP_LOGE(context->GetNodeName(), "patch_img must be 3D"), return GRAPH_FAILED);
+    OP_CHECK_IF(combineShape->GetDimNum() != EXPECTED_RANK_3D,
+                OP_LOGE(context->GetNodeName(), "combine_img must be 3D"), return GRAPH_FAILED);
+    // 与rt1.0一致：coord为未知rank或长度未知(-1)时跳过校验（rt1.0数据不可得时也跳过CheckCoord）
+    OP_CHECK_IF(!Ops::Base::IsUnknownRank(*patchCoordShape) && patchCoordShape->GetDimNum() != EXPECTED_RANK_1D,
+                OP_LOGE(context->GetNodeName(), "patch_coord must be 1D"), return GRAPH_FAILED);
+    OP_CHECK_IF(!Ops::Base::IsUnknownRank(*coreAreaCoordShape) && coreAreaCoordShape->GetDimNum() != EXPECTED_RANK_1D,
+                OP_LOGE(context->GetNodeName(), "core_area_coord must be 1D"), return GRAPH_FAILED);
+    OP_CHECK_IF((!Ops::Base::IsUnknownRank(*patchCoordShape) && patchCoordShape->GetDim(0) != COORD_LEN &&
+                 patchCoordShape->GetDim(0) != ge::UNKNOWN_DIM) ||
+                    (!Ops::Base::IsUnknownRank(*coreAreaCoordShape) && coreAreaCoordShape->GetDim(0) != COORD_LEN &&
+                     coreAreaCoordShape->GetDim(0) != ge::UNKNOWN_DIM),
                 OP_LOGE(context->GetNodeName(), "patch_coord and core_area_coord length must be 4"),
                 return GRAPH_FAILED);
 
-    int64_t patchC = patchShape->GetDim(DIM_C);
-    int64_t combineC = combineShape->GetDim(DIM_C);
-    OP_CHECK_IF(patchC != ge::UNKNOWN_DIM && combineC != ge::UNKNOWN_DIM && patchC != combineC,
-                OP_LOGE(context->GetNodeName(), "C dimension of patch_img and combine_img must be the same"),
-                return GRAPH_FAILED);
+    // 与rt1.0一致：patch为未知rank时跳过C维校验（输出仅由combine决定）
+    if (!Ops::Base::IsUnknownRank(*patchShape)) {
+        int64_t patchC = patchShape->GetDim(DIM_C);
+        int64_t combineC = combineShape->GetDim(DIM_C);
+        OP_CHECK_IF(patchC != ge::UNKNOWN_DIM && combineC != ge::UNKNOWN_DIM && patchC != combineC,
+                    OP_LOGE(context->GetNodeName(), "C dimension of patch_img and combine_img must be the same"),
+                    return GRAPH_FAILED);
+    }
 
     *outShape = *combineShape;
     OP_LOGI(context->GetNodeName(), "End to do InferShape4PasteSubImg");

@@ -124,10 +124,21 @@ static ge::graphStatus InferShapeExtractGlimpseV2(gert::InferShapeContext* conte
     const gert::Shape* offsetsShape = context->GetInputShape(IDX_2);
     OP_CHECK_NULL_WITH_CONTEXT(context, offsetsShape);
 
-    // Unknown-rank input: output rank is fixed 4D (NHWC), N/C unknown, H/W from const size
-    if (Ops::Base::IsUnknownRank(*inputShape) || Ops::Base::IsUnknownRank(*sizeShape) ||
-        Ops::Base::IsUnknownRank(*offsetsShape)) {
-        OP_LOGD(context->GetNodeName(), "input is UnknownRank, set output as 4D with unknown N/C.");
+    // 与rt1.0一致：input为未知rank时直接输出未知rank（不读size、不做其他校验）
+    if (Ops::Base::IsUnknownRank(*inputShape)) {
+        OP_LOGD(context->GetNodeName(), "input is UnknownRank, set output to unknown rank.");
+        gert::Shape* outShape = context->GetOutputShape(IDX_0);
+        OP_CHECK_NULL_WITH_CONTEXT(context, outShape);
+        Ops::Base::SetUnknownRank(*outShape);
+        auto* mutableOutDesc = context->GetComputeNodeInfo()->MutableOutputTdInfo(0);
+        OP_CHECK_NULL_WITH_CONTEXT(context, mutableOutDesc);
+        mutableOutDesc->SetDataType(context->GetInputDesc(0)->GetDataType());
+        return ge::GRAPH_SUCCESS;
+    }
+
+    // size/offsets未知rank：输出固定4D（NHWC），N/C未知，H/W来自常量size
+    if (Ops::Base::IsUnknownRank(*sizeShape) || Ops::Base::IsUnknownRank(*offsetsShape)) {
+        OP_LOGD(context->GetNodeName(), "size or offsets is UnknownRank, set output as 4D with unknown N/C.");
         int64_t glimpseH = 0;
         int64_t glimpseW = 0;
         if (ReadSizeData(context, glimpseH, glimpseW) != ge::GRAPH_SUCCESS) {

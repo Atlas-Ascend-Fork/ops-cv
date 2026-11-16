@@ -142,3 +142,91 @@ TEST_F(BoundingBoxEncodeInfershape, bbe_rejects_mismatched_dtype)
         });
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
 }
+
+// 部分未知shape（-1）场景：输出透传anchor
+TEST_F(BoundingBoxEncodeInfershape, bbe_partial_unknown_dim)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "BoundingBoxEncode",
+        {
+            {{{-1, 4}, {-1, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{-1, 4}, {-1, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::InfershapeContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {{-1, 4}};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+// 全未知shape（-1）场景
+TEST_F(BoundingBoxEncodeInfershape, bbe_all_unknown_dim)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "BoundingBoxEncode",
+        {
+            {{{-1, -1}, {-1, -1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{-1, -1}, {-1, -1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::InfershapeContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {{-1, -1}};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+// 未知rank（-2）场景：anchor为-2时输出透传-2
+TEST_F(BoundingBoxEncodeInfershape, bbe_anchor_unknown_rank)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "BoundingBoxEncode",
+        {
+            {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::InfershapeContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {{-2}};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+// 单侧未知rank场景：仅gt为-2时输出anchor已知shape
+TEST_F(BoundingBoxEncodeInfershape, bbe_gt_unknown_rank_only)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "BoundingBoxEncode",
+        {
+            {{{8, 4}, {8, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{-2}, {-2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::InfershapeContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {{8, 4}};
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
