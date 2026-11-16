@@ -21,7 +21,7 @@ English | [简体中文](./README.md)
 - Calculation formula: for a 2D interpolation point $(N, C, h, w)$, the interpolation $out(N, C, h, w)$ can be expressed as:
 
   $$
-  {out(N, C, h, w)}=\sum_{i=0}^{kW}\sum_{j=0}^{kH}{W(i, j)}*{f(h_i, w_j)}
+  {out(N, C, h, w)}=\sum_{i=0}^{kH-1}\sum_{j=0}^{kW-1}{W(i, j)}*{f(h_i, w_j)}
   $$
 
   $$
@@ -43,10 +43,11 @@ English | [简体中文](./README.md)
   In the formula:
   - If alignCorners is true, the corner pixels of the input and output tensors are aligned; if alignCorners is false, the edge pixels of the input and output tensors are aligned.
   - i and j are the index variables of $W(i, j)$.
-  - If $scaleH >= 1$, then $kH = 1/scaleH$; otherwise, $kH = 4$
-  - If $scaleW >= 1$, then $kW = 1/scaleW$; otherwise, $kW = 4$
-  - $h_i = |h| + i$
-  - $w_j = |w| + j$
+  - The kernel support radii in the input coordinate system are $R_H=2\max(scaleH, 1)$ and $R_W=2\max(scaleW, 1)$. Downsampling ($scale\geq1$) therefore expands the kernel window; the radii are 2 for upsampling.
+  - $kH$ and $kW$ are the maximum numbers of samples in the kernel window: $kH=2\lceil R_H\rceil+1$ and $kW=2\lceil R_W\rceil+1$. The actual window is generated for each output position and clipped to the input boundary.
+  - When computing weights, input coordinate distances in the H and W directions are multiplied by $1/scaleH$ and $1/scaleW$ respectively (for $scale\geq1$), and by 1 otherwise. This distance scaling is separate from the kernel window radii.
+  - $h_i = |h| - R_H + i$
+  - $w_j = |w| - R_W + j$
   - $f(h_i, w_j)$ is the pixel value of the original image at $(h_i, w_j)$
   - $W(i, j)$ is the weight of the bicubic antialiasing interpolation, defined as:
 

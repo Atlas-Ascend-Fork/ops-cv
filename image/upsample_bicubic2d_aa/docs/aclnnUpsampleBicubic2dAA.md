@@ -28,7 +28,7 @@
 - 计算公式：对于一个二维插值点$(N, C, h, w)$，插值$out(N, C, h, w)$可以表示为：
 
   $$
-  {out(N, C, h, w)}=\sum_{i=0}^{kW}\sum_{j=0}^{kH}{W(i, j)}*{f(h_i, w_j)}
+  {out(N, C, h, w)}=\sum_{i=0}^{kH-1}\sum_{j=0}^{kW-1}{W(i, j)}*{f(h_i, w_j)}
   $$
 
   $$
@@ -52,10 +52,11 @@
   - alignCorners为true，表示输入和输出张量的角像素点对齐；alignCorners为false，表示输入和输出张量的边像素点对齐。
   - 当alignCorners为true且outputSize[0]（或outputSize[1]）等于1时，上式分母outputSize-1为0，此时scaleH（或scaleW）取0.0。
   - i和j是$W(i, j)$的索引变量。
-  - 如果$scaleH >= 1$，则$kH = 1/scaleH$，否则$kH = 4$
-  - 如果$scaleW >= 1$，则$kW = 1/scaleW$，否则$kW = 4$
-  - $h_i = |h| + i$
-  - $w_j = |w| + j$
+  - 输入坐标系中的核支持半径为$R_H=2\max(scaleH, 1)$、$R_W=2\max(scaleW, 1)$。因此下采样（$scale\geq1$）会扩大核窗口；上采样时半径为2。
+  - $kH$和$kW$分别表示核窗口的最大采样点数：$kH=2\lceil R_H\rceil+1$、$kW=2\lceil R_W\rceil+1$。实际窗口按输出位置生成，并裁剪到输入边界。
+  - 权重计算时，H和W方向的输入坐标距离分别乘以$1/scaleH$和$1/scaleW$（对应scale≥1），否则乘以1。该距离缩放与核窗口半径是两个不同量。
+  - $h_i = |h| - R_H + i$
+  - $w_j = |w| - R_W + j$
   - $f(h_i, w_j)$是原图像在$(h_i, w_j)$的像素值。
   - $W(i, j)$是双三次抗锯齿插值的权重，定义为：
 
