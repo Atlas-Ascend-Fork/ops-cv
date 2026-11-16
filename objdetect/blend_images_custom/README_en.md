@@ -46,21 +46,21 @@ English | [简体中文](./README.md)
     <tr>
       <td>rgb</td>
       <td>Input</td>
-      <td>An aclTensor on the device. The HWC (C=3) shape is supported, and it satisfies the broadcast relationship with alpha. Only contiguous tensors are supported.</td>
+      <td>An aclTensor on the device. The HWC (C=3) shape is supported, and it satisfies the broadcast relationship with alpha.</td>
       <td>UINT8</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>alpha</td>
       <td>Input</td>
-      <td>An aclTensor on the device. The HWC (C=1) shape is supported, and it satisfies the broadcast relationship with rgb. Only contiguous tensors are supported.</td>
+      <td>An aclTensor on the device. The HWC (C=1) shape is supported, and it satisfies the broadcast relationship with rgb.</td>
       <td>UINT8</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>frame</td>
       <td>Input</td>
-      <td>An aclTensor on the device. The HWC (C=3) shape is supported, and it satisfies the broadcast relationship with alpha. Only contiguous tensors are supported.</td>
+      <td>An aclTensor on the device. The HWC (C=3) shape is supported, and it satisfies the broadcast relationship with alpha.</td>
       <td>UINT8</td>
       <td>ND</td>
     </tr>

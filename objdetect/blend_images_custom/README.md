@@ -44,21 +44,21 @@
     <tr>
       <td>rgb</td>
       <td>输入</td>
-      <td>Device侧的aclTensor，shape支持HWC(C=3)，与alpha满足broadcast关系。只支持连续Tensor。</td>
+      <td>Device侧的aclTensor，shape支持HWC(C=3)，与alpha满足broadcast关系。</td>
       <td>UINT8</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>alpha</td>
       <td>输入</td>
-      <td>Device侧的aclTensor，shape支持HWC(C=1)，与rgb满足broadcast关系。只支持连续Tensor。</td>
+      <td>Device侧的aclTensor，shape支持HWC(C=1)，与rgb满足broadcast关系。</td>
       <td>UINT8</td>
       <td>ND</td>
     </tr>
     <tr>
       <td>frame</td>
       <td>输入</td>
-      <td>Device侧的aclTensor，shape支持HWC(C=3)，与alpha满足broadcast关系。只支持连续Tensor。</td>
+      <td>Device侧的aclTensor，shape支持HWC(C=3)，与alpha满足broadcast关系。</td>
       <td>UINT8</td>
       <td>ND</td>
     </tr>
