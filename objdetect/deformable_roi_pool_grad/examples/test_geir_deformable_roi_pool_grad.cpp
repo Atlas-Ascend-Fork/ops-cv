@@ -20,7 +20,7 @@
 #include <map>
 #include <memory>
 #include <limits>
-#include <securec.h>
+#include <algorithm>
 #include "assert.h"
 
 #include "graph.h"
@@ -150,9 +150,7 @@ int32_t GenOnesData(const vector<int64_t>& shapes, Tensor& inputTensor, TensorDe
     if (dataType == ge::DT_FLOAT) {
         std::vector<float> values(elementCount, static_cast<float>(value));
         data.resize(values.size() * sizeof(float));
-        if (memcpy_s(data.data(), data.size(), values.data(), data.size()) != EOK) {
-            return FAILED;
-        }
+        std::copy_n(reinterpret_cast<const uint8_t*>(values.data()), data.size(), data.data());
     } else {
         return FAILED;
     }
