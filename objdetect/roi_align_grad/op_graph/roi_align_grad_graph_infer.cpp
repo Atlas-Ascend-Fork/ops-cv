@@ -27,8 +27,12 @@ static ge::graphStatus InferDataTypeROIAlignGrad(gert::InferDataTypeContext* con
 {
     OP_LOGD(context->GetNodeName(), "Begin to do InferDataTypeROIAlignGrad");
 
-    // Output dtype = ydiff dtype (first input)
+    // Output dtype = ydiff dtype (first input); the operator only supports float32.
     ge::DataType outDtype = context->GetInputDataType(IDX_0);
+    if (outDtype != ge::DT_FLOAT) {
+        OP_LOGE_WITHOUT_REPORT(context->GetNodeName(), "ydiff dtype must be DT_FLOAT");
+        return GRAPH_FAILED;
+    }
     context->SetOutputDataType(IDX_0, outDtype);
 
     OP_LOGD(context->GetNodeName(), "End to do InferDataTypeROIAlignGrad");

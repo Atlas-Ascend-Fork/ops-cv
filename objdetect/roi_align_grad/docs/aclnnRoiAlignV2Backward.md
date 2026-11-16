@@ -142,7 +142,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <td class="tg-0pky">samplingRatio（int64_t）</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">RoiAlign中用于计算每个输出元素在H和W方向上的采样频率。</td>
-      <td class="tg-0pky">需大于等于0。</td>
+      <td class="tg-0pky">取值非负整数（上限INT32_MAX）；0表示自适应采样（取ceil(roi_size / pooled_size)）；超出范围按参数非法处理。</td>
       <td class="tg-0pky">INT64</td>
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">-</td>
@@ -151,7 +151,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
     <tr>
       <td class="tg-0pky">aligned（bool）</td>
       <td class="tg-0pky">输入</td>
-      <td class="tg-0pky">如果为false，则对齐<a href="../../roi_align/docs/aclnnRoiAlign.md">aclnnRoiAlign</a>版本实现。<br>如果为true，则box坐标像素偏移-0.5来使相邻像素索引更好对齐。</td>
+      <td class="tg-0pky">如果为false，则box坐标不做偏移（无对齐）。<br>如果为true，则box坐标像素偏移-0.5来使相邻像素索引更好对齐。</td>
       <td class="tg-0pky">-</td>
       <td class="tg-0pky">BOOL</td>
       <td class="tg-0pky">-</td>
@@ -218,10 +218,10 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <td>gradOutput和gradInput的数据类型和数据格式不在支持的范围内。</td>
     </tr>
     <tr>
-      <td>gradOutput、boxes、inputShape和gradInput的shape不满足约束限制；inputShape各元素需大于0。</td>
+      <td>gradOutput、boxes、inputShape和gradInput的shape不满足约束限制；inputShape各元素需大于0且不超过INT32_MAX。</td>
     </tr>
     <tr>
-      <td>spatialScale需为有限值且大于0，samplingRatio需大于等于0。</td>
+      <td>spatialScale需为有限值且大于0，samplingRatio需为非负整数（上限INT32_MAX）；pooledHeight/pooledWidth需大于0且不超过INT32_MAX。</td>
     </tr>
   </tbody>
   </table>
@@ -272,10 +272,11 @@ aclnnStatus aclnnRoiAlignV2Backward(
 ## 约束说明
 
 - 确定性计算：
-  - aclnnRoiAlignV2Backward默认非确定性实现，支持通过aclrtSetSysParamOpt开启确定性。
-- boxes：坐标需满足 `0 <= x1 <= x2`、`0 <= y1 <= y2`，由调用方保证；反转框（`x1 > x2` 或 `y1 > y2`）不报错，对应 ROI 对 `gradInput` 的贡献为全 0。
-- inputShape：B、C、inputHeight、inputWidth 均需大于 0。
-- spatialScale：需为有限值且大于 0。
+  - 确定性取决于具体实现/产品：Atlas 910系列默认采用原子累加（非确定性）；Ascend 950为确定性实现。
+- inputShape：B、C、inputHeight、inputWidth均需大于0且不超过INT32_MAX；pooledHeight/pooledWidth需大于0且不超过INT32_MAX。
+- spatialScale：需为有限值且大于0。
+- sample_num/samplingRatio取非负整数，上限INT32_MAX，超出上限按非法参数处理；取0表示自适应采样（ceil(roi_size / pooled_size)）。
+- 空tensor：rois数量为0时返回全0；pooledHeight/pooledWidth为0属非法输入。
 
 ## 调用示例
 
@@ -366,98 +367,149 @@ int CreateAclNchTensor(const std::vector<T>& hostData, const std::vector<int64_t
   return 0;
 }
 
-int main() {
-  // 1. （固定写法）device/stream初始化，参考acl API手册
-  // 根据自己的实际device填写deviceId
-  int32_t deviceId = 0;
-  aclrtStream stream;
-  auto ret = Init(deviceId, &stream);
-  CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("Init acl failed. ERROR: %d\n", ret); return ret);
+int main()
+{
+    // 1. （固定写法）device/stream初始化，参考acl API手册
+    int32_t deviceId = 0;
+    aclrtStream stream = nullptr;
+    void* gradOutputDeviceAddr = nullptr;
+    void* boxesDeviceAddr = nullptr;
+    void* gradInputDeviceAddr = nullptr;
+    void* workspaceAddr = nullptr;
+    aclTensor* gradOutput = nullptr;
+    aclTensor* boxes = nullptr;
+    aclTensor* gradInput = nullptr;
+    const aclIntArray* inputShapeArray = nullptr;
+    uint64_t workspaceSize = 0;
+    aclOpExecutor* executor = nullptr;
 
-  // 2. 构造输入与输出，需要根据API的接口自定义构造
-  std::vector<int64_t> gradOutputShape = {1, 1, 3, 3};
-  std::vector<int64_t> boxesShape = {1, 5};
-  std::vector<int64_t> inputShape = {1, 1, 6, 6};
+    // 统一的清理入口：任一失败路径都释放已申请的 device 内存、tensor、stream 与上下文。
+    auto cleanup = [&]() {
+        if (gradOutput != nullptr) {
+            aclDestroyTensor(gradOutput);
+        }
+        if (boxes != nullptr) {
+            aclDestroyTensor(boxes);
+        }
+        if (gradInput != nullptr) {
+            aclDestroyTensor(gradInput);
+        }
+        if (inputShapeArray != nullptr) {
+            aclDestroyIntArray(inputShapeArray);
+        }
+        if (gradOutputDeviceAddr != nullptr) {
+            aclrtFree(gradOutputDeviceAddr);
+        }
+        if (boxesDeviceAddr != nullptr) {
+            aclrtFree(boxesDeviceAddr);
+        }
+        if (gradInputDeviceAddr != nullptr) {
+            aclrtFree(gradInputDeviceAddr);
+        }
+        if (workspaceAddr != nullptr) {
+            aclrtFree(workspaceAddr);
+        }
+        if (stream != nullptr) {
+            aclrtDestroyStream(stream);
+        }
+        aclrtResetDevice(deviceId);
+        aclFinalize();
+    };
 
-  void* gradOutputDeviceAddr = nullptr;
-  void* boxesDeviceAddr = nullptr;
-  void* gradInputDeviceAddr = nullptr;
-  aclTensor* gradOutput = nullptr;
-  aclTensor* boxes = nullptr;
-  aclTensor* gradInput = nullptr;
+    int ret = Init(deviceId, &stream);
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("Init acl failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
 
-  std::vector<float> gradOutputHostData = {4.5, 6.5, 8.5, 16.5, 18.5, 20.5, 28.5, 30.5, 32.5};
-  std::vector<float> boxesHostData = {0.0, -2.0, -2.0, 22.0, 22.0};
-  std::vector<float> gradInputHostData = {1.125, 1.125, 1.625, 1.625, 2.125, 2.125, 1.125, 1.125, 1.625, 1.625, 2.125, 2.125,
-                                    4.125, 4.125, 4.625, 4.625, 5.125, 5.125, 4.125, 4.125, 4.625, 4.625, 5.125, 5.125,
-                                    7.125, 7.125, 7.625, 7.625, 8.125, 8.125, 7.125, 7.125, 7.625, 7.625, 8.125, 8.125};
+    // 2. 构造输入与输出，需要根据API的接口自定义构造
+    std::vector<int64_t> gradOutputShape = {1, 1, 3, 3};
+    std::vector<int64_t> boxesShape = {1, 5};
+    std::vector<int64_t> inputShape = {1, 1, 6, 6};
 
-  // 创建gradOutput aclTensor
-  ret = CreateAclNchTensor(gradOutputHostData, gradOutputShape, &gradOutputDeviceAddr, aclDataType::ACL_FLOAT, &gradOutput);
-  CHECK_RET(ret == ACL_SUCCESS, return ret);
-  // 创建boxes aclTensor
-  ret = CreateAclTensor(boxesHostData, boxesShape, &boxesDeviceAddr, aclDataType::ACL_FLOAT, &boxes);
-  CHECK_RET(ret == ACL_SUCCESS, return ret);
-  // 创建inputShape aclIntArray
-  const aclIntArray *inputShapeArray = aclCreateIntArray(inputShape.data(), inputShape.size());
-  CHECK_RET(inputShapeArray != nullptr, return ACL_ERROR_INTERNAL_ERROR);
-  // 创建gradInput aclTensor
-  ret = CreateAclNchTensor(gradInputHostData, inputShape, &gradInputDeviceAddr, aclDataType::ACL_FLOAT, &gradInput);
-  CHECK_RET(ret == ACL_SUCCESS, return ret);
-  int64_t pooledHeight = 3;
-  int64_t pooledWidth = 3;
-  int64_t samplingRatio = 2;
-  float spatialScale = 0.25f;
-  bool aligned = false;
+    std::vector<float> gradOutputHostData = {4.5, 6.5, 8.5, 16.5, 18.5, 20.5, 28.5, 30.5, 32.5};
+    std::vector<float> boxesHostData = {0.0, -2.0, -2.0, 22.0, 22.0};
+    std::vector<float> gradInputHostData = {1.125, 1.125, 1.625, 1.625, 2.125, 2.125, 1.125, 1.125, 1.625,
+                                            1.625, 2.125, 2.125, 4.125, 4.125, 4.625, 4.625, 5.125, 5.125,
+                                            4.125, 4.125, 4.625, 4.625, 5.125, 5.125, 7.125, 7.125, 7.625,
+                                            7.625, 8.125, 8.125, 7.125, 7.125, 7.625, 7.625, 8.125, 8.125};
 
-  // 3. 调用CANN算子库API
-  uint64_t workspaceSize = 0;
-  aclOpExecutor* executor;
-  // 调用aclnnRoiAlignV2Backward第一段接口
-  ret = aclnnRoiAlignV2BackwardGetWorkspaceSize(gradOutput, boxes, inputShapeArray, pooledHeight, pooledWidth, spatialScale,
-                                              samplingRatio, aligned, gradInput, &workspaceSize, &executor);
-  CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnRoiAlignV2BackwardGetWorkspaceSize failed. ERROR: %d\n", ret); return ret);
-  // 根据第一段接口计算出的workspaceSize申请device内存
-  void* workspaceAddr = nullptr;
-  if (workspaceSize > 0) {
-    ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret);
-  }
-  // 调用aclnnRoiAlignV2Backward第二段接口
-  ret = aclnnRoiAlignV2Backward(workspaceAddr, workspaceSize, executor, stream);
-  CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnRoiAlignV2Backward failed. ERROR: %d\n", ret); return ret);
+    ret = CreateAclNchTensor(gradOutputHostData, gradOutputShape, &gradOutputDeviceAddr, aclDataType::ACL_FLOAT,
+                             &gradOutput);
+    if (ret != ACL_SUCCESS) {
+        cleanup();
+        return ret;
+    }
+    ret = CreateAclTensor(boxesHostData, boxesShape, &boxesDeviceAddr, aclDataType::ACL_FLOAT, &boxes);
+    if (ret != ACL_SUCCESS) {
+        cleanup();
+        return ret;
+    }
+    inputShapeArray = aclCreateIntArray(inputShape.data(), inputShape.size());
+    if (inputShapeArray == nullptr) {
+        cleanup();
+        return ACL_ERROR_INTERNAL_ERROR;
+    }
+    ret = CreateAclNchTensor(gradInputHostData, inputShape, &gradInputDeviceAddr, aclDataType::ACL_FLOAT, &gradInput);
+    if (ret != ACL_SUCCESS) {
+        cleanup();
+        return ret;
+    }
 
-  // 4. （固定写法）同步等待任务执行结束
-  ret = aclrtSynchronizeStream(stream);
-  CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret); return ret);
+    int64_t pooledHeight = 3;
+    int64_t pooledWidth = 3;
+    int64_t samplingRatio = 2;
+    float spatialScale = 0.25f;
+    bool aligned = false;
 
-  // 5. 获取输出的值，将device侧内存上的结果拷贝至host侧，需要根据具体API的接口定义修改
-  auto size = GetShapeSize(inputShape);
-  std::vector<float> resultData(size, 0);
-  ret = aclrtMemcpy(resultData.data(), resultData.size() * sizeof(resultData[0]),
-                    gradInputDeviceAddr, size * sizeof(resultData[0]), ACL_MEMCPY_DEVICE_TO_HOST);
-  CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("copy resultData from device to host failed. ERROR: %d\n", ret); return ret);
-  for (int64_t i = 0; i < size; i++) {
-    LOG_PRINT("result[%ld] is: %f\n", i, resultData[i]);
-  }
+    // 3. 调用CANN算子库API
+    ret = aclnnRoiAlignV2BackwardGetWorkspaceSize(gradOutput, boxes, inputShapeArray, pooledHeight, pooledWidth,
+                                                  spatialScale, samplingRatio, aligned, gradInput, &workspaceSize,
+                                                  &executor);
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("aclnnRoiAlignV2BackwardGetWorkspaceSize failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
+    if (workspaceSize > 0) {
+        ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        if (ret != ACL_SUCCESS) {
+            LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret);
+            cleanup();
+            return ret;
+        }
+    }
+    ret = aclnnRoiAlignV2Backward(workspaceAddr, workspaceSize, executor, stream);
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("aclnnRoiAlignV2Backward failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
 
-  // 6. 释放aclTensor，需要根据具体API的接口定义修改
-  aclDestroyTensor(gradOutput);
-  aclDestroyTensor(boxes);
-  aclDestroyIntArray(inputShapeArray);
-  aclDestroyTensor(gradInput);
+    // 4. （固定写法）同步等待任务执行结束
+    ret = aclrtSynchronizeStream(stream);
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
 
-  // 7. 释放device资源，需要根据具体API的接口定义修改
-  aclrtFree(gradOutputDeviceAddr);
-  aclrtFree(boxesDeviceAddr);
-  aclrtFree(gradInputDeviceAddr);
-  if (workspaceSize > 0) {
-    aclrtFree(workspaceAddr);
-  }
-  aclrtDestroyStream(stream);
-  aclrtResetDevice(deviceId);
-  aclFinalize();
-  return 0;
+    // 5. 获取输出的值，将device侧内存上的结果拷贝至host侧
+    auto size = GetShapeSize(inputShape);
+    std::vector<float> resultData(size, 0);
+    ret = aclrtMemcpy(resultData.data(), resultData.size() * sizeof(resultData[0]), gradInputDeviceAddr,
+                      size * sizeof(resultData[0]), ACL_MEMCPY_DEVICE_TO_HOST);
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("copy resultData from device to host failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
+    for (int64_t i = 0; i < size; i++) {
+        LOG_PRINT("result[%ld] is: %f\n", i, resultData[i]);
+    }
+
+    cleanup();
+    return 0;
 }
-
 ```

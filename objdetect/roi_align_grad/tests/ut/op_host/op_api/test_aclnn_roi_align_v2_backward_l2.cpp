@@ -363,6 +363,24 @@ TEST_F(l2_roi_align_v2_backward_test, case_attr_invalid_1)
 // 空tensor
 TEST_F(l2_roi_align_v2_backward_test, case_empty_tensor)
 {
+    // A true empty ROI set: zero ROIs (dim0 = 0) with positive pooled dims.
+    auto gradOutput = TensorDesc({0, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto boxes = TensorDesc({0, 5}, ACL_FLOAT, ACL_FORMAT_ND);
+    vector<int64_t> inputShape_dims = {1, 1, 6, 6};
+    auto inputShape = IntArrayDesc(inputShape_dims);
+    auto gradInput = TensorDesc({1, 1, 6, 6}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnRoiAlignV2Backward, INPUT(gradOutput, boxes, inputShape, 3, 3, 0.25f, 2, true),
+                        OUTPUT(gradInput));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(aclRet, ACL_SUCCESS);
+}
+
+TEST_F(l2_roi_align_v2_backward_test, case_pooled_zero_invalid)
+{
+    // pooledHeight/pooledWidth == 0 is documented as invalid input.
     auto gradOutput = TensorDesc({1, 1, 0, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
     auto boxes = TensorDesc({1, 5}, ACL_FLOAT, ACL_FORMAT_ND).Value(vector<float>{0.0, -2.0, -2.0, 22.0, 22.0});
     vector<int64_t> inputShape_dims = {1, 1, 6, 6};
@@ -373,8 +391,38 @@ TEST_F(l2_roi_align_v2_backward_test, case_empty_tensor)
                         OUTPUT(gradInput));
 
     uint64_t workspaceSize = 0;
-    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspaceSize);
-    EXPECT_EQ(aclRet, ACL_SUCCESS);
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_ERR_PARAM_INVALID);
+}
+
+TEST_F(l2_roi_align_v2_backward_test, case_sampling_ratio_above_64_accepted)
+{
+    // samplingRatio has no product-level upper bound below INT32_MAX.
+    auto gradOutput = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto boxes = TensorDesc({1, 5}, ACL_FLOAT, ACL_FORMAT_ND).Value(vector<float>{0.0, -2.0, -2.0, 22.0, 22.0});
+    vector<int64_t> inputShape_dims = {1, 1, 6, 6};
+    auto inputShape = IntArrayDesc(inputShape_dims);
+    auto gradInput = TensorDesc({1, 1, 6, 6}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnRoiAlignV2Backward, INPUT(gradOutput, boxes, inputShape, 3, 3, 0.25f, 1025, false),
+                        OUTPUT(gradInput));
+
+    uint64_t workspaceSize = 0;
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_SUCCESS);
+}
+
+TEST_F(l2_roi_align_v2_backward_test, case_sampling_ratio_above_int32_rejected)
+{
+    auto gradOutput = TensorDesc({1, 1, 3, 3}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto boxes = TensorDesc({1, 5}, ACL_FLOAT, ACL_FORMAT_ND).Value(vector<float>{0.0, -2.0, -2.0, 22.0, 22.0});
+    vector<int64_t> inputShape_dims = {1, 1, 6, 6};
+    auto inputShape = IntArrayDesc(inputShape_dims);
+    auto gradInput = TensorDesc({1, 1, 6, 6}, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnRoiAlignV2Backward, INPUT(gradOutput, boxes, inputShape, 3, 3, 0.25f, 4294967296LL, false),
+                        OUTPUT(gradInput));
+
+    uint64_t workspaceSize = 0;
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspaceSize), ACLNN_ERR_PARAM_INVALID);
 }
 
 // float场景（含精度）

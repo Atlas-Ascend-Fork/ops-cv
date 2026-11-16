@@ -28,7 +28,7 @@ namespace ge {
  *Three inputs, including:
  * @li ydiff: A Tensor of type float32, shape (N, C, pooled_H, pooled_W). Backward gradient input.
  * @li rois: A Tensor of type float32, shape (N, 5). ROI coordinates [batch_idx, x1, y1, x2, y2].
- * @li rois_n: An optional Tensor of type int32, shape (N). Number of ROIs per batch.
+ * @li rois_n: An optional int32 tensor, shape (N). Reserved; not used in computation.
  *@par Outputs:
  *xdiff: A Tensor of type float32, shape (B, C, H, W). Gradient of input feature map.
  *@par Attributes:

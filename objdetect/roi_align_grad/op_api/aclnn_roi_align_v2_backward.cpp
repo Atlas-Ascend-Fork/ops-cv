@@ -11,6 +11,7 @@
 #include "aclnn_roi_align_v2_backward.h"
 #include "roi_align_grad.h"
 #include <cmath>
+#include <limits>
 #include "aclnn_kernels/contiguous.h"
 #include "aclnn_kernels/transdata.h"
 #include "aclnn_kernels/cast.h"
@@ -77,6 +78,20 @@ static bool CheckInputShape(const aclTensor* gradOutput, const aclTensor* boxes,
     OP_CHECK_WRONG_DIMENSION(gradOutput, DIM_FOUR, return false);
     OP_CHECK_WRONG_DIMENSION(boxes, DIM_TWO, return false);
 
+    // pooledHeight/pooledWidth are documented as strictly positive; reject them
+    // before the empty-tensor fast path so pooled==0 is not silently accepted.
+    if (pooledHeight <= 0 || pooledWidth <= 0) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "pooledHeight [%ld] and pooledWidth [%ld] should be greater than 0",
+                pooledHeight, pooledWidth);
+        return false;
+    }
+    constexpr int64_t kInt32Max = static_cast<int64_t>(std::numeric_limits<int32_t>::max());
+    if (pooledHeight > kInt32Max || pooledWidth > kInt32Max) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "pooledHeight [%ld] and pooledWidth [%ld] should be <= INT32_MAX",
+                pooledHeight, pooledWidth);
+        return false;
+    }
+
     auto const& gradOutputShape = gradOutput->GetViewShape();
     auto const& boxesShape = boxes->GetViewShape();
     if (boxesShape.GetDim(1) != DIM_FIVE) { // 5: boxes dim 1
@@ -90,6 +105,12 @@ static bool CheckInputShape(const aclTensor* gradOutput, const aclTensor* boxes,
     for (size_t i = 0; i < inputShape->Size(); ++i) {
         if ((*inputShape)[i] <= 0) {
             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "inputShape[%zu] [%ld] should be greater than 0", i, (*inputShape)[i]);
+            return false;
+        }
+    }
+    for (size_t i = 0; i < inputShape->Size(); ++i) {
+        if ((*inputShape)[i] > kInt32Max) {
+            OP_LOGE(ACLNN_ERR_PARAM_INVALID, "inputShape[%zu] [%ld] should be <= INT32_MAX", i, (*inputShape)[i]);
             return false;
         }
     }
@@ -137,8 +158,11 @@ static bool CheckOutputShape(const aclTensor* gradOutput, const aclIntArray* inp
 
 static bool CheckAttr(int64_t samplingRatio, float spatialScale)
 {
-    if (samplingRatio < 0) {
-        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "samplingRatio [%ld] should be greater than or equal to 0", samplingRatio);
+    // Align with the baseline contract: samplingRatio has no product-level upper
+    // bound. Only reject negatives and values the kernel cannot represent (int32).
+    constexpr int64_t kSamplingRatioMax = static_cast<int64_t>(std::numeric_limits<int32_t>::max());
+    if (samplingRatio < 0 || samplingRatio > kSamplingRatioMax) {
+        OP_LOGE(ACLNN_ERR_PARAM_INVALID, "samplingRatio [%ld] should be in [0, %ld]", samplingRatio, kSamplingRatioMax);
         return false;
     }
     if (!std::isfinite(spatialScale) || spatialScale <= 0.0f) {

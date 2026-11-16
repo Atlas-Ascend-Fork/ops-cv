@@ -17,6 +17,7 @@
  * Sets tiling key based on roiEndMode (R001/R007: compile-time branch elimination).
  */
 
+#include <cmath>
 #include <limits>
 #include <string>
 #include <vector>
@@ -40,6 +41,7 @@ constexpr uint32_t STATIC_UB_ESTIMATE = 0;
 // Input/output tensor indices
 constexpr uint32_t INPUT_YDIFF_IDX = 0;
 constexpr uint32_t INPUT_ROIS_IDX = 1;
+constexpr uint32_t INPUT_ROIS_N_IDX = 2;
 constexpr uint32_t OUTPUT_XDIFF_IDX = 0;
 
 // Attribute indices
@@ -192,22 +194,49 @@ static ge::graphStatus ParseOpAttrs(gert::TilingContext* context, RoiAlignGradTi
         return ge::GRAPH_FAILED;
     }
     const int64_t* xdiffShapeData = xdiffShapeVec->GetData();
-    params.B = static_cast<int32_t>(xdiffShapeData[N_DIM]);
-    params.attrC = static_cast<int32_t>(xdiffShapeData[C_DIM]);
-    params.H = static_cast<int32_t>(xdiffShapeData[H_DIM]);
-    params.W = static_cast<int32_t>(xdiffShapeData[W_DIM]);
+    const int64_t int32Max = static_cast<int64_t>(std::numeric_limits<int32_t>::max());
+    const int64_t xdiffB = xdiffShapeData[N_DIM];
+    const int64_t xdiffC = xdiffShapeData[C_DIM];
+    const int64_t xdiffH = xdiffShapeData[H_DIM];
+    const int64_t xdiffW = xdiffShapeData[W_DIM];
+    if (xdiffB <= 0 || xdiffC <= 0 || xdiffH <= 0 || xdiffW <= 0 || xdiffB > int32Max || xdiffC > int32Max ||
+        xdiffH > int32Max || xdiffW > int32Max) {
+        const std::string actual = std::to_string(xdiffB) + ", " + std::to_string(xdiffC) + ", " +
+                                   std::to_string(xdiffH) + ", " + std::to_string(xdiffW);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "xdiff_shape", actual.c_str(),
+                                              "xdiff_shape elements must be in [1, INT32_MAX]");
+        return ge::GRAPH_FAILED;
+    }
+    params.B = static_cast<int32_t>(xdiffB);
+    params.attrC = static_cast<int32_t>(xdiffC);
+    params.H = static_cast<int32_t>(xdiffH);
+    params.W = static_cast<int32_t>(xdiffW);
 
     const auto* pooledWidthPtr = attrs->GetAttrPointer<int64_t>(ATTR_POOLED_WIDTH_IDX);
     if (!RequireNotNull(context, pooledWidthPtr, "pooledWidthPtr")) {
         return ge::GRAPH_FAILED;
     }
-    params.attrPooledWidth = static_cast<int32_t>(*pooledWidthPtr);
+    const int64_t pooledWidthValue = *pooledWidthPtr;
+    if (pooledWidthValue < 1 || pooledWidthValue > int32Max) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "pooled_width",
+                                              std::to_string(pooledWidthValue).c_str(),
+                                              "pooled_width should be in [1, INT32_MAX]");
+        return ge::GRAPH_FAILED;
+    }
+    params.attrPooledWidth = static_cast<int32_t>(pooledWidthValue);
 
     const auto* pooledHeightPtr = attrs->GetAttrPointer<int64_t>(ATTR_POOLED_HEIGHT_IDX);
     if (!RequireNotNull(context, pooledHeightPtr, "pooledHeightPtr")) {
         return ge::GRAPH_FAILED;
     }
-    params.attrPooledHeight = static_cast<int32_t>(*pooledHeightPtr);
+    const int64_t pooledHeightValue = *pooledHeightPtr;
+    if (pooledHeightValue < 1 || pooledHeightValue > int32Max) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "pooled_height",
+                                              std::to_string(pooledHeightValue).c_str(),
+                                              "pooled_height should be in [1, INT32_MAX]");
+        return ge::GRAPH_FAILED;
+    }
+    params.attrPooledHeight = static_cast<int32_t>(pooledHeightValue);
 
     const auto* spatialScalePtr = attrs->GetAttrPointer<float>(ATTR_SPATIAL_SCALE_IDX);
     if (!RequireNotNull(context, spatialScalePtr, "spatialScalePtr")) {
@@ -227,7 +256,14 @@ static ge::graphStatus ParseOpAttrs(gert::TilingContext* context, RoiAlignGradTi
     params.roiEndMode = DEFAULT_ROI_END_MODE;
     const auto* roiEndModePtr = attrs->GetAttrPointer<int64_t>(ATTR_ROI_END_MODE_IDX);
     if (roiEndModePtr != nullptr) {
-        params.roiEndMode = static_cast<int32_t>(*roiEndModePtr);
+        const int64_t roiEndModeValue = *roiEndModePtr;
+        if (roiEndModeValue < ROI_END_MODE_MIN || roiEndModeValue > ROI_END_MODE_MAX) {
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(OpNameOf(context), "roi_end_mode",
+                                                  std::to_string(roiEndModeValue).c_str(),
+                                                  "roi_end_mode should be in [0, 3]");
+            return ge::GRAPH_FAILED;
+        }
+        params.roiEndMode = static_cast<int32_t>(roiEndModeValue);
     }
     return ge::GRAPH_SUCCESS;
 }
@@ -255,6 +291,19 @@ static ge::graphStatus ValidateParams(gert::TilingContext* context, const RoiAli
         const std::string actual = Ops::Base::ToString(roisDtype);
         OP_LOGE_FOR_INVALID_DTYPE(OpNameOf(context), "rois", actual.c_str(), "FLOAT");
         return ge::GRAPH_FAILED;
+    }
+
+    // rois_n (optional): dtype INT32 (OpDef contract). rank/length are not
+    // constrained here: rois_n is reserved/unused by the kernel and the TBE
+    // reference does not enforce them either.
+    auto roisNDesc = context->GetOptionalInputDesc(INPUT_ROIS_N_IDX);
+    if (roisNDesc != nullptr) {
+        ge::DataType roisNDtype = roisNDesc->GetDataType();
+        if (roisNDtype != ge::DT_INT32) {
+            const std::string actual = Ops::Base::ToString(roisNDtype);
+            OP_LOGE_FOR_INVALID_DTYPE(OpNameOf(context), "rois_n", actual.c_str(), "INT32");
+            return ge::GRAPH_FAILED;
+        }
     }
 
     auto xdiffDesc = context->GetOutputDesc(OUTPUT_XDIFF_IDX);
@@ -293,11 +342,11 @@ static ge::graphStatus ValidateParams(gert::TilingContext* context, const RoiAli
         return ge::GRAPH_FAILED;
     }
 
-    // spatial_scale > 0 (SE 2.4)
-    if (params.spatialScale <= 0.0f) {
+    // spatial_scale must be finite and > 0 (SE 2.4 / ACLNN contract)
+    if (!std::isfinite(params.spatialScale) || params.spatialScale <= 0.0f) {
         OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "spatial_scale",
                                               std::to_string(params.spatialScale).c_str(),
-                                              "spatial_scale should be > 0");
+                                              "spatial_scale should be finite and > 0");
         return ge::GRAPH_FAILED;
     }
 
@@ -343,13 +392,33 @@ static ge::graphStatus ValidateParams(gert::TilingContext* context, const RoiAli
     return ge::GRAPH_SUCCESS;
 }
 
+static bool SafeMultiply(int64_t left, int64_t right, int64_t& result)
+{
+    if (left < 0 || right < 0) {
+        return false;
+    }
+    if (left != 0 && right > std::numeric_limits<int64_t>::max() / left) {
+        return false;
+    }
+    result = left * right;
+    return true;
+}
+
 static ge::graphStatus HandleEmptyTiling(gert::TilingContext* context,
                                          platform_ascendc::PlatformAscendC& ascendcPlatform,
                                          ROIAlignGradTilingData* tiling, const RoiAlignGradTilingParams& params)
 {
+    int64_t totalXdiffElements = 1;
+    const bool multiplyOk = SafeMultiply(static_cast<int64_t>(params.B), params.C, totalXdiffElements) &&
+                            SafeMultiply(totalXdiffElements, params.H, totalXdiffElements) &&
+                            SafeMultiply(totalXdiffElements, params.W, totalXdiffElements);
+    if (!multiplyOk) {
+        ReportTilingFailure(context, "xdiff element count overflows int64");
+        return ge::GRAPH_FAILED;
+    }
     tiling->needCoreNum = 1;
     tiling->totalYdiffElements = 0;
-    tiling->totalXdiffElements = static_cast<int64_t>(params.B) * params.C * params.H * params.W;
+    tiling->totalXdiffElements = totalXdiffElements;
     tiling->batch = params.B;
     tiling->channels = params.C;
     tiling->height = params.H;
@@ -366,6 +435,8 @@ static ge::graphStatus HandleEmptyTiling(gert::TilingContext* context,
     return ge::GRAPH_SUCCESS;
 }
 
+static int64_t CeilDiv(int64_t value, int64_t divisor) { return value / divisor + (value % divisor != 0 ? 1 : 0); }
+
 static ge::graphStatus CalcCoreDistribution(gert::TilingContext* context, const RoiAlignGradTilingParams& params,
                                             int64_t totalXdiffElements, int32_t& needCoreNum, int64_t& perCoreElements)
 {
@@ -375,14 +446,14 @@ static ge::graphStatus CalcCoreDistribution(gert::TilingContext* context, const 
         ReportTilingFailure(context, "effectiveMaxCores is 0");
         return ge::GRAPH_FAILED;
     }
-    perCoreElements = (totalXdiffElements + effectiveMaxCores - 1) / effectiveMaxCores;
+    perCoreElements = CeilDiv(totalXdiffElements, effectiveMaxCores);
     perCoreElements = std::max(perCoreElements, PER_CORE_MIN);
     perCoreElements = ((perCoreElements + ALIGN_32_MASK) / ALIGN_32) * ALIGN_32;
     if (perCoreElements == 0) {
         ReportTilingFailure(context, "perCoreElements is 0");
         return ge::GRAPH_FAILED;
     }
-    needCoreNum = static_cast<int32_t>((totalXdiffElements + perCoreElements - 1) / perCoreElements);
+    needCoreNum = static_cast<int32_t>(CeilDiv(totalXdiffElements, perCoreElements));
     return ge::GRAPH_SUCCESS;
 }
 
@@ -440,8 +511,15 @@ static ge::graphStatus ROIAlignGradTilingFunc(gert::TilingContext* context)
         return HandleEmptyTiling(context, ascendcPlatform, tiling, params);
     }
 
-    int64_t batchXdiffStride = static_cast<int64_t>(params.C) * params.H * params.W;
-    int64_t totalXdiffElements = static_cast<int64_t>(params.B) * batchXdiffStride;
+    int64_t batchXdiffStride = 1;
+    int64_t totalXdiffElements = 1;
+    const bool multiplyOk = SafeMultiply(static_cast<int64_t>(params.C), params.H, batchXdiffStride) &&
+                            SafeMultiply(batchXdiffStride, params.W, batchXdiffStride) &&
+                            SafeMultiply(static_cast<int64_t>(params.B), batchXdiffStride, totalXdiffElements);
+    if (!multiplyOk) {
+        ReportTilingFailure(context, "xdiff element count overflows int64");
+        return ge::GRAPH_FAILED;
+    }
 
     int32_t needCoreNum;
     int64_t perCoreElements;

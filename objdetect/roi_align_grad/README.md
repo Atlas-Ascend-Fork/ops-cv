@@ -82,7 +82,7 @@
     <tr>
       <td>rois_n</td>
       <td>输入（可选）</td>
-      <td>每个batch中有效ROI的数量，shape为(B,)。当前计算中未使用。</td>
+      <td>可选输入，shape为(N,)，dtype为INT32；为保留输入，当前不参与计算。</td>
       <td>INT32</td>
       <td>ND</td>
     </tr>
@@ -94,13 +94,6 @@
       <td>-</td>
     </tr>
     <tr>
-      <td>pooled_height</td>
-      <td>属性（必选）</td>
-      <td>ROI输出特征图的高度。</td>
-      <td>Int</td>
-      <td>-</td>
-    </tr>
-    <tr>
       <td>pooled_width</td>
       <td>属性（必选）</td>
       <td>ROI输出特征图的宽度。</td>
@@ -108,16 +101,23 @@
       <td>-</td>
     </tr>
     <tr>
+      <td>pooled_height</td>
+      <td>属性（必选）</td>
+      <td>ROI输出特征图的高度。</td>
+      <td>Int</td>
+      <td>-</td>
+    </tr>
+    <tr>
       <td>spatial_scale</td>
       <td>属性（必选）</td>
-      <td>特征图相对于原图的缩放比例。</td>
+      <td>特征图相对于原图的缩放比例，须为有限值且大于0。</td>
       <td>Float</td>
       <td>-</td>
     </tr>
     <tr>
       <td>sample_num</td>
       <td>属性（可选）</td>
-      <td>每个bin的采样次数。默认值为2，0表示自动计算（取ceil(roi_size / pooled_size)）。</td>
+      <td>每个bin的采样次数，取值为非负整数（上限INT32_MAX）。默认值为2，0表示自动计算（取ceil(roi_size / pooled_size)）。</td>
       <td>Int</td>
       <td>-</td>
     </tr>
@@ -126,9 +126,9 @@
       <td>属性（可选）</td>
       <td>
         <ul style="margin-top: 0; margin-bottom: 0; padding-left: 2ch;">
-          <li>0：无对齐。</li>
+          <li>0：无对齐（roi_w/roi_h取max(., 1.0)）。</li>
           <li>1：TF偏移模式（x2/y2 += spatial_scale，roi_w/roi_h取max(., 1.0)）。</li>
-          <li>2：PyTorch对齐模式（x1/y1/x2/y2 -= 0.5）。</li>
+          <li>2：PyTorch对齐模式（x1/y1/x2/y2 -= 0.5，不对roi_w/roi_h下钳）。</li>
           <li>3：MMDetection对齐模式（同2）。</li>
         </ul>
         默认值为1。
@@ -149,12 +149,19 @@
 
 - 仅支持float32数据类型。
 - ydiff和xdiff为4维ND格式，rois为2维ND格式。
-- xdiff_shape属性必须为4元素正整数列表。
-- 空tensor（shape含0维）时返回全零梯度。
+- xdiff_shape必须为4元素正整数列表。
+- rois数量N为0（且pooled_height/pooled_width为正）时返回全零梯度；pooled_height/pooled_width必须为正。
+- spatial_scale必须为有限值且大于0。
+- ydiff的H/W应等于pooled_height/pooled_width，ydiff的C应等于xdiff_shape的C。
+- rois的image_id取值范围为[0,B)，坐标维必须为5。
+- sample_num取非负整数，上限INT32_MAX；取0表示自适应采样。
+- roi_end_mode取值范围为[0,3]。
+- 输入/输出为ND连续排布。
+- 支持动态shape（-1/-2）。
 
 ## 调用说明
 
 | 调用方式 | 调用样例 | 说明 |
 |----------|----------|------|
-| aclnn 接口调用 | [test_aclnn_roi_align_v2_backward_l2](examples/test_aclnn_roi_align_v2_backward.cpp) | 通过[aclnnRoiAlignV2Backward](./docs/aclnnRoiAlignV2Backward.md)接口方式调用RoiAlignGrad算子。 |
+| aclnn接口调用 | [test_aclnn_roi_align_v2_backward](examples/test_aclnn_roi_align_v2_backward.cpp) | 通过[aclnnRoiAlignV2Backward](./docs/aclnnRoiAlignV2Backward.md)接口方式调用RoiAlignGrad算子。 |
 | 图模式      | [test_geir_roi_align_grad](examples/test_geir_roi_align_grad.cpp)                                    | 通过[算子IR](op_graph/roi_align_grad_proto.h)构图方式调用RoiAlignGrad算子。                         |

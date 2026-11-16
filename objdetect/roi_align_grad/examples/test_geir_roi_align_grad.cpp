@@ -28,8 +28,6 @@
 #include "array_ops.h"
 #include "ge_ir_build.h"
 
-#include "experiment_ops.h"
-#include "nn_other.h"
 #include "../op_graph/roi_align_grad_proto.h"
 
 #define FAILED -1
@@ -178,7 +176,7 @@ int CreateOppInGraph(DataType inDtype, std::vector<ge::Tensor>& input, std::vect
     std::vector<int64_t> ydiffShape = {2, 3, 7, 7};
     std::vector<int64_t> roisShape = {2, 5};
 
-    add1.set_attr_xdiff_shape({1, 3, 14, 14});
+    add1.set_attr_xdiff_shape({3, 3, 14, 14});
     add1.set_attr_pooled_width(7);
     add1.set_attr_pooled_height(7);
     add1.set_attr_spatial_scale(0.5f);
@@ -188,7 +186,7 @@ int CreateOppInGraph(DataType inDtype, std::vector<ge::Tensor>& input, std::vect
     ADD_INPUT(1, ydiff, inDtype, ydiffShape);
     ADD_INPUT(2, rois, inDtype, roisShape);
 
-    std::vector<int64_t> xdiffShape = {1, 3, 14, 14};
+    std::vector<int64_t> xdiffShape = {3, 3, 14, 14};
     ADD_OUTPUT(1, xdiff, inDtype, xdiffShape);
 
     outputs.push_back(add1);
@@ -221,6 +219,7 @@ int main(int argc, char* argv[])
     ret = CreateOppInGraph(inDtype, input, inputs, outputs, graph);
     if (ret != SUCCESS) {
         printf("%s - ERROR - [XIR]: Create Opp In Graph failed\n", GetTime().c_str());
+        GEFinalize();
         return FAILED;
     }
 
@@ -236,6 +235,7 @@ int main(int argc, char* argv[])
 
     if (session == nullptr) {
         printf("%s - ERROR - [XIR]: Create ir session using build options failed\n", GetTime().c_str());
+        GEFinalize();
         return FAILED;
     }
     printf("%s - INFO - [XIR]: Create ir session using build options success\n", GetTime().c_str());
@@ -246,6 +246,12 @@ int main(int argc, char* argv[])
     };
     uint32_t graph_id = 0;
     ret = session->AddGraph(graph_id, graph, graph_options);
+    if (ret != SUCCESS) {
+        printf("%s - ERROR - [XIR]: Session add ir compute graph to ir session failed\n", GetTime().c_str());
+        delete session;
+        GEFinalize();
+        return FAILED;
+    }
 
     printf("%s - INFO - [XIR]: Session add ir compute graph to ir session success\n", GetTime().c_str());
     printf("%s - INFO - [XIR]: dump graph to txt\n", GetTime().c_str());
@@ -290,8 +296,10 @@ int main(int argc, char* argv[])
     ge::AscendString warning_msg = ge::GEGetWarningMsgV2();
     std::string warning_str(warning_msg.GetString());
     std::cout << "Warning message: " << warning_str << std::endl;
-    printf("%s - INFO - [XIR]: Precision is ok\n", GetTime().c_str());
+    printf("%s - INFO - [XIR]: Run succeeded; outputs written to .bin (no precision comparison performed)\n",
+           GetTime().c_str());
     printf("%s - INFO - [XIR]: Start to finalize ir graph session\n", GetTime().c_str());
+    delete session;
     ret = ge::GEFinalize();
     if (ret != SUCCESS) {
         printf("%s - INFO - [XIR]: Finalize ir graph session failed\n", GetTime().c_str());

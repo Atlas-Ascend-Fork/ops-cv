@@ -84,7 +84,7 @@ English | [简体中文](./README.md)
     <tr>
       <td>rois_n</td>
       <td>Input (Optional)</td>
-      <td>Number of valid ROIs in each batch, with shape (B,). The current computation does not use this parameter.</td>
+      <td>Optional input, shape (N,), dtype INT32; reserved and currently not used in computation.</td>
       <td>INT32</td>
       <td>ND</td>
     </tr>
@@ -96,13 +96,6 @@ English | [简体中文](./README.md)
       <td>-</td>
     </tr>
     <tr>
-      <td>pooled_height</td>
-      <td>Attr (Required)</td>
-      <td>Height of the ROI output feature map.</td>
-      <td>Int</td>
-      <td>-</td>
-    </tr>
-    <tr>
       <td>pooled_width</td>
       <td>Attr (Required)</td>
       <td>Width of the ROI output feature map.</td>
@@ -110,16 +103,23 @@ English | [简体中文](./README.md)
       <td>-</td>
     </tr>
     <tr>
+      <td>pooled_height</td>
+      <td>Attr (Required)</td>
+      <td>Height of the ROI output feature map.</td>
+      <td>Int</td>
+      <td>-</td>
+    </tr>
+    <tr>
       <td>spatial_scale</td>
       <td>Attr (Required)</td>
-      <td>Scaling ratio of the feature map to the original image.</td>
+      <td>Scaling ratio of the feature map to the original image. Must be finite and greater than 0.</td>
       <td>Float</td>
       <td>-</td>
     </tr>
     <tr>
       <td>sample_num</td>
       <td>Attr (Optional)</td>
-      <td>Number of sampling times for each bin. Default value: 2. 0 indicates automatic computation (ceil(roi_size / pooled_size)).</td>
+      <td>Number of sampling times for each bin. Non-negative integer (upper bound INT32_MAX). Default value: 2. 0 indicates automatic computation (ceil(roi_size / pooled_size)).</td>
       <td>Int</td>
       <td>-</td>
     </tr>
@@ -128,9 +128,9 @@ English | [简体中文](./README.md)
       <td>Attr (Optional)</td>
       <td>
         <ul style="margin-top: 0; margin-bottom: 0; padding-left: 2ch;">
-          <li>0: No alignment.</li>
+          <li>0: No alignment (roi_w/roi_h = max(., 1.0)).</li>
           <li>1: TF offset mode (x2/y2 += spatial_scale, and roi_w/roi_h is set to max(., 1.0)).</li>
-          <li>2: PyTorch alignment mode (x1/y1/x2/y2 -= 0.5).</li>
+          <li>2: PyTorch alignment mode (x1/y1/x2/y2 -= 0.5; roi_w/roi_h are not clamped).</li>
           <li>3: MMDetection alignment mode (same as 2).</li>
         </ul>
         Default value: 1.
@@ -151,12 +151,19 @@ English | [简体中文](./README.md)
 
 - The operator supports only the float32 data type.
 - ydiff and xdiff are 4D ND tensors, and rois is a 2D ND tensor.
-- The xdiff_shape attribute must be a list of four positive integers.
-- For an empty tensor (a shape containing a 0 dimension), the operator returns all-zero gradients.
+- xdiff_shape must be a list of four positive integers.
+- When the number of rois N is 0 (with positive pooled_height/pooled_width), the operator returns all-zero gradients; pooled_height/pooled_width must be positive.
+- spatial_scale must be finite and greater than 0.
+- ydiff H/W should equal pooled_height/pooled_width, and ydiff C should equal xdiff_shape C.
+- rois image_id must be in [0, B); the coordinate dimension must be 5.
+- sample_num must be a non-negative integer up to INT32_MAX; 0 means adaptive sampling.
+- roi_end_mode must be in [0, 3].
+- Inputs/outputs use contiguous ND layout.
+- Dynamic shapes (-1/-2) are supported.
 
 ## Invocation
 
 | Invocation Method | Sample | Description |
 |----------|----------|------|
-| aclnn API invocation | [test_aclnn_roi_align_v2_backward_l2](examples/test_aclnn_roi_align_v2_backward.cpp) | Invokes the RoiAlignGrad operator through the [aclnnRoiAlignV2Backward](./docs/aclnnRoiAlignV2Backward_en.md) API. |
+| aclnn API invocation | [test_aclnn_roi_align_v2_backward](examples/test_aclnn_roi_align_v2_backward.cpp) | Invokes the RoiAlignGrad operator through the [aclnnRoiAlignV2Backward](./docs/aclnnRoiAlignV2Backward_en.md) API. |
 | Graph mode      | [test_geir_roi_align_grad](examples/test_geir_roi_align_grad.cpp)                                    | Invokes the RoiAlignGrad operator by constructing a graph through the [operator IR](op_graph/roi_align_grad_proto.h).                         |

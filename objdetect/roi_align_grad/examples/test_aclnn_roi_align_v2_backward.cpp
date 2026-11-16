@@ -99,23 +99,63 @@ int CreateAclNchTensor(const std::vector<T>& hostData, const std::vector<int64_t
 int main()
 {
     // 1. （固定写法）device/stream初始化，参考acl API手册
-    // 根据自己的实际device填写deviceId
     int32_t deviceId = 0;
-    aclrtStream stream;
-    auto ret = Init(deviceId, &stream);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("Init acl failed. ERROR: %d\n", ret); return ret);
+    aclrtStream stream = nullptr;
+    void* gradOutputDeviceAddr = nullptr;
+    void* boxesDeviceAddr = nullptr;
+    void* gradInputDeviceAddr = nullptr;
+    void* workspaceAddr = nullptr;
+    aclTensor* gradOutput = nullptr;
+    aclTensor* boxes = nullptr;
+    aclTensor* gradInput = nullptr;
+    const aclIntArray* inputShapeArray = nullptr;
+    uint64_t workspaceSize = 0;
+    aclOpExecutor* executor = nullptr;
+
+    // 统一的清理入口：任一失败路径都释放已申请的 device 内存、tensor、stream 与上下文。
+    auto cleanup = [&]() {
+        if (gradOutput != nullptr) {
+            aclDestroyTensor(gradOutput);
+        }
+        if (boxes != nullptr) {
+            aclDestroyTensor(boxes);
+        }
+        if (gradInput != nullptr) {
+            aclDestroyTensor(gradInput);
+        }
+        if (inputShapeArray != nullptr) {
+            aclDestroyIntArray(inputShapeArray);
+        }
+        if (gradOutputDeviceAddr != nullptr) {
+            aclrtFree(gradOutputDeviceAddr);
+        }
+        if (boxesDeviceAddr != nullptr) {
+            aclrtFree(boxesDeviceAddr);
+        }
+        if (gradInputDeviceAddr != nullptr) {
+            aclrtFree(gradInputDeviceAddr);
+        }
+        if (workspaceAddr != nullptr) {
+            aclrtFree(workspaceAddr);
+        }
+        if (stream != nullptr) {
+            aclrtDestroyStream(stream);
+        }
+        aclrtResetDevice(deviceId);
+        aclFinalize();
+    };
+
+    int ret = Init(deviceId, &stream);
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("Init acl failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
 
     // 2. 构造输入与输出，需要根据API的接口自定义构造
     std::vector<int64_t> gradOutputShape = {1, 1, 3, 3};
     std::vector<int64_t> boxesShape = {1, 5};
     std::vector<int64_t> inputShape = {1, 1, 6, 6};
-
-    void* gradOutputDeviceAddr = nullptr;
-    void* boxesDeviceAddr = nullptr;
-    void* gradInputDeviceAddr = nullptr;
-    aclTensor* gradOutput = nullptr;
-    aclTensor* boxes = nullptr;
-    aclTensor* gradInput = nullptr;
 
     std::vector<float> gradOutputHostData = {4.5, 6.5, 8.5, 16.5, 18.5, 20.5, 28.5, 30.5, 32.5};
     std::vector<float> boxesHostData = {0.0, -2.0, -2.0, 22.0, 22.0};
@@ -124,19 +164,28 @@ int main()
                                             4.125, 4.125, 4.625, 4.625, 5.125, 5.125, 7.125, 7.125, 7.625,
                                             7.625, 8.125, 8.125, 7.125, 7.125, 7.625, 7.625, 8.125, 8.125};
 
-    // 创建gradOutput aclTensor
     ret = CreateAclNchTensor(gradOutputHostData, gradOutputShape, &gradOutputDeviceAddr, aclDataType::ACL_FLOAT,
                              &gradOutput);
-    CHECK_RET(ret == ACL_SUCCESS, return ret);
-    // 创建boxes aclTensor
+    if (ret != ACL_SUCCESS) {
+        cleanup();
+        return ret;
+    }
     ret = CreateAclTensor(boxesHostData, boxesShape, &boxesDeviceAddr, aclDataType::ACL_FLOAT, &boxes);
-    CHECK_RET(ret == ACL_SUCCESS, return ret);
-    // 创建inputShape aclIntArray
-    const aclIntArray* inputShapeArray = aclCreateIntArray(inputShape.data(), inputShape.size());
-    CHECK_RET(inputShapeArray != nullptr, return ACL_ERROR_INTERNAL_ERROR);
-    // 创建gradInput aclTensor
+    if (ret != ACL_SUCCESS) {
+        cleanup();
+        return ret;
+    }
+    inputShapeArray = aclCreateIntArray(inputShape.data(), inputShape.size());
+    if (inputShapeArray == nullptr) {
+        cleanup();
+        return ACL_ERROR_INTERNAL_ERROR;
+    }
     ret = CreateAclNchTensor(gradInputHostData, inputShape, &gradInputDeviceAddr, aclDataType::ACL_FLOAT, &gradInput);
-    CHECK_RET(ret == ACL_SUCCESS, return ret);
+    if (ret != ACL_SUCCESS) {
+        cleanup();
+        return ret;
+    }
+
     int64_t pooledHeight = 3;
     int64_t pooledWidth = 3;
     int64_t samplingRatio = 2;
@@ -144,54 +193,51 @@ int main()
     bool aligned = false;
 
     // 3. 调用CANN算子库API
-    uint64_t workspaceSize = 0;
-    aclOpExecutor* executor;
-    // 调用aclnnRoiAlignV2Backward第一段接口
     ret = aclnnRoiAlignV2BackwardGetWorkspaceSize(gradOutput, boxes, inputShapeArray, pooledHeight, pooledWidth,
                                                   spatialScale, samplingRatio, aligned, gradInput, &workspaceSize,
                                                   &executor);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnRoiAlignV2BackwardGetWorkspaceSize failed. ERROR: %d\n", ret);
-              return ret);
-    // 根据第一段接口计算出的workspaceSize申请device内存
-    void* workspaceAddr = nullptr;
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("aclnnRoiAlignV2BackwardGetWorkspaceSize failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
     if (workspaceSize > 0) {
         ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
-        CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret);
+        if (ret != ACL_SUCCESS) {
+            LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret);
+            cleanup();
+            return ret;
+        }
     }
-    // 调用aclnnRoiAlignV2Backward第二段接口
     ret = aclnnRoiAlignV2Backward(workspaceAddr, workspaceSize, executor, stream);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnRoiAlignV2Backward failed. ERROR: %d\n", ret); return ret);
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("aclnnRoiAlignV2Backward failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
 
     // 4. （固定写法）同步等待任务执行结束
     ret = aclrtSynchronizeStream(stream);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret); return ret);
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
 
-    // 5. 获取输出的值，将device侧内存上的结果拷贝至host侧，需要根据具体API的接口定义修改
+    // 5. 获取输出的值，将device侧内存上的结果拷贝至host侧
     auto size = GetShapeSize(inputShape);
     std::vector<float> resultData(size, 0);
     ret = aclrtMemcpy(resultData.data(), resultData.size() * sizeof(resultData[0]), gradInputDeviceAddr,
                       size * sizeof(resultData[0]), ACL_MEMCPY_DEVICE_TO_HOST);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("copy resultData from device to host failed. ERROR: %d\n", ret);
-              return ret);
+    if (ret != ACL_SUCCESS) {
+        LOG_PRINT("copy resultData from device to host failed. ERROR: %d\n", ret);
+        cleanup();
+        return ret;
+    }
     for (int64_t i = 0; i < size; i++) {
         LOG_PRINT("result[%ld] is: %f\n", i, resultData[i]);
     }
 
-    // 6. 释放aclTensor，需要根据具体API的接口定义修改
-    aclDestroyTensor(gradOutput);
-    aclDestroyTensor(boxes);
-    aclDestroyIntArray(inputShapeArray);
-    aclDestroyTensor(gradInput);
-
-    // 7. 释放device资源，需要根据具体API的接口定义修改
-    aclrtFree(gradOutputDeviceAddr);
-    aclrtFree(boxesDeviceAddr);
-    aclrtFree(gradInputDeviceAddr);
-    if (workspaceSize > 0) {
-        aclrtFree(workspaceAddr);
-    }
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(deviceId);
-    aclFinalize();
+    cleanup();
     return 0;
 }
