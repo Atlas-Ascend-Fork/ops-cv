@@ -12,8 +12,8 @@
  * \file stack_group_points_proto.h
  * \brief
  */
-#ifndef OPS_BUILT_IN_OP_PROTO_INC_EXPERIMENT_OPS_H_
-#define OPS_BUILT_IN_OP_PROTO_INC_EXPERIMENT_OPS_H_
+#ifndef STACK_GROUP_POINTS_PROTO_H_
+#define STACK_GROUP_POINTS_PROTO_H_
 
 #include "graph/operator_reg.h"
 namespace ge {
@@ -23,9 +23,9 @@ namespace ge {
 * @par Inputs:
 * Four inputs, including:
 * @li features:  Tensor of features to group, input shape is (N1 + N2 ..., C).
-* @li features_batch_cnt:  Input features nums in each batch, just like (N1, N2, ...). Defaults to None.
+* @li features_batch_cnt:  Input features nums in each batch, just like (N1, N2, ...).
 * @li indices: The indices of features to group with, input shape is (M1 + M2 ..., nsample).
-* @li indices_batch_cnt: Input indices nums in each batch, just like (M1, M2, ...). Defaults to None. \n
+* @li indices_batch_cnt: Input indices nums in each batch, just like (M1, M2, ...). \n
 
 * @par Outputs:
 * One outputs: Grouped features, the shape is (M1 + M2 ..., C, nsample).
@@ -44,4 +44,4 @@ REG_OP(StackGroupPoints)
     .OP_END_FACTORY_REG(StackGroupPoints)
 #endif
 } // namespace ge
-#endif // OPS_BUILT_IN_OP_PROTO_INC_EXPERIMENT_OPS_H_
+#endif // STACK_GROUP_POINTS_PROTO_H_

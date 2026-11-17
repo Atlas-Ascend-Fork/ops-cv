@@ -96,6 +96,20 @@ TEST_F(StackGroupPoints, StackGroupPoints_infershape_neg_fbc_not_1d)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
 }
 
+// Negative: features_batch_cnt 非 1D（0D 标量）
+TEST_F(StackGroupPoints, StackGroupPoints_infershape_neg_fbc_0d)
+{
+    gert::InfershapeContextPara infershapeContextPara("StackGroupPoints",
+                                                      {{{{32, 64}, {32, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                       {{{}, {}}, ge::DT_INT32, ge::FORMAT_ND},
+                                                       {{{20, 3}, {20, 3}}, ge::DT_INT32, ge::FORMAT_ND},
+                                                       {{{4}, {4}}, ge::DT_INT32, ge::FORMAT_ND}},
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
 // Negative: indices_batch_cnt 非 1D（0D 标量）
 TEST_F(StackGroupPoints, StackGroupPoints_infershape_neg_ibc_not_1d)
 {
@@ -189,6 +203,24 @@ TEST_F(StackGroupPoints, StackGroupPoints_infershape_unknown_shape_both)
                                                       });
     std::vector<std::vector<int64_t>> expectOutputShape = {
         {-1, -1, -1},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+// 正例：features/indices 具体而 features_batch_cnt 长度未知（-1，动态图形态），
+// 输出按 m/c/nsample 推导
+TEST_F(StackGroupPoints, StackGroupPoints_infershape_pos_fbc_unknown_len)
+{
+    gert::InfershapeContextPara infershapeContextPara("StackGroupPoints",
+                                                      {{{{32, 64}, {32, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                       {{{-1}, {-1}}, ge::DT_INT32, ge::FORMAT_ND},
+                                                       {{{20, 3}, {20, 3}}, ge::DT_INT32, ge::FORMAT_ND},
+                                                       {{{4}, {4}}, ge::DT_INT32, ge::FORMAT_ND}},
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                      });
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {20, 64, 3},
     };
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }

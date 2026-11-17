@@ -47,9 +47,11 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpStackGroupPoi
         int64_t cIdx = (index / nsample) % c;
         int64_t ptIdx = index / nsampleC;
 
-        int32_t bsIdx = 0;
-        int32_t ptCnt = indicesBatchCnt[0];
-        for (int32_t k = 1; k < b; k++) {
+        // 批次归属：indices_batch_cnt 前缀和上的线性扫描（非负计数域上与
+        // searchsorted right 结果一致）；计数/计数和全 int64 域
+        int64_t bsIdx = 0;
+        int64_t ptCnt = indicesBatchCnt[0];
+        for (int64_t k = 1; k < b; k++) {
             if (ptIdx >= ptCnt) {
                 ptCnt += indicesBatchCnt[k];
                 bsIdx = k;
@@ -57,7 +59,7 @@ __simt_vf__ __aicore__ __launch_bounds__(THREAD_NUM) inline void OpStackGroupPoi
         }
 
         int64_t featuresBatchStartIdx = 0;
-        for (int32_t k = 0; k < bsIdx; k++) {
+        for (int64_t k = 0; k < bsIdx; k++) {
             featuresBatchStartIdx += featuresBatchCnt[k];
         }
         const int32_t featuresBatchLocalCnt = featuresBatchCnt[bsIdx];

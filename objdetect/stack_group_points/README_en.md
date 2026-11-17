@@ -18,9 +18,9 @@ English | [简体中文](./README.md)
 ## Function Description
 
 - Operator function: Reorganizes the features of the point cloud according to the groups to which the feature points belong.
-- Computation formula: The point cloud data `features` has the shape $(N1 + N2 ..., C)$, and the operator groups it according to `features_batch_cnt` with the shape $(N1, N2, ...)$. Similarly, `indices` has the shape $(M1 + M2 ..., nsample)$, and the operator groups it according to `indices_batch_cnt` with the shape $(M1, M2, ...)$. The operator extracts features from the corresponding `features` group according to the `indices` grouping to form the output `out`, implementing the following function:
+- Computation formula: The point cloud data `features` has the shape $(N1 + N2 ..., C)$, and the operator groups it according to `features_batch_cnt` with the shape $(N1, N2, ...)$. Similarly, `indices` has the shape $(M1 + M2 ..., nsample)$, and the operator groups it according to `indices_batch_cnt` with the shape $(M1, M2, ...)$. The operator extracts features from the corresponding `features` group according to the `indices` grouping to form the output `out`. The shape of `out` is $(M1 + M2 ..., C, nsample)$, and each element is computed as follows:
   $$
-  out[m:c:np] = features[indices[m:np]:c]
+  out[m, c, np] = features[indices[m, np], c]
   $$
 
 ## Parameter Description
@@ -83,7 +83,7 @@ English | [简体中文](./README.md)
 - `features` and `indices` must be 2D tensors, and `features_batch_cnt` and `indices_batch_cnt` must be 1D tensors.
 - The channel dimension C of `features`, the nsample dimension of `indices`, and the batch count length B must be positive.
 - The lengths of `features_batch_cnt` and `indices_batch_cnt` must be equal, and they describe the number of features and the number of indices of the same batch respectively.
-- The `indices` values of each batch must be within the range of the number of `features` of the corresponding batch. The output of out-of-bound indices is zero.
+- The output elements corresponding to out-of-bound or negative `indices` values are zero.
 
 ## Invocation
 

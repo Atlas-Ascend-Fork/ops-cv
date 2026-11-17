@@ -16,9 +16,9 @@
 ## 功能说明
 
 - 算子功能：根据特征点所属的组，重组点云的特征。
-- 计算公式：点云数据`features`形状为$(N1 + N2 ..., C)$，根据`features_batch_cnt`形状$(N1, N2, ...)$将其分组，同样地，`indices`形状为$(M1 + M2 ..., nsample)$，根据`indices_batch_cnt`形状$(M1, M2, ...)$将其分组。算子根据`indices`分组从对应的`features`组中抽取特征成输出`out`，实现如下功能：
+- 计算公式：点云数据`features`形状为$(N1 + N2 ..., C)$，根据`features_batch_cnt`形状$(N1, N2, ...)$将其分组，同样地，`indices`形状为$(M1 + M2 ..., nsample)$，根据`indices_batch_cnt`形状$(M1, M2, ...)$将其分组。算子根据`indices`分组从对应的`features`组中抽取特征成输出`out`，输出`out`形状为$(M1 + M2 ..., C, nsample)$，各元素按下式计算：
   $$
-  out[m:c:np] = features[indices[m:np]:c]
+  out[m, c, np] = features[indices[m, np], c]
   $$
 
 ## 参数说明
@@ -81,7 +81,7 @@
 - `features` 和 `indices` 必须为二维 Tensor；`features_batch_cnt` 和 `indices_batch_cnt` 必须为一维 Tensor。
 - `features` 的通道维 C、`indices` 的 nsample 维以及 batch 计数长度 B 必须为正数。
 - `features_batch_cnt` 与 `indices_batch_cnt` 的长度必须相等，且分别描述同一批次的特征数量和索引数量。
-- 每个批次的 `indices` 值必须位于对应批次 `features` 数量范围内；越界索引的输出为零。
+- 越界或负值的 `indices` 对应的输出元素为零。
 
 ## 调用说明
 

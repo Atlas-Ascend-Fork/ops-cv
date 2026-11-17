@@ -73,9 +73,10 @@ static ge::graphStatus ValidateAndFillStackGroupPointsOutput(
         return GRAPH_FAILED;
     }
 
-    int32_t m = indices_shape->GetDim(M_INDEX);
-    int32_t nsample = indices_shape->GetDim(NSAMPLE_INDEX);
-    int32_t c = feture_shape->GetDim(C_INDEX);
+    // 维度值按 GetDim 原宽 int64 传递
+    int64_t m = indices_shape->GetDim(M_INDEX);
+    int64_t nsample = indices_shape->GetDim(NSAMPLE_INDEX);
+    int64_t c = feture_shape->GetDim(C_INDEX);
 
     output_shape->SetDimNum(OUTPUT_DIM_NUM);
     output_shape->SetDim(FIRST_DIM_INDEX, m);
