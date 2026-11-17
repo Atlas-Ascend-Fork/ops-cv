@@ -126,6 +126,13 @@ English | [简体中文](./README.md)
 - The `grid` coordinates are normalized coordinates (usually in [-1, 1]). For non-finite coordinates (NaN/±Inf), the behavior is consistent with PyTorch `grid_sample` (`bilinear`/`bicubic` output NaN under `zeros`, and `nearest` maps to valid indexes). For degenerate reflection coordinates with extremely large magnitudes (about `|grid| ≳ 1e8`), this implementation does not guarantee bitwise consistency with PyTorch.
 - Inputs that exceed the capacity upper bounds (any dimension greater than `INT32_MAX`, `H_in * W_in` greater than `INT32_MAX`, `N * H_out * W_out` greater than `INT32_MAX`, or `N * C * H_in * W_in` beyond the range of a 64-bit signed integer) are rejected. On the kernel path, this rejection does not expose an independent error code.
 
+## float64 (DT_DOUBLE) Support Notes
+
+- The custom kernel of this operator (ascend950/ascend350 AICore) supports only `float16`/`float32`. `DT_DOUBLE` inputs are explicitly rejected at the operator registration layer (error code `EZ0019` on the GE path), without silent downgrade.
+- f64 requests from the aclnn/torch path fall back via GE to the CANN built-in AICPU GridSampler2D, and the output is true f64 (bitwise identical to the CPU reference implementation (golden)). The combination of `bicubic` interpolation and f64 is explicitly rejected (error code `161002`).
+- This fallback depends on the built-in operator capability of the CANN version in use and may change across versions. For precision-sensitive services, explicitly verify the output data type and precision level.
+- Test assets: the golden reference includes a `float64` tolerance profile (`binary_equal`, bitwise comparison), so the TTK f64 test case can detect f64→f32 downgrade defects.
+
 ## Invocation Description
 
 | Invocation Method | Sample Code | Description |

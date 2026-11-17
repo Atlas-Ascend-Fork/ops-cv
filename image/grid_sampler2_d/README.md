@@ -124,6 +124,13 @@
 - `grid`坐标为归一化坐标（通常落在[-1, 1]）；对非有限坐标（NaN/±Inf），行为与PyTorch `grid_sample`一致（`bilinear`/`bicubic`在`zeros`下输出NaN，`nearest`映射到合法索引）。对量级极大（约`|grid| ≳ 1e8`）的退化反射坐标，本实现不保证与PyTorch逐位一致。
 - 超过容量上界（任一维大于`INT32_MAX`、`H_in * W_in`大于`INT32_MAX`、`N * H_out * W_out`大于`INT32_MAX`，或`N * C * H_in * W_in`超出64位有符号整型范围）的输入被拒绝；Kernel通路该拒绝不暴露独立错误码。
 
+## float64（DT_DOUBLE）支持说明
+
+- 本算子自定义kernel（ascend950/ascend350 AICore）仅支持`float16`/`float32`；`DT_DOUBLE`输入在算子注册层被显式拒绝（GE报错码`EZ0019`），不做静默降级。
+- aclnn/torch链路的f64请求由GE回落至CANN内置AICPU GridSampler2D执行，输出为真f64（与CPU参考实现（golden）逐位一致）；`bicubic`插值与f64的组合被显式拒绝（报错码`161002`）。
+- 该回落行为依赖CANN版本的内置算子能力，跨版本可能变化；精度敏感业务建议显式校验输出数据类型与精度等级。
+- 测试资产：golden已含`float64`容差档（`binary_equal`，逐位对拍），TTK f64用例可检测f64→f32降级类缺陷。
+
 ## 调用说明
 
 | 调用方式 | 样例代码 | 说明 |

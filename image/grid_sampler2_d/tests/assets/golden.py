@@ -10,7 +10,6 @@
 # ----------------------------------------------------------------------------
 
 import numpy as np
-import torch
 
 # 属性值映射表（string -> int 索引）。编号与 op_host/grid_sampler2_d_def.cpp 的 STRING
 # 属性域（interpolation_mode: bilinear/nearest/bicubic，padding_mode: zeros/border/reflection）
@@ -35,6 +34,8 @@ def _resolve_padding_mode(value):
 
 def _as_torch_tensor(value):
     """桥接 numpy.ndarray / torch.Tensor 容器到 torch.Tensor（不含数值计算）。"""
+    import torch
+
     if isinstance(value, torch.Tensor):
         return value
     numpy_value = (
@@ -70,6 +71,8 @@ class GridSampler2DComposeSpec:
         Returns:
             Output tensor, shape (N, C, H_out, W_out)
         """
+        import torch
+
         interp_idx = _resolve_interp_mode(interpolation_mode)
         pad_idx = _resolve_padding_mode(padding_mode)
 
@@ -129,6 +132,8 @@ class GridSampler2DComposeSpec:
             )
 
         def __call__(self, input=None, grid=None, *, x=None, **kwargs):
+            import torch
+
             # Kernel/GEIR 入口按输入名 x/grid 绑定，ACLNN 入口按 input/grid 绑定；
             # 两个名字都进入有效形参池，避免一侧因形参名不匹配而无法绑定。
             x = x if x is not None else input
@@ -170,7 +175,7 @@ class GridSampler2DComposeSpec:
     tolerance = {
         "float32": {"standard": "mix_tolerance"},
         "float16": {"standard": "mix_tolerance"},
-        "bfloat16": {"standard": "mix_tolerance"},
+        "float64": {"standard": "binary_equal"},
     }
 
 
@@ -193,6 +198,8 @@ class AclnnGridSampler2DTestSpec:
         out=None,
         **kwargs,
     ):
+        import torch
+
         interp_idx = _resolve_interp_mode(interpolationMode)
         pad_idx = _resolve_padding_mode(paddingMode)
 
@@ -218,11 +225,39 @@ class AclnnGridSampler2DTestSpec:
     tolerance = {
         "float32": {"standard": "mix_tolerance"},
         "float16": {"standard": "mix_tolerance"},
-        "bfloat16": {"standard": "mix_tolerance"},
+        "float64": {"standard": "binary_equal"},
     }
 
     # 逐入口第三方参考：ACLNN 入口共享 Kernel 入口的 torch 参考实现。
     third_party = {"torch": GridSampler2DComposeSpec.ThirdPartyImpl}
+
+
+class TorchGridSampleToleranceSpec:
+    """torch.nn.functional.grid_sample 的 e2e golden 与容差。
+
+    显式复用同 API 的 CPU torch 参考，避免依赖“有类无 golden 时框架隐式
+    回落”的外部契约；容差按输出 dtype 路由，避免 f64 作为表外 dtype 回落
+    f32 档而掩盖精度降级。
+    """
+
+    @staticmethod
+    def golden(
+        input, grid, mode="bilinear", padding_mode="zeros", align_corners=None, **kwargs
+    ):
+        import torch
+
+        x = _as_torch_tensor(input)
+        g = _as_torch_tensor(grid)
+        result = torch.nn.functional.grid_sample(
+            x,
+            g,
+            mode=mode,
+            padding_mode=padding_mode,
+            align_corners=False if align_corners is None else align_corners,
+        )
+        return [result]
+
+    tolerance = GridSampler2DComposeSpec.tolerance
 
 
 # Explicit registration: class names use *Spec suffix (not *TestSpec),
@@ -231,4 +266,5 @@ __spec__ = {
     "grid_sampler2_d": "GridSampler2DComposeSpec",
     "GridSampler2D": "GridSampler2DComposeSpec",
     "aclnnGridSampler2D": "AclnnGridSampler2DTestSpec",
+    "torch.nn.functional.grid_sample": "TorchGridSampleToleranceSpec",
 }
