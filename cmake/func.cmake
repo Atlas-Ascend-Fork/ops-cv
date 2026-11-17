@@ -537,7 +537,10 @@ function(find_value_by_key key_list value_list search_key result)
   set(${result} ${found_value} PARENT_SCOPE)
 endfunction()
 
-# 收集所有匹配 key 的 value，保持配对顺序，支持同一芯片型号配置多个 tiling 目录
+# 收集所有匹配 key 的 value，保持配对顺序，支持同一芯片型号配置多个 tiling 目录；结果去重，
+# 避免 arch 归一化后同 arch 的多条目（如 ascend950 与 ascend350 同为 dav_3510）联合命中产生重复目录；
+# 去重用 list(FIND) 实现而非 if(... IN_LIST ...)，避免引入 CMP0057 策略依赖，
+# 保证本文件可被脚本模式（如 query.cmake）直接 include
 function(find_values_by_key key_list value_list search_key result)
   list(LENGTH key_list key_list_length)
   list(LENGTH value_list value_list_length)
@@ -550,7 +553,8 @@ function(find_values_by_key key_list value_list search_key result)
     list(GET key_list ${index} key)
     if("${key}" STREQUAL "${search_key}")
       list(GET value_list ${index} value)
-      if(NOT "${value}" STREQUAL "")
+      list(FIND found_values "${value}" _dup_index)
+      if(NOT "${value}" STREQUAL "" AND _dup_index EQUAL -1)
         list(APPEND found_values ${value})
       endif()
     endif()
@@ -795,23 +799,30 @@ function(add_tiling_sources tiling_dir disable_in_opp)
   endif()
 endfunction()
 
-# usage: add_all_modules_sources(OPTYPE ACLNNTYPE DEPENDENCIES COMPUTE_UNIT NPU_ARCH TILING_DIR DISABLE_IN_OPP HOSTCPU)
+# usage: add_all_modules_sources(OPTYPE ACLNNTYPE DEPENDENCIES COMPUTE_UNIT TILING_DIR DISABLE_IN_OPP HOSTCPU)
 # ACLNNTYPE 支持类型aclnn/aclnn_inner/aclnn_exclude
 # OPTYPE 和 ACLNNTYPE 需一一对应
 # DEPENDENCIES 指定依赖的算子名称列表
-# COMPUTE_UNIT 兼容参数：设置支持芯片版本号（soc列表），必须与TILING_DIR一一对应，缺省为配置所有的soc
-# NPU_ARCH 设置支持的npuArch列表，必须与TILING_DIR一一对应，示例：dav_2201 dav_3510；与COMPUTE_UNIT互斥，
-#          配置后当前构建芯片转换为npuArch统一按arch匹配
-# TILING_DIR 设置所支持芯片类型对应的tiling文件目录，必须与COMPUTE_UNIT（或NPU_ARCH）一一对应，示例：arch22 arch35
-#            同一型号可在 NPU_ARCH（或 COMPUTE_UNIT）中重复填写，并按位置配对多个目录，
-#            示例：NPU_ARCH dav_2201 dav_2201 dav_3510 TILING_DIR arch22 arch22_common arch35
+# COMPUTE_UNIT 支持的芯片，支持soc版本（ascend950等）与npuArch版本（dav_3510等）混配，必须与TILING_DIR
+#             按位置一一对应；函数内逐项将soc转换为npuArch后统一按arch匹配（同arch的soc共享tiling目录，
+#             如ascend950与ascend350同为dav_3510）；缺省为配置所有的soc
+# TILING_DIR 设置所支持芯片类型对应的tiling文件目录，必须与COMPUTE_UNIT一一对应，示例：arch22 arch35
+#            同一arch可在 COMPUTE_UNIT 中重复填写，并按位置配对多个目录，
+#            示例：COMPUTE_UNIT dav_2201 dav_2201 dav_3510 TILING_DIR arch22 arch22_common arch35
 # DISABLE_IN_OPP 设置是否在opp包中编译tiling文件，布尔类型：TRUE，FALSE
 # HOSTCPU 设置是否编译host侧常量折叠OBJECT，布尔类型：TRUE，FALSE，仅在built-in包生效
 macro(add_all_modules_sources)
   set(oneValueArgs DISABLE_IN_OPP HOSTCPU)
-  set(multiValueArgs OPTYPE ACLNNTYPE DEPENDENCIES COMPUTE_UNIT NPU_ARCH TILING_DIR)
+  set(multiValueArgs OPTYPE ACLNNTYPE DEPENDENCIES COMPUTE_UNIT TILING_DIR)
 
   cmake_parse_arguments(MODULE "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+  # NPU_ARCH 参数已合并进 COMPUTE_UNIT（支持 soc/npuArch 混配）：误传旧参数或其他未知参数时
+  # 显式报错，避免被静默忽略后按缺省 COMPUTE_UNIT 处理或触发与根因无关的 key/value 长度报错
+  if(MODULE_UNPARSED_ARGUMENTS)
+    message(FATAL_ERROR
+            "add_all_modules_sources: unparsed arguments ${MODULE_UNPARSED_ARGUMENTS}; "
+            "NPU_ARCH has been merged into COMPUTE_UNIT, which now accepts mixed soc/npuArch entries")
+  endif()
   set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
   add_opbase_modules()
@@ -865,16 +876,32 @@ macro(add_all_modules_sources)
     target_sources(${OPHOST_NAME}_infer_obj PRIVATE ${OPINFER_SRCS})
   endif()
 
-  # 添加tiling文件：NPU_ARCH 与 TILING_DIR 按位置一一配对，当前构建芯片转换为 npuArch 后统一按 arch 匹配；
-  # 未配置 NPU_ARCH 时走原 COMPUTE_UNIT 路径，按 soc 名匹配（保持既有行为不变）；
-  # 构建芯片无 npuArch 映射（如 ascend610lite/ascend630）时与旧路径对不支持 soc 的行为一致，回退默认 tiling 目录
+  # 添加tiling文件：仅 COMPUTE_UNIT 参数，支持 soc（ascend950 等）与 npuArch（dav_3510 等）混配，
+  # 与 TILING_DIR 按位置一一配对；逐项将 soc 转换为 npuArch（npuArch 条目原样保留小写）后统一按 arch
+  # 匹配；当前构建芯片同样转换为 npuArch 后参与匹配。arch 化后同 arch 的 soc 共享 tiling 目录
+  # （如 ascend950 与 ascend350 同为 dav_3510，可命中全部配对目录）；
+  # 声明侧与构建侧对称处理无 npuArch 映射的条目/芯片：均回退小写 soc 名参与匹配，
+  # 保持与旧 COMPUTE_UNIT 按 soc 名命中的行为一致；两侧均未命中时回退默认 tiling 目录；
+  # ASCEND_COMPUTE_UNIT 为多 SoC 列表时（打包/集成配置会传入列表）不参与匹配，
+  # 与基线行为一致回退默认 tiling 目录，同时避免整列表传入单 SoC 映射函数导致 configure 中止
   set(tiling_dir "")
-  if(MODULE_NPU_ARCH)
+  set(_cur_keys "")
+  foreach(_unit IN LISTS MODULE_COMPUTE_UNIT)
+    get_npu_arch_by_soc_version("${_unit}" _unit_arch)
+    if(_unit_arch)
+      list(APPEND _cur_keys "${_unit_arch}")
+    else()
+      string(TOLOWER "${_unit}" _unit_lower)
+      list(APPEND _cur_keys "${_unit_lower}")
+    endif()
+  endforeach()
+  set(_cur_key "")
+  list(LENGTH ASCEND_COMPUTE_UNIT _build_cu_len)
+  if(NOT _build_cu_len GREATER 1)
     get_npu_arch_by_soc_version("${ASCEND_COMPUTE_UNIT}" _cur_key)
-    set(_cur_keys "${MODULE_NPU_ARCH}")
-  else()
-    set(_cur_key "${ASCEND_COMPUTE_UNIT}")
-    set(_cur_keys "${MODULE_COMPUTE_UNIT}")
+    if(NOT _cur_key)
+      string(TOLOWER "${ASCEND_COMPUTE_UNIT}" _cur_key)
+    endif()
   endif()
   if(_cur_key)
     find_values_by_key("${_cur_keys}" "${MODULE_TILING_DIR}" "${_cur_key}" tiling_dir)
