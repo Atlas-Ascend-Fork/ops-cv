@@ -110,4 +110,4 @@
 
 | 调用方式   | 样例代码           | 说明                                         |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| 图模式调用 | [examples/arch35/test_geir_blend_face_bg_part_two.cpp](examples/arch35/test_geir_blend_face_bg_part_two.cpp)（固定shape）<br/>
+| 图模式调用 | [examples/arch35/test_geir_blend_face_bg_part_two.cpp](examples/arch35/test_geir_blend_face_bg_part_two.cpp)（固定shape） | 通过[算子IR](op_graph/blend_face_bg_part_two_proto.h)构图方式调用BlendFaceBgPartTwo算子。 |

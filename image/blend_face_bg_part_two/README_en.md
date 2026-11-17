@@ -112,4 +112,4 @@ English | [简体中文](./README.md)
 
 | Invocation Method | Sample Code | Description |
 | ---------------- | --------------------------- | --------------------------------------------------- |
-| Graph mode invocation | [examples/arch35/test_geir_blend_face_bg_part_two.cpp](examples/arch35/test_geir_blend_face_bg_part_two.cpp) (fixed shape)<br/>
+| Graph mode invocation | [examples/arch35/test_geir_blend_face_bg_part_two.cpp](examples/arch35/test_geir_blend_face_bg_part_two.cpp) (fixed shape) | Calls the BlendFaceBgPartTwo operator by constructing a graph in the [operator IR](op_graph/blend_face_bg_part_two_proto.h) mode. |
