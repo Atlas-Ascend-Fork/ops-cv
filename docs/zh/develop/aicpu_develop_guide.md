@@ -10,7 +10,7 @@
 
 算子开发前，请先了解如下信息：
 
-- 基础知识：请先学习C++编程语言，了解基本语法和原理，参考[《TBE&AI CPU算子开发》](https://hiascend.com/document/redirect/CannCommunityOpdevWizard)熟悉硬件架构、开发API等。
+- 基础知识：请先学习C++编程语言，了解基本语法和原理，参考《[TBE&AI CPU算子开发](https://hiascend.com/document/redirect/CannCommunityOpdevWizard)》熟悉硬件架构、开发API等。
 
 ### 开发流程
 
