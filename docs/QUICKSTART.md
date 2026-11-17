@@ -20,7 +20,7 @@
 
 本阶段目的是**快速体验项目标准流程**，验证环境能否成功进行算子源码编译、打包、安装和运行。
 
-> 本指南以单算子编译过程为例，也支持编译整个算子库算子、离线编译等多种场景，编译过程中的常见问题均可参考[《源码构建指南》](zh/install/compile.md)。
+> 本指南以单算子编译过程为例，也支持编译整个算子库算子、离线编译等多种场景，编译过程中的常见问题均可参考《[源码构建指南](zh/install/compile.md)》。
 
 ### 1.进入项目源码
 
@@ -243,7 +243,7 @@ __aicore__ inline void AddExample<T>::Compute(int64_t currentNum)
 
 找到并编辑`AddExample`的`ops-cv/examples/add_example/examples/test_aclnn_add_example.cpp`，修改输入张量的形状和数值。
 
-**修改输入/输出数据**：修改输入、输出的shape信息，以及初始化数据，构造相应的输入、输出tensor。
+**修改输入/输出数据**：修改输入、输出的shape信息，以及初始化数据，构造相应的输入、输出Tensor。
 
 ```cpp
 int main() {
