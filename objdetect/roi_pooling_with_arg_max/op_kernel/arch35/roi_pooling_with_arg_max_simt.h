@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -67,8 +67,12 @@ __simt_callee__ __aicore__ __attribute__((always_inline)) inline void RoiPooling
                                                                                        int64_t bin_x2, int64_t bin_y2,
                                                                                        int64_t fmW)
 {
-    max_val = -INFINITY;
-    max_idx = INVALID_ARGMAX_OFFSET;
+    // Initialize with the first element of the (non-empty) bin so that an all--inf
+    // window keeps a valid first index (doc: only geometric empty bins use -1).
+    // Caller must ensure !is_empty (bin_x2 > bin_x1 && bin_y2 > bin_y1).
+    const int64_t first_offset = bin_y1 * fmW + bin_x1;
+    max_val = static_cast<float>(offset_input[first_offset]);
+    max_idx = first_offset;
     for (int64_t h = bin_y1; h < bin_y2; ++h) {
         for (int64_t w = bin_x1; w < bin_x2; ++w) {
             const int64_t offset = h * fmW + w;
