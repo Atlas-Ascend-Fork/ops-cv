@@ -161,7 +161,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">Output (aclTensor*)</td>
       <td class="tg-0lax">Output</td>
-      <td class="tg-0lax">Output tensor</td>
+      <td class="tg-0lax">Output tensor.</td>
       <td class="tg-0lax">Must have the same data type as self/rois.</td>
       <td class="tg-0lax">FLOAT, FLOAT16</td>
       <td class="tg-0lax">NCHW</td>

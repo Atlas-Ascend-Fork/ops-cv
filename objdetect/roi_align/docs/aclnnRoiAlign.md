@@ -81,7 +81,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0pky">self(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
-      <td class="tg-0pky">输入tensor。</td>
+      <td class="tg-0pky">输入Tensor。</td>
       <td class="tg-0pky">必须与rois/out数据类型一致。</td>
       <td class="tg-0pky">FLOAT、FLOAT16</td>
       <td class="tg-0pky">NCHW</td>
@@ -161,7 +161,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">out(aclTensor*)</td>
       <td class="tg-0lax">输出</td>
-      <td class="tg-0lax">输出tensor。</td>
+      <td class="tg-0lax">输出Tensor。</td>
       <td class="tg-0lax">必须与self/rois数据类型一致。</td>
       <td class="tg-0lax">FLOAT、FLOAT16</td>
       <td class="tg-0lax">NCHW</td>
