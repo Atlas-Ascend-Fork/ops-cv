@@ -17,8 +17,7 @@ English | [简体中文](./README.md)
 
 - Operator function:
 
-    AIPP (Artificial Intelligence Pre-Processing) performs AI pre-processing. This operator completes data pre-processing on the AI Core, including resizing images, converting color spaces (converting image formats), and subtracting the mean value or multiplying a coefficient (changing image pixels). The actual model inference starts after data pre-processing. **Both dynamic AIPP and static AIPP are currently supported.** For the complete description of AIPP functions, refer to the "Advanced Functions > Enabling AIPP" chapter in the [ATC Offline Model Compilation Tool](https://hiascend.com/document/redirect/CannCommunityAtc
-      ) document.
+    AIPP (Artificial Intelligence Pre-Processing) performs AI pre-processing. This operator completes data pre-processing on the AI Core, including resizing images, converting color spaces (converting image formats), and subtracting the mean value or multiplying a coefficient (changing image pixels). The actual model inference starts after data pre-processing. **Both dynamic AIPP and static AIPP are currently supported.** For the complete description of AIPP functions, refer to the "Advanced Functions > Enabling AIPP" chapter in the [ATC Offline Model Compilation Tool](https://hiascend.com/document/redirect/CannCommunityAtc) document.
 
 - Computation process:
     1. The operator calculates the mapping between the input and output based on the passed-in cropping parameters, and crops the image.

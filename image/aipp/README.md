@@ -15,8 +15,7 @@
 
 - 算子功能：
 
-    AIPP（Artificial Intelligence Pre-Processing）人工智能预处理，用于在AI Core上完成数据预处理，包括改变图像尺寸、色域转换（转换图像格式）、减均值/乘系数（改变图像像素），数据预处理之后再进行真正的模型推理。**目前支持动态AIPP和静态AIPP功能**，全量的AIPP功能介绍请参考 [《ATC离线模型编译工具》](https://hiascend.com/document/redirect/CannCommunityAtc
-      )中“高级功能 > 开启AIPP”章节。
+    AIPP（Artificial Intelligence Pre-Processing）人工智能预处理，用于在AI Core上完成数据预处理，包括改变图像尺寸、色域转换（转换图像格式）、减均值/乘系数（改变图像像素），数据预处理之后再进行真正的模型推理。**目前支持动态AIPP和静态AIPP功能**，全量的AIPP功能介绍请参考 《[ATC离线模型编译工具](https://hiascend.com/document/redirect/CannCommunityAtc)》中“高级功能 > 开启AIPP”章节。
 
 - 计算流程：
     1. 根据传入的裁剪参数计算输入和输出的对应关系，对图片进行裁剪。
