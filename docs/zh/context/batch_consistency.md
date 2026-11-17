@@ -20,10 +20,10 @@
 
 - **调用aclnn API**
 
-  该场景下，通过[《Runtime运行时API》](https://hiascend.com/document/redirect/CannCommunityRuntimeApi)中“运行时配置>aclrtSetSysParamOpt”接口（进程级）开启Batch一致性。具体通过设置`ACL_OPT_DETERMINISTIC=3`开启Batch一致性计算。
+  该场景下，通过《[Runtime运行时API](https://hiascend.com/document/redirect/CannCommunityRuntimeApi)》中“运行时配置>aclrtSetSysParamOpt”接口（进程级）开启Batch一致性。具体通过设置`ACL_OPT_DETERMINISTIC=3`开启Batch一致性计算。
 
 - **调用PyTorch API**
 
-  该场景下，通过[《TorchNPU自定义API》](https://www.hiascend.com/document/detail/zh/Pytorch/latest/apiref/customapi/docs/zh/custom_APIs/overview.md)中`torch_npu.npu.set_deterministic_level`接口开启Batch一致性计算。
+  该场景下，通过《[TorchNPU自定义API](https://www.hiascend.com/document/detail/zh/Pytorch/latest/apiref/customapi/docs/zh/custom_APIs/overview.md)》中`torch_npu.npu.set_deterministic_level`接口开启Batch一致性计算。
 
 对于不同框架的算子API，其默认的Batch一致性计算实现策略请以具体的aclnn API文档或PyTorch API文档描述为准。
