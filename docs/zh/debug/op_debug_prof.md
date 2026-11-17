@@ -20,11 +20,11 @@
    export ASCEND_SLOG_PRINT_TO_STDOUT=1
    ```
 
-   日志相关介绍参见[《日志参考》](https://hiascend.com/document/redirect/CannCommunitylogref)，环境变量介绍参见[《环境变量参考》](https://hiascend.com/document/redirect/CannCommunityEnvRef)。
+   日志相关介绍参见《[日志参考](https://hiascend.com/document/redirect/CannCommunitylogref)》，环境变量介绍参见《[环境变量参考](https://hiascend.com/document/redirect/CannCommunityEnvRef)》。
 
 * **aclnn异常错误信息获取**
 
-   通过aclGetRecentErrMsg接口（[《Runtime运行时API》](https://hiascend.com/document/redirect/CannCommunityRuntimeApi)）获取aclnn接口调用过程中的异常信息，使用方法如下：
+   通过aclGetRecentErrMsg接口（《[Runtime运行时API](https://hiascend.com/document/redirect/CannCommunityRuntimeApi)》）获取aclnn接口调用过程中的异常信息，使用方法如下：
 
    ```cpp
    const char* errMsg = aclGetRecentErrMsg();
@@ -45,7 +45,7 @@
 
 * **printf**
 
-  该接口支持打印Scalar类型数据，如整数、字符、布尔型等，详细介绍请参见[《Ascend C API》](https://hiascend.com/document/redirect/CannCommunityAscendCApi)中“算子调测API > printf”。
+  该接口支持打印Scalar类型数据，如整数、字符、布尔型等，详细介绍请参见《[Ascend C API](https://hiascend.com/document/redirect/CannCommunityAscendCApi)》中“算子调测API > printf”。
 
   ```c++
   blockLength_ = tilingData->totalLength / AscendC::GetBlockNum();
@@ -57,7 +57,7 @@
 
 * **DumpTensor**
 
-  该接口支持Dump指定Tensor的内容，同时支持打印自定义附加信息，比如当前行号等，详细介绍请参见[《Ascend C API》](https://hiascend.com/document/redirect/CannCommunityAscendCApi)中“算子调测API > DumpTensor”。
+  该接口支持Dump指定Tensor的内容，同时支持打印自定义附加信息，比如当前行号等，详细介绍请参见《[Ascend C API](https://hiascend.com/document/redirect/CannCommunityAscendCApi)》中“算子调测API > DumpTensor”。
 
   ```c++
   AscendC::LocalTensor<T> zLocal = outputQueueZ.DeQue<T>();
@@ -91,7 +91,7 @@
   KERNEL_LOG_ERROR(fmt, …)      // 默认打印ERROR级别日志
   ```
 
-  如需打印非ERROR级别日志，需提前配置环境变量`ASCEND_GLOBAL_LOG_LEVEL`，具体使用方法参见[《环境变量参考》](https://hiascend.com/document/redirect/CannCommunityEnvRef)。
+  如需打印非ERROR级别日志，需提前配置环境变量`ASCEND_GLOBAL_LOG_LEVEL`，具体使用方法参见《[环境变量参考](https://hiascend.com/document/redirect/CannCommunityEnvRef)》。
 
   打印示例如下：
 
