@@ -550,9 +550,10 @@ void ResizeBilinearV2GradTilingAscendC::DoTilingPointCopy()
     realCoreNum_ = std::min(realCoreNum_, coreNum_);
 
     // UB divide
-    int64_t wcLenAlign = Ops::Base::CeilAlign(wFactor_ * cFactor_, ONE_BLOCK_SIZE / gradsDtypeSize_);
+    int64_t cLenAlign = Ops::Base::CeilAlign(cFactor_, ONE_BLOCK_SIZE / gradsDtypeSize_);
+    int64_t wcLenAlign = Ops::Base::CeilAlign(wFactor_ * cLenAlign, ONE_BLOCK_SIZE / gradsDtypeSize_);
     int64_t vol4AxisC = (ubBlockNum_ / DB_BUFF_NUM) * ONE_BLOCK_SIZE / gradsDtypeSize_;
-    if (vol4AxisC < cFactor_) {
+    if (vol4AxisC < cLenAlign) {
         ubNFactor_ = 1;
         ubHFactor_ = 1;
         ubWFactor_ = 1;
@@ -560,7 +561,7 @@ void ResizeBilinearV2GradTilingAscendC::DoTilingPointCopy()
     } else if (vol4AxisC < wcLenAlign) {
         ubNFactor_ = 1;
         ubHFactor_ = 1;
-        ubWFactor_ = vol4AxisC / cFactor_;
+        ubWFactor_ = vol4AxisC / cLenAlign;
         ubCFactor_ = cFactor_;
     } else if (vol4AxisC < hFactor_ * wcLenAlign) {
         ubNFactor_ = 1;

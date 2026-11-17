@@ -85,8 +85,10 @@ __aicore__ inline void ResizeBilinearV2GradPointCopy<T_GRADS, T_OUT>::Init(GM_AD
     ubBlockSize_ = Ops::Base::GetUbBlockSize();
     tilingData_ = data;
 
-    int64_t bufferSize = tilingData_->ubNFactor * tilingData_->ubHFactor * tilingData_->ubWFactor *
-                         tilingData_->ubCFactor * sizeof(T_GRADS);
+    int64_t cLengthAlign32 = Ops::Base::CeilAlign<int64_t>(tilingData_->ubCFactor, ubBlockSize_ / sizeof(T_GRADS));
+    int64_t wcLenAlign = Ops::Base::CeilAlign<int64_t>(tilingData_->ubWFactor * cLengthAlign32,
+                                                       ubBlockSize_ / sizeof(T_GRADS));
+    int64_t bufferSize = tilingData_->ubNFactor * tilingData_->ubHFactor * wcLenAlign * sizeof(T_GRADS);
     this->pipe_->InitBuffer(dataQue_, 2, bufferSize);
 }
 

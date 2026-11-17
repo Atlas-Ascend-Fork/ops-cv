@@ -407,3 +407,36 @@ TEST_F(ResizeBilinearV2GradTiling, resize_bilinear_v2_grad_tiling_transpose_nhwc
     EXPECT_EQ(fields[8], 8459);  // lenDesH
     EXPECT_EQ(fields[9], 1);     // lenDesW
 }
+
+// 覆盖 PointCopy UB 切分 branch2 (vol4AxisC >= cLenAlign && vol4AxisC < wcLenAlign):
+// 半 UB 容纳一个对齐后的完整 C 行, 但容纳不下单个 (n,h) 行的完整 W*C, 需按 W 维切分,
+// ubWFactor_ = vol4AxisC / cLenAlign。规格 fp32/NHWC (1,4,10000,200)->(1,2,5000,200),
+// 无 scales 属性(2 倍整数降采样): cFactor_=200, cLenAlign=200, wFactor_=157,
+// wcLenAlign=CeilAlign(157*200,8)=31400, vol4AxisC=30688, 命中 200 <= 30688 < 31400。
+TEST_F(ResizeBilinearV2GradTiling, resize_bilinear_v2_grad_regbase_tiling_point_copy_ub_cut_w_branch)
+{
+    optiling::ResizeBilinearV2GradCompileInfo compileInfo = {64, 245760};
+    gert::TilingContextPara tilingContextPara(
+        "ResizeBilinearV2Grad",
+        {
+            // grads NHWC: N=1, desH=2, desW=5000, C=200
+            {{{1, 2, 5000, 200}, {1, 2, 5000, 200}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+            // original_image NHWC: N=1, srcH=4, srcW=10000, C=200
+            {{{1, 4, 10000, 200}, {1, 4, 10000, 200}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+        },
+        {
+            // y NHWC: N=1, srcH=4, srcW=10000, C=200
+            {{{1, 4, 10000, 200}, {1, 4, 10000, 200}}, ge::DT_FLOAT, ge::FORMAT_NHWC},
+        },
+        {
+            gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+            gert::TilingContextPara::OpAttr("half_pixel_centers", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+        },
+        &compileInfo);
+    uint64_t expectTilingKey = 30001;
+    // branch2: ubN=1, ubH=1, ubW=30688/200=153, ubC=200; scaleH=scaleW=2.0, inverseScale=0.5
+    string expectTilingData = "30001 245760 0 0 1 200 4 10000 2 5000 1 1 157 200 10000 1 1 153 200 10000 "
+                              "4611686019501129728 4539628425446424576 64 125000 0 64 0 0 ";
+    std::vector<size_t> expectWorkspaces = {32};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}

@@ -95,8 +95,9 @@ __aicore__ inline void ResizeBilinearV2PointCopy<T_DATA>::Init(GM_ADDR x, GM_ADD
 
     tilingData_ = data;
 
-    int64_t bufferSize = tilingData_->ubNFactor * tilingData_->ubHFactor * tilingData_->ubWFactor *
-                         tilingData_->ubCFactor * sizeof(T_DATA);
+    int64_t wcLenAlign = Ops::Base::CeilAlign<int64_t>(tilingData_->ubWFactor * tilingData_->ubCFactor,
+                                                       ONE_BLOCK_BYTE / sizeof(T_DATA));
+    int64_t bufferSize = tilingData_->ubNFactor * tilingData_->ubHFactor * wcLenAlign * sizeof(T_DATA);
     this->pipe_->InitBuffer(dataQue_, 2, bufferSize);
 }
 
