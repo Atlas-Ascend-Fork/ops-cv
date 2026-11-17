@@ -144,7 +144,7 @@
     <td>&check;</td>
     <td>&check;</td>
     <td>AI Core</td>
-    <td>提供一个输入tensor以及一个对应的grid网格，然后根据grid中每个位置提供的坐标信息，将input中对应位置的像素值填充到网格指定的位置，得到最终的输出。</td>
+    <td>提供一个输入Tensor以及一个对应的grid网格，然后根据grid中每个位置提供的坐标信息，将input中对应位置的像素值填充到网格指定的位置，得到最终的输出。</td>
   </tr>
   <tr>
     <td>image</td>
