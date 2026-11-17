@@ -561,6 +561,7 @@ resultData[3] is: 4.000000
     cmake ../ -DCMAKE_CXX_COMPILER=g++ -DCMAKE_SKIP_RPATH=TRUE  # 执行构建命令
     make
     ./${test_geir_op_name}                                     # 替换为实际算子可执行文件名
+    ```
 
 5. 运行run.sh脚本。
 
