@@ -139,7 +139,7 @@ $$
 - float16输入时中间计算提升到float32精度。
 - 输出coord_data的通道排列为(x, y, h, w)，注意w和h位置与输入相比发生交换。
 - softmax和background属性仅当yolo_version为"V2"时有效。
-- 输出shape的最后一维使用ceilx内存对齐，与canndev的1.0 infershape一致：
+- 输出shape的最后一维使用ceilx内存对齐：
   - coord_data最后一维：CeilX(H*W*2+32, 32)/2，有效数据为前H*W个元素，padding区域补零。
   - obj_prob最后一维：CeilX(boxes*H*W*2+32, 32)/2，有效数据为前boxes*H*W个元素，padding区域补零。
   - classes_prob最后一维：CeilX(boxes*H*W*2+32, 32)/2，有效数据为前boxes*H*W个元素，padding区域补零。

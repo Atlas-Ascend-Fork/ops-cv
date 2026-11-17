@@ -70,9 +70,9 @@ static ge::graphStatus ExtractAndValidate(gert::TilingContext* context, int64_t&
     auto xShape = context->GetInputShape(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, xShape);
     OP_CHECK_IF(
-        xShape->GetStorageShape().GetDimNum() != 4,
+        xShape->GetStorageShape().GetDimNum() < 4,
         OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
-            opName, "x", std::to_string(xShape->GetStorageShape().GetDimNum()).c_str(), "input dim num must be 4"),
+            opName, "x", std::to_string(xShape->GetStorageShape().GetDimNum()).c_str(), "input dim num must be >= 4"),
         return ge::GRAPH_FAILED);
 
     auto attrs = context->GetAttrs();

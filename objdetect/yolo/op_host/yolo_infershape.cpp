@@ -57,9 +57,9 @@ static ge::graphStatus InferShapeYolo(gert::InferShapeContext* context)
     int64_t coords = (coordsPtr != nullptr) ? *coordsPtr : 4;
     int64_t classes = (classesPtr != nullptr) ? *classesPtr : 80;
 
-    // Validate input dimensions
-    OP_CHECK_IF(xShape->GetDimNum() != 4,
-                OP_LOGE(context, "Yolo: input dim num = %zu, should be 4", xShape->GetDimNum()),
+    // Validate input dimensions: rank must be >= 4; only dims 0/2/3 are used
+    OP_CHECK_IF(xShape->GetDimNum() < 4,
+                OP_LOGE(context, "Yolo: input dim num = %zu, should be >= 4", xShape->GetDimNum()),
                 return ge::GRAPH_FAILED);
 
     // Validate attribute constraints

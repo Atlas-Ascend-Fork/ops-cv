@@ -141,7 +141,7 @@ The object confidence and class probabilities are processed according to yolo_mo
 - When the input is float16, intermediate computations are promoted to the float32 precision.
 - The channel arrangement of the output coord_data is (x, y, h, w). Note that the positions of w and h are exchanged compared with the input.
 - The softmax and background attributes are valid only when yolo_version is "V2".
-- The last dimension of the output shape uses ceilx memory alignment, which is consistent with the 1.0 infershape of canndev:
+- The last dimension of the output shape uses ceilx memory alignment:
   - Last dimension of coord_data: CeilX(H*W*2+32, 32)/2, the valid data is the first H*W elements, and the padding area is filled with zeros.
   - Last dimension of obj_prob: CeilX(boxes*H*W*2+32, 32)/2, the valid data is the first boxes*H*W elements, and the padding area is filled with zeros.
   - Last dimension of classes_prob: CeilX(boxes*H*W*2+32, 32)/2, the valid data is the first boxes*H*W elements, and the padding area is filled with zeros.

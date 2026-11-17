@@ -106,6 +106,35 @@ TEST_F(YoloInfershape, yolo_batch2_fp32)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
 
+TEST_F(YoloInfershape, yolo_rank5_fp32)
+{
+    // rank > 4 is allowed; only dims 0/2/3 are used
+    gert::InfershapeContextPara infershapeContextPara(
+        "Yolo",
+        {
+            {{{1, 255, 13, 13, 2}, {1, 255, 13, 13, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(3)),
+            gert::InfershapeContextPara::OpAttr("coords", Ops::Cv::AnyValue::CreateFrom<int64_t>(4)),
+            gert::InfershapeContextPara::OpAttr("classes", Ops::Cv::AnyValue::CreateFrom<int64_t>(80)),
+            gert::InfershapeContextPara::OpAttr("yolo_version", Ops::Cv::AnyValue::CreateFrom<std::string>("V3")),
+            gert::InfershapeContextPara::OpAttr("softmax", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+            gert::InfershapeContextPara::OpAttr("background", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+        });
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {1, 12, 192},
+        {1, 528},
+        {1, 80, 528},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
 TEST_F(YoloInfershape, yolo_invalid_dim_num)
 {
     gert::InfershapeContextPara infershapeContextPara(
