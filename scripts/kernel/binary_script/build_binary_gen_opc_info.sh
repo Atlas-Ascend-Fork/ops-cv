@@ -35,8 +35,7 @@ main() {
   fi
   local opc_info_csv="${binary_temp_conf_dir}/_${soc_version_lower}_tmp.csv"
   local gen_file="${workdir}/${SCRIPT_NAME_OF_GEN_OPCINFO}"
-  local cmd="bash ${gen_file} ${soc_version} ${opc_info_csv}"
-  ${cmd}
+  bash "${gen_file}" "${soc_version}" "${opc_info_csv}" || exit $?
   echo "[INFO] end to gen opcinfo use ${SCRIPT_NAME_OF_GEN_OPCINFO}"
   exit 0
 }
