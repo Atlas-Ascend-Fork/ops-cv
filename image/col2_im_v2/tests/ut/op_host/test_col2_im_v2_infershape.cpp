@@ -14,6 +14,8 @@
 #include <iostream>
 #include "infershape_context_faker.h"
 #include "infershape_case_executor.h"
+#include "base/registry/op_impl_space_registry_v2.h"
+#include "base/context_builder/op_infer_datatype_context_builder.h"
 
 class Col2ImV2Infershape : public testing::Test {
 protected:
@@ -143,4 +145,61 @@ TEST_F(Col2ImV2Infershape, col2_im_v2_infershape_kernel_size_rank_two)
             {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
         });
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(Col2ImV2Infershape, col2_im_v2_inferdatatype_rejects_null_context)
+{
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    const auto* opImpl = registry->GetOpImpl("Col2ImV2");
+    ASSERT_NE(opImpl, nullptr);
+    ASSERT_NE(opImpl->infer_datatype, nullptr);
+
+    EXPECT_EQ(opImpl->infer_datatype(nullptr), ge::GRAPH_FAILED);
+}
+
+TEST_F(Col2ImV2Infershape, col2_im_v2_inferdatatype_preserves_float32)
+{
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    const auto* opImpl = registry->GetOpImpl("Col2ImV2");
+    ASSERT_NE(opImpl, nullptr);
+    ASSERT_NE(opImpl->infer_datatype, nullptr);
+
+    gert::OpInferDataTypeContextBuilder builder;
+    builder.OpType("Col2ImV2").OpName("Col2ImV2").IONum(3, 1);
+    builder.InputTensorDesc(0, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.InputTensorDesc(1, ge::DT_INT32, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.InputTensorDesc(2, ge::DT_INT32, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.OutputTensorDesc(0, ge::FORMAT_ND, ge::FORMAT_ND);
+    auto holder = builder.Build();
+    auto* context = holder.GetContext();
+    ASSERT_NE(context, nullptr);
+    context->SetOutputDataType(0, ge::DT_UNDEFINED);
+
+    EXPECT_EQ(opImpl->infer_datatype(context), ge::GRAPH_SUCCESS);
+    EXPECT_EQ(context->GetOutputDataType(0), ge::DT_FLOAT);
+}
+
+TEST_F(Col2ImV2Infershape, col2_im_v2_inferdatatype_preserves_float16)
+{
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    const auto* opImpl = registry->GetOpImpl("Col2ImV2");
+    ASSERT_NE(opImpl, nullptr);
+    ASSERT_NE(opImpl->infer_datatype, nullptr);
+
+    gert::OpInferDataTypeContextBuilder builder;
+    builder.OpType("Col2ImV2").OpName("Col2ImV2").IONum(3, 1);
+    builder.InputTensorDesc(0, ge::DT_FLOAT16, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.InputTensorDesc(1, ge::DT_INT32, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.InputTensorDesc(2, ge::DT_INT32, ge::FORMAT_ND, ge::FORMAT_ND);
+    builder.OutputTensorDesc(0, ge::FORMAT_ND, ge::FORMAT_ND);
+    auto holder = builder.Build();
+    auto* context = holder.GetContext();
+    ASSERT_NE(context, nullptr);
+    context->SetOutputDataType(0, ge::DT_UNDEFINED);
+
+    EXPECT_EQ(opImpl->infer_datatype(context), ge::GRAPH_SUCCESS);
+    EXPECT_EQ(context->GetOutputDataType(0), ge::DT_FLOAT16);
 }

@@ -39,13 +39,13 @@ constexpr uint32_t VF_MAX_THREAD_NUM = 1024; // VF 线程数，编译期常量�
 
 // 贡献累加子函数：遍历结构不变——(hK, wK) 字典序升序 + stride 整除过滤 + 边界过滤 + uint64 偏移；
 // 累加精度为 fp32 提升累加（val 为 float，全程无中间舍入），写回时单次舍入 —— GPU col2im_device 语义
-template <typename D_T>
+template <typename D_T, typename StrideT>
 __simt_callee__ inline void AccumulateWindows(__gm__ D_T* xGmAddr, float& val, const uint32_t cIm, const uint32_t hIm,
                                               const uint32_t wIm, const uint32_t colH, const uint32_t colW,
                                               const uint32_t kernelSizeH, const uint32_t kernelSizeW,
-                                              const uint32_t strideH, const uint32_t strideW, const uint32_t dilationH,
-                                              const uint32_t dilationW, const uint32_t shiftSH, const uint32_t mSH,
-                                              const uint32_t shiftSW, const uint32_t mSW)
+                                              const StrideT strideH, const StrideT strideW, const uint32_t dilationH,
+                                              const uint32_t dilationW, const StrideT shiftSH, const StrideT mSH,
+                                              const StrideT shiftSW, const StrideT mSW)
 {
     for (uint32_t hK = 0; hK < kernelSizeH; hK += 1) {
         // 贡献存在条件：存在 hCol >= 0 使 hIm = hCol*strideH + hK*dilationH
@@ -53,8 +53,8 @@ __simt_callee__ inline void AccumulateWindows(__gm__ D_T* xGmAddr, float& val, c
         if (hIm < hK * dilationH) {
             continue; // remH < 0：无合法 hCol（防无符号下溢）
         }
-        const uint32_t remH = hIm - hK * dilationH;
-        const uint32_t hCol = Simt::UintDiv(remH, mSH, shiftSH);
+        const StrideT remH = hIm - hK * dilationH;
+        const StrideT hCol = Simt::UintDiv(remH, mSH, shiftSH);
         if (remH - hCol * strideH != 0 || hCol >= colH) {
             continue; // stride 整除过滤 + hCol 越界过滤
         }
@@ -62,15 +62,15 @@ __simt_callee__ inline void AccumulateWindows(__gm__ D_T* xGmAddr, float& val, c
             if (wIm < wK * dilationW) {
                 continue;
             }
-            const uint32_t remW = wIm - wK * dilationW;
-            const uint32_t wCol = Simt::UintDiv(remW, mSW, shiftSW);
+            const StrideT remW = wIm - wK * dilationW;
+            const StrideT wCol = Simt::UintDiv(remW, mSW, shiftSW);
             if (remW - wCol * strideW != 0 || wCol >= colW) {
                 continue;
             }
             // 3-D x 线性偏移：((cIm*kH + hK)*kW + wK)*ho*wo + hCol*wo + wCol
             // 数学等价于 x[n, c*kH*kW + hK*kW + wK, hCol*wo + wCol]（cIm = n*C + c 合并）
             // uint64_t 合成，防大 shape 偏移溢出
-            uint64_t xIdx = (static_cast<uint64_t>((cIm * kernelSizeH + hK) * kernelSizeW + wK) *
+            uint64_t xIdx = (((static_cast<uint64_t>(cIm) * kernelSizeH + hK) * kernelSizeW + wK) *
                                  static_cast<uint64_t>(colH) +
                              hCol) *
                                 colW +
@@ -83,17 +83,19 @@ __simt_callee__ inline void AccumulateWindows(__gm__ D_T* xGmAddr, float& val, c
 }
 
 // VF 内核：输出 centric（每线程独立一个输出元素，无 atomicAdd），贡献按 (hK, wK) 升序累加
-template <typename D_T>
+template <typename D_T, typename StrideT>
 __simt_vf__ __aicore__ __launch_bounds__(VF_MAX_THREAD_NUM) inline void Col2ImV2SimtCompute(
     __gm__ D_T* xGmAddr, __gm__ D_T* yGmAddr, const uint32_t cnt, const uint32_t outH, const uint32_t outW,
     const uint32_t kernelSizeH, const uint32_t kernelSizeW, const uint32_t padH, const uint32_t padW,
-    const uint32_t strideH, const uint32_t strideW, const uint32_t dilationH, const uint32_t dilationW,
-    const uint32_t shiftGW, const uint32_t mGW, const uint32_t shiftGWH, const uint32_t mGWH, const uint32_t shiftSW,
-    const uint32_t mSW, const uint32_t shiftSH, const uint32_t mSH)
+    const StrideT strideH, const StrideT strideW, const uint32_t dilationH, const uint32_t dilationW,
+    const uint32_t shiftGW, const uint32_t mGW, const uint32_t shiftGWH, const uint32_t mGWH, const StrideT shiftSW,
+    const StrideT mSW, const StrideT shiftSH, const StrideT mSH)
 {
     // colH/colW（ho/wo）VF 内自算（循环外一次）：复用 stride 快除，与 tiling 侧公式一致（tiling 已校验 >= 1）
-    const uint32_t colH = Simt::UintDiv(outH + 2 * padH - dilationH * (kernelSizeH - 1) - 1, mSH, shiftSH) + 1;
-    const uint32_t colW = Simt::UintDiv(outW + 2 * padW - dilationW * (kernelSizeW - 1) - 1, mSW, shiftSW) + 1;
+    const StrideT numeratorH = outH + 2 * padH - dilationH * (kernelSizeH - 1) - 1;
+    const StrideT numeratorW = outW + 2 * padW - dilationW * (kernelSizeW - 1) - 1;
+    const uint32_t colH = static_cast<uint32_t>(Simt::UintDiv(numeratorH, mSH, shiftSH) + 1);
+    const uint32_t colW = static_cast<uint32_t>(Simt::UintDiv(numeratorW, mSW, shiftSW) + 1);
 
     for (uint32_t idx = threadIdx.x + blockIdx.x * blockDim.x; idx < cnt; idx += gridDim.x * blockDim.x) {
         float val = 0.0f; // fp32 提升累加器（ACC_T = float）；隐式补零：不被任何滑窗覆盖的位置输出 0
@@ -108,26 +110,42 @@ __simt_vf__ __aicore__ __launch_bounds__(VF_MAX_THREAD_NUM) inline void Col2ImV2
     }
 }
 
-// Process（__aicore__ scalar 作用域）：预计算 4 组 UintDiv magic/shift，再 asc_vf_call
-template <typename T>
-__aicore__ inline void Process(GM_ADDR x, GM_ADDR y, const Col2ImV2TilingData* tilingData)
+// 在 scalar 侧预计算 4 组 UintDiv magic/shift，再调用相应位宽的 VF。
+template <typename T, typename StrideT>
+__aicore__ inline void LaunchSimt(GM_ADDR x, GM_ADDR y, const Col2ImV2TilingData* tilingData)
 {
-    uint32_t shiftGW, mGW, shiftGWH, mGWH, shiftSW, mSW, shiftSH, mSH;
+    uint32_t shiftGW, mGW, shiftGWH, mGWH;
+    StrideT shiftSW, mSW, shiftSH, mSH;
     uint32_t outW = static_cast<uint32_t>(tilingData->outputSizeW);
     uint32_t outWH = static_cast<uint32_t>(tilingData->outputSizeH * tilingData->outputSizeW);
+    const StrideT strideH = static_cast<StrideT>(tilingData->strideH);
+    const StrideT strideW = static_cast<StrideT>(tilingData->strideW);
     GetUintDivMagicAndShift(mGW, shiftGW, outW);    // / outW
     GetUintDivMagicAndShift(mGWH, shiftGWH, outWH); // / (outH*outW)
-    GetUintDivMagicAndShift(mSW, shiftSW, static_cast<uint32_t>(tilingData->strideW));
-    GetUintDivMagicAndShift(mSH, shiftSH, static_cast<uint32_t>(tilingData->strideH));
+    GetUintDivMagicAndShift(mSW, shiftSW, strideW);
+    GetUintDivMagicAndShift(mSH, shiftSH, strideH);
 
     // fp32 提升累加 + 写回单次舍入（GPU col2im_device 语义），遍历顺序仍为 (hK, wK) 升序
-    asc_vf_call<Col2ImV2SimtCompute<T>>(
+    asc_vf_call<Col2ImV2SimtCompute<T, StrideT>>(
         dim3(VF_MAX_THREAD_NUM), (__gm__ T*)x, (__gm__ T*)y, static_cast<uint32_t>(tilingData->totalLength),
         static_cast<uint32_t>(tilingData->outputSizeH), outW, static_cast<uint32_t>(tilingData->kernelSizeH),
         static_cast<uint32_t>(tilingData->kernelSizeW), static_cast<uint32_t>(tilingData->paddingH),
-        static_cast<uint32_t>(tilingData->paddingW), static_cast<uint32_t>(tilingData->strideH),
-        static_cast<uint32_t>(tilingData->strideW), static_cast<uint32_t>(tilingData->dilationH),
+        static_cast<uint32_t>(tilingData->paddingW), strideH, strideW, static_cast<uint32_t>(tilingData->dilationH),
         static_cast<uint32_t>(tilingData->dilationW), shiftGW, mGW, shiftGWH, mGWH, shiftSW, mSW, shiftSH, mSH);
+}
+
+template <typename T>
+__aicore__ inline void Process(GM_ADDR x, GM_ADDR y, const Col2ImV2TilingData* tilingData)
+{
+    // uint32 快除要求除数不超过 INT32_MAX，被除数过大时加法也可能回绕。
+    // out + 2 * pad - 1 是窗口分子上界，tiling 保证 out + pad <= INT32_MAX。
+    if (tilingData->strideH > INT32_MAX || tilingData->strideW > INT32_MAX ||
+        tilingData->outputSizeH + 2 * tilingData->paddingH - 1 > INT32_MAX ||
+        tilingData->outputSizeW + 2 * tilingData->paddingW - 1 > INT32_MAX) {
+        LaunchSimt<T, uint64_t>(x, y, tilingData);
+    } else {
+        LaunchSimt<T, uint32_t>(x, y, tilingData);
+    }
 }
 
 } // namespace NsCol2ImV2

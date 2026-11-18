@@ -35,8 +35,8 @@ protected:
     {
         cout << "Col2ImV2Test SetUp\n" << endl;
         const string cmd = "cp -rf " + dataPath + " ./";
-        system(cmd.c_str());
-        system("chmod -R 755 ./col2_im_v2_data/");
+        ASSERT_EQ(std::system(cmd.c_str()), 0);
+        ASSERT_EQ(std::system("chmod -R 755 ./col2_im_v2_data/"), 0);
     }
     static void TearDownTestCase() { cout << "Col2ImV2Test TearDown\n" << endl; }
 
@@ -46,7 +46,7 @@ private:
 };
 
 const std::string Col2ImV2Test::rootPath = "../../../../";
-const std::string Col2ImV2Test::dataPath = rootPath + "custom/col2_im_v2/tests/ut/op_kernel/col2_im_v2_data";
+const std::string Col2ImV2Test::dataPath = rootPath + "image/col2_im_v2/tests/ut/op_kernel/col2_im_v2_data";
 
 TEST_F(Col2ImV2Test, test_case_0)
 {
@@ -59,7 +59,7 @@ TEST_F(Col2ImV2Test, test_case_0)
     size_t tiling_data_size = sizeof(Col2ImV2TilingData);
     uint32_t numBlocks = 1;
 
-    system("cd ./col2_im_v2_data/ && python3 gen_data.py '(1, 4, 9)' 'float32' 4 4 2 2 1 1 0 0 1 1");
+    ASSERT_EQ(std::system("cd ./col2_im_v2_data/ && python3 gen_data.py '(1, 4, 9)' 'float32' 4 4 2 2 1 1 0 0 1 1"), 0);
 
     std::string fileName = "./col2_im_v2_data/float32_input_col2_im_v2.bin";
     uint8_t* x = (uint8_t*)AscendC::GmAlloc(xByteSize);
@@ -102,7 +102,7 @@ TEST_F(Col2ImV2Test, test_case_0)
     ICPU_RUN_KF(col2_im_v2<0>, numBlocks, x, output_size, kernel_size, y, workspace, (uint8_t*)(tilingDatafromBin));
 
     fileName = "./col2_im_v2_data/float32_output_col2_im_v2.bin";
-    WriteFile(fileName, y, yByteSize);
+    const bool outputWritten = WriteFile(fileName, y, yByteSize);
 
     // 释放资源
     AscendC::GmFree(x);
@@ -112,8 +112,10 @@ TEST_F(Col2ImV2Test, test_case_0)
     AscendC::GmFree(workspace);
     AscendC::GmFree(tiling);
 
-    system("cd ./col2_im_v2_data/ && python3 compare_data.py 'float32'");
     free(path_);
+
+    ASSERT_TRUE(outputWritten) << "Failed to write " << fileName;
+    ASSERT_EQ(std::system("cd ./col2_im_v2_data/ && python3 compare_data.py 'float32'"), 0);
 }
 
 TEST_F(Col2ImV2Test, test_case_1)
@@ -127,7 +129,8 @@ TEST_F(Col2ImV2Test, test_case_1)
     size_t tiling_data_size = sizeof(Col2ImV2TilingData);
     uint32_t numBlocks = 1;
 
-    system("cd ./col2_im_v2_data/ && python3 gen_data.py '(2, 18, 16)' 'float32' 8 8 3 3 1 1 1 1 2 2");
+    ASSERT_EQ(std::system("cd ./col2_im_v2_data/ && python3 gen_data.py '(2, 18, 16)' 'float32' 8 8 3 3 1 1 1 1 2 2"),
+              0);
 
     std::string fileName = "./col2_im_v2_data/float32_input_col2_im_v2.bin";
     uint8_t* x = (uint8_t*)AscendC::GmAlloc(xByteSize);
@@ -170,7 +173,7 @@ TEST_F(Col2ImV2Test, test_case_1)
     ICPU_RUN_KF(col2_im_v2<0>, numBlocks, x, output_size, kernel_size, y, workspace, (uint8_t*)(tilingDatafromBin));
 
     fileName = "./col2_im_v2_data/float32_output_col2_im_v2.bin";
-    WriteFile(fileName, y, yByteSize);
+    const bool outputWritten = WriteFile(fileName, y, yByteSize);
 
     // 释放资源
     AscendC::GmFree(x);
@@ -180,6 +183,8 @@ TEST_F(Col2ImV2Test, test_case_1)
     AscendC::GmFree(workspace);
     AscendC::GmFree(tiling);
 
-    system("cd ./col2_im_v2_data/ && python3 compare_data.py 'float32'");
     free(path_);
+
+    ASSERT_TRUE(outputWritten) << "Failed to write " << fileName;
+    ASSERT_EQ(std::system("cd ./col2_im_v2_data/ && python3 compare_data.py 'float32'"), 0);
 }

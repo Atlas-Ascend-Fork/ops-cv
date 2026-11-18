@@ -130,58 +130,14 @@ string GetTime()
     return tmp;
 }
 
-uint32_t GetDataTypeSize(DataType dt)
+template <typename T>
+Tensor MakeFilledTensor(const TensorDesc& desc, size_t size, T value)
 {
-    uint32_t dilation = 1;
-    uint32_t oneByte = 1;
-    uint32_t twoByte = 2;
-    uint32_t fourByte = 4;
-    uint32_t eightByte = 8;
-
-    if (dt == ge::DT_FLOAT) {
-        dilation = fourByte;
-    } else if (dt == ge::DT_FLOAT16) {
-        dilation = twoByte;
-    } else if (dt == ge::DT_BF16) {
-        dilation = twoByte;
-    } else if (dt == ge::DT_INT16) {
-        dilation = twoByte;
-    } else if (dt == ge::DT_UINT16) {
-        dilation = twoByte;
-    } else if (dt == ge::DT_INT32) {
-        dilation = fourByte;
-    } else if (dt == ge::DT_UINT32) {
-        dilation = fourByte;
-    } else if (dt == ge::DT_INT64) {
-        dilation = eightByte;
-    } else if (dt == ge::DT_UINT64) {
-        dilation = eightByte;
-    } else if (dt == ge::DT_INT8) {
-        dilation = oneByte;
-    }
-    return dilation;
-}
-
-int32_t GenOnesDataFloat32(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& input_tensor_desc, float value)
-{
-    input_tensor_desc.SetRealDimCnt(shapes.size());
-    size_t size = 1;
-    for (uint32_t i = 0; i < shapes.size(); i++) {
-        size *= shapes[i];
-    }
-    uint32_t byteSizeFloat32 = 4;
-    uint32_t data_len = size * byteSizeFloat32;
-    float* pData = new (std::nothrow) float[size];
-    if (pData == nullptr) {
-        printf("%s - ERROR - [XIR]: GenOnesDataFloat32 alloc failed\n", GetTime().c_str());
-        return FAILED;
-    }
-
+    vector<uint8_t> data(size * sizeof(T));
     for (size_t i = 0; i < size; ++i) {
-        *(pData + i) = value;
+        memcpy(data.data() + i * sizeof(T), &value, sizeof(T));
     }
-    input_tensor = Tensor(input_tensor_desc, (uint8_t*)pData, data_len);
-    return SUCCESS;
+    return Tensor(desc, data);
 }
 
 int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& input_tensor_desc, DataType data_type,
@@ -189,19 +145,29 @@ int32_t GenOnesData(vector<int64_t> shapes, Tensor& input_tensor, TensorDesc& in
 {
     input_tensor_desc.SetRealDimCnt(shapes.size());
     size_t size = 1;
-    for (uint32_t i = 0; i < shapes.size(); i++) {
-        size *= shapes[i];
+    for (int64_t dim : shapes) {
+        size *= dim;
     }
-    uint32_t data_len = size * GetDataTypeSize(data_type);
-    int32_t* pData = new (std::nothrow) int32_t[size];
-    if (pData == nullptr) {
-        printf("%s - ERROR - [XIR]: GenOnesData alloc failed\n", GetTime().c_str());
-        return FAILED;
+
+    switch (data_type) {
+        case DT_FLOAT:
+            input_tensor = MakeFilledTensor(input_tensor_desc, size, static_cast<float>(value));
+            break;
+        case DT_FLOAT16: {
+            // The example fills x with 2.0, whose IEEE 754 binary16 encoding is 0x4000.
+            constexpr uint16_t fp16TwoBits = 0x4000;
+            if (value != 2) {
+                return FAILED;
+            }
+            input_tensor = MakeFilledTensor(input_tensor_desc, size, fp16TwoBits);
+            break;
+        }
+        case DT_INT32:
+            input_tensor = MakeFilledTensor(input_tensor_desc, size, static_cast<int32_t>(value));
+            break;
+        default:
+            return FAILED;
     }
-    for (size_t i = 0; i < size; ++i) {
-        *(pData + i) = value;
-    }
-    input_tensor = Tensor(input_tensor_desc, reinterpret_cast<uint8_t*>(pData), data_len);
     return SUCCESS;
 }
 

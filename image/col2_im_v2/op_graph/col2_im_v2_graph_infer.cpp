@@ -25,6 +25,7 @@ static constexpr int64_t IDX_0 = 0;
 
 static ge::graphStatus InferDataTypeCol2ImV2(gert::InferDataTypeContext* context)
 {
+    OP_CHECK_IF(context == nullptr, OP_LOGE("Col2ImV2", "InferDataTypeContext is nullptr"), return ge::GRAPH_FAILED);
     OP_LOGD(context->GetNodeName(), "Begin to do InferDataTypeCol2ImV2");
 
     // y.dtype = x.dtype

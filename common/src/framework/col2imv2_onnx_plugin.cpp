@@ -79,12 +79,25 @@ static Status ParseOnnxParamsCol2ImV2(const ge::Operator& op_src, ge::Operator& 
                         }
                         set_dilations_flag = true;
                     } else if (name == "pads" && attr.contains("ints")) {
-                        if (attr["ints"].size() == ATTR_INTS) {
-                            for (auto& v : attr["ints"]) {
+                        const auto& pads = attr["ints"];
+                        if (pads.size() == ATTR_INTS) {
+                            for (auto& v : pads) {
                                 v_pads.push_back(static_cast<int>(v.get<int64_t>()));
                             }
+                        } else if (pads.size() == 2 * ATTR_INTS) {
+                            // ONNX orders 2-D pads as [top, left, bottom, right].
+                            const auto top = pads.at(0).get<int64_t>();
+                            const auto left = pads.at(1).get<int64_t>();
+                            const auto bottom = pads.at(2).get<int64_t>();
+                            const auto right = pads.at(3).get<int64_t>();
+                            if (top != bottom || left != right) {
+                                OP_LOGE(GetOpName(op_dest).c_str(), "pads must be symmetric.");
+                                return FAILED;
+                            }
+                            v_pads.push_back(static_cast<int>(top));
+                            v_pads.push_back(static_cast<int>(left));
                         } else {
-                            OP_LOGE(GetOpName(op_dest).c_str(), "length of pads must be 2.");
+                            OP_LOGE(GetOpName(op_dest).c_str(), "length of pads must be 2 or 4.");
                             return FAILED;
                         }
                         set_pads_flag = true;
@@ -151,10 +164,13 @@ static Status ParseOnnxOpToGraphCol2ImV2(const ge::Operator& op, Graph& graph)
     ge::Operator::OpListInt stride_value = {stride[0], stride[1]};
     // 3 in set_attr_dst_type indicates DT_INT32
     auto cast_op = op::Cast((ori_name + "_cast").c_str()).set_input_x(data1).set_attr_dst_type(3);
+    auto block_shape_cast = op::Cast((ori_name + "_block_shape_cast").c_str())
+                                .set_input_x(data2)
+                                .set_attr_dst_type(ge::DT_INT32);
     auto col2im_v2 = op::Col2ImV2((ori_name + "_Col2ImV2").c_str())
                          .set_input_x(data0)
                          .set_input_output_size(cast_op)
-                         .set_input_kernel_size(data2)
+                         .set_input_kernel_size(block_shape_cast)
                          .set_attr_dilation(dilation_value)
                          .set_attr_padding(padding_value)
                          .set_attr_stride(stride_value);

@@ -222,15 +222,20 @@ static ge::graphStatus ComputeGeometry(gert::TilingContext* context, Col2ImV2Geo
                     ("x.dim(1)=" + std::to_string(xShape.GetDim(1)) + ", kH*kW=" + std::to_string(kernelArea)).c_str(),
                     "x.dim(1) must be divisible by kH*kW"),
                 return ge::GRAPH_FAILED);
-    // ho = (outH + 2*padH - dilH*(kH-1) - 1)/strideH + 1 >= 1，wo 同理
-    geom.colH = (geom.outH + 2 * geom.paddingH - geom.dilationH * (geom.kernelH - 1) - 1) / geom.strideH + 1;
-    geom.colW = (geom.outW + 2 * geom.paddingW - geom.dilationW * (geom.kernelW - 1) - 1) / geom.strideW + 1;
-    OP_CHECK_IF(
-        geom.colH < 1 || geom.colW < 1,
-        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
-            context->GetNodeName(), "output_size, kernel_size, dilation, padding, stride",
-            ("ho=" + std::to_string(geom.colH) + ", wo=" + std::to_string(geom.colW)).c_str(), "ho/wo must be >= 1"),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(geom.paddingH > (INT64_MAX - geom.outH) / 2 || geom.paddingW > (INT64_MAX - geom.outW) / 2 ||
+                    geom.kernelH - 1 > INT64_MAX / geom.dilationH || geom.kernelW - 1 > INT64_MAX / geom.dilationW,
+                OP_LOGE(context, "Sliding-window padding or dilation term exceeds INT64_MAX"), return ge::GRAPH_FAILED);
+    // 整数除法向零截断，先拒绝负分子，避免将非法窗口算为 1。
+    const int64_t numeratorH = geom.outH + 2 * geom.paddingH - geom.dilationH * (geom.kernelH - 1) - 1;
+    const int64_t numeratorW = geom.outW + 2 * geom.paddingW - geom.dilationW * (geom.kernelW - 1) - 1;
+    OP_CHECK_IF(numeratorH < 0 || numeratorW < 0,
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "output_size, kernel_size, dilation, padding, stride",
+                    ("numeratorH=" + std::to_string(numeratorH) + ", numeratorW=" + std::to_string(numeratorW)).c_str(),
+                    "ho/wo must be >= 1"),
+                return ge::GRAPH_FAILED);
+    geom.colH = numeratorH / geom.strideH + 1;
+    geom.colW = numeratorW / geom.strideW + 1;
     // x.dim(2) 必须等于 ho*wo
     OP_CHECK_IF(xShape.GetDim(2) != geom.colH * geom.colW,
                 OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(context->GetNodeName(), "x",
