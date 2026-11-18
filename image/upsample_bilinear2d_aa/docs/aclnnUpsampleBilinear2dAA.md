@@ -228,8 +228,8 @@ aclnnStatus aclnnUpsampleBilinear2dAA(
       <td>传入的input、outputSize或out是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="6">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="6">161002</td>
+      <td rowspan="7">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="7">161002</td>
       <td>input或out的数据类型不在支持的范围之内。</td>
     </tr>
     <tr>
@@ -240,6 +240,9 @@ aclnnStatus aclnnUpsampleBilinear2dAA(
     </tr>
     <tr>
       <td>input的shape不是4维。</td>
+    </tr>
+    <tr>
+      <td>out的H、W维与outputSize不一致。</td>
     </tr>
     <tr>
       <td>outputSize的取值小于等于0。</td>

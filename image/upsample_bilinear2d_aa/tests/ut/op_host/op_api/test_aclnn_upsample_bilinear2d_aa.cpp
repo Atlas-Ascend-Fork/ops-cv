@@ -218,3 +218,54 @@ TEST_F(l2_upsample_bilinear2d_aa_test, l2_upsample_bilinear2d_aa_test_dtype_diff
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
+
+// out H mismatch with asymmetric outputSize
+TEST_F(l2_upsample_bilinear2d_aa_test, l2_upsample_bilinear2d_aa_test_out_h_mismatch)
+{
+    auto self_desc = TensorDesc({1, 1, 8, 8}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_desc = TensorDesc({1, 1, 17, 8}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(vector<int64_t>{16, 8});
+    bool align_corners = false;
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dAA,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), OUTPUT(output_desc));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// out W mismatch with asymmetric outputSize
+TEST_F(l2_upsample_bilinear2d_aa_test, l2_upsample_bilinear2d_aa_test_out_w_mismatch)
+{
+    auto self_desc = TensorDesc({1, 1, 8, 8}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_desc = TensorDesc({1, 1, 16, 9}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(vector<int64_t>{16, 8});
+    bool align_corners = false;
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dAA,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), OUTPUT(output_desc));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// legal asymmetric out must pass phase-1 check (guards against H/W transposition)
+TEST_F(l2_upsample_bilinear2d_aa_test, l2_upsample_bilinear2d_aa_test_out_asymmetric_forward)
+{
+    auto self_desc = TensorDesc({1, 1, 8, 8}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_desc = TensorDesc({1, 1, 16, 8}, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(vector<int64_t>{16, 8});
+    bool align_corners = false;
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2dAA,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), OUTPUT(output_desc));
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_SUCCESS);
+}

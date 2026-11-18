@@ -83,6 +83,13 @@ static bool CheckShape(const aclTensor* inputTensor, const aclTensor* out, const
         selfFormat == op::Format::FORMAT_ND || selfFormat == op::Format::FORMAT_NCHW,
         OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleBilinear2dAa", "self", op::ToString(selfFormat).GetString(), "NCHW"),
         return false);
+    op::Shape inputShape = inputTensor->GetViewShape();
+    op::Shape expectShape;
+    expectShape.AppendDim(inputShape.GetDim(DIM_ZERO));
+    expectShape.AppendDim(inputShape.GetDim(DIM_ONE));
+    expectShape.AppendDim((*outputSize)[DIM_ZERO]);
+    expectShape.AppendDim((*outputSize)[DIM_ONE]);
+    OP_CHECK_SHAPE_NOT_EQUAL_WITH_EXPECTED_SIZE(out, expectShape, return false);
     return true;
 }
 
