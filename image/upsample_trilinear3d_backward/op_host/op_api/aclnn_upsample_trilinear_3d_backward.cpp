@@ -8,6 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <cmath>
+
 #include "upsample_trilinear_3d_grad.h"
 #include "aclnn_kernels/contiguous.h"
 #include "aclnn_kernels/transpose.h"
@@ -36,7 +38,7 @@ extern "C" {
 #endif
 
 namespace {
-static bool CheckFormat(const aclTensor* gradOut)
+static bool CheckFormat(const aclTensor* gradOut, const aclTensor* gradInput)
 {
     const op::Format gradOutFormat = gradOut->GetStorageFormat();
     OP_CHECK(gradOutFormat == op::Format::FORMAT_ND || gradOutFormat == op::Format::FORMAT_NCDHW ||
@@ -44,6 +46,14 @@ static bool CheckFormat(const aclTensor* gradOut)
              OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleTrilinear3dBackward", "gradOut",
                                         op::ToString(gradOutFormat).GetString(), "NCDHW or NDHWC"),
              return false);
+    OP_CHECK(
+        gradOutFormat == gradInput->GetStorageFormat(),
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleTrilinear3dBackward", "gradOut,gradInput",
+                                                (std::string(op::ToString(gradOutFormat).GetString()) + ", " +
+                                                 std::string(op::ToString(gradInput->GetStorageFormat()).GetString()))
+                                                    .c_str(),
+                                                "format of gradOut and gradInput must be the same"),
+        return false);
     return true;
 }
 
@@ -125,8 +135,33 @@ static bool CheckUplimit(const aclTensor* gradOut)
     return true;
 }
 
+static bool CheckScalesValid(const double scalesD, const double scalesH, const double scalesW)
+{
+    if (!std::isfinite(scalesD) || !std::isfinite(scalesH) || !std::isfinite(scalesW)) {
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            "aclnnUpsampleTrilinear3dBackward", "scales_d,scales_h,scales_w",
+            (std::string(std::to_string(scalesD).c_str()) + ", " + std::to_string(scalesH).c_str() + ", " +
+             std::to_string(scalesW).c_str())
+                .c_str(),
+            "scales_d, scales_h and scales_w cannot be NaN or Inf");
+        return false;
+    }
+    const bool allPositive = scalesD > 0 && scalesH > 0 && scalesW > 0;
+    const bool allZero = scalesD == 0 && scalesH == 0 && scalesW == 0;
+    if (!allPositive && !allZero) {
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            "aclnnUpsampleTrilinear3dBackward", "scales_d,scales_h,scales_w",
+            (std::string(std::to_string(scalesD).c_str()) + ", " + std::to_string(scalesH).c_str() + ", " +
+             std::to_string(scalesW).c_str())
+                .c_str(),
+            "scales_d, scales_h and scales_w must be all 0 or all positive at the same time");
+        return false;
+    }
+    return true;
+}
+
 static aclnnStatus CheckParams(const aclTensor* gradOut, const aclIntArray* outputSize, const aclIntArray* inputSize,
-                               const aclTensor* gradInput)
+                               double scalesD, double scalesH, double scalesW, const aclTensor* gradInput)
 {
     // 1. 检查参数是否为空指针
     CHECK_RET(CheckNotNull2In2Out(gradOut, outputSize, inputSize, gradInput), ACLNN_ERR_PARAM_NULLPTR);
@@ -136,13 +171,16 @@ static aclnnStatus CheckParams(const aclTensor* gradOut, const aclIntArray* outp
 
     // 3. 检查shape, format是否支持
     CHECK_RET(CheckUpsampleShape(gradOut, outputSize, inputSize), ACLNN_ERR_PARAM_INVALID);
-    CHECK_RET(CheckFormat(gradOut), ACLNN_ERR_PARAM_INVALID);
+    CHECK_RET(CheckFormat(gradOut, gradInput), ACLNN_ERR_PARAM_INVALID);
 
     // 4. 检查输入元素是否合法
     CHECK_RET(CheckInputElement(gradOut, outputSize, inputSize, gradInput), ACLNN_ERR_PARAM_INVALID);
 
     // 5. 校验上边界
     CHECK_RET(CheckUplimit(gradOut), ACLNN_ERR_PARAM_INVALID);
+
+    // 6. 校验scales取值：需同时为0或同时为正数，不能为NaN/Inf
+    CHECK_RET(CheckScalesValid(scalesD, scalesH, scalesW), ACLNN_ERR_PARAM_INVALID);
     return ACLNN_SUCCESS;
 }
 
@@ -188,7 +226,7 @@ aclnnStatus aclnnUpsampleTrilinear3dBackwardGetWorkspaceSize(const aclTensor* gr
     auto uniqueExecutor = CREATE_EXECUTOR();
     CHECK_RET(uniqueExecutor.get() != nullptr, ACLNN_ERR_INNER_CREATE_EXECUTOR);
 
-    auto ret = CheckParams(gradOut, outputSize, inputSize, gradInput);
+    auto ret = CheckParams(gradOut, outputSize, inputSize, scalesD, scalesH, scalesW, gradInput);
     CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
     if (gradOut->IsEmpty() || gradInput->IsEmpty()) {

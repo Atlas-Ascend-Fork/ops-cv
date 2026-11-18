@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 #include <array>
+#include <limits>
 #include <vector>
 #include "gtest/gtest.h"
 
@@ -615,4 +616,119 @@ TEST_F(l2_upsample_trilinear_3d_backward_test, case_scales_normal)
 
     // SAMPLE: precision simulate
     // ut.TestPrecision();
+}
+
+TEST_F(l2_upsample_trilinear_3d_backward_test, case_scales_negative_abnormal)
+{
+    auto grad_out_desc = TensorDesc({2, 2, 4, 8, 12}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    vector<int64_t> output_size = {4, 8, 12};
+    vector<int64_t> input_size = {2, 2, 2, 4, 8};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    bool align_corners = false;
+    const double_t scales_d = -1.0;
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 1.5;
+    auto grad_input_desc = TensorDesc({2, 2, 2, 4, 8}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+
+    auto ut = OP_API_UT(
+        aclnnUpsampleTrilinear3dBackward,
+        INPUT(grad_out_desc, output_size_desc, input_size_desc, align_corners, scales_d, scales_h, scales_w),
+        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+TEST_F(l2_upsample_trilinear_3d_backward_test, case_scales_nan_abnormal)
+{
+    auto grad_out_desc = TensorDesc({2, 2, 4, 8, 12}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    vector<int64_t> output_size = {4, 8, 12};
+    vector<int64_t> input_size = {2, 2, 2, 4, 8};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    bool align_corners = false;
+    const double_t scales_d = std::numeric_limits<double_t>::quiet_NaN();
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 1.5;
+    auto grad_input_desc = TensorDesc({2, 2, 2, 4, 8}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+
+    auto ut = OP_API_UT(
+        aclnnUpsampleTrilinear3dBackward,
+        INPUT(grad_out_desc, output_size_desc, input_size_desc, align_corners, scales_d, scales_h, scales_w),
+        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+TEST_F(l2_upsample_trilinear_3d_backward_test, case_scales_inf_abnormal)
+{
+    auto grad_out_desc = TensorDesc({2, 2, 4, 8, 12}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    vector<int64_t> output_size = {4, 8, 12};
+    vector<int64_t> input_size = {2, 2, 2, 4, 8};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    bool align_corners = false;
+    const double_t scales_d = std::numeric_limits<double_t>::infinity();
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 1.5;
+    auto grad_input_desc = TensorDesc({2, 2, 2, 4, 8}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+
+    auto ut = OP_API_UT(
+        aclnnUpsampleTrilinear3dBackward,
+        INPUT(grad_out_desc, output_size_desc, input_size_desc, align_corners, scales_d, scales_h, scales_w),
+        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+TEST_F(l2_upsample_trilinear_3d_backward_test, case_scales_partial_zero_abnormal)
+{
+    auto grad_out_desc = TensorDesc({2, 2, 4, 8, 12}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    vector<int64_t> output_size = {4, 8, 12};
+    vector<int64_t> input_size = {2, 2, 2, 4, 8};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    bool align_corners = false;
+    const double_t scales_d = 0.0;
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 1.5;
+    auto grad_input_desc = TensorDesc({2, 2, 2, 4, 8}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+
+    auto ut = OP_API_UT(
+        aclnnUpsampleTrilinear3dBackward,
+        INPUT(grad_out_desc, output_size_desc, input_size_desc, align_corners, scales_d, scales_h, scales_w),
+        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+TEST_F(l2_upsample_trilinear_3d_backward_test, case_grad_input_format_diff_abnormal)
+{
+    auto grad_out_desc = TensorDesc({2, 2, 3, 4, 5}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    vector<int64_t> output_size = {3, 4, 5};
+    vector<int64_t> input_size = {2, 2, 6, 8, 10};
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto input_size_desc = IntArrayDesc(input_size);
+    bool align_corners = false;
+    const double_t scales_d = 0.0;
+    const double_t scales_h = 0.0;
+    const double_t scales_w = 0.0;
+    auto grad_input_desc = TensorDesc({2, 6, 8, 10, 2}, ACL_FLOAT, ACL_FORMAT_NDHWC);
+
+    auto ut = OP_API_UT(
+        aclnnUpsampleTrilinear3dBackward,
+        INPUT(grad_out_desc, output_size_desc, input_size_desc, align_corners, scales_d, scales_h, scales_w),
+        OUTPUT(grad_input_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }

@@ -203,7 +203,7 @@ aclnnStatus aclnnUpsampleTrilinear3dBackward(
       <td>scalesD(double)</td>
       <td>输入</td>
       <td>表示输出`gradInput`的depth维度乘数，对应公式中的`scales_d`。</td>
-      <td>-</td>
+      <td>需与scalesH、scalesW同时为0或同时大于0。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -213,7 +213,7 @@ aclnnStatus aclnnUpsampleTrilinear3dBackward(
       <td>scalesH(double)</td>
       <td>输入</td>
       <td>表示输出`gradInput`的height维度乘数，对应公式中的`scales_h`。</td>
-      <td>-</td>
+      <td>需与scalesD、scalesW同时为0或同时大于0。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -223,7 +223,7 @@ aclnnStatus aclnnUpsampleTrilinear3dBackward(
       <td>scalesW(double)</td>
       <td>输入</td>
       <td>表示输出`gradInput`的width维度乘数，对应公式中的`scales_w`。</td>
-      <td>-</td>
+      <td>需与scalesD、scalesH同时为0或同时大于0。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -293,8 +293,8 @@ aclnnStatus aclnnUpsampleTrilinear3dBackward(
       <td>传入的gradOut、outputSize、inputSize或gradInput是空指针。</td>
     </tr>
     <tr>
-      <td rowspan="10">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="10">161002</td>
+      <td rowspan="12">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="12">161002</td>
       <td>gradOut的数据类型和数据格式不在支持的范围内。</td>
     </tr>
     <tr>
@@ -323,6 +323,12 @@ aclnnStatus aclnnUpsampleTrilinear3dBackward(
     </tr>
     <tr>
       <td>gradInput的shape与inputSize[0]、inputSize[1]、inputSize[2]、inputSize[3]和inputSize[4]不一致。</td>
+    </tr>
+    <tr>
+      <td>gradOut和gradInput的数据格式不一致。</td>
+    </tr>
+    <tr>
+      <td>scalesD、scalesH、scalesW的取值不是同时为0或同时大于0。</td>
     </tr>
   </tbody></table>
 
@@ -386,6 +392,7 @@ aclnnStatus aclnnUpsampleTrilinear3dBackward(
     - dtype代表输入张量的数据类型。
     - N \* C \* gradOut_D \* gradOut_H < 2^31
     - gradInput_W * gradInput_H < 2^31
+- 参数scalesD、scalesH、scalesW的取值需同时为0或同时大于0。
 - 当输入scalesD、scalesH、scalesW的取值均大于0时，参数inputSize、outputSize、scalesD、scalesH、scalesW需要满足如下约束：
 
   $$
