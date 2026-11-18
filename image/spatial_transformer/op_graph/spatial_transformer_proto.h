@@ -29,10 +29,12 @@ namespace ge {
  *            uint16, int16, int32, uint32, uint64, int64.
  *            4-D tensor with shape [batch, channels, height, width].
  *            The format must be NCHW or NC1HWC0.
- * @li theta: A Tensor. Must be one of following types: float, float16, double, uint8, int8,
+ * @li theta: An optional Tensor. Must be one of following types: float, float16, double, uint8, int8,
  *              uint16, int16, int32, uint32, uint64, int64.
  *              2-D tensor with shape [2, 3] or 3-D tensor with shape [batch, 2, 3] containing
  *              affine transformation parameters. \n
+ *              It may be omitted when all six use_default_theta entries are 1 and default_theta provides at least six
+ *coefficients. \n
  *
  *@par Outputs:
  * @li y: A Tensor. Must be one of following types: float, float16, double, uint8, int8,
@@ -45,6 +47,7 @@ namespace ge {
  *              Specifies the output height and width. If -1, uses input size.
  * @li default_theta: A list of 6 floats. Defaults to [].
  *              Default affine transformation parameters when use_default_theta is true.
+ *              At least six coefficients are required when theta is omitted.
  * @li align_corners: A bool. Defaults to false.
  *              If true, centers of the 4 corner pixels of the input and output
  *              tensors are aligned, preserving the values at the corner pixels.

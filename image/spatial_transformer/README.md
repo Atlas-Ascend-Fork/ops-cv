@@ -43,8 +43,8 @@
     </tr>
     <tr>
       <td>theta</td>
-      <td>输入</td>
-      <td>变换矩阵，包含仿射变换参数。</td>
+      <td>可选输入</td>
+      <td>变换矩阵，包含仿射变换参数；当use_default_theta的6项均为1且default_theta至少提供6个系数时可省略。</td>
       <td>INT8、INT16、INT32、INT64、UINT8、UINT16、UINT32、UINT64<br>
           FLOAT16、FLOAT、DOUBLE</td>
       <td>ND</td>
@@ -67,7 +67,7 @@
     <tr>
       <td>default_theta</td>
       <td>属性</td>
-      <td>默认的仿射变换参数，当use_default_theta为true时使用。默认为空列表。</td>
+      <td>默认的仿射变换参数，当use_default_theta为true时使用。省略theta时至少提供6个系数。默认为空列表。</td>
       <td>ListFloat</td>
       <td>-</td>
     </tr>
@@ -94,6 +94,7 @@
 - 变换矩阵theta的形状必须为 [batch, 2, 3] 或 [2, 3]。
 - 当use_default_theta为空列表时，使用输入theta进行变换。
 - 当use_default_theta不为空时，对应位置为1的参数使用default_theta中的值，为0的参数使用输入theta中的值。
+- 当use_default_theta的6项均为1且default_theta至少提供6个系数时，无需提供theta输入。
 
 ## 调用说明
 

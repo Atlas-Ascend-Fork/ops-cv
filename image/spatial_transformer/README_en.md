@@ -45,8 +45,8 @@ Operator function: the Spatial Transformer Network (STN) operator performs an af
     </tr>
     <tr>
       <td>theta</td>
-      <td>Input</td>
-      <td>Transformation matrix, containing the affine transformation parameters.</td>
+      <td>Optional input</td>
+      <td>Transformation matrix, containing the affine transformation parameters; it can be omitted when all six use_default_theta entries are 1 and default_theta provides at least six coefficients.</td>
       <td>INT8, INT16, INT32, INT64, UINT8, UINT16, UINT32, UINT64<br>
           FLOAT16, FLOAT, DOUBLE</td>
       <td>ND</td>
@@ -69,7 +69,7 @@ Operator function: the Spatial Transformer Network (STN) operator performs an af
     <tr>
       <td>default_theta</td>
       <td>Attr</td>
-      <td>Default affine transformation parameters, used when use_default_theta is true. The default value is an empty list.</td>
+      <td>Default affine transformation parameters, used when use_default_theta is true. At least six coefficients are required when theta is omitted. The default value is an empty list.</td>
       <td>ListFloat</td>
       <td>-</td>
     </tr>
@@ -96,6 +96,7 @@ Operator function: the Spatial Transformer Network (STN) operator performs an af
 - The shape of the transformation matrix theta must be [batch, 2, 3] or [2, 3].
 - When use_default_theta is an empty list, the input theta is used for the transformation.
 - When use_default_theta is not empty, the parameter at a position with value 1 uses the value in default_theta, and the parameter with value 0 uses the value in the input theta.
+- When all six use_default_theta entries are 1 and default_theta provides at least six coefficients, the theta input is not required.
 
 ## Invocation Description
 
