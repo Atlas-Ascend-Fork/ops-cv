@@ -1,17 +1,17 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of 
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, 
-# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. 
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 # ---------------------------------------------------------------------------------------------------------
 
 
 set -e
-FILE_NAME="$(basename $0)"
+FILE_NAME="$(basename "$0")"
 
 main() {
   echo "[INFO]execute file: $0"
@@ -32,10 +32,10 @@ main() {
   fi
   soc_version_lower=${soc_version,,}
   workdir=$(
-            cd $(dirname $0)
+            cd -- "$(dirname -- "$0")" || exit 1
             pwd
   )
-  local topdir=$(readlink -f ${workdir}/../../..)
+  local topdir=$(readlink -f "${workdir}/../../..")
   local binary_config_dir=${topdir}/build/tbe/config
   ini_file="${binary_config_dir}/aic-${soc_version_lower}-ops-info.ini"  # modify ini path
   echo "[INFO]op ini path: ${ini_file}"
@@ -55,7 +55,7 @@ main() {
   fi
   parer_cmd="${python_arg} ${parer_python_file} ${ini_file} ${output_file}"
   echo "[INFO]parser cmd: ${parer_cmd}"
-  ${parer_cmd}
+  "${python_arg}" "${parer_python_file}" "${ini_file}" "${output_file}"
 }
 set -o pipefail
 main "$@" | while IFS= read -r line; do echo "$(date '+[%Y-%m-%d %H:%M:%S]') $line"; done
