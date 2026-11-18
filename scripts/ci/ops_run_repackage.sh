@@ -52,6 +52,7 @@ parse_args() {
             # 处理未知参数
             *)
             echo "ERROR: Unknown param $arg" >&2
+            return 1
             ;;
         esac
     done
@@ -89,7 +90,7 @@ ensure_file() {
 # -----------------------------
 
 log "Starting ops packaging process..."
-parse_args "$@"
+parse_args "$@" || exit 1
 
 WORKDIR=${TOP_DIR}/${PKG_PATH}         # 当前工作目录
 TEMP_RUN_DIR="./run_files"              # 临时存放拷贝的 .run 文件
