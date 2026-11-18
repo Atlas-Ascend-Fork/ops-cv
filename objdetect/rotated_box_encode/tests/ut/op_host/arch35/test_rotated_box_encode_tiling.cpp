@@ -20,6 +20,7 @@
  */
 
 #include <cstring>
+#include <limits>
 #include <vector>
 #include <gtest/gtest.h>
 #include "tiling_case_executor.h"
@@ -98,7 +99,10 @@ TEST_F(RotatedBoxEncodeTiling, tiling_case0_fp16_small)
     EXPECT_EQ(td.dim0, 16);
     EXPECT_EQ(td.N, 8);
     EXPECT_EQ(td.coreNum, 1);
-    EXPECT_EQ(td.ubFormer, 3584);
+    // Aggregated slot layout: A = ceilAlign(8*2B, 32B)/2 = 16 elems, K = 3584/16 = 224 batches
+    // (capacity bound is the per-channel element budget K*A <= ubFormer)
+    EXPECT_EQ(td.slotElems, 16);
+    EXPECT_EQ(td.ubFormer, 1792);
     EXPECT_EQ(td.blockFormer, 512);
     EXPECT_EQ(td.blockNum, 1);
     EXPECT_EQ(td.ubLoopOfFormerBlock, 1);
@@ -119,7 +123,10 @@ TEST_F(RotatedBoxEncodeTiling, tiling_case1_fp32_small)
     EXPECT_EQ(td.dim0, 16);
     EXPECT_EQ(td.N, 8);
     EXPECT_EQ(td.coreNum, 1);
-    EXPECT_EQ(td.ubFormer, 4224);
+    // Aggregated slot layout: A = ceilAlign(8*4B, 32B)/4 = 8 elems, K = 4160/8 = 520 batches
+    // (capacity bound K*A <= ubFormer; UB_GUARD_BYTES already reserved in maxBoxNum)
+    EXPECT_EQ(td.slotElems, 8);
+    EXPECT_EQ(td.ubFormer, 4160);
     EXPECT_EQ(td.blockFormer, 512);
     EXPECT_EQ(td.blockNum, 1);
     EXPECT_EQ(td.ubLoopOfFormerBlock, 1);
@@ -168,6 +175,8 @@ TEST_F(RotatedBoxEncodeTiling, tiling_case4_fp16_large_custom_weight)
     EXPECT_EQ(td.dim0, 1024);
     EXPECT_EQ(td.N, 256);
     EXPECT_EQ(td.coreNum, 3);
+    // Aggregated slot layout: A = ceilAlign(256*2B, 32B)/2 = 256 elems, K = 3584/256 = 14 batches
+    EXPECT_EQ(td.slotElems, 256);
     EXPECT_EQ(td.ubFormer, 3584);
     EXPECT_EQ(td.blockFormer, 512);
     EXPECT_EQ(td.blockNum, 2);
@@ -192,13 +201,16 @@ TEST_F(RotatedBoxEncodeTiling, tiling_case5_fp32_large_multicore)
     EXPECT_EQ(td.dim0, 32768);
     EXPECT_EQ(td.N, 4096);
     EXPECT_EQ(td.coreNum, 48);
-    EXPECT_EQ(td.ubFormer, 4224);
-    EXPECT_EQ(td.blockFormer, 1024);
-    EXPECT_EQ(td.blockNum, 32);
+    // Aggregated with K = 1 (slot = 4096 <= ubFormer = 4160): ubFormer = 1*4096
+    EXPECT_EQ(td.slotElems, 4096);
+    EXPECT_EQ(td.ubFormer, 4096);
+    // blockFormer aligns UP to N when aggregated: ceilAlign(1024, 4096) = 4096
+    EXPECT_EQ(td.blockFormer, 4096);
+    EXPECT_EQ(td.blockNum, 8);
     EXPECT_EQ(td.ubLoopOfFormerBlock, 1);
-    EXPECT_EQ(td.ubTailOfFormerBlock, 1024);
+    EXPECT_EQ(td.ubTailOfFormerBlock, 4096);
     EXPECT_EQ(td.ubLoopOfTailBlock, 1);
-    EXPECT_EQ(td.ubTailOfTailBlock, 1024);
+    EXPECT_EQ(td.ubTailOfTailBlock, 4096);
 }
 
 // Branch-0 (fp16) default weight (no attr): (2,5,8) → tilingKey=0, weight=[1,1,1,1,1]
@@ -211,7 +223,9 @@ TEST_F(RotatedBoxEncodeTiling, tiling_case6_fp16_default_weight)
     EXPECT_EQ(td.dim0, 16);
     EXPECT_EQ(td.N, 8);
     EXPECT_EQ(td.coreNum, 1);
-    EXPECT_EQ(td.ubFormer, 3584);
+    // Aggregated slot layout: same as tiling_case0
+    EXPECT_EQ(td.slotElems, 16);
+    EXPECT_EQ(td.ubFormer, 1792);
     EXPECT_FLOAT_EQ(td.weight[0], 1.0f);
     EXPECT_FLOAT_EQ(td.weight[1], 1.0f);
     EXPECT_FLOAT_EQ(td.weight[2], 1.0f);
@@ -264,4 +278,16 @@ TEST_F(RotatedBoxEncodeTiling, tiling_case12_fp32_ub_too_small_should_fail)
 {
     TilingInfo info;
     EXPECT_FALSE(ExecuteTiling(MakeContext({2, 5, 8}, ge::DT_FLOAT, {1.0f, 1.0f, 1.0f, 1.0f, 1.0f}, 1024), info));
+}
+
+// dim0 = B*N fits int64, but BOX_CHANNELS*dim0 — the total channel element
+// count reached by the kernel GM offsets b0*BOX_CHANNELS*N + c*N — would
+// overflow int64; the host tiling must reject the shape up front.
+TEST_F(RotatedBoxEncodeTiling, tiling_case13_channels_total_overflow_should_fail)
+{
+    TilingInfo info;
+    constexpr int64_t boxChannels = 5;
+    constexpr int64_t n = 8;
+    const int64_t batch = std::numeric_limits<int64_t>::max() / boxChannels / n + 1;
+    EXPECT_FALSE(ExecuteTiling(MakeContext({batch, 5, n}, ge::DT_FLOAT, {1.0f, 1.0f, 1.0f, 1.0f, 1.0f}), info));
 }

@@ -25,6 +25,22 @@ constexpr int64_t BOX_CHANNELS = 5;        // spec.yaml shape[1]==5
 constexpr int64_t MIN_TILING_BITS = 32768; // §2.2 4KB/core (bits)
 constexpr int64_t MAX_RANK = 3;            // §9.3.2 rank==3
 
+// MTE 2D copy granularity: every UB block start must be 32B-aligned, so an
+// aggregated (batch, channel) segment occupies a slot of this many bytes.
+constexpr int64_t MTE_BLOCK_ALIGN_BYTES = 32;
+
+// Aggregate cap for K (batches per tile). DataCopyExtParams::blockCount is a
+// uint16 field (see kernel_struct_data_copy.h); 4095 is a conservative
+// single-copy block budget that keeps every 2D DataCopyPad well inside the
+// field limit and bounds the tiling state size.
+constexpr int64_t MAX_COPY_BLOCK_COUNT = 4095;
+
+// Tail slack reserved in UB for the VF LoadAlign overread (one 64-element
+// vector past 5*ubStride on the last channel, per TBuf). The kernel sizes
+// every TBuf with this many extra elements; maxBoxNum subtracts the matching
+// byte budget so the guard never overflows the physical UB.
+constexpr int64_t UB_GUARD_BYTES = 1024; // >= 4 TBuf * 64 elems * 4B (fp16 worst case)
+
 // Branch-0 (fp16-upcast): perBoxBytes=70, elemStride=10, alignFactor=128
 constexpr int64_t BRANCH0_BOX_CHANNELS = 5;
 constexpr int64_t BRANCH0_ALIGN_256_BYTES = 256;
@@ -66,9 +82,11 @@ struct RotatedBoxEncodeBranch1Inputs {
 // Branch pure tiling computations (DESIGN-BRANCH-0/1.md §2).
 // Caller MUST memset `out` to 0 before calling.
 // ===========================================================================
-ge::graphStatus ComputeBranch0Tiling(const RotatedBoxEncodeBranch0Inputs& in, RotatedBoxEncodeTilingData& out);
+ge::graphStatus ComputeBranch0Tiling(const RotatedBoxEncodeBranch0Inputs& in, RotatedBoxEncodeTilingData& out,
+                                     const char* opName);
 
-ge::graphStatus ComputeBranch1Tiling(const RotatedBoxEncodeBranch1Inputs& in, RotatedBoxEncodeTilingData& out);
+ge::graphStatus ComputeBranch1Tiling(const RotatedBoxEncodeBranch1Inputs& in, RotatedBoxEncodeTilingData& out,
+                                     const char* opName);
 
 // ===========================================================================
 // TilingRotatedBoxEncode: runtime tiling entry (DESIGN §9.9).

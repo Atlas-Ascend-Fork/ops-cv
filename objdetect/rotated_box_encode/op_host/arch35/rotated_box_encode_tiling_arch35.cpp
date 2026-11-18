@@ -14,6 +14,7 @@
 #include "exe_graph/runtime/tensor.h"
 #include "exe_graph/runtime/runtime_attrs.h"
 #include "graph/types.h"
+#include "log/log.h"
 #include "register/op_def_registry.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "platform/platform_infos_def.h"
@@ -63,7 +64,8 @@ static inline int64_t ComputeCoreNum(int64_t dim0, int64_t minDtypeBits, int64_t
 // ComputeBranch0Tiling: Branch-0 (fp16-upcast) tiling computation.
 // DESIGN-BRANCH-0.md §2: perBoxBytes=70, alignFactor=128, minDtypeBits=80.
 // ===========================================================================
-ge::graphStatus ComputeBranch0Tiling(const RotatedBoxEncodeBranch0Inputs& in, RotatedBoxEncodeTilingData& out)
+ge::graphStatus ComputeBranch0Tiling(const RotatedBoxEncodeBranch0Inputs& in, RotatedBoxEncodeTilingData& out,
+                                     const char* opName)
 {
     out.dim0 = in.dim0;
     out.N = in.N;
@@ -79,11 +81,36 @@ ge::graphStatus ComputeBranch0Tiling(const RotatedBoxEncodeBranch0Inputs& in, Ro
     int64_t perBoxBytes = BRANCH0_PER_BOX_BYTES;
     int64_t elemStride = BRANCH0_ELEM_STRIDE;
     int64_t alignFactor = BRANCH0_ALIGN_256_BYTES / std::gcd(BRANCH0_ALIGN_256_BYTES, elemStride);
-    int64_t maxBoxNum = static_cast<int64_t>(in.ubSize) / perBoxBytes;
+    int64_t maxBoxNum = (static_cast<int64_t>(in.ubSize) - UB_GUARD_BYTES) / perBoxBytes;
     if (maxBoxNum < alignFactor) {
         return ge::GRAPH_FAILED;
     }
     int64_t ubFormer = AlignDown(maxBoxNum, alignFactor);
+    // Batch-aggregated slot layout: when one padded batch-channel slot fits a
+    // channel (slot <= ubFormer, i.e. N <= ubFormer), the kernel gathers K
+    // whole batches per tile. Each (batch, channel) segment occupies A =
+    // ceilAlign(N*sizeof(T), 32B)/sizeof(T) elements in UB so every MTE 2D
+    // copy block start is 32B-aligned; the A-N pad lanes are zero-filled and
+    // numerically inert (all-zero boxes encode to all-zero deltas). A tile
+    // then costs perBoxBytes*K*A bytes of UB (one K*A-element slot per channel,
+    // BOX_CHANNELS buffers in total), so the capacity bound is the per-channel
+    // element budget: K*A <= ubFormer. This avoids one full pipeline pass per
+    // batch, which collapses throughput for large-B/small-N shapes. K is
+    // capped by the MTE 2D copy blockCount budget.
+    int64_t slotElems = 0;
+    if (in.N >= 1 && in.N <= ubFormer) {
+        int64_t slot = CeilDiv(in.N * BRANCH0_ELEM_BYTES, MTE_BLOCK_ALIGN_BYTES) * MTE_BLOCK_ALIGN_BYTES /
+                       BRANCH0_ELEM_BYTES; // A = ceilAlign(N*s, 32B)/s
+        if (slot <= ubFormer) {
+            int64_t kBatch = ubFormer / slot;
+            if (kBatch > MAX_COPY_BLOCK_COUNT) {
+                kBatch = MAX_COPY_BLOCK_COUNT;
+            }
+            slotElems = slot;
+            ubFormer = kBatch * in.N;
+        }
+    }
+    out.slotElems = slotElems;
     out.ubFormer = ubFormer;
 
     int64_t minDtypeBits = BRANCH0_BOX_CHANNELS * BRANCH0_ELEM_BYTES * 8;
@@ -94,6 +121,17 @@ ge::graphStatus ComputeBranch0Tiling(const RotatedBoxEncodeBranch0Inputs& in, Ro
     int64_t blockFormer = 0;
     if (!CheckedCeilAlign(CeilDiv(in.dim0, coreNum), BRANCH0_ELEM_ALIGN_FACTOR, blockFormer)) {
         return ge::GRAPH_FAILED;
+    }
+    // Align UP to a multiple of N so block boundaries stay on batch boundaries
+    // while blockNum never exceeds coreNum (ceil-align only grows blockFormer).
+    // Only meaningful for the aggregated slot layout; otherwise keep the plain
+    // 512-aligned split (large-N shapes already run one batch per tile).
+    if (slotElems > 0 && in.N > 1) {
+        if (!CheckedCeilAlign(blockFormer, in.N, blockFormer)) {
+            OP_LOGE(opName, "blockFormer align to N overflow, dim0=%ld, N=%ld, blockFormer=%ld.", in.dim0, in.N,
+                    blockFormer);
+            return ge::GRAPH_FAILED;
+        }
     }
     int64_t blockNum = CeilDiv(in.dim0, blockFormer);
     out.coreNum = static_cast<int32_t>(coreNum);
@@ -117,7 +155,8 @@ ge::graphStatus ComputeBranch0Tiling(const RotatedBoxEncodeBranch0Inputs& in, Ro
 // ComputeBranch1Tiling: Branch-1 (fp32-direct) tiling computation.
 // DESIGN-BRANCH-1.md §2: perBoxBytes=60, alignFactor=64, minDtypeBits=160.
 // ===========================================================================
-ge::graphStatus ComputeBranch1Tiling(const RotatedBoxEncodeBranch1Inputs& in, RotatedBoxEncodeTilingData& out)
+ge::graphStatus ComputeBranch1Tiling(const RotatedBoxEncodeBranch1Inputs& in, RotatedBoxEncodeTilingData& out,
+                                     const char* opName)
 {
     out.dim0 = in.dim0;
     out.N = in.N;
@@ -133,11 +172,26 @@ ge::graphStatus ComputeBranch1Tiling(const RotatedBoxEncodeBranch1Inputs& in, Ro
     int64_t perBoxBytes = BRANCH1_PER_BOX_BYTES;
     int64_t elemStride = BRANCH1_ELEM_STRIDE;
     int64_t alignFactor = BRANCH1_ALIGN_256_BYTES / std::gcd(BRANCH1_ALIGN_256_BYTES, elemStride);
-    int64_t maxBoxNum = static_cast<int64_t>(in.ubSize) / perBoxBytes;
+    int64_t maxBoxNum = (static_cast<int64_t>(in.ubSize) - UB_GUARD_BYTES) / perBoxBytes;
     if (maxBoxNum < alignFactor) {
         return ge::GRAPH_FAILED;
     }
     int64_t ubFormer = AlignDown(maxBoxNum, alignFactor);
+    // Batch-aggregated slot layout: see ComputeBranch0Tiling.
+    int64_t slotElems = 0;
+    if (in.N >= 1 && in.N <= ubFormer) {
+        int64_t slot = CeilDiv(in.N * BRANCH1_ELEM_BYTES, MTE_BLOCK_ALIGN_BYTES) * MTE_BLOCK_ALIGN_BYTES /
+                       BRANCH1_ELEM_BYTES; // A = ceilAlign(N*s, 32B)/s
+        if (slot <= ubFormer) {
+            int64_t kBatch = ubFormer / slot;
+            if (kBatch > MAX_COPY_BLOCK_COUNT) {
+                kBatch = MAX_COPY_BLOCK_COUNT;
+            }
+            slotElems = slot;
+            ubFormer = kBatch * in.N;
+        }
+    }
+    out.slotElems = slotElems;
     out.ubFormer = ubFormer;
 
     int64_t minDtypeBits = BRANCH1_BOX_CHANNELS * BRANCH1_ELEM_BYTES * 8;
@@ -148,6 +202,14 @@ ge::graphStatus ComputeBranch1Tiling(const RotatedBoxEncodeBranch1Inputs& in, Ro
     int64_t blockFormer = 0;
     if (!CheckedCeilAlign(CeilDiv(in.dim0, coreNum), BRANCH1_ELEM_ALIGN_FACTOR, blockFormer)) {
         return ge::GRAPH_FAILED;
+    }
+    // Align UP to a multiple of N: see ComputeBranch0Tiling.
+    if (slotElems > 0 && in.N > 1) {
+        if (!CheckedCeilAlign(blockFormer, in.N, blockFormer)) {
+            OP_LOGE(opName, "blockFormer align to N overflow, dim0=%ld, N=%ld, blockFormer=%ld.", in.dim0, in.N,
+                    blockFormer);
+            return ge::GRAPH_FAILED;
+        }
     }
     int64_t blockNum = CeilDiv(in.dim0, blockFormer);
     out.coreNum = static_cast<int32_t>(coreNum);
@@ -263,6 +325,14 @@ ge::graphStatus TilingRotatedBoxEncode(gert::TilingContext* ctx)
         return ge::GRAPH_FAILED;
     }
     int64_t dim0 = B * N;
+    // The kernel computes GM offsets as b0 * BOX_CHANNELS * N + c * N, whose
+    // max value is one channel short of BOX_CHANNELS * dim0; keep that whole
+    // product inside int64 so the offsets cannot overflow.
+    if (dim0 > std::numeric_limits<int64_t>::max() / BOX_CHANNELS) {
+        OP_LOGE(ctx->GetNodeName(), "total channel elements overflow int64, dim0=%ld, boxChannels=%ld.", dim0,
+                BOX_CHANNELS);
+        return ge::GRAPH_FAILED;
+    }
 
     float weight[BOX_CHANNELS] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
     if (wList != nullptr) {
@@ -312,7 +382,7 @@ ge::graphStatus TilingRotatedBoxEncode(gert::TilingContext* ctx)
         for (int i = 0; i < BOX_CHANNELS; ++i) {
             bin.weight[i] = weight[i];
         }
-        branchRet = ComputeBranch0Tiling(bin, *td);
+        branchRet = ComputeBranch0Tiling(bin, *td, ctx->GetNodeName());
     } else {
         RotatedBoxEncodeBranch1Inputs bin{};
         bin.dim0 = dim0;
@@ -322,7 +392,7 @@ ge::graphStatus TilingRotatedBoxEncode(gert::TilingContext* ctx)
         for (int i = 0; i < BOX_CHANNELS; ++i) {
             bin.weight[i] = weight[i];
         }
-        branchRet = ComputeBranch1Tiling(bin, *td);
+        branchRet = ComputeBranch1Tiling(bin, *td, ctx->GetNodeName());
     }
 
     if (branchRet != ge::GRAPH_SUCCESS) {

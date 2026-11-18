@@ -20,6 +20,11 @@
 constexpr int32_t RBE_BOX_CHANNELS = 5; // spec.yaml shape[1]==5
 constexpr float RBE_PI_OVER_180 = 3.14159265358979323846f / 180.0f;
 
+// VF LoadAlign may read up to one vector (64 elements) past 5*ubStride on the
+// last channel; every TBuf carries this many extra tail elements and the
+// zero-init covers them so masked overread lanes always see zeros.
+constexpr int32_t RBE_UB_GUARD_ELEMS = 64;
+
 // Channel indices (x0, y0, x1, y1, θ_deg)
 constexpr int32_t RBE_CH_X0 = 0;
 constexpr int32_t RBE_CH_Y0 = 1;
@@ -240,15 +245,29 @@ public:
         N_ = td.N;
         B_ = td.dim0 / N_; // host guarantees dim0 == B*N exactly
 
+        // Aggregated tiles use the padded slot layout: channel stride per tile
+        // is K*A elements (K = ubFormer/N batches, A = slotElems), which may
+        // exceed ubFormer; buffers are sized to that stride. Non-aggregated
+        // tiles keep the plain [5, ubFormer] layout.
+        int64_t ubSlot = td.ubFormer;
+        if (td.slotElems > 0 && td.N > 0) {
+            ubSlot = (td.ubFormer / td.N) * td.slotElems;
+        }
+
         // GM layout: [B, 5, N] row-major → element(b,c,n) at b*5N + c*N + n.
+        // Every TBuf carries RBE_UB_GUARD_ELEMS of tail slack (see its
+        // definition); the host tiling reserves the matching guard bytes when
+        // computing maxBoxNum.
         if constexpr (DTYPE == ROTATED_BOX_ENCODE_DTYPE_FP16) {
             anchorGm_.SetGlobalBuffer((__gm__ half*)anchor_box);
             gtGm_.SetGlobalBuffer((__gm__ half*)gt_box);
             outGm_.SetGlobalBuffer((__gm__ half*)y);
 
-            // All 4 TBuf sized to the full tile (ubFormer boxes × 5 channels).
-            uint32_t tileBytesB0 = static_cast<uint32_t>(td.ubFormer * RBE_BOX_CHANNELS * sizeof(half));
-            uint32_t tileBytesB1 = static_cast<uint32_t>(td.ubFormer * RBE_BOX_CHANNELS * sizeof(float));
+            // All 4 TBuf sized to the full tile (ubSlot boxes × 5 channels).
+            uint32_t tileBytesB0 = static_cast<uint32_t>((ubSlot * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS) *
+                                                         sizeof(half));
+            uint32_t tileBytesB1 = static_cast<uint32_t>((ubSlot * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS) *
+                                                         sizeof(float));
             pipe_.InitBuffer(b0Buf_, tileBytesB0); // B0 fp16 IO staging
             pipe_.InitBuffer(b1Buf_, tileBytesB1); // B1 fp32 anchor (Cast target)
             pipe_.InitBuffer(b2Buf_, tileBytesB1); // B2 fp32 gt     (Cast target)
@@ -261,7 +280,8 @@ public:
             gtGmF32_.SetGlobalBuffer((__gm__ float*)gt_box);
             outGmF32_.SetGlobalBuffer((__gm__ float*)y);
 
-            uint32_t tileBytesFp32 = static_cast<uint32_t>(td.ubFormer * RBE_BOX_CHANNELS * sizeof(float));
+            uint32_t tileBytesFp32 = static_cast<uint32_t>((ubSlot * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS) *
+                                                           sizeof(float));
             pipe_.InitBuffer(b0Buf_, tileBytesFp32); // B0 fp32 anchor (CopyIn direct)
             pipe_.InitBuffer(b1Buf_, tileBytesFp32); // B1 fp32 gt     (CopyIn direct)
             pipe_.InitBuffer(b2Buf_, tileBytesFp32); // B2 fp32 output (VF result)
@@ -297,8 +317,18 @@ public:
     // of ONE batch only — CopyIn/CopyOut then issue a single-segment 2D stride
     // DataCopyPad whose UB base stays 32B-aligned (a running non-32B-aligned
     // UB offset would trigger an AICore 507035 fault).
+    // Fast path: with the aggregated slot layout (slotElems > 0, host tiling
+    // aligns ubFormer/blockFormer to N), ProcessTile covers K = boxCount/N
+    // batches at once and the per-channel 2D copies gather all batches in one
+    // shot. This avoids one full pipeline pass (zero-init + barriers +
+    // precompute + VF) per batch, which collapses throughput for
+    // large-B/small-N shapes.
     __aicore__ inline void ProcessTileRange(int64_t boxOffset, int64_t boxCount)
     {
+        if (td_->slotElems > 0 && boxCount > 0 && N_ > 0 && (boxOffset % N_) == 0 && (boxCount % N_) == 0) {
+            ProcessTile(boxOffset, boxCount);
+            return;
+        }
         while (boxCount > 0) {
             int64_t nStart = boxOffset % N_;
             int64_t seg = N_ - nStart; // boxes left in this batch
@@ -327,26 +357,50 @@ private:
     // Branch-0 fp16-upcast tile pipeline (S1–S8).
     __aicore__ inline void ProcessTileFp16(int64_t boxOffset, int64_t boxCount)
     {
-        // ceilAlign(boxCount, 16) keeps every channel start 32B-aligned for
-        // fp16 (16*2=32B) and fp32 (16*4=64B), as required by LoadAlign/StoreAlign.
-        int64_t ubStride = (boxCount + 15) & ~static_cast<int64_t>(15); // ceilAlign(boxCount, 16)
+        // Aggregated tile (slot layout): boxCount spans K whole batches; each
+        // (batch, channel) segment occupies A = slotElems elements, so the
+        // channel stride is K*A and the A-N pad lanes are zero (inert for the
+        // encoding math: an all-zero box encodes to all-zero deltas). Non-
+        // aggregated tiles keep the plain ceilAlign(boxCount, 16) stride.
+        bool agg = (td_->slotElems > 0) && ((boxOffset % N_) == 0) && ((boxCount % N_) == 0);
+        int64_t ubStride = agg ? (boxCount / N_) * td_->slotElems :
+                                 (boxCount + 15) & ~static_cast<int64_t>(15); // ceilAlign(boxCount, 16)
+        int64_t cnt64 = agg ? ubStride : boxCount; // vector op count (pads included when aggregated)
 
         // Zero-init B1/B2/B3 so Tan/VF never read uninitialized data beyond
         // boxCount (507035 faults from Div-by-zero/overflow); the valid region
-        // is overwritten by Cast/VF. B0 needs no init — its valid region is
-        // fully written by CopyIn and the VF masks reads at boxCount.
+        // is overwritten by Cast/VF. The length also covers the guard tail:
+        // VF LoadAlign reads up to 5*ubStride+RBE_UB_GUARD_ELEMS, and masked
+        // overread lanes must see zeros on tail tiles (previous-tile residue
+        // would otherwise reach the Div/Sin/Cos pipeline). In the aggregated
+        // layout B0 is zeroed too: the aggregated vector count spans the pad
+        // lanes, so B0 pads must be zero before Cast even if the MTE
+        // pad-fill behaviour ever changes; per-batch (non-agg) tiles leave B0
+        // alone as before.
         {
+            if (agg) {
+                auto b0Local = b0Buf_.Get<half>();
+                AscendC::Duplicate<half>(b0Local, static_cast<half>(0),
+                                         static_cast<int32_t>(ubStride * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS));
+            }
             auto b1Local = b1Buf_.Get<float>();
             auto b2Local = b2Buf_.Get<float>();
             auto b3Local = b3Buf_.Get<float>();
-            AscendC::Duplicate<float>(b1Local, (float)0, static_cast<int32_t>(td_->ubFormer * RBE_BOX_CHANNELS));
-            AscendC::Duplicate<float>(b2Local, (float)0, static_cast<int32_t>(td_->ubFormer * RBE_BOX_CHANNELS));
-            AscendC::Duplicate<float>(b3Local, (float)0, static_cast<int32_t>(td_->ubFormer * RBE_BOX_CHANNELS));
+            AscendC::Duplicate<float>(b1Local, (float)0,
+                                      static_cast<int32_t>(ubStride * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS));
+            AscendC::Duplicate<float>(b2Local, (float)0,
+                                      static_cast<int32_t>(ubStride * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS));
+            AscendC::Duplicate<float>(b3Local, (float)0,
+                                      static_cast<int32_t>(ubStride * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS));
         }
         AscendC::PipeBarrier<PIPE_ALL>();
 
         // ===== S1 CopyIn anchor (MTE2) → B0 fp16 [5, ubStride] =====
-        CopyInPerChannel(anchorGm_, boxOffset, boxCount, ubStride);
+        if (agg) {
+            CopyInAgg<half>(anchorGm_, b0Buf_, boxOffset, boxCount, ubStride);
+        } else {
+            CopyInPerChannel(anchorGm_, boxOffset, boxCount, ubStride);
+        }
         AscendC::PipeBarrier<PIPE_ALL>();
 
         // ===== S2 Cast fp16→fp32 anchor (V, ordinary) → B1 [5, ubStride] =====
@@ -360,7 +414,11 @@ private:
         AscendC::PipeBarrier<PIPE_ALL>();
 
         // ===== S3 CopyIn gt (MTE2) → B0 fp16 (reuse) =====
-        CopyInPerChannel(gtGm_, boxOffset, boxCount, ubStride);
+        if (agg) {
+            CopyInAgg<half>(gtGm_, b0Buf_, boxOffset, boxCount, ubStride);
+        } else {
+            CopyInPerChannel(gtGm_, boxOffset, boxCount, ubStride);
+        }
         AscendC::PipeBarrier<PIPE_ALL>();
 
         // ===== S4 Cast fp16→fp32 gt (V, ordinary) → B2 [5, ubStride] =====
@@ -383,7 +441,7 @@ private:
             auto b1Local = b1Buf_.Get<float>(); // anchor
             auto b2Local = b2Buf_.Get<float>(); // gt
             auto b3Local = b3Buf_.Get<float>(); // output
-            uint32_t cnt = static_cast<uint32_t>(boxCount);
+            uint32_t cnt = static_cast<uint32_t>(cnt64);
             uint32_t angOff = static_cast<uint32_t>(RBE_CH_ANG * ubStride);
 
             // Step 1-2: θ_a_rad = θ_a_deg × π/180, θ_g_rad = θ_g_deg × π/180
@@ -430,7 +488,7 @@ private:
             __ubuf__ float* b1Ptr = (__ubuf__ float*)b1Local.GetPhyAddr();
             __ubuf__ float* b2Ptr = (__ubuf__ float*)b2Local.GetPhyAddr();
             __ubuf__ float* b3Ptr = (__ubuf__ float*)b3Local.GetPhyAddr();
-            uint32_t cnt = static_cast<uint32_t>(boxCount);
+            uint32_t cnt = static_cast<uint32_t>(cnt64);
             uint32_t stride = static_cast<uint32_t>(ubStride);
             asc_vf_call<DxDwVF>(b3Ptr, b1Ptr, b2Ptr, cnt, stride, td_->weight[0], td_->weight[2]);
             asc_vf_call<DyDhVF>(b3Ptr, b1Ptr, b2Ptr, cnt, stride, td_->weight[1], td_->weight[3]);
@@ -448,7 +506,11 @@ private:
         AscendC::PipeBarrier<PIPE_ALL>();
 
         // ===== S8 CopyOut (V→MTE3) → GM y =====
-        CopyOutPerChannel(boxOffset, boxCount, ubStride);
+        if (agg) {
+            CopyOutAgg<half>(outGm_, b0Buf_, boxOffset, boxCount, ubStride);
+        } else {
+            CopyOutPerChannel(boxOffset, boxCount, ubStride);
+        }
         AscendC::PipeBarrier<PIPE_ALL>();
     }
 
@@ -456,28 +518,42 @@ private:
     // no Cast steps; VF bodies shared with the fp16 path.
     __aicore__ inline void ProcessTileFp32(int64_t boxOffset, int64_t boxCount)
     {
-        // ceilAlign(boxCount, 16) keeps every channel start 64B-aligned for
-        // fp32, satisfying the 32B LoadAlign/StoreAlign requirement.
-        int64_t ubStride = (boxCount + 15) & ~static_cast<int64_t>(15); // ceilAlign(boxCount, 16)
+        // Aggregated tile (slot layout): see ProcessTileFp16.
+        bool agg = (td_->slotElems > 0) && ((boxOffset % N_) == 0) && ((boxCount % N_) == 0);
+        int64_t ubStride = agg ? (boxCount / N_) * td_->slotElems :
+                                 (boxCount + 15) & ~static_cast<int64_t>(15); // ceilAlign(boxCount, 16)
+        int64_t cnt64 = agg ? ubStride : boxCount; // vector op count (pads included when aggregated)
 
         // Zero-init B0/B1/B2 so Tan/VF never read uninitialized data beyond
         // boxCount (507035 faults); the valid region is overwritten by CopyIn/VF.
+        // The length covers the guard tail for the same reason as the fp16 path.
         {
             auto b0Local = b0Buf_.Get<float>();
             auto b1Local = b1Buf_.Get<float>();
             auto b2Local = b2Buf_.Get<float>();
-            AscendC::Duplicate<float>(b0Local, (float)0, static_cast<int32_t>(td_->ubFormer * RBE_BOX_CHANNELS));
-            AscendC::Duplicate<float>(b1Local, (float)0, static_cast<int32_t>(td_->ubFormer * RBE_BOX_CHANNELS));
-            AscendC::Duplicate<float>(b2Local, (float)0, static_cast<int32_t>(td_->ubFormer * RBE_BOX_CHANNELS));
+            AscendC::Duplicate<float>(b0Local, (float)0,
+                                      static_cast<int32_t>(ubStride * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS));
+            AscendC::Duplicate<float>(b1Local, (float)0,
+                                      static_cast<int32_t>(ubStride * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS));
+            AscendC::Duplicate<float>(b2Local, (float)0,
+                                      static_cast<int32_t>(ubStride * RBE_BOX_CHANNELS + RBE_UB_GUARD_ELEMS));
         }
         AscendC::PipeBarrier<PIPE_ALL>();
 
         // ===== S1 CopyIn anchor (MTE2) → B0 fp32 [5, ubStride] =====
-        CopyInPerChannelFp32(anchorGmF32_, b0Buf_, boxOffset, boxCount, ubStride);
+        if (agg) {
+            CopyInAgg<float>(anchorGmF32_, b0Buf_, boxOffset, boxCount, ubStride);
+        } else {
+            CopyInPerChannelFp32(anchorGmF32_, b0Buf_, boxOffset, boxCount, ubStride);
+        }
         AscendC::PipeBarrier<PIPE_ALL>();
 
         // ===== S2 CopyIn gt (MTE2) → B1 fp32 [5, ubStride] =====
-        CopyInPerChannelFp32(gtGmF32_, b1Buf_, boxOffset, boxCount, ubStride);
+        if (agg) {
+            CopyInAgg<float>(gtGmF32_, b1Buf_, boxOffset, boxCount, ubStride);
+        } else {
+            CopyInPerChannelFp32(gtGmF32_, b1Buf_, boxOffset, boxCount, ubStride);
+        }
         AscendC::PipeBarrier<PIPE_ALL>();
 
         // ===== S3 dθ_prewa precompute (V, ordinary, stable identity on ch4) =====
@@ -489,7 +565,7 @@ private:
             auto b0Local = b0Buf_.Get<float>(); // anchor
             auto b1Local = b1Buf_.Get<float>(); // gt
             auto b2Local = b2Buf_.Get<float>(); // output
-            uint32_t cnt = static_cast<uint32_t>(boxCount);
+            uint32_t cnt = static_cast<uint32_t>(cnt64);
             uint32_t angOff = static_cast<uint32_t>(RBE_CH_ANG * ubStride);
 
             // Step 1-2: θ_a_rad = θ_a_deg × π/180, θ_g_rad = θ_g_deg × π/180
@@ -533,7 +609,7 @@ private:
             __ubuf__ float* b0Ptr = (__ubuf__ float*)b0Local.GetPhyAddr();
             __ubuf__ float* b1Ptr = (__ubuf__ float*)b1Local.GetPhyAddr();
             __ubuf__ float* b2Ptr = (__ubuf__ float*)b2Local.GetPhyAddr();
-            uint32_t cnt = static_cast<uint32_t>(boxCount);
+            uint32_t cnt = static_cast<uint32_t>(cnt64);
             uint32_t stride = static_cast<uint32_t>(ubStride);
             asc_vf_call<DxDwVF>(b2Ptr, b0Ptr, b1Ptr, cnt, stride, td_->weight[0], td_->weight[2]);
             asc_vf_call<DyDhVF>(b2Ptr, b0Ptr, b1Ptr, cnt, stride, td_->weight[1], td_->weight[3]);
@@ -542,8 +618,86 @@ private:
         AscendC::PipeBarrier<PIPE_ALL>();
 
         // ===== S5 CopyOut (V→MTE3) → GM y =====
-        CopyOutPerChannelFp32(boxOffset, boxCount, ubStride);
+        if (agg) {
+            CopyOutAgg<float>(outGmF32_, b2Buf_, boxOffset, boxCount, ubStride);
+        } else {
+            CopyOutPerChannelFp32(boxOffset, boxCount, ubStride);
+        }
         AscendC::PipeBarrier<PIPE_ALL>();
+    }
+
+    // Aggregated copies — batch-aligned tiles (slot layout).
+    // The tile covers K = boxCount/N whole batches starting at b0. Channel c
+    // keeps the [5, ubStride] view the VF bodies expect, with batch b's N
+    // elements at c*ubStride + b*slotElems; the trailing pad lanes
+    // [N, slotElems) per slot are zero (zero-inert for the encoding math).
+    //
+    // MTE 2D copy constraint: every UB block start must be 32B-aligned. With
+    // blockLen = N*sizeof(T) and dstStride = 0, consecutive block starts
+    // advance by ceilAlign(N*sizeof(T), 32B) = slotElems*sizeof(T) — exactly
+    // the slot pitch — so all K blocks of one channel land correctly in a
+    // single 2D DataCopyPad per channel.
+    // Invariant: K <= MAX_COPY_BLOCK_COUNT (host tiling caps ubFormer/N).
+    // Precondition: [boxOffset, boxOffset+boxCount) spans whole batches only.
+
+    // CopyInAgg — MTE2 aggregated gather (GM → UB), slot layout.
+    template <typename T>
+    __aicore__ inline void CopyInAgg(const AscendC::GlobalTensor<T>& gm,
+                                     AscendC::TBuf<AscendC::TPosition::VECCALC>& dstBuf, int64_t boxOffset,
+                                     int64_t boxCount, int64_t ubStride)
+    {
+        auto bLocal = dstBuf.Get<T>();
+        int64_t b0 = boxOffset / N_;
+        uint32_t batchCount = static_cast<uint32_t>(boxCount / N_);
+        // Aggregated copies only run when the host tiling enabled the slot
+        // layout (N <= ubFormer, a few thousand), so N * sizeof(T) fits
+        // uint32_t blockLen; the GM stride is kept in int64_t end to end.
+        uint32_t blockLen = static_cast<uint32_t>(N_ * sizeof(T));
+        int64_t srcStride = (RBE_BOX_CHANNELS - 1) * N_ * sizeof(T); // GM: bytes
+
+        AscendC::DataCopyPadExtParams<T> padParams;
+        padParams.isPad = (blockLen % AscendC::ONE_BLK_SIZE) != 0;
+
+        for (int64_t c = 0; c < RBE_BOX_CHANNELS; ++c) {
+            AscendC::DataCopyExtParams copyParams;
+            copyParams.blockCount = batchCount;
+            copyParams.blockLen = blockLen;
+            copyParams.srcStride = srcStride;
+            copyParams.dstStride = 0; // UB: 32B units — slots are contiguous
+
+            int64_t gmOff = b0 * RBE_BOX_CHANNELS * N_ + c * N_;
+            AscendC::DataCopyPad<T, AscendC::PaddingMode::Normal>(
+                bLocal[static_cast<uint32_t>(c * ubStride)], gm[static_cast<uint64_t>(gmOff)], copyParams, padParams);
+        }
+    }
+
+    // CopyOutAgg — MTE3 aggregated scatter (UB → GM), mirror of CopyInAgg:
+    // blocks read contiguous slot lanes (srcStride = 0), GM blocks hop
+    // 4N elements between batch segments (dstStride = 4N elements, bytes).
+    template <typename T>
+    __aicore__ inline void CopyOutAgg(AscendC::GlobalTensor<T>& outGm,
+                                      AscendC::TBuf<AscendC::TPosition::VECCALC>& srcBuf, int64_t boxOffset,
+                                      int64_t boxCount, int64_t ubStride)
+    {
+        auto bLocal = srcBuf.Get<T>();
+        int64_t b0 = boxOffset / N_;
+        uint32_t batchCount = static_cast<uint32_t>(boxCount / N_);
+        // See CopyInAgg: the host slot-layout invariant bounds blockLen;
+        // the GM stride stays int64_t end to end.
+        uint32_t blockLen = static_cast<uint32_t>(N_ * sizeof(T));
+        int64_t dstStride = (RBE_BOX_CHANNELS - 1) * N_ * sizeof(T); // GM: bytes
+
+        for (int64_t c = 0; c < RBE_BOX_CHANNELS; ++c) {
+            AscendC::DataCopyExtParams copyParams;
+            copyParams.blockCount = batchCount;
+            copyParams.blockLen = blockLen;
+            copyParams.srcStride = 0; // UB: 32B units — slots are contiguous
+            copyParams.dstStride = dstStride;
+
+            int64_t gmOff = b0 * RBE_BOX_CHANNELS * N_ + c * N_;
+            AscendC::DataCopyPad<T, AscendC::PaddingMode::Normal>(
+                outGm[static_cast<uint64_t>(gmOff)], bLocal[static_cast<uint32_t>(c * ubStride)], copyParams);
+        }
     }
 
     // CopyInPerChannel — MTE2 2D stride gather (fp16 path).

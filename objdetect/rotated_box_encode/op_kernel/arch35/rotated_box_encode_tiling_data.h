@@ -26,5 +26,8 @@ struct RotatedBoxEncodeTilingData {
     int64_t ubLoopOfTailBlock;   // 尾 block 的 UB 循环次数 = ceil(blockTail / ubFormer)
     int64_t ubTailOfTailBlock;   // 尾 block 的尾部 box 数 = blockTail - (ubLoopOfTailBlock - 1) × ubFormer
     float weight[BOX_CHANNELS];  // 编码权重 [wx, wy, ww, wh, wa]（attr weight 透传，缺省 [1,1,1,1,1]）
+    int64_t slotElems; // 聚合布局：每 batch 每通道的 UB slot 元素数 A = ceilAlign(N*sizeof(T), 32B)/sizeof(T)；
+                       // 0 = 非聚合（per-batch 路径）。tile 内 batch 数 K = ubFormer/N，通道 stride = K*A。
+                       // 新增字段只追加在结构体末尾（保持历史字段偏移不变，兼容缓存 tiling blob）
 };
 #endif // ROTATED_BOX_ENCODE_TILING_DATA_H_
