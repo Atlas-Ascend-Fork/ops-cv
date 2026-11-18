@@ -40,7 +40,9 @@ This chapter uses the co-located development and runtime environment scenario as
 
     # Set ASCEND_PATH (CANN package directory; modify based on the actual path) and INCLUDE_BASE_DIR (header file directory)
     if(NOT "$ENV{ASCEND_CUSTOM_PATH}" STREQUAL "")
-        set(ASCEND_PATH $ENV{ASCEND_CUSTOM_PATH})
+        set(ASCEND_PATH "$ENV{ASCEND_CUSTOM_PATH}")
+    elseif(NOT "$ENV{ASCEND_HOME_PATH}" STREQUAL "")
+        set(ASCEND_PATH "$ENV{ASCEND_HOME_PATH}")
     else()
         set(ASCEND_PATH "/usr/local/Ascend/cann")
     endif()
