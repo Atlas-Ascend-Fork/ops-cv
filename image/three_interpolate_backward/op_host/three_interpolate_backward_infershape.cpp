@@ -15,6 +15,7 @@
 #include "register/op_impl_registry.h"
 #include "op_common/op_host/util/shape_util.h"
 #include "log/log.h"
+#include "error_report_util.h"
 
 using namespace ge;
 
@@ -34,10 +35,19 @@ static graphStatus InferShape4ThreeInterpolateBackward(gert::InferShapeContext* 
     OP_LOGI(context, "Enter InferShape4ThreeInterpolateBackward");
 
     const gert::Shape* grad_x_shape = context->GetInputShape(INDEX_INPUT_GRAD_X);
-    OP_CHECK_NULL_WITH_CONTEXT(context, grad_x_shape);
+    OP_CHECK_IF(
+        grad_x_shape == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "grad_x",
+                                            "the input shape of required input grad_x is missing in the infer-shape "
+                                            "context; check that the graph node provides all required inputs"),
+        return GRAPH_FAILED);
 
     gert::Shape* grad_y_shape = context->GetOutputShape(INDEX_OUTPUT_GRAD_Y);
-    OP_CHECK_NULL_WITH_CONTEXT(context, grad_y_shape);
+    OP_CHECK_IF(grad_y_shape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "grad_y_shape is null in the infershape context; check the InferShapeContext construction"),
+                return GRAPH_FAILED);
 
     if (Ops::Base::IsUnknownRank(*grad_x_shape)) {
         OP_LOGI(context, "input is UnknownRank, set output as UnknownRank.");
@@ -46,14 +56,22 @@ static graphStatus InferShape4ThreeInterpolateBackward(gert::InferShapeContext* 
     }
 
     auto attrs = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+    OP_CHECK_IF(attrs == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "attrs is null in the infershape context; check the InferShapeContext construction"),
+                return GRAPH_FAILED);
 
     // 950(arch35) ND 路径：grad_x (B, C, N) -> grad_y (B, C, M)
     if (grad_x_shape->GetDimNum() == DIM_NUM_ND) {
         // def.cpp 中 Attr("m").Int() 存储为 int64_t，此处按 int64_t 读取
         // （修正参考版 GetAttrPointer<uint32_t> 的类型不匹配问题）
         auto attr_m = attrs->GetAttrPointer<int64_t>(0);
-        OP_CHECK_NULL_WITH_CONTEXT(context, attr_m);
+        OP_CHECK_IF(attr_m == nullptr,
+                    error_report::ReportInferShapeStageError(
+                        context->GetNodeName(),
+                        "attr_m is null in the infershape context; check the InferShapeContext construction"),
+                    return GRAPH_FAILED);
         // 校验属性 m > 0（与 tiling 侧双重拦截）
         OP_CHECK_IF(*attr_m <= 0,
                     OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "m", std::to_string(*attr_m).c_str(),
@@ -62,9 +80,19 @@ static graphStatus InferShape4ThreeInterpolateBackward(gert::InferShapeContext* 
         // 校验 idx/weight shape：dimNum==3、idx shape == weight shape、idx == (B, N, 3)
         // （各输入独立判定：unknown rank 输入跳过自身校验；unknown dim 仅校验已知维度）
         const gert::Shape* idx_shape = context->GetInputShape(static_cast<size_t>(DIM::DIM_1));
-        OP_CHECK_NULL_WITH_CONTEXT(context, idx_shape);
+        OP_CHECK_IF(
+            idx_shape == nullptr,
+            error_report::ReportInvalidArgument(context->GetNodeName(), "idx",
+                                                "the input shape of required input idx is missing in the infer-shape "
+                                                "context; check that the graph node provides all required inputs"),
+            return GRAPH_FAILED);
         const gert::Shape* weight_shape = context->GetInputShape(static_cast<size_t>(DIM::DIM_2));
-        OP_CHECK_NULL_WITH_CONTEXT(context, weight_shape);
+        OP_CHECK_IF(weight_shape == nullptr,
+                    error_report::ReportInvalidArgument(
+                        context->GetNodeName(), "weight",
+                        "the input shape of required input weight is missing in the infer-shape "
+                        "context; check that the graph node provides all required inputs"),
+                    return GRAPH_FAILED);
         const bool idxKnownRank = !Ops::Base::IsUnknownRank(*idx_shape);
         const bool weightKnownRank = !Ops::Base::IsUnknownRank(*weight_shape);
         if (idxKnownRank) {
@@ -124,7 +152,11 @@ static graphStatus InferShape4ThreeInterpolateBackward(gert::InferShapeContext* 
     // 属性 m 在 def.cpp 注册为 Int（int64_t），必须按 int64_t 读取；以 uint32_t 读取会截断
     // 低 32 位（m=-1 变 4294967295），绕过 m>0 校验并污染 grad_y 的 DIM_2。
     auto attr_m = attrs->GetAttrPointer<int64_t>(0);
-    OP_CHECK_NULL_WITH_CONTEXT(context, attr_m);
+    OP_CHECK_IF(attr_m == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "attr_m is null in the infershape context; check the InferShapeContext construction"),
+                return GRAPH_FAILED);
     OP_CHECK_IF(*attr_m <= 0,
                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "m", std::to_string(*attr_m).c_str(),
                                                       "attr m must be > 0"),
@@ -137,9 +169,19 @@ static graphStatus InferShape4ThreeInterpolateBackward(gert::InferShapeContext* 
     // idx/weight 形状校验（与 ND 分支同等约束）：dimNum==3、idx shape == weight shape、
     // idx == (B, N, 3)，其中 N 取 grad_x 的 DIM_2。
     const gert::Shape* idx_shape_5hd = context->GetInputShape(static_cast<size_t>(DIM::DIM_1));
-    OP_CHECK_NULL_WITH_CONTEXT(context, idx_shape_5hd);
+    OP_CHECK_IF(
+        idx_shape_5hd == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "idx",
+                                            "the input shape of required input idx is missing in the infer-shape "
+                                            "context; check that the graph node provides all required inputs"),
+        return GRAPH_FAILED);
     const gert::Shape* weight_shape_5hd = context->GetInputShape(static_cast<size_t>(DIM::DIM_2));
-    OP_CHECK_NULL_WITH_CONTEXT(context, weight_shape_5hd);
+    OP_CHECK_IF(
+        weight_shape_5hd == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "weight",
+                                            "the input shape of required input weight is missing in the infer-shape "
+                                            "context; check that the graph node provides all required inputs"),
+        return GRAPH_FAILED);
     const bool idxKnownRank5hd = !Ops::Base::IsUnknownRank(*idx_shape_5hd);
     const bool weightKnownRank5hd = !Ops::Base::IsUnknownRank(*weight_shape_5hd);
     if (idxKnownRank5hd) {

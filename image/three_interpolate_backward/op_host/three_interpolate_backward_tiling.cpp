@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "log/log.h"
 #include "util/math_util.h"
+#include "op_api/error_report_util.h"
 
 #include "platform/platform_info.h"
 #include "three_interpolate_backward_tiling.h"
@@ -158,7 +159,9 @@ ge::graphStatus TilingProcess(ThreeInterpolateBackwardTilingData& tiling_host, c
                              tiling_host.get_grad_x_move_block_size() + tiling_host.get_grad_y_move_block_size()) *
                             BLOCK_BYTE_SIZE;
     if (total_used_bytes > ub_platform_byte_size) {
-        OP_LOGD(context, "ub insufficient.");
+        OP_LOGE_FOR_INVALID_CONFIG_WITH_REASON(
+            context->GetNodeName(), "platform", "ubSize", std::to_string(ub_platform_byte_size).c_str(),
+            (std::string("ub insufficient, required bytes=") + std::to_string(total_used_bytes)).c_str());
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -168,7 +171,12 @@ ge::graphStatus TilingGetDimSizeByIndex(gert::TilingContext* context, uint32_t i
                                         uint32_t& dim_size)
 {
     auto shape_ptr = (dir == DIR::DIR_INPUT) ? context->GetInputShape(index) : context->GetOutputShape(index);
-    OP_CHECK_NULL_WITH_CONTEXT(context, shape_ptr);
+    OP_CHECK_IF(
+        shape_ptr == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "shape",
+                                            "the input desc/shape of required input/output shape is missing in the "
+                                            "tiling context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
 
     auto shape_val = shape_ptr->GetStorageShape();
     OP_CHECK_IF(static_cast<size_t>(dim) >= shape_val.GetDimNum(), OP_LOGE(context, "shape_val limit error."),
@@ -207,18 +215,38 @@ ge::graphStatus TilingBasicShapeInfo(gert::TilingContext* context, ThreeInterpol
 ge::graphStatus TilingCheckShapeConsistency(gert::TilingContext* context, const ThreeInterpolateShapeInfo& shape_info)
 {
     auto idx_shape_ptr = context->GetInputShape(INDEX_INPUT_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, idx_shape_ptr);
+    OP_CHECK_IF(
+        idx_shape_ptr == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "idx",
+                                            "the input desc/shape of required input idx (index 1) is missing in the "
+                                            "tiling context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
     auto weight_shape_ptr = context->GetInputShape(INDEX_INPUT_WEIGHT);
-    OP_CHECK_NULL_WITH_CONTEXT(context, weight_shape_ptr);
+    OP_CHECK_IF(
+        weight_shape_ptr == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "weight",
+                                            "the input desc/shape of required input weight (index 2) is missing in the "
+                                            "tiling context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
     auto grad_y_shape_ptr = context->GetOutputShape(OUTPUT_GRAD_Y);
-    OP_CHECK_NULL_WITH_CONTEXT(context, grad_y_shape_ptr);
+    OP_CHECK_IF(
+        grad_y_shape_ptr == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "grad_y",
+                                            "the output desc/shape of required output grad_y (index 0) is missing in "
+                                            "the tiling context; check that the graph node provides all required "
+                                            "outputs"),
+        return ge::GRAPH_FAILED);
 
     const auto& idx_shape = idx_shape_ptr->GetStorageShape();
     const auto& weight_shape = weight_shape_ptr->GetStorageShape();
     const auto& grad_y_shape = grad_y_shape_ptr->GetStorageShape();
 
     OP_CHECK_IF(idx_shape.GetDimNum() != CONST_3 || weight_shape.GetDimNum() != CONST_3,
-                OP_LOGE(context, "idx and weight must be 3-dim tensor."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+                    context->GetNodeName(), "idx, weight",
+                    (std::to_string(idx_shape.GetDimNum()) + ", " + std::to_string(weight_shape.GetDimNum())).c_str(),
+                    "idx and weight must be 3-dim tensor"),
+                return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(idx_shape.GetDim(0) != weight_shape.GetDim(0) || idx_shape.GetDim(1) != weight_shape.GetDim(1) ||
                     idx_shape.GetDim(2) != weight_shape.GetDim(2),
@@ -242,12 +270,21 @@ ge::graphStatus TilingCheckShapeConsistency(gert::TilingContext* context, const 
 ge::graphStatus TilingCheckOutputMs(gert::TilingContext* context)
 {
     auto shape_ptr = context->GetOutputShape(OUTPUT_GRAD_Y);
-    OP_CHECK_NULL_WITH_CONTEXT(context, shape_ptr);
+    OP_CHECK_IF(
+        shape_ptr == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "grad_y",
+                                            "the output desc/shape of required output grad_y (index 0) is missing in "
+                                            "the tiling context; check that the graph node provides all required "
+                                            "outputs"),
+        return ge::GRAPH_FAILED);
     const auto& shape_val = shape_ptr->GetStorageShape();
     OP_CHECK_IF(shape_val.GetDimNum() <= static_cast<size_t>(DIM::DIM_2),
                 OP_LOGE(context, "grad_y dim num is invalid."), return ge::GRAPH_FAILED);
     int64_t ms = shape_val.GetDim(static_cast<size_t>(DIM::DIM_2));
-    OP_CHECK_IF(ms <= 0, OP_LOGE(context, "attr m must be > 0."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ms <= 0,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "m", std::to_string(ms).c_str(),
+                                                      "attr m must be > 0"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -286,12 +323,17 @@ ge::graphStatus TilingMainProcess(ThreeInterpolateBackwardTilingData& tiling_hos
 
         tiling_key = static_cast<uint64_t>(ThreeInterpolateBackwardTilingType::TILING_MODE_FP16_INT64);
     } else {
-        OP_LOGD(context, "ThreeInterpolateBackward data type is not supported.");
+        const std::string dtypeMsg = Ops::Base::ToString(grad_x_dtype) + "," + Ops::Base::ToString(idx_dtype);
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "grad_x,idx", dtypeMsg.c_str(),
+                                               "supported combinations are float32/float16 with int32/int64");
         return ge::GRAPH_FAILED;
     }
 
     context->SetTilingKey(tiling_key);
-    OP_CHECK_IF(tiling_ret != ge::GRAPH_SUCCESS, OP_LOGE(context, "TilingProcess failed."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(tiling_ret != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                                       "TilingProcess failed; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
 
     return ge::GRAPH_SUCCESS;
 }
@@ -307,24 +349,43 @@ static ge::graphStatus Tiling4ThreeInterpolateBackward(gert::TilingContext* cont
     }
 
     auto grad_x_desc = context->GetInputDesc(INDEX_INPUT_GRAD_X);
-    OP_CHECK_NULL_WITH_CONTEXT(context, grad_x_desc);
+    OP_CHECK_IF(
+        grad_x_desc == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "grad_x",
+                                            "the input desc of required input grad_x (index 0) is missing in the "
+                                            "tiling context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
 
     const auto& grad_x_format = static_cast<ge::Format>(ge::GetPrimaryFormat(grad_x_desc->GetStorageFormat()));
     OP_CHECK_IF(grad_x_format != ge::FORMAT_NC1HWC0, OP_LOGE(context, "input format invalid, tiling failed."),
                 return ge::GRAPH_FAILED);
 
-    OP_CHECK_IF(TilingCheckOutputMs(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "TilingCheckOutputMs failed."),
+    OP_CHECK_IF(TilingCheckOutputMs(context) != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                                       "TilingCheckOutputMs failed; propagate the first error reported by the failing "
+                                       "stage"),
                 return ge::GRAPH_FAILED);
 
     auto idx_desc = context->GetInputDesc(INDEX_INPUT_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, idx_desc);
+    OP_CHECK_IF(
+        idx_desc == nullptr,
+        error_report::ReportInvalidArgument(context->GetNodeName(), "idx",
+                                            "the input desc of required input idx (index 1) is missing in the "
+                                            "tiling context; check that the graph node provides all required inputs"),
+        return ge::GRAPH_FAILED);
 
     ThreeInterpolateShapeInfo shape_info;
     OP_CHECK_IF(TilingBasicShapeInfo(context, shape_info) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "TilingBasicShapeInfo failed."), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                                       "TilingBasicShapeInfo failed; propagate the first error reported by the failing "
+                                       "stage"),
+                return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(TilingCheckShapeConsistency(context, shape_info) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "TilingCheckShapeConsistency failed."), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                                       "TilingCheckShapeConsistency failed; propagate the first error reported by the "
+                                       "failing stage"),
+                return ge::GRAPH_FAILED);
 
     ThreeInterpolateBackwardTilingData tiling_host;
     tiling_host.set_bs(shape_info.bs);
@@ -333,11 +394,17 @@ static ge::graphStatus Tiling4ThreeInterpolateBackward(gert::TilingContext* cont
     tiling_host.set_ns(shape_info.ns);
 
     auto compileInfo = reinterpret_cast<const ThreeInterpolateBackwardCompileInfo*>(context->GetCompileInfo());
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(TilingMainProcess(tiling_host, compileInfo, context, grad_x_desc->GetDataType(),
                                   idx_desc->GetDataType()) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "tiling failed."), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(context->GetNodeName(),
+                                       "tiling failed; propagate the first error reported by the failing stage"),
+                return ge::GRAPH_FAILED);
 
     size_t sysWorkspaceSize = WORKSPACE_16MBYTE_SIZE;
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
@@ -353,10 +420,18 @@ static ge::graphStatus Tiling4ThreeInterpolateBackward(gert::TilingContext* cont
 static ge::graphStatus TilingPrepare4ThreeInterpolateBackward(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<ThreeInterpolateBackwardCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     auto platformInfo = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfo);
+    OP_CHECK_IF(
+        platformInfo == nullptr,
+        error_report::ReportTilingStageError(
+            context->GetNodeName(), "platformInfo is null in the tiling context; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
 
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->aicore_num = ascendcPlatform.GetCoreNumAiv();

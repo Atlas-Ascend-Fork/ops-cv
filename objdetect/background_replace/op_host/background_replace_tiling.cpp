@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -16,10 +16,12 @@
 #include "register/op_impl_registry.h"
 #include "platform/platform_info.h"
 #include "log/log.h"
+#include "op_api/error_report_util.h"
 #include "tiling/tiling_api.h"
 #include "util/math_util.h"
 #include "background_replace_tiling.h"
 #include <limits>
+#include <string>
 
 namespace optiling {
 
@@ -83,28 +85,40 @@ static ge::graphStatus TilingBackgroundReplace(gert::TilingContext* context)
     auto tensorMask = context->GetInputTensor(2);
     auto outDesc = context->GetOutputDesc(0);
     if (tensorBkg == nullptr || tensorSrc == nullptr || tensorMask == nullptr || outDesc == nullptr) {
-        OP_LOGE("BackgroundReplace", "bkg, src, mask or out tensor is null.");
+        error_report::ReportInvalidArgument("BackgroundReplace", "bkg/src/mask/out",
+                                            "bkg, src, mask or out tensor is null");
         return ge::GRAPH_FAILED;
     }
     auto bkgShape = context->GetInputShape(0);
     auto srcShape = context->GetInputShape(1);
     auto maskShape = context->GetInputShape(2);
     auto outShape = context->GetOutputShape(0);
-    if (bkgShape == nullptr || srcShape == nullptr || maskShape == nullptr || outShape == nullptr ||
-        !IsShapeContractValid(bkgShape->GetStorageShape(), srcShape->GetStorageShape(), maskShape->GetStorageShape(),
+    if (bkgShape == nullptr || srcShape == nullptr || maskShape == nullptr || outShape == nullptr) {
+        error_report::ReportInvalidArgument("BackgroundReplace", "bkg/src/mask/out",
+                                            "bkg, src, mask or out shape is null");
+        return ge::GRAPH_FAILED;
+    }
+    if (!IsShapeContractValid(bkgShape->GetStorageShape(), srcShape->GetStorageShape(), maskShape->GetStorageShape(),
                               outShape->GetStorageShape())) {
-        OP_LOGE("BackgroundReplace", "bkg, src, mask or out shape is invalid.");
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("BackgroundReplace", "bkg/src/mask/out", "invalid",
+                                              "bkg, src, mask or out shape is invalid");
         return ge::GRAPH_FAILED;
     }
     int64_t maskSize = tensorMask->GetShapeSize();
     int64_t bkgSize = tensorBkg->GetShapeSize();
     if (maskSize < 0 || bkgSize < 0 || maskSize > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
-        OP_LOGE("BackgroundReplace", "mask or background shape size is invalid.");
+        OP_LOGE_FOR_INVALID_SHAPESIZES_WITH_REASON("BackgroundReplace", "mask,bkg",
+                                                   (std::to_string(maskSize) + "," + std::to_string(bkgSize)).c_str(),
+                                                   "mask or background shape size is invalid");
         return ge::GRAPH_FAILED;
     }
     auto bkgDataType = tensorBkg->GetDataType();
     if (tensorSrc->GetDataType() != bkgDataType || outDesc->GetDataType() != bkgDataType) {
-        OP_LOGE("BackgroundReplace", "bkg, src and out dtype must be the same.");
+        const std::string dtypeMsg = Ops::Base::ToString(bkgDataType) + "," +
+                                     Ops::Base::ToString(tensorSrc->GetDataType()) + "," +
+                                     Ops::Base::ToString(outDesc->GetDataType());
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON("BackgroundReplace", "bkg,src,out", dtypeMsg.c_str(),
+                                               "bkg, src and out dtype must be the same");
         return ge::GRAPH_FAILED;
     }
     const uint64_t tiling_key = ResolveBackgroundReplaceTilingKey(maskSize, bkgSize, bkgDataType);

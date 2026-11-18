@@ -61,3 +61,76 @@ TEST(ThreeInterpolateBackwardTiling910B, rejects_negative_m)
     TilingInfo info;
     EXPECT_FALSE(ExecuteTiling(context, info));
 }
+
+TEST(ThreeInterpolateBackwardTiling910B, rejects_unsupported_idx_dtype)
+{
+    gert::StorageShape gradX({2, 1, 4, 1, kC0}, {2, 1, 4, 1, kC0});
+    gert::StorageShape idx({2, 4, 3}, {2, 4, 3});
+    gert::StorageShape weight({2, 4, 3}, {2, 4, 3});
+    gert::StorageShape gradY({2, 1, 6, 1, kC0}, {2, 1, 6, 1, kC0});
+    auto context = gert::TilingContextPara(
+        "ThreeInterpolateBackward",
+        {
+            {gradX, ge::DT_FLOAT, ge::FORMAT_NC1HWC0},
+            {idx, ge::DT_FLOAT, ge::FORMAT_ND},
+            {weight, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {gradY, ge::DT_FLOAT, ge::FORMAT_NC1HWC0},
+        },
+        {
+            gert::TilingContextPara::OpAttr("m", Ops::Cv::AnyValue::CreateFrom<int64_t>(6)),
+        },
+        &g_compileInfo, "Ascend910B", 48, 262144);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}
+
+TEST(ThreeInterpolateBackwardTiling910B, rejects_ub_insufficient)
+{
+    optiling::ThreeInterpolateBackwardCompileInfo tinyUb{48, 64};
+    gert::StorageShape gradX({2, 1, 4, 1, kC0}, {2, 1, 4, 1, kC0});
+    gert::StorageShape idx({2, 4, 3}, {2, 4, 3});
+    gert::StorageShape weight({2, 4, 3}, {2, 4, 3});
+    gert::StorageShape gradY({2, 1, 6, 1, kC0}, {2, 1, 6, 1, kC0});
+    auto context = gert::TilingContextPara(
+        "ThreeInterpolateBackward",
+        {
+            {gradX, ge::DT_FLOAT, ge::FORMAT_NC1HWC0},
+            {idx, ge::DT_INT32, ge::FORMAT_ND},
+            {weight, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {gradY, ge::DT_FLOAT, ge::FORMAT_NC1HWC0},
+        },
+        {
+            gert::TilingContextPara::OpAttr("m", Ops::Cv::AnyValue::CreateFrom<int64_t>(6)),
+        },
+        &tinyUb, "Ascend910B", 48, 64);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}
+
+TEST(ThreeInterpolateBackwardTiling910B, rejects_idx_n_mismatch)
+{
+    gert::StorageShape gradX({2, 1, 4, 1, kC0}, {2, 1, 4, 1, kC0});
+    gert::StorageShape idx({2, 5, 3}, {2, 5, 3});
+    gert::StorageShape weight({2, 5, 3}, {2, 5, 3});
+    gert::StorageShape gradY({2, 1, 6, 1, kC0}, {2, 1, 6, 1, kC0});
+    auto context = gert::TilingContextPara(
+        "ThreeInterpolateBackward",
+        {
+            {gradX, ge::DT_FLOAT, ge::FORMAT_NC1HWC0},
+            {idx, ge::DT_INT32, ge::FORMAT_ND},
+            {weight, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {gradY, ge::DT_FLOAT, ge::FORMAT_NC1HWC0},
+        },
+        {
+            gert::TilingContextPara::OpAttr("m", Ops::Cv::AnyValue::CreateFrom<int64_t>(6)),
+        },
+        &g_compileInfo, "Ascend910B", 48, 262144);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}

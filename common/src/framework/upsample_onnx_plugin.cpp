@@ -55,10 +55,8 @@ static Status ParseParamsUpsample(const ge::Operator& op_src, ge::Operator& op_d
     }
 
     if (mode_value != "nearest" && mode_value != "linear") {
-        OP_LOGE(GetOpName(op_dest).c_str(),
-                "Mode attr of Upsample only supports nearest and linear, current "
-                "is %s .",
-                mode_value.c_str());
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(GetOpName(op_dest).c_str(), "mode", mode_value.c_str(),
+                                              "Mode attr of Upsample only supports nearest and linear");
         return FAILED;
     }
 

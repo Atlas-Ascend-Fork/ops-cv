@@ -118,7 +118,9 @@ static Status ParseParamsResize(const ge::Operator& op_src, ge::Operator& op_dst
     std::string input_scales;
     ResolveResizeInputs(op_src, input_size, input_roi, input_scales);
     if (input_size < INPUT_SIZES_IS_THREE) {
-        OP_LOGE(GetOpName(op_dst).c_str(), "Input size is less than 3, cannot access input_roi and input_scales.");
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(GetOpName(op_dst).c_str(), "input_size",
+                                              std::to_string(input_size).c_str(),
+                                              "Input size is less than 3, cannot access input_roi and input_scales");
         return FAILED;
     }
 

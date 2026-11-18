@@ -13,8 +13,11 @@
  * \brief roi_pooling_with_arg_max infer shape, logic reused from canndev
  */
 
+#include <string>
+
 #include "register/op_impl_registry.h"
 #include "log/log.h"
+#include "error_report_util.h"
 #include "util/shape_util.h"
 #include "infershape_utils.h"
 
@@ -48,33 +51,35 @@ static ge::graphStatus CheckInputShapeValid(gert::InferShapeContext* context, co
     if (!Ops::Base::IsUnknownRank(*rois_shape)) {
         int64_t length_rois = static_cast<int64_t>(rois_shape->GetDimNum());
         if (length_rois == 0) {
-            OP_LOGE(context->GetNodeName(), "rois shape dim number is 0.");
+            OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "rois", "0", "2");
             return ge::GRAPH_FAILED;
         }
         if (length_rois != static_cast<int64_t>(DIM_TWO)) {
-            OP_LOGE(context->GetNodeName(), "rois shape %s dim number is not two.",
-                    Ops::Base::ToString(*rois_shape).c_str());
+            OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "rois", std::to_string(length_rois).c_str(), "2");
             return ge::GRAPH_FAILED;
         }
         if (rois_shape->GetDim(DIM_ZERO) > BATCH_SIZE_MAX_LIMIT) {
-            OP_LOGE(context->GetNodeName(), "the first dim of rois shape %s exceeds 1024.",
-                    Ops::Base::ToString(*rois_shape).c_str());
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "rois.shape[0]",
+                                                  std::to_string(rois_shape->GetDim(DIM_ZERO)).c_str(),
+                                                  "the first dim of rois shape exceeds 1024.");
             return ge::GRAPH_FAILED;
         }
     }
     if (!Ops::Base::IsUnknownRank(*x_shape)) {
         int64_t length_features = static_cast<int64_t>(x_shape->GetDimNum());
         if (length_features < 1) {
-            OP_LOGE(context->GetNodeName(), "x shape dim number is invalid.");
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(
+                context->GetNodeName(), "x", std::to_string(length_features).c_str(), "x shape dim number is invalid.");
             return ge::GRAPH_FAILED;
         }
         if (length_features != static_cast<int64_t>(DIM_FOUR)) {
-            OP_LOGE(context->GetNodeName(), "x shape %s rank is not 4.", Ops::Base::ToString(*x_shape).c_str());
+            OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "x", std::to_string(length_features).c_str(), "4");
             return ge::GRAPH_FAILED;
         }
         if (x_shape->GetDim(DIM_ZERO) > BATCH_SIZE_MAX_LIMIT) {
-            OP_LOGE(context->GetNodeName(), "the first dim of x shape %s exceeds 1024.",
-                    Ops::Base::ToString(*x_shape).c_str());
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x.shape[0]",
+                                                  std::to_string(x_shape->GetDim(DIM_ZERO)).c_str(),
+                                                  "the first dim of x shape exceeds 1024.");
             return ge::GRAPH_FAILED;
         }
     }
@@ -84,16 +89,29 @@ static ge::graphStatus CheckInputShapeValid(gert::InferShapeContext* context, co
 static ge::graphStatus InferShape4RoiPoolingWithArgMax(gert::InferShapeContext* context)
 {
     auto x_shape = context->GetInputShape(INPUT_FEATURES_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, x_shape);
+    OP_CHECK_IF(x_shape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "x"), return ge::GRAPH_FAILED);
     auto rois_shape = context->GetInputShape(INPUT_ROIS_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, rois_shape);
+    OP_CHECK_IF(rois_shape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "rois"),
+                return ge::GRAPH_FAILED);
     auto output_shape = context->GetOutputShape(OUTPUT_Y_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, output_shape);
+    OP_CHECK_IF(output_shape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "output_shape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
     auto argmax_shape = context->GetOutputShape(OUTPUT_ARGMAX_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, argmax_shape);
+    OP_CHECK_IF(argmax_shape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "argmax_shape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+    OP_CHECK_IF(attrs == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "attrs is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
     const int64_t* pool_h_ptr = attrs->GetAttrPointer<int64_t>(ATTR_POOLED_HEIGHT_IDX);
     const int64_t* pool_w_ptr = attrs->GetAttrPointer<int64_t>(ATTR_POOLED_WIDTH_IDX);
 
@@ -101,7 +119,7 @@ static ge::graphStatus InferShape4RoiPoolingWithArgMax(gert::InferShapeContext* 
     const int64_t pool_w_shape = pool_w_ptr == nullptr ? ge::UNKNOWN_DIM : *pool_w_ptr;
 
     if (CheckInputShapeValid(context, rois_shape, x_shape) != ge::GRAPH_SUCCESS) {
-        OP_LOGE(context->GetNodeName(), "Input shape check failed.");
+        OP_LOGE_WITHOUT_REPORT(context->GetNodeName(), "Input shape check failed; propagate the first error");
         return ge::GRAPH_FAILED;
     }
 

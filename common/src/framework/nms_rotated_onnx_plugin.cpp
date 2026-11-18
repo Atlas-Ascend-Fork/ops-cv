@@ -98,7 +98,8 @@ static Status ParseOpToGraphNMSRotated(const ge::Operator& op, ge::Graph& graph)
     int input_size = 0;
     op.GetAttr("N", input_size);
     if (input_size != INPUT_NUM_WITHOUT_LABELS && input_size != INPUT_NUM_WITH_LABELS) {
-        OP_LOGE("ParseOpToGraphNMSRotated", "input must contain boxes, scores and labels(optional)");
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("ParseOpToGraphNMSRotated", "N", std::to_string(input_size).c_str(),
+                                              "input must contain boxes, scores and labels(optional)");
         return FAILED;
     }
 

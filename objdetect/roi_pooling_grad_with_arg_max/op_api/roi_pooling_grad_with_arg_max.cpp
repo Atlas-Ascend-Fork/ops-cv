@@ -37,7 +37,9 @@ const aclTensor* RoiPoolingGradWithArgMax(const aclTensor* grad, const aclTensor
                                            OP_INPUT(grad, x, rois, roiActualNumOptional, argmax), OP_OUTPUT(out),
                                            OP_ATTR(pooledH, pooledW, spatialScaleH, spatialScaleW, poolChannel));
     OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "RoiPoolingGradWithArgMaxAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
+             OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                                    "RoiPoolingGradWithArgMaxAiCore ADD_TO_LAUNCHER_LIST_AICORE failed; "
+                                    "propagate the first error reported by the failing stage."),
              return nullptr);
     return out;
 }

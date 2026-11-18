@@ -12,8 +12,11 @@
  * \file roi_pooling_grad_with_arg_max_infershape.cpp
  * \brief
  */
+#include <string>
+
 #include "register/op_impl_registry.h"
 #include "log/log.h"
+#include "error_report_util.h"
 #include "register/tilingdata_base.h"
 #include "util/math_util.h"
 #include "util/shape_util.h"
@@ -74,20 +77,27 @@ static ge::graphStatus InferShape4RoiPoolingGradWithArgMax(gert::InferShapeConte
 {
     OP_LOGI(context->GetNodeName(), "begin to do InferShape4RoiPoolingGradWithArgMax.");
     auto gradShape = context->GetInputShape(GRAD_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, gradShape);
+    OP_CHECK_IF(gradShape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "grad"),
+                return ge::GRAPH_FAILED);
     OP_LOGD(context->GetNodeName(), "input grad shape = %s", Ops::Base::ToString(*gradShape).c_str());
     auto xShape = context->GetInputShape(X_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, xShape);
+    OP_CHECK_IF(xShape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "x"), return ge::GRAPH_FAILED);
     OP_LOGD(context->GetNodeName(), "input x shape = %s", Ops::Base::ToString(*xShape).c_str());
     auto roisShape = context->GetInputShape(ROIS_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, roisShape);
+    OP_CHECK_IF(roisShape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "rois"),
+                return ge::GRAPH_FAILED);
     OP_LOGD(context->GetNodeName(), "input rois shape = %s", Ops::Base::ToString(*roisShape).c_str());
     auto argmaxShape = context->GetInputShape(ARGMAX_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, argmaxShape);
+    OP_CHECK_IF(argmaxShape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "argmax"),
+                return ge::GRAPH_FAILED);
     OP_LOGD(context->GetNodeName(), "input argmax shape = %s", Ops::Base::ToString(*argmaxShape).c_str());
 
     auto yShape = context->GetOutputShape(Y_IDX);
-    OP_CHECK_NULL_WITH_CONTEXT(context, yShape);
+    OP_CHECK_IF(yShape == nullptr,
+                error_report::ReportInferShapeStageError(
+                    context->GetNodeName(),
+                    "yShape is null in the infershape context; check the InferShapeContext construction"),
+                return ge::GRAPH_FAILED);
 
     if (Ops::Base::IsUnknownRank(*gradShape) || Ops::Base::IsUnknownRank(*xShape) ||
         Ops::Base::IsUnknownRank(*roisShape) || Ops::Base::IsUnknownRank(*argmaxShape)) {
@@ -98,12 +108,12 @@ static ge::graphStatus InferShape4RoiPoolingGradWithArgMax(gert::InferShapeConte
     }
 
     OP_CHECK_IF((!checkInputShape(context, gradShape, xShape, roisShape, argmaxShape)),
-                OP_LOGE(context->GetNodeName(), "Input shape check failed."), return ge::GRAPH_FAILED);
+                error_report::ReportInvalidArgument(context->GetNodeName(), "input", "Input shape check failed."),
+                return ge::GRAPH_FAILED);
 
     auto xShapeSize = xShape->GetDimNum();
     OP_CHECK_IF((xShapeSize != DIMS_FOUR),
-                OP_LOGE(context->GetNodeName(), "x's dim length should be 4, but got %s.",
-                        Ops::Base::ToString(*xShape).c_str()),
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "x", std::to_string(xShapeSize).c_str(), "4"),
                 return ge::GRAPH_FAILED);
     yShape->SetDimNum(xShapeSize);
 

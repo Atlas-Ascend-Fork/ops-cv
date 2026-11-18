@@ -73,14 +73,16 @@ static Status OpRoiAlignUpdateInfo(const ge::Operator& op_src, ge::Operator& op_
                         // attr is absent. If the attr is present, "s" must be a real avg/max string;
                         // do not fall back to "" or silently keep the default (tiling rejects others).
                         if (!attr.contains("s") || !attr["s"].is_string()) {
-                            OP_LOGE(GetOpName(op_dest).c_str(),
-                                    "mode attribute is present but string value \"s\" is missing.");
+                            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                                GetOpName(op_dest).c_str(), "mode", "missing",
+                                "mode attribute is present but string value \"s\" is missing");
                             return FAILED;
                         }
                         pool_mode_value = attr["s"].get<std::string>();
                         if (pool_mode_value != ROI_ALIGN_POOL_MODE_AVG && pool_mode_value != ROI_ALIGN_POOL_MODE_MAX) {
-                            OP_LOGE(GetOpName(op_dest).c_str(), "pool_mode must be \"avg\" or \"max\", got \"%s\".",
-                                    pool_mode_value.c_str());
+                            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(GetOpName(op_dest).c_str(), "mode",
+                                                                  pool_mode_value.c_str(),
+                                                                  "mode must be \"avg\" or \"max\"");
                             return FAILED;
                         }
                     }

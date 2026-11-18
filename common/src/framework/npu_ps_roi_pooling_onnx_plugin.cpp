@@ -72,7 +72,8 @@ static Status ParseParamsNpuPsRoiPooling(const ge::Operator& op_src, ge::Operato
 
     // Node must have 3 required attr.
     if (attr_num != 3) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "Node must have attr spatial_scale, output_dim, group_size");
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(GetOpName(op_dest).c_str(), "attrs", std::to_string(attr_num).c_str(),
+                                              "Node must have attr spatial_scale, output_dim, group_size");
         return FAILED;
     }
 

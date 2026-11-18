@@ -20,6 +20,7 @@
 
 #include "exe_graph/runtime/infer_datatype_context.h"
 #include "log/log.h"
+#include "op_api/error_report_util.h"
 #include "register/op_impl_registry.h"
 
 namespace ops {
@@ -32,13 +33,23 @@ constexpr const char* kValueAippModeStatic = "static";
 
 ge::graphStatus InferDataTypeForAipp(gert::InferDataTypeContext* context)
 {
-    OP_CHECK_IF(context == nullptr, OP_LOGE("Aipp", "%s is nullptr!", "InferDataTypeContext"), return ge::GRAPH_FAILED);
+    if (context == nullptr) {
+        error_report::ReportInferShapeStageError("Aipp", "InferDataTypeContext is nullptr");
+        return ge::GRAPH_FAILED;
+    }
     const ge::DataType outDtype = context->GetOutputDataType(kFeaturesIdx);
     try {
         auto attrs = context->GetAttrs();
-        OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+        if (attrs == nullptr) {
+            error_report::ReportInferShapeStageError(context->GetNodeName(), "attrs is null in InferDataType context");
+            return ge::GRAPH_FAILED;
+        }
         const char* configData = attrs->GetAttrPointer<char>(kAttrCfgIdx);
-        OP_CHECK_NULL_WITH_CONTEXT(context, configData);
+        if (configData == nullptr) {
+            error_report::ReportInvalidArgument(context->GetNodeName(), "aipp_config_path",
+                                                "configData is null in InferDataType context");
+            return ge::GRAPH_FAILED;
+        }
         nlohmann::json cfgJson = nlohmann::json::parse(configData);
         OP_CHECK_IF(!cfgJson.is_object(),
                     OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "aipp_config_path", configData,

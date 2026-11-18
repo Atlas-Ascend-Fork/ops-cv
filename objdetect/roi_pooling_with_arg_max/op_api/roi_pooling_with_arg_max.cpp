@@ -53,7 +53,9 @@ const aclTensor* RoiPoolingWithArgMax(const aclTensor* x, const aclTensor* rois,
     auto y = executor->AllocTensor(yStorageShape, yOriginalShape, x->GetDataType(), x->GetStorageFormat(),
                                    x->GetOriginalFormat());
     if (y == nullptr) {
-        OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "RoiPoolingWithArgMax alloc y tensor failed");
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                               "RoiPoolingWithArgMax alloc y tensor failed; propagate the first error "
+                               "reported by the failing stage.");
         return nullptr;
     }
 
@@ -63,7 +65,9 @@ const aclTensor* RoiPoolingWithArgMax(const aclTensor* x, const aclTensor* rois,
     auto argmax = executor->AllocTensor(argmaxStorageShape, argmaxOriginalShape, op::DataType::DT_INT32,
                                         op::Format::FORMAT_ND, op::Format::FORMAT_ND);
     if (argmax == nullptr) {
-        OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "RoiPoolingWithArgMax alloc argmax tensor failed");
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                               "RoiPoolingWithArgMax alloc argmax tensor failed; propagate the first error "
+                               "reported by the failing stage.");
         return nullptr;
     }
 
@@ -72,9 +76,11 @@ const aclTensor* RoiPoolingWithArgMax(const aclTensor* x, const aclTensor* rois,
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(RoiPoolingWithArgMax, OP_INPUT(x, rois, roi_actual_num),
                                            OP_OUTPUT(y, argmax),
                                            OP_ATTR(pooled_h, pooled_w, spatial_scale_h, spatial_scale_w, pool_channel));
-    OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "RoiPoolingWithArgMax ADD_TO_LAUNCHER_LIST_AICORE failed."),
-             return nullptr);
+    OP_CHECK(
+        ret == ACLNN_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "RoiPoolingWithArgMax ADD_TO_LAUNCHER_LIST_AICORE failed; "
+                                                        "propagate the first error reported by the failing stage."),
+        return nullptr);
 
     *out_y = y;
     *out_argmax = argmax;

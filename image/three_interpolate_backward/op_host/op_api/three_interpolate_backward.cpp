@@ -35,7 +35,9 @@ const aclTensor* ThreeInterpolateBackwardAicore(const aclTensor* grad_x, const a
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(ThreeInterpolateBackward, OP_INPUT(grad_x, idx, weight), OP_OUTPUT(grad_y),
                                            OP_ATTR(m));
     OP_CHECK(ret == ACLNN_SUCCESS,
-             OP_LOGE(ACLNN_ERR_INNER_NULLPTR, "ThreeInterpolateBackwardAiCore ADD_TO_LAUNCHER_LIST_AICORE failed."),
+             OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR,
+                                    "ThreeInterpolateBackwardAiCore ADD_TO_LAUNCHER_LIST_AICORE failed; "
+                                    "propagate the first error reported by the failing stage."),
              return nullptr);
     return grad_y;
 }

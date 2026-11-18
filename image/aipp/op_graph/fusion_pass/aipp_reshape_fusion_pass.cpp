@@ -23,6 +23,7 @@
 #include "ge/ge_api_error_codes.h"
 #include "graph/utils/type_utils.h"
 #include "log/log.h"
+#include "op_api/error_report_util.h"
 #include "register/register_custom_pass.h"
 #include "version/ge-compiler_version.h"
 using namespace ge;
@@ -403,12 +404,14 @@ graphStatus WriteFeaturesDescFromImages(GNode& node, const TensorDesc& imagesDes
     const std::string nodeName = GetNodeName(node);
     TensorDesc featuresDesc;
     OP_CHECK_IF(node.GetOutputDesc(kFeaturesOutputIndex, featuresDesc) != GRAPH_SUCCESS,
-                OP_LOGE(nodeName.c_str(), "GetOutputDesc features failed."), return GRAPH_FAILED);
+                error_report::ReportInferShapeStageError(nodeName.c_str(), "GetOutputDesc features failed."),
+                return GRAPH_FAILED);
     featuresDesc.SetFormat(imagesDesc.GetFormat());
     featuresDesc.SetOriginFormat(imagesDesc.GetOriginFormat());
     featuresDesc.SetSize(featuresSize);
     OP_CHECK_IF(node.UpdateOutputDesc(kFeaturesOutputIndex, featuresDesc) != GRAPH_SUCCESS,
-                OP_LOGE(nodeName.c_str(), "UpdateOutputDesc features failed."), return GRAPH_FAILED);
+                error_report::ReportInferShapeStageError(nodeName.c_str(), "UpdateOutputDesc features failed."),
+                return GRAPH_FAILED);
     return GRAPH_SUCCESS;
 }
 
@@ -418,7 +421,8 @@ graphStatus SetHasInferedVerified(GNode& node)
     int64_t verified = kHasInferedVerifiedValue;
     const std::string nodeName = GetNodeName(node);
     OP_CHECK_IF(node.SetAttr(attrName, verified) != GRAPH_SUCCESS,
-                OP_LOGE(nodeName.c_str(), "SetAttr has_infered_verified failed."), return GRAPH_FAILED);
+                error_report::ReportInferShapeStageError(nodeName.c_str(), "SetAttr has_infered_verified failed."),
+                return GRAPH_FAILED);
     return GRAPH_SUCCESS;
 }
 
@@ -438,7 +442,8 @@ graphStatus WriteBackStatic(GNode& node, const AippParamsCfg& params)
     const std::string nodeName = GetNodeName(node);
     TensorDesc imagesDesc;
     OP_CHECK_IF(node.GetInputDesc(kImagesInputIndex, imagesDesc) != GRAPH_SUCCESS,
-                OP_LOGE(nodeName.c_str(), "GetInputDesc images failed."), return GRAPH_FAILED);
+                error_report::ReportInferShapeStageError(nodeName.c_str(), "GetInputDesc images failed."),
+                return GRAPH_FAILED);
     ImagesLayout layout;
     OP_CHECK_IF(ParseImagesLayout(nodeName.c_str(), imagesDesc, layout) != GRAPH_SUCCESS, , return GRAPH_FAILED);
     const int64_t realChannel = (layout.format == FORMAT_NC1HWC0_C04) ? kChannel1 : GetChannel(params);
@@ -451,13 +456,15 @@ graphStatus WriteBackStatic(GNode& node, const AippParamsCfg& params)
     FillStaticPackedShape(layout, srcH, srcW, realChannel, imagesDesc);
     imagesDesc.SetDataType(srcDtype);
     OP_CHECK_IF(node.UpdateInputDesc(kImagesInputIndex, imagesDesc) != GRAPH_SUCCESS,
-                OP_LOGE(nodeName.c_str(), "UpdateInputDesc images failed."), return GRAPH_FAILED);
+                error_report::ReportInferShapeStageError(nodeName.c_str(), "UpdateInputDesc images failed."),
+                return GRAPH_FAILED);
     OP_CHECK_IF(SetHasInferedVerified(node) != GRAPH_SUCCESS, , return GRAPH_FAILED);
     std::vector<int64_t> aclInputDims = GetAclInputDims(params, layout.batch, srcH, srcW);
     if (aclInputDims.size() >= static_cast<size_t>(kNum4)) {
         AscendString dimsName(kAttrInputDims);
         OP_CHECK_IF(node.SetAttr(dimsName, aclInputDims) != GRAPH_SUCCESS,
-                    OP_LOGE(nodeName.c_str(), "SetAttr input_dims failed."), return GRAPH_FAILED);
+                    error_report::ReportInferShapeStageError(nodeName.c_str(), "SetAttr input_dims failed."),
+                    return GRAPH_FAILED);
     }
     return GRAPH_SUCCESS;
 }
@@ -484,7 +491,8 @@ graphStatus WriteBackDynamicCompile(GNode& node, const AippParamsCfg& params)
                 return GRAPH_FAILED);
     TensorDesc imagesDesc;
     OP_CHECK_IF(node.GetInputDesc(kImagesInputIndex, imagesDesc) != GRAPH_SUCCESS,
-                OP_LOGE(nodeName.c_str(), "GetInputDesc images failed."), return GRAPH_FAILED);
+                error_report::ReportInferShapeStageError(nodeName.c_str(), "GetInputDesc images failed."),
+                return GRAPH_FAILED);
     OP_CHECK_IF(
         IsUnknownRankDims(imagesDesc.GetShape().GetDims()),
         OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(nodeName.c_str(), "images", "[-2]", "unknown rank is not supported"),
@@ -497,7 +505,8 @@ graphStatus WriteBackDynamicCompile(GNode& node, const AippParamsCfg& params)
     imagesDesc.SetDataType(DT_UINT8);
     SetFormatAndOrigin(imagesDesc, FORMAT_NHWC);
     OP_CHECK_IF(node.UpdateInputDesc(kImagesInputIndex, imagesDesc) != GRAPH_SUCCESS,
-                OP_LOGE(nodeName.c_str(), "UpdateInputDesc images failed."), return GRAPH_FAILED);
+                error_report::ReportInferShapeStageError(nodeName.c_str(), "UpdateInputDesc images failed."),
+                return GRAPH_FAILED);
     return SetHasInferedVerified(node);
 }
 
@@ -532,7 +541,8 @@ namespace Ops {
 ge::Status AippReshapeFusionPass::Run(ge::GraphPtr& graph, ge::CustomPassContext& passContext)
 {
     OP_LOGD(kPassName, "Enter AippReshapeFusionPass");
-    OP_CHECK_IF(graph == nullptr, OP_LOGE(kPassName, "%s is nullptr!", "graph"), return FAILED);
+    OP_CHECK_IF(graph == nullptr, error_report::ReportInferShapeStageError(kPassName, "graph is nullptr"),
+                return FAILED);
 
     bool changed = false;
     for (auto& node : graph->GetDirectNode()) {

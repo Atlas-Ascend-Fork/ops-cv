@@ -116,7 +116,9 @@ static Status ParseParamsRoiExtractor(const ge::Operator& op_src, ge::Operator& 
     // Do not use GetInputsSize() alone — it is 0 before ports are registered.
     const uint32_t input_num = ResolveOnnxInputNum(op_src);
     if (input_num < MIN_INPUT_NUM) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "input num must be greater than or equal to 2, but got %u", input_num);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(GetOpName(op_dest).c_str(), "input_num",
+                                              std::to_string(input_num).c_str(),
+                                              "input num must be greater than or equal to 2");
         return FAILED;
     }
     op_dest.DynamicInputRegister("features", input_num - 1, false);
