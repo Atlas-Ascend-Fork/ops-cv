@@ -69,7 +69,7 @@ inline Hsv<T> RgbToHsv(Rgb<T> in)
     max = max > in.b ? max : in.b;
 
     T delta{max - min};
-    if (delta < static_cast<T>(0.00001)) {
+    if (delta == static_cast<T>(0.0) || max == static_cast<T>(0.0)) {
         return Hsv<T>{static_cast<T>(0.0), static_cast<T>(0.0), max};
     }
     if (max < static_cast<T>(0.0)) {

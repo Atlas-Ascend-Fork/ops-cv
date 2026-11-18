@@ -8,6 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <cmath>
+
 #include "gtest/gtest.h"
 #ifndef private
 #define private public
@@ -276,4 +278,43 @@ TEST_F(TEST_ADJUST_SATURATION_UT, INPUT_BOOL_UNSUPPORT)
 
     CREATE_NODEDEF(shapes, data_types, datas);
     RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
+}
+
+template <typename T>
+void CheckSmallChroma(DataType dataType, T low, T high)
+{
+    T input[] = {high, low, low, low, low, low, T(0), T(0), T(0)};
+    T output[9] = {};
+    float scale[] = {100000.0F};
+    vector<vector<int64_t>> shapes = {{1, 3, 3}, {1}, {1, 3, 3}};
+    vector<DataType> dataTypes = {dataType, DT_FLOAT, dataType};
+    vector<void*> datas = {input, scale, output};
+    CREATE_NODEDEF(shapes, dataTypes, datas);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+    const T expected[] = {high, T(0), T(0), low, low, low, T(0), T(0), T(0)};
+    for (size_t i = 0; i < 9; ++i) {
+        EXPECT_EQ(static_cast<float>(output[i]), static_cast<float>(expected[i]));
+    }
+}
+
+TEST_F(TEST_ADJUST_SATURATION_UT, SMALL_NONZERO_CHROMA_IS_SCALED)
+{
+    CheckSmallChroma<float>(DT_FLOAT, 0.5F, 0.5F + 8e-6F);
+    CheckSmallChroma<Eigen::half>(DT_FLOAT16, Eigen::half(0.001F), Eigen::half(0.001001F));
+}
+
+TEST_F(TEST_ADJUST_SATURATION_UT, ZERO_MAX_DOES_NOT_PRODUCE_NAN)
+{
+    float input[] = {-8e-6F, 0.0F, 0.0F};
+    float output[3] = {};
+    float scale[] = {0.0F};
+    vector<vector<int64_t>> shapes = {{1, 1, 3}, {1}, {1, 1, 3}};
+    vector<DataType> dataTypes = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<void*> datas = {input, scale, output};
+    CREATE_NODEDEF(shapes, dataTypes, datas);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+    for (float value : output) {
+        EXPECT_TRUE(std::isfinite(value));
+        EXPECT_EQ(value, 0.0F);
+    }
 }
