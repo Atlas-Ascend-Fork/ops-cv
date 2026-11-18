@@ -105,12 +105,12 @@ execute_run_file() {
         return 1
     fi
     chmod +x "${run_files[0]}"
-    cmd=""${run_files[0]}" --install-path="/tmp""
+    local cmd=("${run_files[0]}" "--install-path=/tmp")
     if [ $pkg_type == "builtin" ];then
-        cmd+=" --full"
+        cmd+=("--full")
     fi
-    echo $cmd
-    if ! eval "$cmd"; then
+    echo "${cmd[@]}"
+    if ! "${cmd[@]}"; then
         echo "execute pkg error"
         exit 1
     fi
