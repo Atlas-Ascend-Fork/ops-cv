@@ -180,6 +180,16 @@ inline void FillWithExtrapolationSingle(typename TTypes<float, kDimNumFour>::Ten
     }
 }
 
+inline float InterpolatePixel(float first, float second, float ratio)
+{
+    if (std::isfinite(first) && std::isfinite(second) &&
+        ((first < 0.0f && second > 0.0f) || (first > 0.0f && second < 0.0f))) {
+        // The difference of finite opposite-sign pixels can overflow.
+        return (1.0f - ratio) * first + ratio * second;
+    }
+    return first + (second - first) * ratio;
+}
+
 template <typename T>
 inline void ProcessCropRow(typename TTypes<T, kDimNumFour>::Tensor image,
                            typename TTypes<float, kDimNumFour>::Tensor crops, int64_t b, int32_t b_in,
@@ -206,9 +216,9 @@ inline void ProcessCropRow(typename TTypes<T, kDimNumFour>::Tensor image,
                 float v01 = static_cast<float>(image(b_in, topY, rightX, d));
                 float v10 = static_cast<float>(image(b_in, bottomY, leftX, d));
                 float v11 = static_cast<float>(image(b_in, bottomY, rightX, d));
-                float row0 = v00 + (v01 - v00) * xRatio;
-                float row1 = v10 + (v11 - v10) * xRatio;
-                crops(b, y, x, d) = row0 + (row1 - row0) * yRatio;
+                float row0 = InterpolatePixel(v00, v01, xRatio);
+                float row1 = InterpolatePixel(v10, v11, xRatio);
+                crops(b, y, x, d) = InterpolatePixel(row0, row1, yRatio);
             }
         } else {
             int64_t rndX = static_cast<int64_t>(std::round(xPos));

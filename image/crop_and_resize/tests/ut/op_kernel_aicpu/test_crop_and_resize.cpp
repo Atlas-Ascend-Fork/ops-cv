@@ -934,3 +934,29 @@ TEST_F(TEST_CropAndResize_UTest, CropAndResizeKernel_BilinearV2_IntegerBoundaryE
         EXPECT_FLOAT_EQ(output[kBoundaryOutput], -1.0f);
     }
 }
+
+TEST_F(TEST_CropAndResize_UTest, BilinearFiniteOppositeSignPixels)
+{
+    for (bool vertical : {false, true}) {
+        for (float magnitude : {3.0F, 3e38F, std::numeric_limits<float>::max()}) {
+            float image[] = {-magnitude, magnitude};
+            float box[] = {0, 0, 1, 1};
+            int32_t boxIndex[] = {0};
+            int32_t cropSize[] = {vertical ? 3 : 1, vertical ? 1 : 3};
+            float output[3] = {};
+            auto nodeDef = CpuKernelUtils::CreateNodeDef();
+            NodeDefBuilder(nodeDef.get(), "CropAndResize", "CropAndResize")
+                .Input({"x", DT_FLOAT, {1, vertical ? 2 : 1, vertical ? 1 : 2, 1}, image})
+                .Input({"boxes", DT_FLOAT, {1, 4}, box})
+                .Input({"box_index", DT_INT32, {1}, boxIndex})
+                .Input({"crop_size", DT_INT32, {2}, cropSize})
+                .Output({"y", DT_FLOAT, {1, cropSize[0], cropSize[1], 1}, output})
+                .Attr("method", std::string("bilinear"))
+                .Attr("extrapolation_value", 0.0F);
+            RUN_KERNEL(nodeDef, HOST, KERNEL_STATUS_OK);
+            EXPECT_EQ(output[0], -magnitude);
+            EXPECT_EQ(output[1], 0.0F);
+            EXPECT_EQ(output[2], magnitude);
+        }
+    }
+}
