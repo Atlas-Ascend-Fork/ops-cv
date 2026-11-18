@@ -57,7 +57,7 @@
                           ${ASCEND_PATH}/lib64/libopapi_math.so
                           ${ASCEND_PATH}/lib64/libopapi_cv.so)
 
-    # 可执行文件在CMakeLists文件所在目录的bin目录下
+    # 可执行文件在build目录的bin目录下
     install(TARGETS opapi_test DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
     ```
 
@@ -96,7 +96,7 @@
             mkdir -p build
             ```
 
-        - 进入build目录，执行cmake命令编译，再执行make命令生成可执行文件。
+        - 进入build目录，执行cmake命令编译，再执行make命令生成可执行文件。其中`-DCMAKE_CXX_COMPILER=g++`指定C++编译器为g++，`-DCMAKE_SKIP_RPATH=TRUE`关闭RPATH写入，使可执行文件可在任意路径下运行。
 
           ```sh
           cd build
@@ -115,7 +115,7 @@
 
         以GridSample算子的运行结果为例，运行后的结果示例如下：
 
-        ```sh
+        ```output
         resultData[0] is: 0.250000
         resultData[1] is: 2.250000
         resultData[2] is: 2.000000
@@ -139,7 +139,7 @@
 
         上述构造空指针问题获取报错信息示例如下：
 
-        ```sh
+        ```output
         aclnnGridSampler2DGetWorkspaceSize failed. ERROR: 161001
         [ERROR msg][PID:xxxx] xxx(timestamp) AclNN_Parameter_Error(EZ1001): Expected a proper Tensor but got null for argument input.
         ```

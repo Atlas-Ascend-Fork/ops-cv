@@ -57,7 +57,7 @@ This chapter uses the co-located development and runtime environment scenario as
                           ${ASCEND_PATH}/lib64/libopapi_math.so
                           ${ASCEND_PATH}/lib64/libopapi_cv.so)
 
-    # The executable is located in the bin directory under the directory where the CMakeLists file resides
+    # The executable is located in the bin directory under the build directory
     install(TARGETS opapi_test DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
     ```
 
@@ -96,7 +96,7 @@ This chapter uses the co-located development and runtime environment scenario as
             mkdir -p build
             ```
 
-        - Go to the build directory, run the cmake command to compile, and then run the make command to generate the executable file.
+        - Go to the build directory, run the cmake command to compile, and then run the make command to generate the executable file. `-DCMAKE_CXX_COMPILER=g++` specifies g++ as the C++ compiler, and `-DCMAKE_SKIP_RPATH=TRUE` disables RPATH embedding so the executable can run from any path.
 
           ```sh
           cd build
@@ -115,7 +115,7 @@ This chapter uses the co-located development and runtime environment scenario as
 
         Taking the running result of the GridSample operator as an example, the result after running is as follows:
 
-        ```sh
+        ```output
         resultData[0] is: 0.250000
         resultData[1] is: 2.250000
         resultData[2] is: 2.000000
@@ -139,7 +139,7 @@ This chapter uses the co-located development and runtime environment scenario as
 
         The following is an example of obtaining error information for the null pointer issue described above:
 
-        ```sh
+        ```output
         aclnnGridSampler2DGetWorkspaceSize failed. ERROR: 161001
         [ERROR msg][PID:xxxx] xxx(timestamp) AclNN_Parameter_Error(EZ1001): Expected a proper Tensor but got null for argument input.
         ```

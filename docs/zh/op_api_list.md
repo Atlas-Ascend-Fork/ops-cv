@@ -46,7 +46,7 @@
 | [aclnnUpsampleBicubic2dAAGrad](../../image/upsample_bicubic2d_aa_grad/docs/aclnnUpsampleBicubic2dAAGrad.md) | [aclnnUpsampleBicubic2dAA](../../image/upsample_bicubic2d_aa/docs/aclnnUpsampleBicubic2dAA.md)的反向传播。 |默认确定性实现|默认非确定性实现，支持配置开启|
 | [aclnnUpsampleBicubic2dBackward](../../image/upsample_bicubic2d_grad/docs/aclnnUpsampleBicubic2dBackward.md) | [aclnnUpsampleBicubic2d](../../image/upsample_bicubic2d/docs/aclnnUpsampleBicubic2d.md)的反向传播。 |默认非确定性实现，支持配置开启|默认非确定性实现，支持配置开启|
 | [aclnnUpsampleBilinear2d](../../image/upsample_bilinear2d/docs/aclnnUpsampleBilinear2d.md) | 对由多个输入通道组成的输入信号应用2D双线性上采样。|默认确定性实现|默认确定性实现|
-| [aclnnUpsampleBilinear2dAA](../../image/upsample_bilinear2d_aa/docs/aclnnUpsampleBilinear2dAA.md) | 对由多个输入通道组成的输入信号应用2D双线性抗锯齿采样。|默认确定性实现|默认确定性实现|
+| [aclnnUpsampleBilinear2dAA](../../image/upsample_bilinear2d_aa/docs/aclnnUpsampleBilinear2dAA.md) | 对由多个输入通道组成的输入信号应用2D双线性抗锯齿上采样。|默认确定性实现|默认确定性实现|
 | [aclnnUpsampleBilinear2dAABackward](../../image/upsample_bilinear2d_aa_backward/docs/aclnnUpsampleBilinear2dAABackward.md) | [aclnnUpsampleBilinear2dAA](../../image/upsample_bilinear2d_aa/docs/aclnnUpsampleBilinear2dAA.md)的反向传播。 |默认确定性实现|默认非确定性实现，支持配置开启|
 | [aclnnUpsampleBilinear2dBackward](../../image/resize_bilinear_v2_grad/docs/aclnnUpsampleBilinear2dBackward.md) | [aclnnUpsampleBilinear2d](../../image/upsample_bilinear2d/docs/aclnnUpsampleBilinear2d.md)的反向传播。 |默认确定性实现|默认非确定性实现，支持配置开启|
 | [aclnnUpsampleBilinear2dBackwardV2](../../image/upsample_bilinear2d_grad/docs/aclnnUpsampleBilinear2dBackwardV2.md) | [aclnnUpsampleBilinear2d](../../image/upsample_bilinear2d/docs/aclnnUpsampleBilinear2d.md)的反向传播。 |默认确定性实现|默认非确定性实现，支持配置开启|
