@@ -16,7 +16,11 @@ build_static_lib() {
   echo "Start to build static lib."
 
   cd "${BUILD_PATH}" && cmake ${CMAKE_ARGS} ..
-  local all_targets=$(cmake --build . --target help)
+  local all_targets
+  if ! all_targets=$(cmake --build . --target help); then
+    echo "[ERROR] Failed to query CMake build targets." >&2
+    exit 1
+  fi
   rm -fr "${BUILD_PATH}/bin_tmp"
   mkdir -p "${BUILD_PATH}/bin_tmp"
   if grep -wq "ophost_cv_static" <<< "${all_targets}"; then
@@ -82,7 +86,11 @@ build_binary() {
   cd "${BUILD_PATH}" && cmake .. ${CMAKE_ARGS}
 
   echo "--------------- prepare build start ---------------"
-  local all_targets=$(cmake --build . --target help)
+  local all_targets
+  if ! all_targets=$(cmake --build . --target help); then
+    echo "[ERROR] Failed to query CMake build targets." >&2
+    exit 1
+  fi
   if echo "${all_targets}" | grep -wq "ascendc_impl_gen"; then
     cmake --build . --target ascendc_impl_gen -- ${VERBOSE} -j $THREAD_NUM || {
       echo "[ERROR] Failed to execute ascendc_impl_gen."
@@ -153,7 +161,11 @@ build_package() {
   echo "--------------- build package start ---------------"
   clean_build_out
 
-  local all_targets=$(cmake --build . --target help)
+  local all_targets
+  if ! all_targets=$(cmake --build . --target help); then
+    echo "[ERROR] Failed to query CMake build targets." >&2
+    exit 1
+  fi
   if [[ "$ENABLE_BINARY" != "TRUE" && "$ENABLE_CUSTOM" != "TRUE" ]]; then
     # gen impl python files
     if echo "${all_targets}" | grep -wq "ascendc_impl_gen"; then
