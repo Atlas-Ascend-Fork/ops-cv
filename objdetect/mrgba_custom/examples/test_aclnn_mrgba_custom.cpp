@@ -81,33 +81,33 @@ int main()
     // check根据自己的需要处理
     CHECK_RET(ret == 0, LOG_PRINT("Init acl failed. ERROR: %d\n", ret); return ret);
     // 2.构造输入与输出，需要根据API的接口自定义构造
-    std::vector<int64_t> rgbShape = {4, 3};
-    std::vector<int64_t> alphaShape = {4, 1};
-    std::vector<int64_t> dstShape = {4, 3};
+    std::vector<int64_t> rgbShape = {2, 2, 3};
+    std::vector<int64_t> alphaShape = {2, 2, 1};
+    std::vector<int64_t> outShape = {2, 2, 3};
     void* rgbDeviceAddr = nullptr;
     void* alphaDeviceAddr = nullptr;
-    void* dstDeviceAddr = nullptr;
+    void* outDeviceAddr = nullptr;
     aclTensor* rgb = nullptr;
     aclTensor* alpha = nullptr;
-    aclTensor* dst = nullptr;
+    aclTensor* out = nullptr;
     std::vector<uint8_t> rgbHostData = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120};
     std::vector<uint8_t> alphaHostData = {255, 255, 255, 255};
-    std::vector<uint8_t> dstHostData = {1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    std::vector<uint8_t> outHostData = {1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     // 创建rgb aclTensor
     ret = CreateAclTensor(rgbHostData, rgbShape, &rgbDeviceAddr, aclDataType::ACL_UINT8, &rgb);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
     // 创建alpha aclTensor
     ret = CreateAclTensor(alphaHostData, alphaShape, &alphaDeviceAddr, aclDataType::ACL_UINT8, &alpha);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
-    // 创建dst aclTensor
-    ret = CreateAclTensor(dstHostData, dstShape, &dstDeviceAddr, aclDataType::ACL_UINT8, &dst);
+    // 创建out aclTensor
+    ret = CreateAclTensor(outHostData, outShape, &outDeviceAddr, aclDataType::ACL_UINT8, &out);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
 
     // 3. 调用CANN算子库API
     uint64_t workspaceSize = 0;
     aclOpExecutor* executor;
-    // 调用aclnnMrgba第一段接口
-    ret = aclnnMrgbaCustomGetWorkspaceSize(rgb, alpha, dst, &workspaceSize, &executor);
+    // 调用aclnnMrgbaCustom第一段接口
+    ret = aclnnMrgbaCustomGetWorkspaceSize(rgb, alpha, out, &workspaceSize, &executor);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnMrgbaCustomGetWorkspaceSize failed. ERROR: %d\n", ret); return ret);
     // 根据第一段接口计算出的workspaceSize申请device内存
     void* workspaceAddr = nullptr;
@@ -115,16 +115,16 @@ int main()
         ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
         CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret);
     }
-    // 调用aclnnMrgba第二段接口
+    // 调用aclnnMrgbaCustom第二段接口
     ret = aclnnMrgbaCustom(workspaceAddr, workspaceSize, executor, stream);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnMrgbaCustom failed. ERROR: %d\n", ret); return ret);
     // 4. (固定写法)同步等待任务执行结束
     ret = aclrtSynchronizeStream(stream);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret); return ret);
     // 5. 获取输出的值，将device侧内存上的结果拷贝至host侧，需要根据具体API的接口定义修改
-    auto size = GetShapeSize(dstShape);
+    auto size = GetShapeSize(outShape);
     std::vector<uint8_t> resultData(size, 0);
-    ret = aclrtMemcpy(resultData.data(), resultData.size() * sizeof(resultData[0]), dstDeviceAddr,
+    ret = aclrtMemcpy(resultData.data(), resultData.size() * sizeof(resultData[0]), outDeviceAddr,
                       size * sizeof(uint8_t), ACL_MEMCPY_DEVICE_TO_HOST);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("copy result from device to host failed. ERROR: %d\n", ret); return ret);
     for (int64_t i = 0; i < size; i++) {
@@ -134,12 +134,12 @@ int main()
     // 6. 释放aclTensor
     aclDestroyTensor(rgb);
     aclDestroyTensor(alpha);
-    aclDestroyTensor(dst);
+    aclDestroyTensor(out);
 
     // 7. 释放device资源，需要根据具体API的接口定义修改
     aclrtFree(rgbDeviceAddr);
     aclrtFree(alphaDeviceAddr);
-    aclrtFree(dstDeviceAddr);
+    aclrtFree(outDeviceAddr);
     if (workspaceSize > 0) {
         aclrtFree(workspaceAddr);
     }

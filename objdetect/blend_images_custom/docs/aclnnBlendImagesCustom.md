@@ -28,7 +28,7 @@
 - 计算公式：
 
 $$
-out_{i*3}=rgb_{i*3} * (alpha_i / 255) + frame_{i*3}*(1 - alpha_i/255)
+out_{i*3+j}=rgb_{i*3+j} * (alpha_i / 255) + frame_{i*3+j}*(1 - alpha_i/255)，其中j=0,1,2
 $$
 
 ## 函数原型
@@ -225,7 +225,7 @@ aclnnStatus aclnnBlendImagesCustom(
 
 ## 调用示例
 
-示例代码如下，仅供参考，具体编译和执行过程请参考[编译与运行样例](../../../docs/zh/context/compile_and_run_sample.md)。
+示例代码如下，输入rgb、alpha、frame均为UINT8类型的HWC张量，示例中alpha取255表示完全不透明，因此按公式混合后输出与rgb一致，结果由PrintOutResult打印到终端，仅供参考，具体编译和执行过程请参考[编译与运行样例](../../../docs/zh/context/compile_and_run_sample.md)。
 
 ```Cpp
 #include <iostream>
@@ -336,7 +336,7 @@ int main() {
   ret = CreateAclTensor(outHostData, outShape, &outDeviceAddr, aclDataType::ACL_UINT8, &out);
   CHECK_RET(ret == ACL_SUCCESS, return ret);
 
-  // 3. 调用CANN算子库API，需要修改为具体的Api名称
+  // 3. 调用CANN算子库API
   uint64_t workspaceSize = 0;
   aclOpExecutor* executor;
 
@@ -362,7 +362,7 @@ int main() {
   // 5. 获取输出的值，将device侧内存上的结果拷贝至host侧，需要根据具体API的接口定义修改
   PrintOutResult(outShape, &outDeviceAddr);
 
-  // 6. 释放aclTensor和aclScalar，需要根据具体API的接口定义修改
+  // 6. 释放aclTensor
   aclDestroyTensor(rgb);
   aclDestroyTensor(alpha);
   aclDestroyTensor(frame);

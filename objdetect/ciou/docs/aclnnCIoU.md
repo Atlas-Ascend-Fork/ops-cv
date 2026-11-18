@@ -87,7 +87,7 @@ aclnnStatus aclnnCIoU(
       <td>bBoxes</td>
       <td>输入</td>
       <td>预测矩形框。</td>
-      <td>形状为[4, M]的二维Tensor。</td>
+      <td>形状为[4, M]的二维Tensor，M须为1024的倍数，且与gtBoxes、overlap、atanSub的第二维一致。</td>
       <td>FLOAT、FLOAT16</td>
       <td>ND</td>
       <td>2</td>
@@ -117,7 +117,7 @@ aclnnStatus aclnnCIoU(
       <td>isCross</td>
       <td>输入</td>
       <td>用于指定bBoxes与gtBoxes之间是否进行交叉运算。</td>
-      <td>true：输出的shape为[M, N]。<br>false：输出的shape为[1, N]。</td>
+      <td>false：输出的shape为[1, N]，true暂不支持。</td>
       <td>BOOL</td>
       <td>-</td>
       <td>-</td>

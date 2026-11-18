@@ -149,7 +149,7 @@ int main()
     CHECK_RET(ret == ACL_SUCCESS, return ret);
 
     // 创建attr int: centerPointBox
-    int64_t centerPointBox = 0;
+    int32_t centerPointBox = 0;
 
     // 3. 调用CANN算子库API
     uint64_t workspaceSize = 0;

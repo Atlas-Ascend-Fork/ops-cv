@@ -19,9 +19,9 @@ English | [简体中文](./README.md)
 
 - Computation formula:
 
-  The input feature map $x$ has the shape $(N, C, H, W)$, and the ROI tensor $\text{rois}$ has the shape $(\text{num\_rois}, 5)$, where each row represents $(b_n, x_1, y_1, x_2, y_2)$. The scalar parameters are $s_h$, $s_w$ (spatial_scale), $\text{pooled\_h}$, and $\text{pooled\_w}$. The subscript $n$ denotes the ROI index, $c$ denotes the channel, and $(\text{ph}, \text{pw})$ denotes the pooling grid point.
+  The input feature map $x$ has the shape $(N, C, H, W)$, and the ROI tensor $\text{rois}$ has the shape $(\text{num\_rois}, 5)$, where each row represents $(b_n, x_1, y_1, x_2, y_2)$. The scalar parameters are $s_h$, $s_w$ (spatial_scale_h, spatial_scale_w), $\text{pooled\_h}$, and $\text{pooled\_w}$. The subscript $n$ denotes the ROI index, $c$ denotes the channel, and $(\text{ph}, \text{pw})$ denotes the pooling grid point.
 
-  - **ROI mapping to the feature map**: The operator multiplies the ROI coordinates by spatial_scale to obtain the floating-point intervals on the feature map:
+  - **ROI mapping to the feature map**: The operator multiplies the ROI coordinates by spatial_scale_h/spatial_scale_w to obtain the floating-point intervals on the feature map:
 
     $$
     \tilde{x}_1 = x_1 s_w,\quad \tilde{y}_1 = y_1 s_h,\quad \tilde{x}_2 = (x_2+1)s_w,\quad \tilde{y}_2 = (y_2+1)s_h

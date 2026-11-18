@@ -109,7 +109,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">√</td>
     </tr>
     <tr>
-      <td class="tg-0lax">mode(char*)</td>
+      <td class="tg-0lax">mode(const char*)</td>
       <td class="tg-0lax">输入</td>
       <td class="tg-0lax">池化模式，支持"avg"和"max"。</td>
       <td class="tg-0lax">-</td>
@@ -141,7 +141,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">samplingRatio(int)</td>
       <td class="tg-0lax">输入</td>
-      <td class="tg-0lax">用于计算每个输出元素在H和W方向上的采样频率。取值范围[0, 46340]（即floor(sqrt(INT32_MAX))）。</td>
+      <td class="tg-0lax">用于计算每个输出元素在H和W方向上的采样频率。取值范围：大于等于0的整数；建议传值0；取值小于0时接口返回ACLNN_ERR_PARAM_INVALID（161002）。取值范围[0, 46340]（即floor(sqrt(INT32_MAX))）。</td>
       <td class="tg-0lax">建议传值0。</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -450,7 +450,7 @@ int main() {
   void* workspaceAddr = nullptr;
   if (workspaceSize > 0) {
     ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret;);
+    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret);
   }
   // 调用aclnnRoiAlign第二段接口
   ret = aclnnRoiAlign(workspaceAddr, workspaceSize, executor, stream);

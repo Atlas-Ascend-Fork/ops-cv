@@ -27,9 +27,9 @@
 
 - Formula:
 
-  The shape of the input feature map $x$ is $(N, C, H, W)$, and the shape of the ROI tensor $\text{rois}$ is $(\text{num\_rois}, 5)$, where each row represents $(b_n, x_1, y_1, x_2, y_2)$. The scalar parameters are $s_h$, $s_w$ (spatial_scale), and $\text{pooled\_h}$, $\text{pooled\_w}$. The subscript $n$ indicates the ROI index, $c$ indicates the channel, and $(\text{ph}, \text{pw})$ indicates the pooling bin.
+  The shape of the input feature map $x$ is $(N, C, H, W)$, and the shape of the ROI tensor $\text{rois}$ is $(\text{num\_rois}, 5)$, where each row represents $(b_n, x_1, y_1, x_2, y_2)$. The scalar parameters are $s_h$, $s_w$ (spatial_scale_h, spatial_scale_w), and $\text{pooled\_h}$, $\text{pooled\_w}$. The subscript $n$ indicates the ROI index, $c$ indicates the channel, and $(\text{ph}, \text{pw})$ indicates the pooling bin.
 
-  - **ROI mapped to feature map**: Multiply the ROI coordinates by spatial_scale to obtain the floating-point interval on the feature map:
+  - **ROI mapped to feature map**: Multiply the ROI coordinates by spatial_scale_h/spatial_scale_w to obtain the floating-point interval on the feature map:
 
     $$
     \tilde{x}_1 = x_1 s_w,\quad \tilde{y}_1 = y_1 s_h,\quad \tilde{x}_2 = (x_2+1)s_w,\quad \tilde{y}_2 = (y_2+1)s_h

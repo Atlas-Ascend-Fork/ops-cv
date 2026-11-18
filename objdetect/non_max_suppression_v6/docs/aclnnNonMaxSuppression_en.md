@@ -438,7 +438,7 @@ int main() {
   CHECK_RET(ret == ACL_SUCCESS, return ret);
 
   // Create attr int: centerPointBox
-  int64_t centerPointBox = 0;
+  int32_t centerPointBox = 0;
 
   // 3. Call the CANN operator library API
   uint64_t workspaceSize = 0;

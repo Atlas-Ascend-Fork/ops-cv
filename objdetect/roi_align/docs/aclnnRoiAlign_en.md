@@ -109,7 +109,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0lax">√</td>
     </tr>
     <tr>
-      <td class="tg-0lax">mode (char*)</td>
+      <td class="tg-0lax">mode (const char*)</td>
       <td class="tg-0lax">Input</td>
       <td class="tg-0lax">Supports "avg" and "max". Pooling mode.</td>
       <td class="tg-0lax">-</td>
@@ -141,7 +141,7 @@ aclnnStatus aclnnRoiAlign(
     <tr>
       <td class="tg-0lax">samplingRatio（int）</td>
       <td class="tg-0lax">Input</td>
-      <td class="tg-0lax">Used to compute the sampling frequency for each output element in the H and W directions. Value range: [0, 46340] (floor(sqrt(INT32_MAX))).</td>
+      <td class="tg-0lax">Used to compute the sampling frequency for each output element in the H and W directions. Value range: an integer greater than or equal to 0; 0 is recommended; values less than 0 cause the API to return ACLNN_ERR_PARAM_INVALID (161002). Value range: [0, 46340] (floor(sqrt(INT32_MAX))).</td>
       <td class="tg-0lax">It is recommended to pass 0.</td>
       <td class="tg-0lax">INT32</td>
       <td class="tg-0lax">-</td>
@@ -450,7 +450,7 @@ int main() {
   void* workspaceAddr = nullptr;
   if (workspaceSize > 0) {
     ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret;);
+    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret);
   }
   // Call the second-phase API of aclnnRoiAlign
   ret = aclnnRoiAlign(workspaceAddr, workspaceSize, executor, stream);

@@ -41,7 +41,7 @@ aclnnStatus aclnnBackgroundReplaceGetWorkspaceSize(
   const aclTensor*    bkg,
   const aclTensor*    src,
   const aclTensor*    mask,
-  const aclTensor*    out,
+  aclTensor*          out,
   uint64_t*           workspaceSize,
   aclOpExecutor**     executor)
 ```

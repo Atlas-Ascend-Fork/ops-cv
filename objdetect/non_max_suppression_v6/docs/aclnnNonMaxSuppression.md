@@ -374,7 +374,6 @@ int CreateAclIntArray(const std::vector<T>& hostData, void** deviceAddr, aclIntA
 
 int main() {
   // 1. （固定写法）device/stream初始化，参考acl API手册
-  // 根据自己的实际device填写deviceId
   int32_t deviceId = 0;
   aclrtStream stream;
   auto ret = Init(deviceId, &stream);
@@ -429,7 +428,7 @@ int main() {
   iouThd = aclCreateFloatArray(iouThresholdHostData.data(), iouThresholdHostData.size());
   CHECK_RET(iouThd != nullptr, return 0);
 
-  // 创建AclFloatArray: scoresThreshold
+  // 创建AclFloatArray: scoreThreshold
   scoresThd = aclCreateFloatArray(scoreThresholdHostData.data(), scoreThresholdHostData.size());
   CHECK_RET(scoresThd != nullptr, return 0);
 
@@ -438,7 +437,7 @@ int main() {
   CHECK_RET(ret == ACL_SUCCESS, return ret);
 
   // 创建attr int: centerPointBox
-  int64_t centerPointBox = 0;
+  int32_t centerPointBox = 0;
 
   // 3. 调用CANN算子库API
   uint64_t workspaceSize = 0;
@@ -450,7 +449,7 @@ int main() {
   void* workspaceAddr = nullptr;
   if (workspaceSize > 0) {
     ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret;);
+    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret);
   }
   // 调用aclnnNonMaxSuppression第二段接口
   ret = aclnnNonMaxSuppression(workspaceAddr, workspaceSize, executor, stream);

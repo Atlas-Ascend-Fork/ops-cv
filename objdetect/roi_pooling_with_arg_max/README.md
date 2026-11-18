@@ -17,9 +17,9 @@
 
 - 计算公式：
 
-  输入特征图 $x$ 的shape为 $(N, C, H, W)$，ROI张量 $\text{rois}$ 的shape为 $(\text{num\_rois}, 5)$，每行表示 $(b_n, x_1, y_1, x_2, y_2)$。标量参数为 $s_h$、$s_w$（spatial_scale）以及 $\text{pooled\_h}$、$\text{pooled\_w}$。下标 $n$ 表示ROI索引，$c$ 表示通道，$(\text{ph}, \text{pw})$ 表示池化格点。
+  输入特征图 $x$ 的shape为 $(N, C, H, W)$，ROI张量 $\text{rois}$ 的shape为 $(\text{num\_rois}, 5)$，每行表示 $(b_n, x_1, y_1, x_2, y_2)$。标量参数为 $s_h$、$s_w$（spatial_scale_h、spatial_scale_w）以及 $\text{pooled\_h}$、$\text{pooled\_w}$。下标 $n$ 表示ROI索引，$c$ 表示通道，$(\text{ph}, \text{pw})$ 表示池化格点。
 
-  - **ROI映射到特征图**：将ROI坐标乘以spatial_scale得到特征图上的浮点区间：
+  - **ROI映射到特征图**：将ROI坐标乘以spatial_scale_h/spatial_scale_w得到特征图上的浮点区间：
 
     $$
     \tilde{x}_1 = x_1 s_w,\quad \tilde{y}_1 = y_1 s_h,\quad \tilde{x}_2 = (x_2+1)s_w,\quad \tilde{y}_2 = (y_2+1)s_h

@@ -86,7 +86,7 @@ aclnnStatus aclnnCIoU(
       <td>bBoxes</td>
       <td>Input</td>
       <td>Predicted bounding boxes.</td>
-      <td>A 2D tensor with shape [4, M].</td>
+      <td>A 2D tensor with shape [4, M]. M must be a multiple of 1024 and consistent with the second dimension of gtBoxes, overlap, and atanSub.</td>
       <td>FLOAT, FLOAT16</td>
       <td>ND</td>
       <td>2</td>
@@ -116,7 +116,7 @@ aclnnStatus aclnnCIoU(
       <td>isCross</td>
       <td>Input</td>
       <td>Specifies whether to perform cross operation between bBoxes and gtBoxes.</td>
-      <td>true: the output shape is [M, N].<br>false: the output shape is [1, N].</td>
+      <td>false: the output shape is [1, N]; true is currently not supported.</td>
       <td>BOOL</td>
       <td>-</td>
       <td>-</td>

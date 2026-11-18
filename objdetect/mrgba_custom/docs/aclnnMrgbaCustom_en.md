@@ -294,33 +294,33 @@ int main()
     // check handle according to your own needs
     CHECK_RET(ret == 0, LOG_PRINT("Init acl failed. ERROR: %d\n", ret); return ret);
     // 2.Construct the inputs and outputs, which need to be custom-constructed according to the API definition.
-    std::vector<int64_t> rgbShape = {4, 3};
-    std::vector<int64_t> alphaShape = {4, 1};
-    std::vector<int64_t> dstShape = {4, 3};
+    std::vector<int64_t> rgbShape = {2, 2, 3};
+    std::vector<int64_t> alphaShape = {2, 2, 1};
+    std::vector<int64_t> outShape = {2, 2, 3};
     void *rgbDeviceAddr = nullptr;
     void *alphaDeviceAddr = nullptr;
-    void *dstDeviceAddr = nullptr;
+    void *outDeviceAddr = nullptr;
     aclTensor *rgb = nullptr;
     aclTensor *alpha = nullptr;
-    aclTensor *dst = nullptr;
+    aclTensor *out = nullptr;
     std::vector<uint8_t> rgbHostData = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120};
     std::vector<uint8_t> alphaHostData = {255, 255, 255, 255};
-    std::vector<uint8_t> dstHostData = {1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    std::vector<uint8_t> outHostData = {1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     // Create rgb aclTensor
     ret = CreateAclTensor(rgbHostData, rgbShape, &rgbDeviceAddr, aclDataType::ACL_UINT8, &rgb);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
     // Create alpha aclTensor
     ret = CreateAclTensor(alphaHostData, alphaShape, &alphaDeviceAddr, aclDataType::ACL_UINT8, &alpha);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
-    // Create dst aclTensor
-    ret = CreateAclTensor(dstHostData, dstShape, &dstDeviceAddr, aclDataType::ACL_UINT8, &dst);
+    // Create out aclTensor
+    ret = CreateAclTensor(outHostData, outShape, &outDeviceAddr, aclDataType::ACL_UINT8, &out);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
 
     // 3. Call the CANN operator library API
     uint64_t workspaceSize = 0;
     aclOpExecutor *executor;
     // Call the first-phase API of aclnnMrgba
-    ret = aclnnMrgbaCustomGetWorkspaceSize(rgb, alpha, dst, &workspaceSize, &executor);
+    ret = aclnnMrgbaCustomGetWorkspaceSize(rgb, alpha, out, &workspaceSize, &executor);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnMrgbaCustomGetWorkspaceSize failed. ERROR: %d\n", ret); return ret);
     // Allocate device memory based on the workspaceSize computed by the first-phase API
     void *workspaceAddr = nullptr;
@@ -335,9 +335,9 @@ int main()
     ret = aclrtSynchronizeStream(stream);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret); return ret);
     // 5. Get the output values and copy the results from device-side memory to host; modify according to the specific API definition.
-    auto size = GetShapeSize(dstShape);
+    auto size = GetShapeSize(outShape);
     std::vector<uint8_t> resultData(size, 0);
-    ret = aclrtMemcpy(resultData.data(), resultData.size() * sizeof(resultData[0]), dstDeviceAddr,
+    ret = aclrtMemcpy(resultData.data(), resultData.size() * sizeof(resultData[0]), outDeviceAddr,
                       size * sizeof(uint8_t),
                       ACL_MEMCPY_DEVICE_TO_HOST);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("copy result from device to host failed. ERROR: %d\n", ret); return ret);
@@ -348,12 +348,12 @@ int main()
     // 6. Release aclTensor
     aclDestroyTensor(rgb);
     aclDestroyTensor(alpha);
-    aclDestroyTensor(dst);
+    aclDestroyTensor(out);
 
     // 7. Release device resources; modify according to the specific API definition.
     aclrtFree(rgbDeviceAddr);
     aclrtFree(alphaDeviceAddr);
-    aclrtFree(dstDeviceAddr);
+    aclrtFree(outDeviceAddr);
     if(workspaceSize > 0){
         aclrtFree(workspaceAddr);
     }

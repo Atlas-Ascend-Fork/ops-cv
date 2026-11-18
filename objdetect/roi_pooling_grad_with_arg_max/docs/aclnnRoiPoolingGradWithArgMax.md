@@ -60,7 +60,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
   void*                   workspace,
   uint64_t                workspaceSize,
   aclOpExecutor*          executor,
-  aclrtStream             stream)
+  aclrtStream             stream);
 ```
 
 ## aclnnRoiPoolingGradWithArgMaxGetWorkspaceSize
@@ -102,7 +102,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
       <tr>
       <td>gradInputRef(aclTensor*)</td>
       <td>输入/输出</td>
-      <td>输出结果。</td>
+      <td>输出结果，同时作为待累加梯度的输入张量参与计算，计算后原地更新。</td>
       <td>-</td>
       <td>FLOAT16、FLOAT32</td>
       <td>ND</td>
@@ -152,7 +152,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
     <tr>
       <td>spatialScale(double)</td>
       <td>属性</td>
-      <td>输入坐标映射到ROI坐标的缩放比例。</td>
+      <td>输入坐标映射到ROI坐标的缩放比例，通常取原始输入与特征图尺寸比的倒数（如1/16对应0.0625），取值为正的浮点数。</td>
       <td>-</td>
       <td>DOUBLE</td>
       <td>-</td>
@@ -261,7 +261,7 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
         <tr>
           <td>workspaceSize</td>
           <td>输入</td>
-          <td>在Device侧申请的workspace大小，由第一段接口aclnnRoiPoolingGradWithArgMax获取。</td>
+          <td>在Device侧申请的workspace大小，由第一段接口aclnnRoiPoolingGradWithArgMaxGetWorkspaceSize获取。</td>
         </tr>
         <tr>
           <td>executor</td>
@@ -303,7 +303,6 @@ aclnnStatus aclnnRoiPoolingGradWithArgMax(
 #include <vector>
 #include "acl/acl.h"
 #include "aclnnop/aclnn_roi_pooling_grad_with_arg_max.h"
-#include <iostream>
 using namespace std;
 
 
@@ -416,11 +415,11 @@ int main()
     ret = CreateAclTensor(argmaxHostData, argmaxShape, &argmaxDeviceAddr, aclDataType::ACL_INT32, &argmax);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
 
-    int32_t pooledH = 2;
-    int32_t pooledW = 2;
+    int64_t pooledH = 2;
+    int64_t pooledW = 2;
     double spatialScale = 1.0;
 
-    // 3. 调用CANN算子库API，需要修改为具体的Api名称
+    // 3. 调用CANN算子库接口aclnnRoiPoolingGradWithArgMaxGetWorkspaceSize与aclnnRoiPoolingGradWithArgMax，完成RoiPoolingWithArgMax反向计算
     uint64_t workspaceSize = 0;
     aclOpExecutor* executor;
 

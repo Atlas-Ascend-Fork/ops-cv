@@ -52,7 +52,7 @@ aclnnStatus aclnnIouGetWorkspaceSize(
   bool                    aligned,
   aclTensor*              overlap,
   uint64_t*               workspaceSize,
-  aclOpExecutor**         executor)
+  aclOpExecutor**         executor);
 ```
 
 ```Cpp
@@ -60,7 +60,7 @@ aclnnStatus aclnnIou(
   void*                   workspace,
   uint64_t                workspaceSize,
   aclOpExecutor*          executor,
-  aclrtStream             stream)
+  aclrtStream             stream);
 ```
 
 ## aclnnIouGetWorkspaceSize

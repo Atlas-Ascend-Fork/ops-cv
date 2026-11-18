@@ -414,8 +414,8 @@ int main()
     ret = CreateAclTensor(argmaxHostData, argmaxShape, &argmaxDeviceAddr, aclDataType::ACL_INT32, &argmax);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
 
-    int32_t pooledH = 2;
-    int32_t pooledW = 2;
+    int64_t pooledH = 2;
+    int64_t pooledW = 2;
     double spatialScale = 1.0;
 
     // 3. Call the CANN operator library API; change it to the specific Api name.

@@ -28,7 +28,7 @@
 - Formula:
 
 $$
-out_{i*3}=rgb_{i*3} * (alpha_i / 255) + frame_{i*3}*(1 - alpha_i/255)
+out_{i*3+j}=rgb_{i*3+j} * (alpha_i / 255) + frame_{i*3+j}*(1 - alpha_i/255), where j=0,1,2
 $$
 
 ## Function Prototype
@@ -225,7 +225,7 @@ aclnnStatus aclnnBlendImagesCustom(
 
 ## Example
 
-The sample code is for reference only. For the specific compilation and execution process, see [Compile and Run Samples](../../../docs/en/context/compile_and_run_sample.md).
+The sample code is for reference only. Inputs rgb, alpha, and frame are UINT8 HWC tensors; in the sample alpha is set to 255 (fully opaque), so the blended output matches rgb and is printed by PrintOutResult. For the specific compilation and execution process, see [Compile and Run Samples](../../../docs/en/context/compile_and_run_sample.md).
 
 ```Cpp
 #include <iostream>
@@ -336,7 +336,7 @@ int main() {
   ret = CreateAclTensor(outHostData, outShape, &outDeviceAddr, aclDataType::ACL_UINT8, &out);
   CHECK_RET(ret == ACL_SUCCESS, return ret);
 
-  // 3. Call the CANN operator library API; change it to the specific Api name.
+  // 3. Call the CANN operator library API
   uint64_t workspaceSize = 0;
   aclOpExecutor* executor;
 
@@ -362,7 +362,7 @@ int main() {
   // 5. Get the output values and copy the results from device-side memory to host; modify according to the specific API definition.
   PrintOutResult(outShape, &outDeviceAddr);
 
-  // 6. Release aclTensor and aclScalar; modify according to the specific API definition.
+  // 6. Release aclTensor
   aclDestroyTensor(rgb);
   aclDestroyTensor(alpha);
   aclDestroyTensor(frame);
