@@ -181,15 +181,15 @@ uint32_t NonMaxSuppressionV3CpuKernel::DoCompute()
     std::vector<T> scores_data(num_boxes_);
     std::copy_n(reinterpret_cast<T*>(scores_->GetData()), num_boxes_, scores_data.begin());
 
-    auto iou_threshold = static_cast<T>(*(static_cast<T_threshold*>(iou_threshold_tensor_->GetData())));
-    auto score_threshold = static_cast<T>(*(static_cast<T_threshold*>(score_threshold_tensor_->GetData())));
+    const float iou_threshold = static_cast<float>(*(static_cast<T_threshold*>(iou_threshold_tensor_->GetData())));
+    const float score_threshold = static_cast<float>(*(static_cast<T_threshold*>(score_threshold_tensor_->GetData())));
 
     std::unique_ptr<int32_t[]> indices_data(new (std::nothrow) int32_t[max_output_size_]);
     if (indices_data == nullptr) {
         KERNEL_LOG_ERROR("DoCompute: new indices_data failed");
         return KERNEL_STATUS_INNER_ERROR;
     }
-    if (iou_threshold < static_cast<T>(0.0) || iou_threshold > static_cast<T>(1.0)) {
+    if (iou_threshold < 0.0f || iou_threshold > 1.0f) {
         KERNEL_LOG_ERROR("DoCompute: input[3]iou_threshold must be in the "
                          "range [0, 1].");
         return KERNEL_STATUS_PARAM_INVALID;
@@ -215,7 +215,7 @@ uint32_t NonMaxSuppressionV3CpuKernel::DoCompute()
 
     std::priority_queue<Candidate, std::deque<Candidate>, decltype(cmp)> candidate_priority_queue(cmp);
     for (uint32_t i = 0; i < scores_data.size(); ++i) {
-        if (scores_data[i] > score_threshold) {
+        if (static_cast<float>(scores_data[i]) > score_threshold) {
             candidate_priority_queue.emplace(Candidate({static_cast<int>(i), scores_data[i], 0}));
         }
     }
@@ -247,15 +247,14 @@ uint32_t NonMaxSuppressionV3CpuKernel::DoCompute()
         for (int j = indices_data_size - 1; j >= next_candidate.suppress_begin_index; --j) {
             similarity = IOUSimilarity(&boxes_map(next_candidate.box_index, 0), &boxes_map(indices_data[j], 0),
                                        offset_cast, correct_box);
-            next_candidate.score *= (static_cast<T>(similarity) <= iou_threshold) ? static_cast<T>(1.0) :
-                                                                                    static_cast<T>(0.0);
+            next_candidate.score *= (similarity <= iou_threshold) ? static_cast<T>(1.0) : static_cast<T>(0.0);
             // First decide whether to perform hard suppression
-            if (static_cast<T>(similarity) > iou_threshold) {
+            if (similarity > iou_threshold) {
                 should_suppress = true;
                 break;
             }
             // If next_candidate survives hard suppression, apply soft suppressin
-            if (next_candidate.score <= score_threshold)
+            if (static_cast<float>(next_candidate.score) <= score_threshold)
                 break;
         }
         // next_candidate.suppress_begin_index equals the size of indices_data
@@ -267,7 +266,7 @@ uint32_t NonMaxSuppressionV3CpuKernel::DoCompute()
                 indices_data_size += 1;
                 continue;
             }
-            if (next_candidate.score > score_threshold) {
+            if (static_cast<float>(next_candidate.score) > score_threshold) {
                 candidate_priority_queue.push(next_candidate);
             }
         }

@@ -550,3 +550,43 @@ TEST_F(TEST_NON_MAX_SUPPRESSION_V3_UT, TestNonMaxSuppressionV3_MixedThresholdDty
     CREATE_NODEDEF(shapes, data_types, datas);
     RUN_KERNEL(node_def, HOST, KERNEL_STATUS_PARAM_INVALID);
 }
+
+namespace {
+template <typename Threshold>
+void CheckHalfBoxesThresholdPrecision(DataType thresholdType, Threshold iouThreshold, Threshold scoreThreshold,
+                                      Eigen::half secondWidth)
+{
+    Eigen::half boxes[] = {Eigen::half(0), Eigen::half(0), Eigen::half(1), Eigen::half(1),
+                           Eigen::half(0), Eigen::half(0), Eigen::half(1), secondWidth};
+    Eigen::half scores[] = {Eigen::half(1), Eigen::half(0.5F)};
+    int32_t maxOutputSize = 2;
+    uint64_t summary[4] = {};
+    vector<DataType> dataTypes = {DT_FLOAT16, DT_FLOAT16, DT_INT32, thresholdType, thresholdType, DT_UINT64};
+    vector<vector<int64_t>> shapes = {{2, 4}, {2}, {}, {}, {}, {-1}};
+    vector<void*> datas = {boxes, scores, &maxOutputSize, &iouThreshold, &scoreThreshold, summary};
+    CREATE_NODEDEF(shapes, dataTypes, datas);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+    EXPECT_EQ(summary[3], sizeof(int32_t));
+    EXPECT_NE(summary[2], 0U);
+    if (summary[2] != 0 && summary[3] == sizeof(int32_t)) {
+        EXPECT_EQ(*reinterpret_cast<const int32_t*>(summary[2]), 0);
+    }
+    if (summary[0] != 0) {
+        CpuKernelAllocatorUtils::DeleteOutputDataPtr(summary[0]);
+    }
+    if (summary[2] != 0) {
+        CpuKernelAllocatorUtils::DeleteOutputDataPtr(summary[2]);
+    }
+}
+} // namespace
+
+TEST_F(TEST_NON_MAX_SUPPRESSION_V3_UT, HalfBoxesPreserveFloatThresholdPrecision)
+{
+    CheckHalfBoxesThresholdPrecision<float>(DT_FLOAT, 0.9999F, 0.0F, Eigen::half(1));
+    CheckHalfBoxesThresholdPrecision<float>(DT_FLOAT, 0.5F, 0.9999F, Eigen::half(1));
+}
+
+TEST_F(TEST_NON_MAX_SUPPRESSION_V3_UT, HalfBoxesPreserveFloatIouPrecision)
+{
+    CheckHalfBoxesThresholdPrecision<Eigen::half>(DT_FLOAT16, Eigen::half(1.0F / 3.0F), Eigen::half(0), Eigen::half(3));
+}
