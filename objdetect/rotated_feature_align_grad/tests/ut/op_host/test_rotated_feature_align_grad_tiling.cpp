@@ -14,12 +14,14 @@
  */
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <vector>
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 #include "tiling_case_executor.h"
 #include "tiling_context_faker.h"
 #include "platform/platform_infos_def.h"
+#include "objdetect/rotated_feature_align_grad/op_kernel/rotated_feature_align_grad_tiling_data.h"
 
 using namespace ge;
 using namespace std;
@@ -49,6 +51,15 @@ TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_pts1)
     for (size_t i = 0; i < tilingInfo.workspaceSizes.size(); i++) {
         EXPECT_EQ(tilingInfo.workspaceSizes[i], expectWorkspaces[i]);
     }
+    // 属性读取前置后，spatial_scale/points 仍须原值写入 tiling data 供 kernel 采样坐标缩放使用
+    ASSERT_GE(tilingInfo.tilingDataSize, sizeof(RotatedFeatureAlignGradTilingData));
+    const auto* tilingData = reinterpret_cast<const RotatedFeatureAlignGradTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_FLOAT_EQ(tilingData->spatial_scale, 0.25f);
+    EXPECT_EQ(tilingData->points, 1);
+    EXPECT_EQ(tilingData->N, 2);
+    EXPECT_EQ(tilingData->H, 4);
+    EXPECT_EQ(tilingData->W, 4);
+    EXPECT_EQ(tilingData->C, 3);
 }
 
 TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_pts5)
@@ -217,6 +228,77 @@ TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_fail_
          {{{kMaxDim, kMaxDim, 1, 5}, {kMaxDim, kMaxDim, 1, 5}}, ge::DT_FLOAT, ge::FORMAT_ND}},
         {{{{kMaxDim, kMaxDim, 1, 3}, {kMaxDim, kMaxDim, 1, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}},
         {gert::TilingContextPara::OpAttr("spatial_scale", Ops::Cv::AnyValue::CreateFrom<float>(0.25f)),
+         gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(1))},
+        {1, 1}, {1}, &compileInfo, "Ascend950", 64, 262144, 4096);
+    TilingInfo tilingInfo;
+    EXPECT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}
+
+// spatial_scale 非有限（NaN / +Inf / -Inf）：不是合法的缩放比例，tiling 必须拒绝，
+// 不得写入 tiling data 后参与 kernel 采样坐标计算（与同族前向算子口径一致）。
+TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_fail_spatial_scale_nan)
+{
+    struct RotatedFeatureAlignGradCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RotatedFeatureAlignGrad",
+        {{{{2, 4, 4, 3}, {2, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+         {{{2, 4, 4, 5}, {2, 4, 4, 5}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{{{2, 4, 4, 3}, {2, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("spatial_scale",
+                                         Ops::Cv::AnyValue::CreateFrom<float>(std::numeric_limits<float>::quiet_NaN())),
+         gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(1))},
+        {1, 1}, {1}, &compileInfo, "Ascend950", 64, 262144, 4096);
+    TilingInfo tilingInfo;
+    EXPECT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}
+
+TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_fail_spatial_scale_pos_inf)
+{
+    struct RotatedFeatureAlignGradCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RotatedFeatureAlignGrad",
+        {{{{2, 4, 4, 3}, {2, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+         {{{2, 4, 4, 5}, {2, 4, 4, 5}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{{{2, 4, 4, 3}, {2, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("spatial_scale",
+                                         Ops::Cv::AnyValue::CreateFrom<float>(std::numeric_limits<float>::infinity())),
+         gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(1))},
+        {1, 1}, {1}, &compileInfo, "Ascend950", 64, 262144, 4096);
+    TilingInfo tilingInfo;
+    EXPECT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}
+
+TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_fail_spatial_scale_neg_inf)
+{
+    struct RotatedFeatureAlignGradCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RotatedFeatureAlignGrad",
+        {{{{2, 4, 4, 3}, {2, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+         {{{2, 4, 4, 5}, {2, 4, 4, 5}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{{{2, 4, 4, 3}, {2, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("spatial_scale",
+                                         Ops::Cv::AnyValue::CreateFrom<float>(-std::numeric_limits<float>::infinity())),
+         gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(5))},
+        {1, 1}, {1}, &compileInfo, "Ascend950", 64, 262144, 4096);
+    TilingInfo tilingInfo;
+    EXPECT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}
+
+// 空维输入同样不得绕过属性校验：属性校验先于空维快速路径，非有限 spatial_scale 仍须拒绝。
+TEST_F(TilingForRotatedFeatureAlignGrad, rotated_feature_align_grad_tiling_fail_empty_shape_spatial_scale_nan)
+{
+    struct RotatedFeatureAlignGradCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "RotatedFeatureAlignGrad",
+        {{{{0, 4, 4, 3}, {0, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+         {{{0, 4, 4, 5}, {0, 4, 4, 5}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{{{0, 4, 4, 3}, {0, 4, 4, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("spatial_scale",
+                                         Ops::Cv::AnyValue::CreateFrom<float>(std::numeric_limits<float>::quiet_NaN())),
          gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(1))},
         {1, 1}, {1}, &compileInfo, "Ascend950", 64, 262144, 4096);
     TilingInfo tilingInfo;

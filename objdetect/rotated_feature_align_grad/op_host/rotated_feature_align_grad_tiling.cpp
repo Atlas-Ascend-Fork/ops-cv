@@ -23,6 +23,7 @@
 #include "objdetect/rotated_feature_align_grad/op_kernel/rotated_feature_align_grad_tiling_key.h"
 #include <cstring>
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <string>
 
@@ -198,14 +199,14 @@ static ge::graphStatus ValidateShape(gert::TilingContext* context)
     return ge::GRAPH_SUCCESS;
 }
 
-// SE "参数约束"小节: points ∈ {1, 5}
-static ge::graphStatus ValidateAttr(gert::TilingContext* context,
-                                    [[maybe_unused]] const RotatedFeatureAlignGradCompileInfo* compileInfo)
+// SE "参数约束"小节: spatial_scale 必须有限, points ∈ {1, 5}
+static ge::graphStatus ValidateAttr(gert::TilingContext* context, float spatialScale, int64_t points)
 {
-    const gert::RuntimeAttrs* attrs = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
-    const int64_t* pointsPtr = attrs->GetInt(ATTR_POINTS);
-    int64_t points = (pointsPtr != nullptr) ? *pointsPtr : 1;
+    if (!std::isfinite(spatialScale)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "spatial_scale",
+                                              std::to_string(spatialScale).c_str(), "spatial_scale must be finite");
+        return ge::GRAPH_FAILED;
+    }
     if (points != 1 && points != POINTS_FULL_SAMPLING) {
         OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "points", std::to_string(points).c_str(), "1 or 5");
         return ge::GRAPH_FAILED;
@@ -213,7 +214,7 @@ static ge::graphStatus ValidateAttr(gert::TilingContext* context,
     return ge::GRAPH_SUCCESS;
 }
 
-static ge::graphStatus ValidateInputs(gert::TilingContext* context)
+static ge::graphStatus ValidateInputs(gert::TilingContext* context, float spatialScale, int64_t points)
 {
     if (ValidateDtype(context) != ge::GRAPH_SUCCESS) {
         return ge::GRAPH_FAILED;
@@ -221,7 +222,7 @@ static ge::graphStatus ValidateInputs(gert::TilingContext* context)
     if (ValidateShape(context) != ge::GRAPH_SUCCESS) {
         return ge::GRAPH_FAILED;
     }
-    if (ValidateAttr(context, nullptr) != ge::GRAPH_SUCCESS) {
+    if (ValidateAttr(context, spatialScale, points) != ge::GRAPH_SUCCESS) {
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -316,15 +317,19 @@ static ge::graphStatus RotatedFeatureAlignGradTilingFunc(gert::TilingContext* co
     auto bboxesInput = context->GetInputShape(kBboxesIdx);
     OP_CHECK_NULL_WITH_CONTEXT(context, bboxesInput);
     auto bboxesShape = EnsureNotScalar(bboxesInput->GetStorageShape());
-    // 参数校验前置：零维早退路径同样必须经过 dtype/rank/末维/N-H-W/points 校验，
-    // 避免空维输入绕过拒绝义务（非法 points 曾静默落入 POINTS_5）。
-    if (ValidateInputs(context) != ge::GRAPH_SUCCESS) {
-        return ge::GRAPH_FAILED;
-    }
+    // 属性读取与参数校验前置：零维早退路径同样必须经过 dtype/rank/末维/N-H-W/spatial_scale/points
+    // 校验，避免空维输入绕过拒绝义务（非法 points 曾静默落入 POINTS_5）。
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+    const float* spatialScalePtr = attrs->GetFloat(ATTR_SPATIAL_SCALE);
+    OP_CHECK_NULL_WITH_CONTEXT(context, spatialScalePtr);
+    const float spatial_scale = *spatialScalePtr;
     const int64_t* pointsPtr = attrs->GetInt(ATTR_POINTS);
-    int32_t points = static_cast<int32_t>((pointsPtr != nullptr) ? *pointsPtr : 1);
+    const int64_t pointsAttr = (pointsPtr != nullptr) ? *pointsPtr : 1;
+    int32_t points = static_cast<int32_t>(pointsAttr);
+    if (ValidateInputs(context, spatial_scale, pointsAttr) != ge::GRAPH_SUCCESS) {
+        return ge::GRAPH_FAILED;
+    }
     // Zero-dimension fast path AFTER validation: if dy or bboxes has 0 dim, return zero tiling
     if (HasZeroDimension(dyShape) || HasZeroDimension(bboxesShape)) {
         RotatedFeatureAlignGradTilingData* zeroTiling = context->GetTilingData<RotatedFeatureAlignGradTilingData>();
@@ -347,9 +352,6 @@ static ge::graphStatus RotatedFeatureAlignGradTilingFunc(gert::TilingContext* co
         context->SetTilingKey(tilingKey);
         return ge::GRAPH_SUCCESS;
     }
-    const float* spatialScalePtr = attrs->GetFloat(ATTR_SPATIAL_SCALE);
-    OP_CHECK_NULL_WITH_CONTEXT(context, spatialScalePtr);
-    float spatial_scale = *spatialScalePtr;
     int32_t N = static_cast<int32_t>(dyShape.GetDim(DIM_IDX_N));
     int32_t H = static_cast<int32_t>(dyShape.GetDim(DIM_IDX_H));
     int32_t W = static_cast<int32_t>(dyShape.GetDim(DIM_IDX_W));

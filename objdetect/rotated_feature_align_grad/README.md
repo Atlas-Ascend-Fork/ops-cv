@@ -82,6 +82,7 @@
 - dy的shape必须为[N, H, W, C]的4维Tensor，bboxes的shape必须为[N, H, W, 5]的4维Tensor，且两者的N、H、W维度必须一致。
 - dy与bboxes的每一维取值范围为[0, 2147483647]，且元素总数N·H·W·C与N·H·W·5均需在int64表示范围内；超出上述范围的输入视为非法，算子将拒绝执行。
 - points属性取值仅支持1或5。
+- spatial_scale属性取值必须为有限值，NaN、+Inf、-Inf均视为非法，算子将拒绝执行。
 
 ## 调用说明
 

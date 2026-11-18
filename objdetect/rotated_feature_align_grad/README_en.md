@@ -84,6 +84,7 @@ English | [简体中文](./README.md)
 - The shape of dy must be a 4D tensor [N, H, W, C], and the shape of bboxes must be a 4D tensor [N, H, W, 5]. In addition, the N, H, and W dimensions of the two must be the same.
 - Each dimension of dy and bboxes must be within [0, 2147483647], and the total element counts N·H·W·C and N·H·W·5 must fit within the int64 range. Inputs exceeding these ranges are considered invalid and will be rejected by the operator.
 - The value of the points attribute supports only 1 or 5.
+- The value of the spatial_scale attribute must be finite. NaN, +Inf, and -Inf are considered invalid and will be rejected by the operator.
 
 ## Invocation
 
