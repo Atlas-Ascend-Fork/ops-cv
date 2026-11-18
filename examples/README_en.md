@@ -34,6 +34,6 @@ This project provides development and invocation samples for AI Core operators a
 
 |    Sample directory    |    Description    |    Operator development    |    Operator invocation    |
 |---|------------------|---|---|
-|  add_example|An operator that adds two tensors.  |  For the end-to-end operator development process, refer to the [AI Core Operator Development Guide](../docs/zh/develop/aicore_develop_guide.md)  |  For the invocation, refer to [README](add_example/README_en.md)  |
+|  add_example  |  An operator that adds two tensors.  |  For the end-to-end operator development process, refer to the [AI Core Operator Development Guide](../docs/zh/develop/aicore_develop_guide.md)  |  For the invocation, refer to [README](add_example/README_en.md)  |
 |  add_example_aicpu  |  An operator that adds two tensors.  |  For the end-to-end operator development process, refer to the [AI CPU Operator Development Guide](../docs/zh/develop/aicpu_develop_guide.md)  |  For the invocation, refer to [README](add_example_aicpu/README_en.md)  |
 |  fast_kernel_launch_example  |  A sample for fast end-to-end operator development in the PyTorch scenario.  |  For the end-to-end operator development process, refer to the [PyTorch Operator Quick Development Guide](./fast_kernel_launch_example/README_en.md)  |  For the invocation, refer to [README](fast_kernel_launch_example/README_en.md)  |

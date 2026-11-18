@@ -189,7 +189,7 @@ __aicore__ inline void AddExample<T>::Compute(int64_t currentNum)
 
 - **printf**
 
-  该接口支持打印Scalar类型数据，如整数、字符型、布尔型等，详细介绍请参见[《Ascend C API》](https://hiascend.com/document/redirect/CannCommunityAscendCApi)中“算子调测API > printf”。
+  该接口支持打印Scalar类型数据，如整数、字符型、布尔型等，详细介绍请参见《[Ascend C API](https://hiascend.com/document/redirect/CannCommunityAscendCApi)》中“算子调测API > printf”。
 
   ```cpp
   blockLength_ = (remainderLength > tilingData->blockFactor) ? tilingData->blockFactor : remainderLength;
@@ -200,7 +200,7 @@ __aicore__ inline void AddExample<T>::Compute(int64_t currentNum)
 
 - **DumpTensor**
 
-  该接口支持Dump指定Tensor的内容，同时支持打印自定义附加信息，比如当前行号等，详细介绍请参见[《Ascend C API》](https://hiascend.com/document/redirect/CannCommunityAscendCApi)中“算子调测API > DumpTensor”。
+  该接口支持Dump指定Tensor的内容，同时支持打印自定义附加信息，比如当前行号等，详细介绍请参见《[Ascend C API](https://hiascend.com/document/redirect/CannCommunityAscendCApi)》中“算子调测API > DumpTensor”。
 
   ```cpp
   AscendC::LocalTensor<T> xLocal = inputQueueX.DeQue<T>();
