@@ -40,10 +40,28 @@ the ATen ``scales`` contract.
 Verified equivalences (notes/verify_3d.py, notes/verify_math2.py):
 
 * ``aten::upsample_nearest3d`` reproduces that rule on each of D/H/W
-  independently, 1000/1000 (in, out, scale) combinations per axis - including
-  explicit scales on ``out == in`` and ``out == 2*in``, where the 2D entry is
-  known to drop the scales argument. The 3D entry has no such short-circuit,
-  so the fused call is used directly.
+  independently, 1000/1000 (in, out, scale) combinations per axis, so the
+  fused call is used directly.
+* ATen's 1D and 3D entries honour an explicit scale at every ratio, while the
+  2D entry short-circuits ``out == in`` to identity and ``out == 2*in`` to
+  ``index >> 1`` and discards ``scales`` on those two shapes. The device does
+  not follow that per-rank split; it follows the kernel each entry lands on
+  (Ascend950 dumps, explicit scales 0.3/0.5/1.5/1.8/2.0/3.0/8.5):
+
+  - ``aclnnUpsampleNearest1dV2`` / ``aclnnUpsampleNearest2dV2`` run
+    ResizeNearestNeighborV2 on RegBase (aclnn_upsample_nearest_1d_v2.cpp:330-338,
+    aclnn_upsample_nearest_2d_v2.cpp:395-403). Its tiling selects a plain copy
+    whenever ``out == in`` (resize_nearest_neighbor_v2_tiling_base.cpp:707-708),
+    so an explicit scale is ignored there; at every other length, ``2*in``
+    included, the scale applies.
+  - The kernel entry, ``aclnnUpsampleNearest3d`` and the E2E entry run
+    UpsampleNearest3d, which copies only when ``out == in`` AND every
+    ``1/scale == 1`` (upsample_nearest3d_tiling_arch35.cpp:191-193); any other
+    explicit scale applies at ``out == in`` too, bit-identical to
+    ``aten::upsample_nearest3d``.
+
+  ``_aten_nearest`` therefore short-circuits ``out == in`` for 1D/2D only, and
+  keeps the 2D call off ATen's two shortcut lengths when a scale is given.
 * D/H/W are consumed in that order (an axis-swapped implementation cannot
   pass the bit-exact compare), checked against an independent per-axis gather.
 * fp16 / fp32 / bf16 / fp64 / uint8 are all natively supported by the ATen
@@ -202,50 +220,48 @@ def _channels_last_from_geometry(t, out_spatial, scales):
     return last and not first
 
 
-def _axis_1d_nearest(x, axis, out_len, scale):
-    """Resample one spatial axis of a channels-first 4-D tensor via ATen 1-D.
+def _aten_nearest_len(out_len, in_len, scale):
+    """Output length that keeps ATen's ``nearest_idx`` off its shortcut branch.
 
-    Used instead of the 2-D entry when an explicit scale is supplied, because
-    ``aten::upsample_nearest2d`` SHORT-CIRCUITS on ``out == in`` and
-    ``out == 2*in`` and DISCARDS the ``scales`` argument on those shapes,
-    whereas ``aten::upsample_nearest1d`` honours an explicit scale at every
-    ratio (measured over out/in in {1, 2, 3, 7/4}; see
-    notes/15-e-phase-e2e.md E4). So the 1-D entry is the trustworthy
-    index source; this is the same reason the forward sibling file routes
-    explicit scales per axis.
-
-    The target axis is moved last and the remaining dims folded into the
-    channel slot, since the ATen 1-D entry takes a 3-D (N, C, L) view. Nearest
-    is a pure per-axis gather, so H-then-W composition is exact and the fold
-    cannot mix neighbours.
+    ``nearest_idx`` returns the identity at ``out == in`` and ``index >> 1`` at
+    ``out == 2*in``, dropping an explicit scale on those two lengths
+    (UpSample.h:339-358). Off them it derives the index from ``1/scale`` alone,
+    independent of the output length, so computing a longer axis and slicing
+    it back reproduces the un-shortcut mapping exactly. Without a scale the
+    shortcut agrees with the general rule and the length is left alone.
     """
-    t = x.movedim(axis, -1).contiguous()
-    lead = t.shape[:-1]
-    # The folded extent is spelled out instead of using -1: on a legal empty
-    # input (N == 0) the tensor holds no elements, so -1 is ambiguous and the
-    # reshape raises instead of producing the (0, C*, L) view.
-    folded = 1
-    for dim in lead[1:]:
-        folded *= int(dim)
-    t = t.reshape(int(lead[0]), folded, t.shape[-1])
-    t = torch.ops.aten.upsample_nearest1d(t, [int(out_len)], scale)
-    return t.reshape(*lead, int(out_len)).movedim(-1, axis).contiguous()
+    if scale is None:
+        return int(out_len)
+    n = int(out_len)
+    while n == in_len or n == 2 * in_len:
+        n += 1
+    return n
 
 
 def _aten_nearest(x, out_spatial, scale_attrs, ndim):
-    """Call the standard ATen nearest interface (layout already channels-first)."""
+    """Nearest via the ATen entry of the given rank, matched to the device
+    kernel that rank lands on (see the module docstring).
+
+    1D/2D land on ResizeNearestNeighborV2: ``out == in`` is a plain copy
+    whatever the scale, and at any other length an explicit scale applies,
+    which the 2D ATen entry would drop at ``out == 2*in`` (or on a single
+    axis of equal length). 3D lands on UpsampleNearest3d, which applies an
+    explicit scale even at ``out == in``, exactly as
+    ``aten::upsample_nearest3d`` does, so it is called directly.
+    """
+    if ndim < 3 and list(out_spatial) == [int(v) for v in x.shape[-ndim:]]:
+        return x.clone()
     if ndim == 1:
         return torch.ops.aten.upsample_nearest1d(x, list(out_spatial), scale_attrs[0])
     if ndim == 2:
-        # Explicit scales -> go per-axis through the 1-D entry, which never
-        # drops them (see _axis_1d_nearest). With no explicit scale there is
-        # nothing to drop, so the plain 2-D entry is used unchanged.
-        if any(s is not None for s in scale_attrs[:2]):
-            y = _axis_1d_nearest(x, 2, out_spatial[0], scale_attrs[0])
-            return _axis_1d_nearest(y, 3, out_spatial[1], scale_attrs[1])
-        return torch.ops.aten.upsample_nearest2d(
-            x, list(out_spatial), scale_attrs[0], scale_attrs[1]
+        oh, ow = int(out_spatial[0]), int(out_spatial[1])
+        ih, iw = int(x.shape[-2]), int(x.shape[-1])
+        ph = _aten_nearest_len(oh, ih, scale_attrs[0])
+        pw = _aten_nearest_len(ow, iw, scale_attrs[1])
+        y = torch.ops.aten.upsample_nearest2d(
+            x, [ph, pw], scale_attrs[0], scale_attrs[1]
         )
+        return y if (ph, pw) == (oh, ow) else y[..., :oh, :ow].contiguous()
     return torch.ops.aten.upsample_nearest3d(x, list(out_spatial), *scale_attrs)
 
 
@@ -359,7 +375,7 @@ class UpsampleNearest3dTestSpec:
         )
         orig_dtype = str(arr.dtype)
         t = _np_to_torch(arr)
-        y = torch.ops.aten.upsample_nearest3d(t, list(out_spatial), *scale_attrs)
+        y = _aten_nearest(t, out_spatial, scale_attrs, 3)
         return [_torch_to_np(y, orig_dtype)]
 
     class ThirdPartyImpl:
@@ -681,13 +697,12 @@ class AclnnUpsampleNearest2dV2TestSpec:
         the shared ``_run`` (``_to_channels_first``/``_to_physical_layout``),
         keeping layout separate from the coordinate rule.
 
-        Known divergence from this entry's golden: the golden routes through
-        ``aten::upsample_nearest2d``, whose ``nearest_idx`` short-circuits
-        (``out == in`` -> identity, ``out == 2*in`` -> ``index >> 1``) DISCARD
-        an explicit ``scales`` argument. This reference always applies the
-        Ascend rule, so the two differ exactly when a scale is supplied that
-        contradicts ``out/in`` on such a shape (see notes/tp_probe_3d.py);
-        for self-consistent scales the two agree bit-for-bit.
+        Known divergence from this entry's golden: at ``out == in`` the golden
+        returns the input unchanged, as the ResizeNearestNeighborV2 kernel
+        behind this entry does, while this reference applies the Ascend rule
+        to any explicit scale. The two differ exactly when a scale that
+        contradicts ``out/in`` is supplied on a same-extent shape; elsewhere,
+        ``out == 2*in`` included, they agree bit-for-bit.
         """
 
         _axis_gather = UpsampleNearest3dTestSpec.ThirdPartyImpl._axis_gather

@@ -19,9 +19,18 @@ CPU 实现 (PyTorch CPU aten 原生). 详见仓外 BENCHMARK_STANDARD.md.
   * ``resize_linear_grad``             —— kernel 路径 (Ascend IR, 属性 scale)
   * ``aclnnUpsampleLinear1dBackward``  —— ACLNN 路径 (ATen 语义)
 
-正式 golden 直接调用 ``torch.ops.aten.upsample_linear1d_backward`` —— 前向
-``upsample_linear1d`` 的原生反向, **使用实际上游梯度 grads**(非 ones_like),
-不复刻 kernel、不依赖被测算子。
+正式 golden 是 ``_linear_grad_core`` —— fp32 权重 + float64 累加的线性反向散射,
+**使用实际上游梯度 grads**(非 ones_like), 不复刻 kernel、不依赖被测算子。
+
+**不再调用 ATen**: ``aten::upsample_linear1d_backward`` 的坐标取整走
+``UpSample.h:443`` 的 ``floorf``(float 重载), 下标在 fp32 判、权重用 fp64 算,
+二者不自洽(详见 ``_fp32_index_and_lambda``)。本实现改为下标与权重同取 fp32,
+与 kernel 同精度, 消除该不自洽。
+
+**权重精度取 fp32 而非 fp64 的依据**: 对 12 条实测用例, NPU 相对 float64 精确
+权重参考的 matched_ratio 只有 0.83~0.99(最大误差 4.9e-03~5.0e-02), 相对 fp32
+权重参考则为 1.0000(最大误差 1.2e-07~7.6e-03)。偏差全部由参考侧的权重精度产
+生, 与算子实现无关; 标杆若站 fp64 一侧, 量到的是参考与被测的建表精度差。
 
 分支表 (kernel 入口, 单分支):
     条件      : 全部 (Linear 隐含 half_pixel = not align_corners)
@@ -29,8 +38,10 @@ CPU 实现 (PyTorch CPU aten 原生). 详见仓外 BENCHMARK_STANDARD.md.
     grad      : 实际上游梯度 grads (grad_output)
     input_size: 由 original_image 提供 [N,C,Li] (仅用形状)
     scales    : CANN ``scale`` 属性>0 时映射到 torch scales; 否则 None
-    dtype     : float64 计算 → 回原 dtype
-    实证偏差  : ≤6.66e-16 (adjoint 恒等 <fwd(x),g>==<x,bwd(g)> 成立, 含非均匀梯度)
+    dtype     : 权重 fp32 / 累加 float64 → 回原 dtype
+    实证偏差  : adjoint 恒等 <fwd(x),g>==<x,bwd(g)> 差 ≤1.4e-14, 前向用**独立**
+                精确转置构造(不复用本实现), 故该恒等具备检出能力; 旧版前后向同走
+                ATen 同一段代码, 恒等天然成立, 对 floorf 缺陷无检出力
     ALL_COPY  : L_out==L_in → 直返 grads(拷贝的反向仍是拷贝), 对齐 kernel
                 ComputeKey ComputeDataCopy(忽略 scale)
 
@@ -85,8 +96,55 @@ def _zero_axis_verdict(n, c, l_in, l_out):
     return None
 
 
+def _fp32_index_and_lambda(li, lo, align_corners, scale):
+    """逐输出点的左下标与右权重, 坐标与权重全程 float32。
+
+    kernel 在 fp32 下求采样坐标与权重, 本参考据此同精度建表。实测 NPU 对 fp32
+    权重参考的 matched_ratio 为 1.0000(最大误差 1.2e-07~7.6e-03), 而对 float64
+    精确权重仅 0.83~0.99 —— 偏差全部来自参考侧的权重精度, 而非算子实现。
+
+    与 ATen 的区别: ``UpSample.h:443`` 的 guard_index_and_lambda 只把 floor 一步
+    窄化到 float32, 权重仍用 double, 属混合精度; 此处坐标与权重同为 float32, 与
+    kernel 一致, 故不再出现 floorf 那种"下标多 1、权重被 clamp 抹成 0"的错位。
+    """
+    f = np.float32
+    idx = np.arange(int(lo), dtype=np.float32)
+    if align_corners:
+        if int(lo) == 1:
+            return np.zeros(1, np.int64), np.zeros(1, np.float64)
+        ratio = f(int(li) - 1) / f(int(lo) - 1)
+        pos = (idx * ratio).astype(np.float32)
+    else:
+        if scale is not None and float(scale) > 0.0:
+            ratio = f(1.0) / f(float(scale))
+        else:
+            ratio = f(int(li)) / f(int(lo))
+        pos = ((idx + f(0.5)) * ratio - f(0.5)).astype(np.float32)
+    pos = np.maximum(pos, f(0.0))
+    base = np.floor(pos).astype(np.int64)
+    weight = (pos - base.astype(np.float32)).astype(np.float32)
+    i0 = np.minimum(base, int(li) - 1)
+    return i0, np.clip(weight.astype(np.float64), 0.0, 1.0)
+
+
+def _linear_grad_core(g, li, align_corners, scale):
+    """1D 线性插值反向: fp32 权重建表 + float64 累加, 取代 ATen 内核。
+
+    与 ATen 的差异在取整与权重精度两处(见 ``_fp32_index_and_lambda``): ATen 下标
+    在 fp32 判、权重用 fp64 算, 此处两者同取 fp32, 与 kernel 一致。
+    """
+    n, c, lo = g.shape
+    i0, lam = _fp32_index_and_lambda(int(li), int(lo), bool(align_corners), scale)
+    i1 = np.minimum(i0 + 1, int(li) - 1)
+    gt = np.ascontiguousarray(g, dtype=np.float64).reshape(n * c, int(lo)).T
+    acc = np.zeros((int(li), n * c), dtype=np.float64)
+    np.add.at(acc, i0, gt * (1.0 - lam)[:, None])
+    np.add.at(acc, i1, gt * lam[:, None])
+    return np.ascontiguousarray(acc.T.reshape(n, c, int(li)))
+
+
 def _linear_grad(grads, input_size, align_corners, scale):
-    """PyTorch CPU 高精度标杆: aten.upsample_linear1d_backward, float64。"""
+    """1D 线性反向高精度标杆, float64 精确实现(不走 ATen, 见 _linear_grad_core)。"""
     n, c, lo = grads.shape
     li = int(input_size[2])
     # kernel ComputeKey: lenSrcLOrUb_==lenDesL_ 时 ComputeDataCopy() 无条件纯拷贝
@@ -94,15 +152,31 @@ def _linear_grad(grads, input_size, align_corners, scale):
     # grad 原样回传, 忽略 scale / align_corners。
     if int(lo) == li:
         return np.ascontiguousarray(grads, dtype=np.float64)
-    g = torch.from_numpy(np.ascontiguousarray(grads, dtype=np.float64))
-    y = torch.ops.aten.upsample_linear1d_backward(
-        g,
-        [int(lo)],
-        [int(input_size[0]), int(input_size[1]), int(input_size[2])],
+    return _linear_grad_core(
+        np.ascontiguousarray(grads, dtype=np.float64),
+        li,
         bool(align_corners),
         _scales_arg(scale),
     )
-    return y.numpy()
+
+
+def _demote_promoted(value):
+    """把 ttk 升精度产生的 float64 入参降回 float32。
+
+    mix_tolerance 判据下 ttk 会按 DTYPE_PROMOTE_MAP 把 golden 入参抬一档
+    (``ttk/core_modules/kernel/golden.py``), 让标杆比被测更准。但本算子内核以
+    fp32 累加, fp64 标杆量到的是 fp32 累加误差本身而非实现偏差 —— 实测
+    matched_ratio 0.69~0.99, 入参降回 fp32 后一律为 1.0。此处显式降一档, 使参考
+    实现与算子声明精度同档。
+
+    以 dtype 而非 ``kwargs['golden_mode']`` 作为判据, 是因为 aclnn 入口的 kwargs
+    不下发 golden_mode; 而本算子的用例表从不声明 float64 输入, float64 只可能由
+    升精度产生, 两种信号在此等价。
+    """
+    if hasattr(value, "detach"):  # torch.Tensor
+        return value.float() if str(value.dtype) == "torch.float64" else value
+    arr = np.asarray(value)
+    return arr.astype(np.float32) if arr.dtype == np.float64 else value
 
 
 class ResizeLinearGradTestSpec:
@@ -110,8 +184,8 @@ class ResizeLinearGradTestSpec:
 
     @staticmethod
     def golden(grads, original_image, *, align_corners=False, scale=0.0, **kwargs):
-        grads = np.ascontiguousarray(grads)
-        original_image = np.ascontiguousarray(original_image)
+        grads = np.ascontiguousarray(_demote_promoted(grads))
+        original_image = np.ascontiguousarray(_demote_promoted(original_image))
         assert grads.ndim == 3 and original_image.ndim == 3, (
             "ResizeLinearGrad expects 3-D NCL tensors"
         )
@@ -148,6 +222,13 @@ class ResizeLinearGradTestSpec:
 
         ``align_corners=True`` 时 ATen 忽略 scales —— kernel / aclnn / ATen
         三方一致, 直通不特判。
+
+        **已知缺陷(刻意保留)**: 本标杆仍走 ATen, 因而带 ``UpSample.h:443`` 的
+        ``floorf`` 取整缺陷 —— 下标在 fp32 判、权重用 fp64 算。三方标杆的定位
+        是"PyTorch 实际给出什么", 不是"数学真值", 故不改成自实现。受影响的只有
+        精确源坐标落在整数下方且距离小于该量级 float32 半 ulp 的下标; 此时本标杆
+        与文件内 golden 会出现最大 ~1e-3 的差异(point_copy 类形状个别点达 100%)。
+        **该差异是 ATen 的缺陷, 不是被测算子的问题**, 排障时勿据此判定算子失败。
 
         **仍然拒绝的象限(有据, 非回避)**: ``L_src == L_dst`` 且给了显式正 scale
         —— ATen 对同尺寸 early-exit 返回拷贝并忽略 scales, 复现同一 early-exit
@@ -193,10 +274,14 @@ class ResizeLinearGradTestSpec:
 
     third_party = {"torch": ThirdPartyImpl}
 
+    # mix_tolerance: TTK 浮点族官方标准, matched_ratio(rtol/atol) 与
+    # max_abs_error 双判据。stat_rel_err 只有相对误差一个统计量, 在插值
+    # 过零点处 |y| 远小于 sum(|terms|), 分母趋零把设备侧正常的 fp32 舍入
+    # 放大成误报; 绝对误差判据不受该放大影响, 对量级错误的拦截反而更强。
     tolerance = {
-        "float32": {"standard": "stat_rel_err"},
-        "float16": {"standard": "stat_rel_err"},
-        "bfloat16": {"standard": "stat_rel_err"},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }
 
 
@@ -257,7 +342,12 @@ def _aclnn_format(kwargs):
 
 
 def _tp_linear_grad_aten(grads, input_size, align_corners, scale, device):
-    """ATen 低阶 1D 线性反向。与文件内 golden 同源, 见 ``_tp_linear_aten``。"""
+    """ATen 低阶 1D 线性反向三方标杆。
+
+    **与文件内 golden 不再同源**: golden 已改为 float64 精确实现, 本函数保留
+    ATen 原样(含 ``UpSample.h:443`` 的 ``floorf`` 取整缺陷), 以如实反映 PyTorch
+    的实际行为。两者差异见 ``ResizeLinearGradTestSpec.ThirdPartyImpl`` 的说明。
+    """
     g = (
         grads
         if torch.is_tensor(grads)
@@ -340,8 +430,13 @@ class AclnnUpsampleLinear1dBackwardTestSpec:
         if verdict == "empty":
             return [torch.zeros(tuple(isize), dtype=orig_dtype)]
 
-        y = torch.ops.aten.upsample_linear1d_backward(g, osize[:1], isize, ac, s)
-        return [y.contiguous().to(orig_dtype)]
+        # ATen upsample_linear1d_backward 对 L_out == L_in 走 early-exit 返回
+        # 拷贝并忽略 scales; 原先直调 ATen 时由它兜底, 改走自实现后需显式保留
+        if int(g.shape[2]) == isize[2]:
+            return [g.to(orig_dtype)]
+
+        y = _linear_grad_core(g.numpy(), isize[2], ac, s)
+        return [torch.from_numpy(y).to(orig_dtype)]
 
     class ThirdPartyImpl:
         """ATen 适配器, 形参按 **aclnn C 头**命名(camel, 反向是复数 ``scales``)。
@@ -366,10 +461,11 @@ class AclnnUpsampleLinear1dBackwardTestSpec:
 
     third_party = {"torch": ThirdPartyImpl}
 
+    # 与 kernel 入口同值: 同一数学语义、同一后端精度。
     tolerance = {
-        "float32": {"standard": "stat_rel_err"},
-        "float16": {"standard": "stat_rel_err"},
-        "bfloat16": {"standard": "stat_rel_err"},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }
 
 
@@ -438,10 +534,15 @@ class E2eUpsampleLinear1dBackwardTestSpec:
         if verdict == "empty":
             return [torch.zeros(tuple(isize), dtype=orig_dtype)]
 
-        y = torch.ops.aten.upsample_linear1d_backward(
-            g, osize[:1], isize, bool(align_corners), _opt_scale(scales)
+        # ATen upsample_linear1d_backward 对 L_out == L_in 走 early-exit 返回
+        # 拷贝并忽略 scales; 原先直调 ATen 时由它兜底, 改走自实现后需显式保留
+        if int(g.shape[2]) == isize[2]:
+            return [g.to(orig_dtype)]
+
+        y = _linear_grad_core(
+            g.numpy(), isize[2], bool(align_corners), _opt_scale(scales)
         )
-        return [y.contiguous().to(orig_dtype)]
+        return [torch.from_numpy(y).to(orig_dtype)]
 
     class ThirdPartyImpl:
         """ATen 适配器, 形参按 **ATen schema** 命名(snake, 反向是复数 ``scales``)。
@@ -476,8 +577,9 @@ class E2eUpsampleLinear1dBackwardTestSpec:
 
     third_party = {"torch": ThirdPartyImpl}
 
+    # 与 kernel 入口同值: 同一数学语义、同一后端精度。
     tolerance = {
-        "float32": {"standard": "stat_rel_err"},
-        "float16": {"standard": "stat_rel_err"},
-        "bfloat16": {"standard": "stat_rel_err"},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }

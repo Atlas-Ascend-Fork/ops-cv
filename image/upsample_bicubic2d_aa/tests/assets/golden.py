@@ -209,6 +209,35 @@ def _aa_axis_tables(in_size, out_size, align_corners, s, is_regbase=True):
     return tables
 
 
+def _aa_window_out_of_range(
+    in_h, in_w, out_h, out_w, align_corners, scales_h, scales_w, is_regbase=True
+):
+    """显性 scales 把插值窗口整体推出输入范围时为真。
+
+    ``aten::_upsample_bicubic2d_aa`` 的 CPU 实现在这种参数下会**越界读内存**:
+    本机 torch 2.10.0+cpu 实测, 常量 1.0 输入 (1,1,5,8) -> (20,10) /
+    scales=(2.6,2.5), 第 0~16 行恒为正解 1.0, 第 17~19 行共 30 个元素是读到的
+    越界内容 —— 6 次独立进程结果逐次不同(3 次全为 0, 3 次含 2~4 个 NaN),
+    每次 md5 均不相同; 同参数放大到 (6,2,51,1676) -> (812,361) 则 5/5 直接
+    Segmentation fault, traceback 停在 ``torch/_ops.py`` 的算子调用上; 同形状
+    下改用与 in/out 一致的 scales 或不传 scales 则 5/5 正常返回正解。同一语义
+    下规模不同、同参数逐次不同(变动的垃圾值或崩溃), 是越界读的典型表现,
+    不是某个取值约定的差异。
+
+    越界窗口本身是**合法入参**: attr 里的 scales 与实际 in/out 形状不一致
+    时, 末尾若干 dst 的 ``[x_min, x_max)`` 整体落在 ``[0, in_size)`` 之外,
+    该 dst 没有任何输入贡献。设备在这些位置输出 0, 文件内 fp64 实现同样输出
+    0(实测与设备的 2928432 个 0 逐位一致), 故这些形状整张交给 fp64 实现,
+    不再进 ATen。判定复用 ``_aa_axis_tables`` 而非另写一份边界算术, 以保证
+    与接管方的窗口定义恒一致。
+    """
+    for in_size, out_size, s in ((in_h, out_h, scales_h), (in_w, out_w, scales_w)):
+        for idx, w in _aa_axis_tables(in_size, out_size, align_corners, s, is_regbase):
+            if len(idx) == 0 or float(w.sum()) == 0.0:
+                return True
+    return False
+
+
 def _upsample_bicubic2d_aa_nchw(
     x, out_h, out_w, align_corners, scales_h, scales_w, is_regbase=True
 ):
@@ -260,6 +289,25 @@ def _upsample_bicubic2d_aa_nchw(
     return y.numpy()
 
 
+def _demote_promoted(value):
+    """把 ttk 升精度产生的 float64 入参降回 float32。
+
+    mix_tolerance 判据下 ttk 会按 DTYPE_PROMOTE_MAP 把 golden 入参抬一档
+    (``ttk/core_modules/kernel/golden.py``), 让标杆比被测更准。但本算子内核以
+    fp32 累加, fp64 标杆量到的是 fp32 累加误差本身而非实现偏差 —— 实测
+    matched_ratio 0.69~0.99, 入参降回 fp32 后一律为 1.0。此处显式降一档, 使参考
+    实现与算子声明精度同档。
+
+    以 dtype 而非 ``kwargs['golden_mode']`` 作为判据, 是因为 aclnn 入口的 kwargs
+    不下发 golden_mode; 而本算子的用例表从不声明 float64 输入, float64 只可能由
+    升精度产生, 两种信号在此等价。
+    """
+    if hasattr(value, "detach"):  # torch.Tensor
+        return value.float() if str(value.dtype) == "torch.float64" else value
+    arr = np.asarray(value)
+    return arr.astype(np.float32) if arr.dtype == np.float64 else value
+
+
 class UpsampleBicubic2dAATestSpec:
     """TestSpec for upsample_bicubic2d_aa (kernel path, aten IR golden)."""
 
@@ -276,7 +324,7 @@ class UpsampleBicubic2dAATestSpec:
         **kwargs: {input,output}_{dtypes,ori_shapes,formats,ori_formats},
                   full_soc_version, short_soc_version, testcase_name, golden_mode
         """
-        x = np.asarray(x)
+        x = _demote_promoted(x)
         if x.ndim != 4:
             raise ValueError(f"x must be 4-D NCHW, got shape {x.shape}")
         out_h, out_w = _normalize_output_size(output_size)
@@ -294,10 +342,22 @@ class UpsampleBicubic2dAATestSpec:
         )
         s_h_attr, s_w_attr = float(scales_h), float(scales_w)
 
-        if out_w == 1:
-            # ATen CPU defect: H direction collapses for output width == 1
-            # (module docstring item 2). Independent fp64 fallback, verified
-            # by three independent reference chains; NPU is correct here.
+        if out_w == 1 or _aa_window_out_of_range(
+            in_h_,
+            in_w_,
+            out_h,
+            out_w,
+            bool(align_corners),
+            s_h_attr,
+            s_w_attr,
+            is_regbase,
+        ):
+            # Two ATen CPU defects share this fp64 fallback:
+            #   * output width == 1 -> H direction collapses (module docstring
+            #     item 2), verified by three independent reference chains;
+            #   * interpolation window pushed outside the input by explicit
+            #     scales -> out-of-bounds read (see _aa_window_out_of_range).
+            # NPU is correct in both; the in-file fp64 reference matches it.
             x_f = x.astype(np.float32) if orig_dtype in ("float16", "bfloat16") else x
             y = _upsample_bicubic2d_aa_nchw(
                 x_f, out_h, out_w, bool(align_corners), s_h_attr, s_w_attr, is_regbase
@@ -428,6 +488,18 @@ class UpsampleBicubic2dAATestSpec:
             t = t.to(self.device)
             if t.dtype in (torch.float16, torch.bfloat16):
                 t = t.to(torch.float32)
+            ih_, iw_ = (int(v) for v in t.shape[-2:])
+            if _aa_window_out_of_range(
+                ih_,
+                iw_,
+                oh,
+                ow,
+                self.align_corners,
+                self.scales_h,
+                self.scales_w,
+                True,
+            ):
+                raise NotImplementedError(_AA_TP_OOR_REJECT)
             out = torch.ops.aten._upsample_bicubic2d_aa(
                 t.contiguous(),
                 [oh, ow],
@@ -441,13 +513,14 @@ class UpsampleBicubic2dAATestSpec:
 
     third_party = {"torch": ThirdPartyImpl}
 
+    # mix_tolerance: TTK 浮点族官方标准, matched_ratio(rtol/atol) 与
+    # max_abs_error 双判据。stat_rel_err 只有相对误差一个统计量, 在插值
+    # 过零点处 |y| 远小于 sum(|terms|), 分母趋零把设备侧正常的 fp32 舍入
+    # 放大成误报; 绝对误差判据不受该放大影响, 对量级错误的拦截反而更强。
     tolerance = {
-        # fp16/bf16 follow the TTK official dtype table (2^-10 / 2^-7),
-        # verified on NPU (Ascend950PR) with multiple seeds. fp32 2e-4 covers
-        # the NPU weight CAST_RINT quantisation + fp32 accumulation order.
-        "float32": {"standard": "stat_rel_err", "threshold": 2e-4},
-        "float16": {"standard": "stat_rel_err", "threshold": 0.0009765625},
-        "bfloat16": {"standard": "stat_rel_err", "threshold": 0.0078125},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }
 
 
@@ -555,6 +628,16 @@ _AA_TP_W1_REJECT = (
     "该象限由文件内 golden 的 fp64 独立实现覆盖(用例保留, 不删不排除)"
 )
 
+_AA_TP_OOR_REJECT = (
+    "显性 scales 与 in/out 形状矛盾, 末尾 dst 的插值窗口整体落在输入之外: "
+    "aten::_upsample_bicubic2d_aa 的 CPU 实现在该区间越界读内存(torch 2.10.0 "
+    "实测 (1,1,5,8) -> (20,10) / scales=(2.6,2.5) 常量 1.0 输入, 末 3 行共 30 "
+    "个元素逐次运行结果不同、部分含 NaN, 放大到 (6,2,51,1676) -> (812,361) "
+    "直接 Segmentation fault); "
+    "复现崩溃的标杆无交叉校验价值, 该象限由文件内 golden 的 fp64 独立实现覆盖"
+    "(用例保留, 不删不排除)"
+)
+
 
 class AclnnUpsampleBicubic2dAATestSpec:
     """aclnnUpsampleBicubic2dAA(x, outputSize, alignCorners, scalesH, scalesW, out).
@@ -636,6 +719,7 @@ class AclnnUpsampleBicubic2dAATestSpec:
         —— 注意**没有** full_soc_version(kernel 路径才有), 本入口不依赖它。
         """
         t = x.detach().cpu() if torch.is_tensor(x) else torch.as_tensor(x)
+        t = _demote_promoted(t)
         if t.dim() != 4:
             raise ValueError(
                 f"aclnnUpsampleBicubic2dAA expects a 4-D NCHW input, got {tuple(t.shape)}"
@@ -657,16 +741,27 @@ class AclnnUpsampleBicubic2dAATestSpec:
             return [torch.zeros((n_, c_, out_h, out_w), dtype=t.dtype)]
 
         orig_dtype = t.dtype
-        reduced = orig_dtype in (torch.float16, torch.bfloat16)
-        # ATen CPU 不支持 fp16/bf16 → fp32; fp32 → fp64 取最高精度标杆
-        t = t.contiguous().to(torch.float32 if reduced else torch.float64)
+        # 与 kernel 入口同档: 被测内核以 fp32 累加, 参考实现也取 fp32。
+        # ATen CPU 不支持 fp16/bf16, 一并提到 fp32。见 _demote_promoted。
+        t = t.contiguous().to(torch.float32)
 
         ac = bool(alignCorners)
         s_h = None if ac else _opt_scale(scalesH)
         s_w = None if ac else _opt_scale(scalesW)
 
-        if out_w == 1:
-            # ATen CPU H-collapse defect (class docstring item 1~4).
+        if out_w == 1 or _aa_window_out_of_range(
+            in_h_,
+            in_w_,
+            out_h,
+            out_w,
+            ac,
+            0.0 if s_h is None else s_h,
+            0.0 if s_w is None else s_w,
+            True,
+        ):
+            # ATen CPU 的两个缺陷共用这条 fp64 回退: out_w==1 的 H 塌缩
+            # (class docstring item 1~4), 以及显性 scales 把窗口推出输入
+            # 范围时的越界读(见 _aa_window_out_of_range)。
             # is_regbase=True 固定"attr 为 OUT/IN", 即 ACLNN 边界语义。
             y = _upsample_bicubic2d_aa_nchw(
                 t.numpy(),
@@ -702,25 +797,40 @@ class AclnnUpsampleBicubic2dAATestSpec:
             if ow == 1:
                 raise NotImplementedError(_AA_TP_W1_REJECT)
             ac = bool(alignCorners)
+            s_h_ = None if ac else _opt_scale(scalesH)
+            s_w_ = None if ac else _opt_scale(scalesW)
+            t_ = x if torch.is_tensor(x) else torch.from_numpy(np.asarray(x))
+            ih_, iw_ = (int(v) for v in t_.shape[-2:])
+            if _aa_window_out_of_range(
+                ih_,
+                iw_,
+                oh,
+                ow,
+                ac,
+                0.0 if s_h_ is None else s_h_,
+                0.0 if s_w_ is None else s_w_,
+                True,
+            ):
+                raise NotImplementedError(_AA_TP_OOR_REJECT)
             return [
                 _tp_aa_aten(
                     x,
                     oh,
                     ow,
                     ac,
-                    None if ac else _opt_scale(scalesH),
-                    None if ac else _opt_scale(scalesW),
+                    s_h_,
+                    s_w_,
                     self.device,
                 )
             ]
 
     third_party = {"torch": ThirdPartyImpl}
 
+    # 与 kernel 入口同值: 同一数学语义、同一后端精度。
     tolerance = {
-        # 与 kernel 入口同值: 同一数学语义、同一后端精度, 无理由放宽。
-        "float32": {"standard": "stat_rel_err", "threshold": 2e-4},
-        "float16": {"standard": "stat_rel_err", "threshold": 0.0009765625},
-        "bfloat16": {"standard": "stat_rel_err", "threshold": 0.0078125},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }
 
 
@@ -797,17 +907,28 @@ class E2eUpsampleBicubic2dAATestSpec:
         if verdict == "empty":
             return [torch.zeros((n_, c_, out_h, out_w), dtype=t.dtype)]
 
+        t = _demote_promoted(t)
         orig_dtype = t.dtype
-        reduced = orig_dtype in (torch.float16, torch.bfloat16)
-        # ATen CPU 不支持 fp16/bf16 → fp32; fp32 → fp64 取最高精度标杆
-        t = t.contiguous().to(torch.float32 if reduced else torch.float64)
+        # 与 kernel 入口同档: 被测内核以 fp32 累加, 参考实现也取 fp32。
+        # ATen CPU 不支持 fp16/bf16, 一并提到 fp32。见 _demote_promoted。
+        t = t.contiguous().to(torch.float32)
 
         ac = bool(align_corners)
         s_h = _opt_scale(scales_h)
         s_w = _opt_scale(scales_w)
 
-        if out_w == 1:
-            # ATen CPU H-collapse defect; 见本类与 aclnn 入口 docstring。
+        if out_w == 1 or _aa_window_out_of_range(
+            in_h_,
+            in_w_,
+            out_h,
+            out_w,
+            ac,
+            0.0 if s_h is None else s_h,
+            0.0 if s_w is None else s_w,
+            True,
+        ):
+            # ATen CPU 的 H 塌缩与窗口越界读两个缺陷共用这条 fp64 回退;
+            # 见本类与 aclnn 入口 docstring 及 _aa_window_out_of_range。
             # is_regbase=True 固定"attr 为 OUT/IN", 即 ATen scales 的边界语义。
             y = _upsample_bicubic2d_aa_nchw(
                 t.numpy(),
@@ -868,23 +989,37 @@ class E2eUpsampleBicubic2dAATestSpec:
             oh, ow = _normalize_output_size(output_size)
             if ow == 1:
                 raise NotImplementedError(_AA_TP_W1_REJECT)
+            s_h_ = _opt_scale(scales_h)
+            s_w_ = _opt_scale(scales_w)
+            ih_, iw_ = (int(v) for v in self.shape[-2:])
+            if _aa_window_out_of_range(
+                ih_,
+                iw_,
+                oh,
+                ow,
+                bool(align_corners),
+                0.0 if s_h_ is None else s_h_,
+                0.0 if s_w_ is None else s_w_,
+                True,
+            ):
+                raise NotImplementedError(_AA_TP_OOR_REJECT)
             return [
                 _tp_aa_aten(
                     self,
                     oh,
                     ow,
                     bool(align_corners),
-                    _opt_scale(scales_h),
-                    _opt_scale(scales_w),
+                    s_h_,
+                    s_w_,
                     impl.device,
                 )
             ]
 
     third_party = {"torch": ThirdPartyImpl}
 
+    # 与 kernel 入口同值: 同一数学语义、同一后端精度。
     tolerance = {
-        # 与 kernel/aclnn 入口同值: 同一数学语义、同一后端精度, 无理由放宽。
-        "float32": {"standard": "stat_rel_err", "threshold": 2e-4},
-        "float16": {"standard": "stat_rel_err", "threshold": 0.0009765625},
-        "bfloat16": {"standard": "stat_rel_err", "threshold": 0.0078125},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }

@@ -43,9 +43,24 @@ Verified equivalences (notes/verify_math.py, notes/verify_1d_align.py):
   kernel's ``roundf(dst*(in-1)/(out-1))`` rule exactly.
 * The ``scales`` attribute is an out/in factor; the kernel uses ``1/scales``
   (tiling_base.cpp:239-265), which is precisely the ATen ``scales_h/scales_w``
-  contract, so the attribute is forwarded unchanged. Every delivered case
-  leaves it at its default (``0.0`` -> ``None`` -> shape-derived), so the
-  reference always takes the shape-derived route.
+  contract, so the attribute is forwarded unchanged. A non-positive value
+  (the IR default ``0.0``) becomes ``None`` and the ratio is derived from the
+  shapes instead, which is the same fallback the kernel applies.
+* When the output H/W equal the input H/W the device returns the input
+  unchanged, for every coordinate rule and whatever ``scales`` says: the
+  tiling selects the INPUT_EQ_OUTPUT copy (tiling_base.cpp:707-708). The
+  golden checks that before any backend dispatch. At every other extent the
+  device applies an explicit scale, ``out == 2*in`` included.
+* ATen's plain-nearest entries read their source index from ``nearest_idx``,
+  which ignores an explicit scale when the output length equals the input
+  length or twice it (UpSample.h:339-358, kept upstream for BC and marked
+  deprecated). Since the general branch of that helper derives the index from
+  ``1/scale`` alone, independently of the output length, the golden asks for a
+  length off those two values and slices the result back (``_aten_nearest_len``)
+  rather than leaving the attribute silently dropped. With full same-extent
+  output already handled above, this matters for ``out == 2*in`` and for a
+  single axis whose length equals the input's. The nearest-exact entries carry
+  no such shortcut and are called directly.
 * Under ``align_corners`` the kernel ignores ``scales`` entirely (the rule is
   fixed at ``(in-1)/(out-1)``); the golden mirrors that instead of raising,
   because it is an input domain the kernel accepts.
@@ -320,6 +335,21 @@ def _normalize_4d(t, fmt):
     return t.contiguous(), lambda y: y.contiguous()
 
 
+def _aten_nearest_len(out_len, in_len, scale):
+    """Output length that keeps ATen's ``nearest_idx`` off its shortcut branch.
+
+    Only meaningful when an explicit scale is supplied. Without one the
+    shortcut agrees with the general rule, and the general rule derives the
+    ratio from the output length itself, so the length must be left alone.
+    """
+    if scale is None:
+        return int(out_len)
+    n = int(out_len)
+    while n == in_len or n == 2 * in_len:
+        n += 1
+    return n
+
+
 def _check_combo(align_corners, half_pixel_centers):
     if align_corners and half_pixel_centers:
         raise ValueError(
@@ -348,6 +378,16 @@ def _nearest_2d(x_nchw, out_hw, align_corners, half_pixel_centers, scales, backe
     if backend == "auto":
         backend = "tf" if align_corners else "torch"
 
+    # The device returns x unchanged whenever the output extent equals the
+    # input one, regardless of any explicit scales or of the coordinate rule,
+    # so this precedes the backend dispatch. Only ATen's plain-nearest path
+    # has an equivalent shortcut; nearest-exact and the TF branch do not.
+    if [int(out_hw[0]), int(out_hw[1])] == [
+        int(x_nchw.shape[-2]),
+        int(x_nchw.shape[-1]),
+    ]:
+        return x_nchw.clone()
+
     if backend == "torch":
         if align_corners:
             raise ValueError(
@@ -355,32 +395,29 @@ def _nearest_2d(x_nchw, out_hw, align_corners, half_pixel_centers, scales, backe
                 "ref_backend='tf' (tf.raw_ops.ResizeNearestNeighbor with "
                 "align_corners=True) or leave ref_backend='auto'."
             )
-        if s_h is not None or s_w is not None:
-            # Out of the delivered domain: every case leaves ``scales`` at its
-            # default, so no reference path for explicit scales is maintained
-            # here. Raise instead of calling the fused ATen entries below --
-            # those short-circuit on out==in / out==2*in and silently drop the
-            # scales, which would yield a wrong golden rather than an error.
-            raise ValueError(
-                "explicit scales are outside the delivered case domain "
-                f"(got scales_h={s_h!r}, scales_w={s_w!r}); every delivered "
-                "case leaves the attribute at its default 0.0 so the output "
-                "ratio is derived from the shapes."
-            )
-        fn = (
-            torch.ops.aten._upsample_nearest_exact2d
-            if half_pixel_centers
-            else torch.ops.aten.upsample_nearest2d
-        )
-        return fn(x_nchw, [int(out_hw[0]), int(out_hw[1])], s_h, s_w)
+        oh, ow = int(out_hw[0]), int(out_hw[1])
+        if half_pixel_centers:
+            # nearest_exact_idx has no shortcut, so an explicit scale reaches
+            # the coordinate rule unchanged (UpSample.h:360-367).
+            return torch.ops.aten._upsample_nearest_exact2d(x_nchw, [oh, ow], s_h, s_w)
+        # upsample_nearest2d takes its source index from nearest_idx, which
+        # returns the identity (out==in) or a >>1 shift (out==2*in) and drops
+        # an explicit scale on those two lengths; upstream keeps that shortcut
+        # for BC and marks it deprecated (UpSample.h:339-358). Off those two
+        # lengths the same helper derives the index from 1/scale alone, with
+        # no dependence on the output length, so computing a longer axis and
+        # slicing it back reproduces the un-shortcut mapping exactly.
+        ih, iw = int(x_nchw.shape[-2]), int(x_nchw.shape[-1])
+        ph, pw = _aten_nearest_len(oh, ih, s_h), _aten_nearest_len(ow, iw, s_w)
+        y = torch.ops.aten.upsample_nearest2d(x_nchw, [ph, pw], s_h, s_w)
+        return y if (ph, pw) == (oh, ow) else y[..., :oh, :ow].contiguous()
     if backend == "tf":
         if (s_h is not None or s_w is not None) and not align_corners:
             raise ValueError(
                 "tf.raw_ops.ResizeNearestNeighbor has no scales argument; the TF "
                 "branch cannot express explicit scales for the non-align rule. "
-                "Explicit scales are outside the delivered case domain on both "
-                "backends -- every delivered case leaves the attribute at its "
-                "default 0.0 so the output ratio is derived from the shapes."
+                "Leave ref_backend='auto' so explicit scales route to the ATen "
+                "backend, which carries the attribute."
             )
         # align_corners ignores scales in the kernel too (the rule is fixed at
         # (in-1)/(out-1), tiling_base.cpp:239-265), so dropping them here is
@@ -408,19 +445,20 @@ def _nearest_1d(x_ncl, out_len, align_corners, half_pixel_centers, scale, backen
                 "ref_backend='tf' (length mapped onto H with W=1) or leave "
                 "ref_backend='auto'."
             )
-        fn = (
-            torch.ops.aten._upsample_nearest_exact1d
-            if half_pixel_centers
-            else torch.ops.aten.upsample_nearest1d
-        )
-        return fn(x_ncl, [int(out_len)], scale)
+        ol = int(out_len)
+        if half_pixel_centers:
+            return torch.ops.aten._upsample_nearest_exact1d(x_ncl, [ol], scale)
+        # Same nearest_idx shortcut as the 2D entry; see _nearest_2d.
+        pl = _aten_nearest_len(ol, int(x_ncl.shape[-1]), scale)
+        y = torch.ops.aten.upsample_nearest1d(x_ncl, [pl], scale)
+        return y if pl == ol else y[..., :ol].contiguous()
     if backend == "tf":
         if scale is not None and not align_corners:
             raise ValueError(
                 "tf.raw_ops.ResizeNearestNeighbor has no scales argument; the TF "
                 "branch cannot express explicit scales for the non-align rule. "
-                "Every delivered case leaves the attribute at its default 0.0, so "
-                "the output ratio is derived from the shapes."
+                "Leave ref_backend='auto' so explicit scales route to the ATen "
+                "backend, which carries the attribute."
             )
         x4 = x_ncl.unsqueeze(-1)  # (N,C,L) -> (N,C,L,1): L onto H, W==1
         y4 = _tf_resize_nearest(
@@ -503,14 +541,11 @@ def _tp_axis_index(
     different coordinate semantic, the index is built from verified torch ops
     (checked against the kernel rule, notes/verify_tp.py).
 
-    The ``scale_attr`` branch is kept because the IR attribute and the aten
-    schemas both admit the argument, not because any delivered case supplies
-    it: every case leaves the attribute at its default, so callers always pass
-    ``None`` here and the shape-derived ratio is used. (Historically that
-    branch also covered explicit scales, which ``F.interpolate(scale_factor=
-    ...)`` cannot represent at all because it derives the output length itself
-    as floor(in*scale); that configuration is outside the delivered domain and
-    is retained only as locating evidence.)
+    Explicit scales reach the same branch: ``F.interpolate`` cannot express
+    them at all, since ``scale_factor`` makes it derive the output length
+    itself as floor(in*scale) instead of honouring the requested one. The
+    rule applied here is the kernel's, ``scale > 0 -> 1/scale`` otherwise
+    in/out (tiling_base.cpp:239-265).
     """
     out_len = int(out_len)
     in_len = int(in_len)
@@ -622,10 +657,9 @@ class ResizeNearestNeighborV2TestSpec:
         Separate code path from the golden: the golden calls the ATen IR ops /
         ``tf.raw_ops``, this one uses the public ``torch.nn.functional``
         interpolate API plus verified torch primitives for the combination
-        that API cannot express (align_corners). The ``scales`` attribute is
-        accepted and normalized because the IR declares it, but every
-        delivered case leaves it at its default, so the primitive path is
-        reached only through align_corners.
+        that API cannot express (align_corners, and explicit scales, which
+        ``scale_factor`` cannot represent because it derives the output
+        length itself).
 
         ``device`` is a framework-reserved parameter name: TTK's XPU executor
         injects the resolved device string (execution_container.py:11), so the
@@ -980,6 +1014,10 @@ def _e2e_nearest_nd(x, out_spatial, scales, half_pixel_centers):
     """
     n = len(out_spatial)
     y = x.contiguous()
+    # Same-extent output is an unconditional pass-through on the device; the
+    # per-axis gather below would otherwise apply an explicit scale here.
+    if [int(v) for v in out_spatial] == [int(v) for v in x.shape[-n:]]:
+        return y
     for k in range(n):
         axis = -n + k
         y = _e2e_axis_gather(

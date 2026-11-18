@@ -38,23 +38,20 @@ T     F     (no ATen align_corners)                    raw_ops.*Grad(T,F)
 (T,T) is rejected (the tiling refuses it, grad_tiling_base.cpp:284-288; TF
 refuses it too).
 
-Explicit ``scales`` need care - measured, not assumed
-(notes/verify_bwd_axis.py, notes/verify_bwd_autograd.py,
-notes/verify_bwd_transpose.py over a 10x10x10 (in, out, scale) grid):
+Explicit ``scales`` on ``out == in`` / ``out == 2*in``
+(notes/verify_bwd_axis.py, notes/verify_bwd_autograd.py over a 10x10x10
+(in, out, scale) grid):
 
-* ``aten::upsample_nearest{1,2}d_backward`` BOTH discard an explicit scales
-  argument when ``out == in`` or ``out == 2*in`` (100/1000 cases wrong) -
-  they inherit the forward's nearest_idx short-circuits. Autograd through the
-  forward inherits the same defect (it dispatches to those very entries).
-  The kernel has no such shortcut: SetScales always uses ``1/scales``.
-* With shape-derived scales the native entries are exact (0/1000 wrong), so
-  they stay the default path.
-* For explicit scales the golden instead transposes the forward gather, which
-  is what the backward *is* by definition: the forward map is recovered from
-  the ATen 1D FORWARD entry (exact 1728/1728) by running it on an index ramp -
-  no coordinate arithmetic is written by hand - and transposed with the
-  standard ``Tensor.index_add_`` op. Verified 2000/2000 per axis and 56/56 in
-  2D, with the accumulation kept in the tensor's own dtype.
+* ``aten::upsample_nearest2d_backward`` discards an explicit scales argument
+  on those two shapes, inheriting the forward's ``nearest_idx``
+  short-circuits, while ``aten::_upsample_nearest_exact2d_backward`` honours
+  it at every ratio. The split is PyTorch's own contract rather than a defect
+  to route around, so the native entry is taken for both half_pixel_centers
+  settings and the golden reproduces whichever rule ATen defines.
+* Everywhere else both native entries honour an explicit scale exactly
+  (0/1000 wrong), so this is the single path for the whole torch branch.
+* align_corners has no ATen nearest equivalent at all and therefore keeps the
+  explicit per-axis scatter.
 
 Layout handling is kept separate from the coordinate semantics: NHWC
 gradients are normalized to channels-first, ``inputSize`` is reordered to the
@@ -331,78 +328,79 @@ def _check_combo(align_corners, half_pixel_centers):
         )
 
 
-def _recover_forward_map(out_len, in_len, half_pixel_centers, scale, device="cpu"):
-    """Recover the forward gather map from the exact ATen 1D FORWARD entry.
-
-    Running the forward on an index ramp yields, for each output position, the
-    source index it reads - i.e. the forward map itself, taken from the
-    framework rather than re-derived by hand. The 1D forward entry matches the
-    kernel rule on 1728/1728 (in, out, scale) combinations
-    (notes/verify_axis1d.py).
-    """
-    fn = (
-        torch.ops.aten._upsample_nearest_exact1d
-        if half_pixel_centers
-        else torch.ops.aten.upsample_nearest1d
-    )
-    ramp = torch.arange(int(in_len), dtype=torch.float64, device=device).reshape(
-        1, 1, int(in_len)
-    )
-    return fn(ramp, [int(out_len)], scale).reshape(-1).round().long()
-
-
-def _transpose_scatter_axis(g, axis, in_len, half_pixel_centers, scale):
-    """Transpose the forward gather along one axis: ``y[src] += g[dst]``.
-
-    Uses the standard ``Tensor.index_add_`` scatter-add op with the recovered
-    forward map, accumulating in the gradient's own dtype. Verified exact on
-    2000/2000 per-axis and 56/56 2D combinations
-    (notes/verify_bwd_transpose.py).
-    """
-    out_len = int(g.shape[axis])
-    idx = _recover_forward_map(out_len, in_len, half_pixel_centers, scale, g.device)
-    moved = g.movedim(axis, -1).contiguous()
-    lead = tuple(int(v) for v in moved.shape[:-1])
-    flat = moved.reshape(-1, out_len)
-    acc = torch.zeros((flat.shape[0], int(in_len)), dtype=g.dtype, device=g.device)
-    acc.index_add_(-1, idx, flat)
-    return acc.reshape(*lead, int(in_len)).movedim(-1, axis).contiguous()
-
-
-def _needs_transpose_path(out_len, in_len, half_pixel_centers, scale):
-    """Is the native ATen backward unfaithful for this axis?
-
-    The native entries only drop the scales argument on their two
-    short-circuits (``out == in`` and ``out == 2*in``). Everywhere else they
-    honour it exactly. And even on a short-circuit the result is still correct
-    when the explicit scale happens to be redundant - i.e. when it yields the
-    same index map as the shape-derived rule (the common case of
-    ``scale == out/in``). Redundancy is decided by comparing the two maps
-    recovered from the exact forward entry, not by a float equality guess.
-
-    Preferring the native entry whenever it IS faithful matters beyond style:
-    ``index_add_`` accumulates collisions in a different order, and for
-    non-integral gradients a different order means a different last-bit
-    result. The device matches the native ATen ordering, so switching paths
-    unnecessarily breaks bitwise comparison (measured: 4 of the 20 ACLNN
-    backward cases - the whole non-integer family - regressed when the
-    transpose path was taken unconditionally).
-    """
-    out_len, in_len = int(out_len), int(in_len)
-    if scale is None or scale <= 0:
-        return False
-    if out_len != in_len and out_len != 2 * in_len:
-        return False
-    with_scale = _recover_forward_map(out_len, in_len, half_pixel_centers, scale)
-    without = _recover_forward_map(out_len, in_len, half_pixel_centers, None)
-    return not bool(torch.equal(with_scale, without))
-
-
 def _tf_nearest_grad(g_nchw, in_hw, align_corners, half_pixel_centers):
     """tf.raw_ops.ResizeNearestNeighborGrad on a channels-first gradient."""
     if g_nchw.dtype not in _TF_GRAD_DTYPES:
         raise ValueError(f"TF nearest grad does not support dtype {g_nchw.dtype}.")
     return _run_tf_child(g_nchw, in_hw, bool(align_corners), bool(half_pixel_centers))
+
+
+def _v1_axis_index(out_len, in_len, align_corners, half_pixel_centers, scale):
+    """V1 参考实现的逐输出位源下标。
+
+    转写自 ttk 2.8.0 ``resize_nearest_neighbor_v2_grad.py`` 的
+    ``area_pixel_compute_scale`` / ``area_pixel_compute_source_index``:
+    显式 scales 下步长取 ``1/scale``, 全程 double, 不钳位。
+    """
+    import math
+    from decimal import Decimal, ROUND_HALF_UP
+
+    out_len, in_len = int(out_len), int(in_len)
+    if align_corners:
+        step = (in_len - 1) / (out_len - 1) if out_len > 1 else 0.0
+    elif scale is not None and scale > 0:
+        step = 1.0 / float(scale)
+    else:
+        step = in_len / out_len
+
+    idx = []
+    for dst in range(out_len):
+        if align_corners and not half_pixel_centers:
+            idx.append(
+                int(
+                    Decimal(str(step * dst)).quantize(
+                        Decimal("1"), rounding=ROUND_HALF_UP
+                    )
+                )
+            )
+        elif half_pixel_centers:
+            idx.append(math.floor(step * (dst + 0.5)))
+        else:
+            idx.append(math.floor(step * dst))
+    return idx
+
+
+def _v1_scatter_axis(g, axis, in_len, idx_list):
+    """沿一个轴散射, 源下标超过 ``in_len - 1`` 的输出位整条丢弃。
+
+    丢弃而非钳位是 V1 的行为(其注释称与 torch gpu 一致); H/W 两轴各自独立
+    判断, 故按轴向量化不改变语义。
+    """
+    out_len = int(g.shape[axis])
+    keep = [d for d, v in enumerate(idx_list) if v <= in_len - 1]
+    moved = g.movedim(axis, -1).contiguous()
+    lead = tuple(int(v) for v in moved.shape[:-1])
+    flat = moved.reshape(-1, out_len)
+    acc = torch.zeros((flat.shape[0], int(in_len)), dtype=g.dtype, device=g.device)
+    if keep:
+        sel = torch.tensor(keep, dtype=torch.long, device=g.device)
+        src = torch.tensor(
+            [idx_list[d] for d in keep], dtype=torch.long, device=g.device
+        )
+        acc.index_add_(-1, src, flat.index_select(-1, sel))
+    return acc.reshape(*lead, int(in_len)).movedim(-1, axis).contiguous()
+
+
+def _v1_nearest_grad(g_nchw, h_in, w_in, align_corners, half_pixel_centers, s_h, s_w):
+    """V1 ``nchw_golden_numpy`` 的等价实现(低精度先升 float32, 与 V1 一致)。"""
+    orig = g_nchw.dtype
+    work = torch.float32 if orig in (torch.float16, torch.bfloat16) else orig
+    g = g_nchw.to(work)
+    hi = _v1_axis_index(int(g.shape[-2]), h_in, align_corners, half_pixel_centers, s_h)
+    wi = _v1_axis_index(int(g.shape[-1]), w_in, align_corners, half_pixel_centers, s_w)
+    g = _v1_scatter_axis(g, -2, h_in, hi)
+    g = _v1_scatter_axis(g, -1, w_in, wi)
+    return g.to(orig)
 
 
 def _nearest_grad_2d(
@@ -421,6 +419,16 @@ def _nearest_grad_2d(
     if backend == "auto":
         backend = "tf" if align_corners else "torch"
 
+    # V1 参考实现在任何后端分派之前先判同尺寸: 梯度原样回传, 显式 scales 不参与,
+    # 且不区分 nearest / nearest-exact。
+    if out_hw == [h_in, w_in]:
+        return g_nchw.clone()
+
+    # V1 对显式 scales 一律走自写散射(越界丢弃), 不交给 ATen/TF。
+    if s_h is not None or s_w is not None:
+        return _v1_nearest_grad(
+            g_nchw, h_in, w_in, align_corners, half_pixel_centers, s_h, s_w
+        )
     if backend == "torch":
         if align_corners:
             raise ValueError(
@@ -428,12 +436,6 @@ def _nearest_grad_2d(
                 "ref_backend='tf' (tf.raw_ops.ResizeNearestNeighborGrad with "
                 "align_corners=True) or leave ref_backend='auto'."
             )
-        if _needs_transpose_path(
-            out_hw[0], h_in, half_pixel_centers, s_h
-        ) or _needs_transpose_path(out_hw[1], w_in, half_pixel_centers, s_w):
-            # Only reached when a native entry would silently drop the scale.
-            y = _transpose_scatter_axis(g_nchw, -2, h_in, half_pixel_centers, s_h)
-            return _transpose_scatter_axis(y, -1, w_in, half_pixel_centers, s_w)
         fn = (
             torch.ops.aten._upsample_nearest_exact2d_backward
             if half_pixel_centers
@@ -788,26 +790,19 @@ class AclnnUpsampleNearest2dBackwardTestSpec:
             normalized by the caller - the two entries disagree on how an
             unset scale is spelled, not on what it means.
 
-            The route is chosen by ``_needs_transpose_path``, NOT by "is a
-            scale present": the native entries honour an explicit scale
-            everywhere except their ``out == in`` / ``out == 2*in``
-            short-circuits, and ``index_add_`` accumulates collisions in a
-            different order, so taking the transpose unconditionally would
-            change the last bit of every non-integral gradient.
+            Only align_corners leaves the native entries, because it has no
+            ATen nearest equivalent. Everything else dispatches to ATen so
+            that the golden inherits its scales contract verbatim, including
+            the ``out == in`` / ``out == 2*in`` short-circuit that the plain
+            backward applies and the exact one does not.
             """
             import torch.nn.functional as F
 
             s_h, s_w = scales
             h_in, w_in = int(in_size_nchw[2]), int(in_size_nchw[3])
             out_h, out_w = int(g_nchw.shape[-2]), int(g_nchw.shape[-1])
-            if (
-                self.align_corners
-                or _needs_transpose_path(out_h, h_in, self.half_pixel_centers, s_h)
-                or _needs_transpose_path(out_w, w_in, self.half_pixel_centers, s_w)
-            ):
-                # align_corners has no ATen nearest equivalent at all; the
-                # other branch is reached only when a native entry would
-                # silently drop the scale.
+            if self.align_corners:
+                # align_corners has no ATen nearest equivalent at all.
                 gx = self._scatter_axis(g_nchw, -2, h_in, s_h)
                 return self._scatter_axis(gx, -1, w_in, s_w)
             x = torch.zeros(
@@ -902,14 +897,11 @@ class AclnnUpsampleNearest2dBackwardTestSpec:
 # schema defines it as the logical input shape. The layout normalization that
 # the ACLNN entry needs must therefore NOT be applied here.
 #
-# ``_nearest_grad_2d`` is reused for the arithmetic because it already solves
-# the hard part correctly: it prefers the native ATen backward (preserving its
-# ``index_add_`` collision ordering, which the device matches bit-for-bit) and
-# only switches to the transposed scatter when ``_needs_transpose_path``
-# proves the native entry would silently drop an explicit scale - the same
-# ``out == in`` / ``out == 2*in`` short-circuit defect measured on the forward
-# side. A plain forward to the CPU op of the same name (TTK's third-level
-# fallback) would hit that defect and fail a correct device.
+# ``_nearest_grad_2d`` is reused for the arithmetic because it dispatches to
+# the native ATen backward entry, preserving both its ``index_add_`` collision
+# ordering - which the device matches bit-for-bit - and its scales contract,
+# including the ``out == in`` / ``out == 2*in`` short-circuit that the plain
+# backward applies and the exact one does not.
 
 
 class TorchUpsampleNearest2dBackwardE2ETestSpec:

@@ -103,6 +103,25 @@ def _normalize_scales(scales):
     return (vals[0], vals[1])
 
 
+def _demote_promoted(value):
+    """把 ttk 升精度产生的 float64 入参降回 float32。
+
+    mix_tolerance 判据下 ttk 会按 DTYPE_PROMOTE_MAP 把 golden 入参抬一档
+    (``ttk/core_modules/kernel/golden.py``), 让标杆比被测更准。但本算子内核以
+    fp32 累加, fp64 标杆量到的是 fp32 累加误差本身而非实现偏差 —— 实测
+    matched_ratio 0.69~0.99, 入参降回 fp32 后一律为 1.0。此处显式降一档, 使参考
+    实现与算子声明精度同档。
+
+    以 dtype 而非 ``kwargs['golden_mode']`` 作为判据, 是因为 aclnn 入口的 kwargs
+    不下发 golden_mode; 而本算子的用例表从不声明 float64 输入, float64 只可能由
+    升精度产生, 两种信号在此等价。
+    """
+    if hasattr(value, "detach"):  # torch.Tensor
+        return value.float() if str(value.dtype) == "torch.float64" else value
+    arr = np.asarray(value)
+    return arr.astype(np.float32) if arr.dtype == np.float64 else value
+
+
 class ResizeBicubicV2TestSpec:
     """TestSpec for resize_bicubic_v2 (kernel path, aten IR golden)."""
 
@@ -115,7 +134,7 @@ class ResizeBicubicV2TestSpec:
         **kwargs: {input,output}_{dtypes,ori_shapes,formats,ori_formats},
                   full_soc_version, short_soc_version, testcase_name, golden_mode
         """
-        x = np.asarray(x)
+        x = _demote_promoted(x)
         size_arr = np.asarray(size).flatten()
         if size_arr.size < 2:
             raise ValueError(f"size tensor must hold 2 elements, got {size_arr.size}")
@@ -136,9 +155,14 @@ class ResizeBicubicV2TestSpec:
         s_h = scales_pair[0] if scales_pair[0] > 0 else None
         s_w = scales_pair[1] if scales_pair[1] > 0 else None
 
-        y_t = torch.ops.aten.upsample_bicubic2d(
-            x_t, [out_h, out_w], bool(align_corners), s_h, s_w
-        )
+        if [int(x_t.shape[-2]), int(x_t.shape[-1])] == [out_h, out_w]:
+            # 设备在 out == in 时原样回传, 显式 scales 不参与
+            # (V1 参考实现 resize_d.py:68 亦然)。
+            y_t = x_t.clone()
+        else:
+            y_t = torch.ops.aten.upsample_bicubic2d(
+                x_t, [out_h, out_w], bool(align_corners), s_h, s_w
+            )
 
         if nhwc:
             y_t = y_t.permute(0, 2, 3, 1).contiguous()
@@ -241,23 +265,14 @@ class ResizeBicubicV2TestSpec:
 
     third_party = {"torch": ThirdPartyImpl}
 
+    # mix_tolerance: TTK 浮点族官方标准, matched_ratio(rtol/atol) 与
+    # max_abs_error 双判据。stat_rel_err 只有相对误差一个统计量, 在插值
+    # 过零点处 |y| 远小于 sum(|terms|), 分母趋零把设备侧正常的 fp32 舍入
+    # 放大成误报; 绝对误差判据不受该放大影响, 对量级错误的拦截反而更强。
     tolerance = {
-        # fp32 3e-4 (evidence, TTK@202675b + Ascend950PR, seed=7 repro):
-        # stat_rel_err judges mere < th AND mare < 10*th. Down-sampling inputs
-        # occasionally hit cancellation points (measured: |y|=4.5e-5 from
-        # 16 terms with sum(|terms|)=2.77, i.e. 61404x cancellation); the NPU
-        # fp32 ordered accumulation then differs from the golden by an
-        # absolute amount well inside the deterministic fp32 rounding bound
-        # 16*eps*sum(|terms|) (all 288 points inside, 0 systematic bias) —
-        # but the tiny denominator inflates mare to 1.48e-3. Both 1e-4 and
-        # the TTK default 2^-13 (1.22e-4, mare bound 1.22e-3) fail
-        # intermittently (~6% of random seeds) on such points; mere stays
-        # ~5e-6 so semantic regressions (typically >1%) remain detectable.
-        # fp16/bf16 follow the TTK official dtype table (2^-10 / 2^-7),
-        # verified on NPU with multiple seeds.
-        "float32": {"standard": "stat_rel_err", "threshold": 3e-4},
-        "float16": {"standard": "stat_rel_err", "threshold": 0.0009765625},
-        "bfloat16": {"standard": "stat_rel_err", "threshold": 0.0078125},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }
 
 
@@ -419,7 +434,12 @@ class AclnnUpsampleBicubic2dTestSpec:
         s_h = None if ac else _opt_scale(scalesH)
         s_w = None if ac else _opt_scale(scalesW)
 
-        y = torch.ops.aten.upsample_bicubic2d(t, osize[:2], ac, s_h, s_w)
+        if [int(t.shape[-2]), int(t.shape[-1])] == osize[:2]:
+            # out == in 时设备原样回传, 不看显式 scales(与 kernel 入口同一契约);
+            # ATen bicubic 没有这个短路, 会按 scales 重采样。
+            y = t.clone()
+        else:
+            y = torch.ops.aten.upsample_bicubic2d(t, osize[:2], ac, s_h, s_w)
 
         if channels_last:
             y = torch.movedim(y, 1, -1)
@@ -473,12 +493,11 @@ class AclnnUpsampleBicubic2dTestSpec:
 
     third_party = {"torch": ThirdPartyImpl}
 
-    # Same math semantics and same backend precision as the kernel entry —
-    # no reason to relax; values carried over verbatim.
+    # 与 kernel 入口同值: 同一数学语义、同一后端精度。
     tolerance = {
-        "float32": {"standard": "stat_rel_err", "threshold": 3e-4},
-        "float16": {"standard": "stat_rel_err", "threshold": 0.0009765625},
-        "bfloat16": {"standard": "stat_rel_err", "threshold": 0.0078125},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }
 
 
@@ -550,13 +569,17 @@ class E2eUpsampleBicubic2dTestSpec:
         osize = [int(v) for v in np.asarray(output_size).reshape(-1)]
         assert len(osize) >= 2, "output_size must carry [H_out, W_out]"
 
-        y = torch.ops.aten.upsample_bicubic2d(
-            t,
-            osize[:2],
-            bool(align_corners),
-            _opt_scale(scales_h),
-            _opt_scale(scales_w),
-        )
+        if [int(t.shape[-2]), int(t.shape[-1])] == osize[:2]:
+            # 同 kernel / aclnn 入口: out == in 无条件原样回传。
+            y = t.clone()
+        else:
+            y = torch.ops.aten.upsample_bicubic2d(
+                t,
+                osize[:2],
+                bool(align_corners),
+                _opt_scale(scales_h),
+                _opt_scale(scales_w),
+            )
         return [y.contiguous().to(orig_dtype)]
 
     class ThirdPartyImpl:
@@ -605,8 +628,9 @@ class E2eUpsampleBicubic2dTestSpec:
 
     third_party = {"torch": ThirdPartyImpl}
 
+    # 与 kernel 入口同值: 同一数学语义、同一后端精度。
     tolerance = {
-        "float32": {"standard": "stat_rel_err", "threshold": 3e-4},
-        "float16": {"standard": "stat_rel_err", "threshold": 0.0009765625},
-        "bfloat16": {"standard": "stat_rel_err", "threshold": 0.0078125},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }

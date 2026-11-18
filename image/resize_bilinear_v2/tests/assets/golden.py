@@ -784,10 +784,14 @@ class ResizeBilinearV2TestSpec:
 
     third_party = {"torch": ThirdPartyImpl, "tf": TfThirdPartyImpl}
 
+    # mix_tolerance: TTK 浮点族官方标准, matched_ratio(rtol/atol) 与
+    # max_abs_error 双判据。stat_rel_err 只有相对误差一个统计量, 在插值
+    # 过零点处 |y| 远小于 sum(|terms|), 分母趋零把设备侧正常的 fp32 舍入
+    # 放大成误报; 绝对误差判据不受该放大影响, 对量级错误的拦截反而更强。
     tolerance = {
-        "float32": {"standard": "stat_rel_err"},
-        "float16": {"standard": "stat_rel_err"},
-        "bfloat16": {"standard": "stat_rel_err"},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }
 
 
@@ -1003,10 +1007,11 @@ class AclnnUpsampleBilinear2dTestSpec:
 
     third_party = {"torch": ThirdPartyImpl, "tf": TfThirdPartyImpl}
 
+    # 与 kernel 入口同值: 同一数学语义、同一后端精度。
     tolerance = {
-        "float32": {"standard": "stat_rel_err"},
-        "float16": {"standard": "stat_rel_err"},
-        "bfloat16": {"standard": "stat_rel_err"},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }
 
 
@@ -1144,8 +1149,9 @@ class E2eUpsampleBilinear2dTestSpec:
 
     third_party = {"torch": ThirdPartyImpl, "tf": TfThirdPartyImpl}
 
+    # 与 kernel 入口同值: 同一数学语义、同一后端精度。
     tolerance = {
-        "float32": {"standard": "stat_rel_err"},
-        "float16": {"standard": "stat_rel_err"},
-        "bfloat16": {"standard": "stat_rel_err"},
+        "float32": {"standard": "mix_tolerance"},
+        "float16": {"standard": "mix_tolerance"},
+        "bfloat16": {"standard": "mix_tolerance"},
     }
