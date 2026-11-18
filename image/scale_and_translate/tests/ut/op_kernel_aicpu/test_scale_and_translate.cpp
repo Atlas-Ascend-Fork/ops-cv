@@ -1702,3 +1702,25 @@ TEST_F(TEST_SCALEANDTRANSLATE_UT, LARGE_HEIGHT_VARYING_WEIGHTS_FLOAT16_SUCC)
     RunLanczos5LargeSpanCase<Eigen::half>(DT_FLOAT16, 4096, 2, kLargeSpanOutputSize, 2, 0.3f, 1.0f, false,
                                           kLargeSpanRepeat);
 }
+
+TEST_F(TEST_SCALEANDTRANSLATE_UT, BoxHalfPixelBoundaryIsExact)
+{
+    const float translations[] = {0.0F, -1.0F, -0.5F, -0.499999F, -0.500001F};
+    const float expected[] = {0.0F, 100.0F, 50.0F, 0.0F, 100.0F};
+    for (bool vertical : {false, true}) {
+        for (size_t i = 0; i < 5; ++i) {
+            vector<DataType> dataTypes = {DT_FLOAT, DT_INT32, DT_FLOAT, DT_FLOAT, DT_FLOAT};
+            vector<vector<int64_t>> shapes = {{1, vertical ? 2 : 1, vertical ? 1 : 2, 1}, {2}, {2}, {2}, {1, 1, 1, 1}};
+            float images[] = {0.0F, 100.0F};
+            int32_t size[] = {1, 1};
+            float scale[] = {1.0F, 1.0F};
+            float translation[] = {0.0F, 0.0F};
+            translation[vertical ? 0 : 1] = translations[i];
+            float output[] = {-1.0F};
+            vector<void*> datas = {images, size, scale, translation, output};
+            CREATE_NODEDEF(shapes, dataTypes, datas, "box", false);
+            RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+            EXPECT_FLOAT_EQ(output[0], expected[i]);
+        }
+    }
+}

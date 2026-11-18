@@ -125,7 +125,7 @@ struct BoxKernelFunc {
         x = std::abs(x);
         constexpr float pointFive = 0.5f;
         constexpr float onePoint = 1.0f;
-        return x < pointFive ? onePoint : IsValueEqual<float>(x, pointFive) ? pointFive : 0.0f;
+        return x < pointFive ? onePoint : x == pointFive ? pointFive : 0.0f;
     }
     float Radius() const { return 1.f; }
 };
