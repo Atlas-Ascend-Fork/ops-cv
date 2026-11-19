@@ -16,6 +16,8 @@
  * Tiling对于最大化NPU利用率和性能至关重要。
  */
 
+#include <string>
+
 #include "log/log.h"
 #include "util/math_util.h"
 #include "util/platform_util.h"
@@ -131,8 +133,12 @@ static ge::graphStatus GetShapeAttrsInfo(gert::TilingContext* context, int64_t& 
     // shape校验：确保所有张量都是4维
     OP_CHECK_IF(inputShapeX.GetDimNum() != DIMS_LIMIT || inputShapeY.GetDimNum() != DIMS_LIMIT ||
                     outShapeZ.GetDimNum() != DIMS_LIMIT,
-                OP_LOGE(context, "AddExample: inputx,inputy,outputz shape dim = %zu, %zu, %zu, should be equal 4",
-                        inputShapeX.GetDimNum(), inputShapeY.GetDimNum(), outShapeZ.GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "x, y, z",
+                    (std::to_string(inputShapeX.GetDimNum()) + "D, " + std::to_string(inputShapeY.GetDimNum()) + "D, " +
+                     std::to_string(outShapeZ.GetDimNum()) + "D")
+                        .c_str(),
+                    "inputx, inputy and outputz must all be 4D"),
                 return ge::GRAPH_FAILED);
 
     // x2 is read for the same element count as x1 by the kernel, so reject known shape mismatches.
@@ -140,7 +146,9 @@ static ge::graphStatus GetShapeAttrsInfo(gert::TilingContext* context, int64_t& 
         int64_t x1Dim = inputShapeX.GetDim(i);
         int64_t x2Dim = inputShapeY.GetDim(i);
         if (x1Dim >= 0 && x2Dim >= 0 && x1Dim != x2Dim) {
-            OP_LOGE(context, "AddExample: x1 and x2 shapes must match");
+            OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(context->GetNodeName(), "x1, x2",
+                                                   (std::to_string(x1Dim) + ", " + std::to_string(x2Dim)).c_str(),
+                                                   "x1 and x2 shapes must match");
             return ge::GRAPH_FAILED;
         }
     }
@@ -156,10 +164,15 @@ static ge::graphStatus GetShapeAttrsInfo(gert::TilingContext* context, int64_t& 
     OP_CHECK_NULL_WITH_CONTEXT(context, inputDescY);
     dataType = inputDesc->GetDataType();
     OP_CHECK_IF(dataType != inputDescY->GetDataType(),
-                OP_LOGE(context, "AddExample: x1 and x2 must have the same data type"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+                    context->GetNodeName(), "x1, x2",
+                    (Ops::Base::ToString(dataType) + ", " + Ops::Base::ToString(inputDescY->GetDataType())).c_str(),
+                    "x1 and x2 must have the same data type"),
+                return ge::GRAPH_FAILED);
 
     if (supportedDtype.count(dataType) == 0) {
-        OP_LOGE(context, "invalid dtype");
+        OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(context->GetNodeName(), "x", Ops::Base::ToString(dataType).c_str(),
+                                              "dtype must be float or int32");
         return ge::GRAPH_FAILED;
     }
 
@@ -253,7 +266,8 @@ static ge::graphStatus AddExampleTilingFunc(gert::TilingContext* context)
         tilingKey = GET_TPL_TILING_KEY(ELEMENTWISE_TPL_SCH_MODE_1);
         context->SetTilingKey(tilingKey);
     } else {
-        OP_LOGE(context, "get dtype error");
+        OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(context->GetNodeName(), "x", Ops::Base::ToString(dataType).c_str(),
+                                              "dtype must be float or int32");
         return ge::GRAPH_FAILED;
     }
 

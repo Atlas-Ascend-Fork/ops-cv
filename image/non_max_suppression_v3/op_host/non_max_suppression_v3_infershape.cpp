@@ -13,6 +13,8 @@
  * \brief
  */
 
+#include <string>
+
 #include "log/log.h"
 #include "op_common/op_host/util/shape_util.h"
 #include "register/op_impl_registry.h"
@@ -66,37 +68,54 @@ static ge::graphStatus InferShapeForNonMaxSuppressionV3(gert::InferShapeContext*
     OP_CHECK_NULL_WITH_CONTEXT(context, boxesDesc);
     OP_CHECK_NULL_WITH_CONTEXT(context, scoresDesc);
     OP_CHECK_IF(boxesDesc->GetDataType() != scoresDesc->GetDataType(),
-                OP_LOGE(context, "boxes and scores must have the same data type"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "boxes, scores",
+                                                       (Ops::Base::ToString(boxesDesc->GetDataType()) + ", " +
+                                                        Ops::Base::ToString(scoresDesc->GetDataType()))
+                                                           .c_str(),
+                                                       "boxes and scores must have the same data type"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_NULL_WITH_CONTEXT(context, iouThresholdShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, scoreThresholdShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, selectedIndicesShape);
 
     OP_CHECK_IF(IsRankInvalid(*boxesShape, kBoxesRank),
-                OP_LOGE(context, "boxes must be rank 2, but got %zu", boxesShape->GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "boxes",
+                                             (std::to_string(boxesShape->GetDimNum()) + "D").c_str(), "2D"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(IsRankInvalid(*scoresShape, kScoresRank),
-                OP_LOGE(context, "scores must be rank 1, but got %zu", scoresShape->GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "scores",
+                                             (std::to_string(scoresShape->GetDimNum()) + "D").c_str(), "1D"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(!IsScalarOrSingleElement(*maxOutputSizeShape),
-                OP_LOGE(context, "max_output_size must be a scalar or a single-element tensor"),
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "max_output_size",
+                                                      Ops::Base::ToString(*maxOutputSizeShape).c_str(),
+                                                      "must be a scalar or a single-element tensor"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(!IsScalarOrSingleElement(*iouThresholdShape),
-                OP_LOGE(context, "iou_threshold must be a scalar or a single-element tensor"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "iou_threshold",
+                                                      Ops::Base::ToString(*iouThresholdShape).c_str(),
+                                                      "must be a scalar or a single-element tensor"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(!IsScalarOrSingleElement(*scoreThresholdShape),
-                OP_LOGE(context, "score_threshold must be a scalar or a single-element tensor"),
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "score_threshold",
+                                                      Ops::Base::ToString(*scoreThresholdShape).c_str(),
+                                                      "must be a scalar or a single-element tensor"),
                 return ge::GRAPH_FAILED);
 
     const int64_t boxesNum = GetDimOrUnknown(*boxesShape, 0U);
     const int64_t scoresNum = GetDimOrUnknown(*scoresShape, 0U);
     OP_CHECK_IF(
         boxesNum != ge::UNKNOWN_DIM && scoresNum != ge::UNKNOWN_DIM && boxesNum != scoresNum,
-        OP_LOGE(context, "boxes and scores first dimensions are incompatible: %ld and %ld", boxesNum, scoresNum),
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(context->GetNodeName(), "boxes, scores",
+                                               (std::to_string(boxesNum) + ", " + std::to_string(scoresNum)).c_str(),
+                                               "boxes and scores first dimensions are incompatible"),
         return ge::GRAPH_FAILED);
 
     const int64_t coordinateNum = GetDimOrUnknown(*boxesShape, kBoxesCoordinateDim);
-    OP_CHECK_IF(coordinateNum != ge::UNKNOWN_DIM && coordinateNum != kCoordinateNum,
-                OP_LOGE(context, "boxes second dimension must be 4, but got %ld", coordinateNum),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        coordinateNum != ge::UNKNOWN_DIM && coordinateNum != kCoordinateNum,
+        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "boxes", std::to_string(coordinateNum).c_str(), "4"),
+        return ge::GRAPH_FAILED);
 
     selectedIndicesShape->SetDimNum(kOutputRank);
     selectedIndicesShape->SetDim(0U, ge::UNKNOWN_DIM);

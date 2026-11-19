@@ -14,6 +14,8 @@
  *
  * 本文件提供了推理逻辑，用于确定Add算子的输出张量shape和数据类型。
  */
+#include <string>
+
 #include "register/op_impl_registry.h"
 #include "log/log.h"
 
@@ -43,14 +45,19 @@ static ge::graphStatus InferShapeAddExample(gert::InferShapeContext* context)
     const gert::Shape* x2Shape = context->GetInputShape(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, x2Shape);
     if (xShape->GetDimNum() != x2Shape->GetDimNum()) {
-        OP_LOGE(context->GetNodeName(), "AddExample: x1 and x2 must have the same rank");
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+            context->GetNodeName(), "x1, x2",
+            (std::to_string(xShape->GetDimNum()) + "D, " + std::to_string(x2Shape->GetDimNum()) + "D").c_str(),
+            "x1 and x2 must have the same rank");
         return GRAPH_FAILED;
     }
     for (size_t i = 0; i < xShape->GetDimNum(); ++i) {
         int64_t x1Dim = xShape->GetDim(i);
         int64_t x2Dim = x2Shape->GetDim(i);
         if (x1Dim >= 0 && x2Dim >= 0 && x1Dim != x2Dim) {
-            OP_LOGE(context->GetNodeName(), "AddExample: x1 and x2 shapes must match");
+            OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(context->GetNodeName(), "x1, x2",
+                                                   (std::to_string(x1Dim) + ", " + std::to_string(x2Dim)).c_str(),
+                                                   "x1 and x2 shapes must match");
             return GRAPH_FAILED;
         }
     }
@@ -91,7 +98,10 @@ static ge::graphStatus InferDataTypeAddExample(gert::InferDataTypeContext* conte
     ge::DataType sizeDtype = context->GetInputDataType(IDX_0);
     ge::DataType x2Dtype = context->GetInputDataType(1);
     if (sizeDtype != x2Dtype) {
-        OP_LOGE(context->GetNodeName(), "AddExample: x1 and x2 must have the same data type");
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+            context->GetNodeName(), "x1, x2",
+            (Ops::Base::ToString(sizeDtype) + ", " + Ops::Base::ToString(x2Dtype)).c_str(),
+            "x1 and x2 must have the same data type");
         return GRAPH_FAILED;
     }
     context->SetOutputDataType(IDX_0, sizeDtype);

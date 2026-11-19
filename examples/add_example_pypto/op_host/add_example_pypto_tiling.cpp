@@ -19,6 +19,8 @@
  * 共享同一份tiling布局，无需手写副本。
  */
 
+#include <string>
+
 #include "exe_graph/runtime/tiling_context.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "register/op_def_registry.h"
@@ -61,9 +63,11 @@ static ge::graphStatus AddExamplePyptoTilingFunc(gert::TilingContext* context)
     auto inputX1 = context->GetInputShape(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, inputX1);
     const auto& shapeX1 = inputX1->GetStorageShape();
-    OP_CHECK_IF(shapeX1.GetDimNum() != DIMS_LIMIT,
-                OP_LOGE(context, "AddExamplePypto: input dim = %zu, should be equal 2", shapeX1.GetDimNum()),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        shapeX1.GetDimNum() != DIMS_LIMIT,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(
+            context->GetNodeName(), "x1", (std::to_string(shapeX1.GetDimNum()) + "D").c_str(), "input must be 2D"),
+        return ge::GRAPH_FAILED);
 
     // kernel 用同一份 rows/columns 构造 x1、x2、y 的寻址，x2 与 x1 必须完全同 shape，
     // 否则 kernel 会按 x1 的范围访问 x2，产生越界 GM 访问。
@@ -71,22 +75,28 @@ static ge::graphStatus AddExamplePyptoTilingFunc(gert::TilingContext* context)
     OP_CHECK_NULL_WITH_CONTEXT(context, inputX2);
     const auto& shapeX2 = inputX2->GetStorageShape();
     OP_CHECK_IF(shapeX2.GetDimNum() != shapeX1.GetDimNum(),
-                OP_LOGE(context, "AddExamplePypto: x2 dim = %zu, should equal x1 dim = %zu", shapeX2.GetDimNum(),
-                        shapeX1.GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(
+                    context->GetNodeName(), "x2", (std::to_string(shapeX2.GetDimNum()) + "D").c_str(),
+                    ("x2 rank must equal x1 rank " + std::to_string(shapeX1.GetDimNum()) + "D").c_str()),
                 return ge::GRAPH_FAILED);
     for (size_t i = 0; i < shapeX1.GetDimNum(); i++) {
         OP_CHECK_IF(shapeX2.GetDim(i) != shapeX1.GetDim(i),
-                    OP_LOGE(context, "AddExamplePypto: x2 shape[%zu] = %ld, should equal x1 shape[%zu] = %ld", i,
-                            shapeX2.GetDim(i), i, shapeX1.GetDim(i)),
+                    OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                        context->GetNodeName(), "x1, x2",
+                        (std::to_string(shapeX1.GetDim(i)) + ", " + std::to_string(shapeX2.GetDim(i))).c_str(),
+                        "x1 and x2 shapes must match"),
                     return ge::GRAPH_FAILED);
     }
 
     int64_t rows = shapeX1.GetDim(0);
     int64_t columns = shapeX1.GetDim(1);
-    OP_CHECK_IF(rows % TILE_ROWS != 0 || columns % TILE_COLUMNS != 0,
-                OP_LOGE(context, "AddExamplePypto: shape [%ld, %ld] should be aligned to [%ld, %ld]", rows, columns,
-                        TILE_ROWS, TILE_COLUMNS),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        rows % TILE_ROWS != 0 || columns % TILE_COLUMNS != 0,
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+            context->GetNodeName(), "x1", (std::to_string(rows) + ", " + std::to_string(columns)).c_str(),
+            ("shape must be aligned to [" + std::to_string(TILE_ROWS) + ", " + std::to_string(TILE_COLUMNS) + "]")
+                .c_str()),
+        return ge::GRAPH_FAILED);
 
     // 3、设置workspace，本算子不需要额外workspace
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);

@@ -15,6 +15,8 @@
 
 // ---------------IMGWarpOffsets Op start-------------------
 
+#include <string>
+
 #include "log/log.h"
 #include "op_common/op_host/util/shape_util.h"
 #include "register/op_impl_registry.h"
@@ -50,24 +52,33 @@ static ge::graphStatus InferShapeForIMGWarpOffsets(gert::InferShapeContext* cont
     }
 
     OP_CHECK_IF(imagesShape->GetDimNum() != kInputRank,
-                OP_LOGE(context, "images must be rank 4, but got %zu", imagesShape->GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "images",
+                                                         (std::to_string(imagesShape->GetDimNum()) + "D").c_str(),
+                                                         "images must be rank 4"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        imagesShape->GetDim(kImagesChannelDim) != kChannelNum &&
-            imagesShape->GetDim(kImagesChannelDim) != ge::UNKNOWN_DIM,
-        OP_LOGE(context, "images last dimension must be 3, but got %ld", imagesShape->GetDim(kImagesChannelDim)),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(imagesShape->GetDim(kImagesChannelDim) != kChannelNum &&
+                    imagesShape->GetDim(kImagesChannelDim) != ge::UNKNOWN_DIM,
+                OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "images",
+                                                         std::to_string(imagesShape->GetDim(kImagesChannelDim)).c_str(),
+                                                         "last dimension must be 3"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(offsetsShape->GetDimNum() != kInputRank,
-                OP_LOGE(context, "offsets must be rank 4, but got %zu", offsetsShape->GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "offsets",
+                                                         (std::to_string(offsetsShape->GetDimNum()) + "D").c_str(),
+                                                         "offsets must be rank 4"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        offsetsShape->GetDim(kOffsetsPointDim) != kPointNum &&
-            offsetsShape->GetDim(kOffsetsPointDim) != ge::UNKNOWN_DIM,
-        OP_LOGE(context, "offsets second dimension must be 4, but got %ld", offsetsShape->GetDim(kOffsetsPointDim)),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(offsetsShape->GetDim(kOffsetsPointDim) != kPointNum &&
+                    offsetsShape->GetDim(kOffsetsPointDim) != ge::UNKNOWN_DIM,
+                OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "offsets",
+                                                         std::to_string(offsetsShape->GetDim(kOffsetsPointDim)).c_str(),
+                                                         "second dimension must be 4"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(imagesShape->GetDim(kBatchDim) != offsetsShape->GetDim(kBatchDim),
-                OP_LOGE(context, "images and offsets batch dimensions must be equal, but got %ld and %ld",
-                        imagesShape->GetDim(kBatchDim), offsetsShape->GetDim(kBatchDim)),
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(context->GetNodeName(), "images, offsets",
+                                                       (std::to_string(imagesShape->GetDim(kBatchDim)) + ", " +
+                                                        std::to_string(offsetsShape->GetDim(kBatchDim)))
+                                                           .c_str(),
+                                                       "batch dimensions must be equal"),
                 return ge::GRAPH_FAILED);
 
     warpImagesShape->SetDimNum(kOutputRank);
