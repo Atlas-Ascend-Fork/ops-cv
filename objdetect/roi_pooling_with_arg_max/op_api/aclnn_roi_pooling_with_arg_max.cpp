@@ -33,7 +33,7 @@ static aclnnStatus CheckSocValid()
     if (!IsRegBase()) {
         const std::string soc = op::ToString(socVersion).GetString();
         const std::string reason = "SoC " + soc +
-                                   " is not supported. Supported SoC is regbase (Ascend950). "
+                                   " is not supported. Supported SoC is regbase (Ascend950, Ascend960DT, Ascend960PR). "
                                    "Kernel is RoiPoolingWithArgMax, dtype is FLOAT or FLOAT16, format is ND.";
         OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_RUNTIME_ERROR, "%s", reason.c_str());
         const std::vector<const char*> keys = {"opName", "reason"};

@@ -1,0 +1,653 @@
+{
+    "op_type": "IouV2",
+    "op_list": [
+      {
+        "bin_filename": "IouV2_f16_iof_notaligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iof"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": false
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_f16_iou_notaligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iou"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": false
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_f16_iof_aligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iof"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_f16_iou_aligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "float16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iou"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_f32_iof_notaligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iof"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": false
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_f32_iou_notaligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iou"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": false
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_f32_iof_aligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iof"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_f32_iou_aligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "float32",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iou"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_bf16_iof_notaligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iof"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": false
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_bf16_iou_notaligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iou"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": false
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_bf16_iof_aligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iof"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "bin_filename": "IouV2_bf16_iou_aligned",
+        "inputs": [
+          {
+            "name": "bboxes",
+            "index": 0,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          },
+          {
+            "name": "gtboxes",
+            "index": 1,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "overlap",
+            "index": 0,
+            "dtype": "bfloat16",
+            "format": "ND",
+            "paramType": "required",
+            "shape": [
+              -2
+            ]
+          }
+        ],
+        "attrs": [
+          {
+            "name": "mode",
+            "dtype": "string",
+            "value": "iou"
+          },
+          {
+            "name": "eps",
+            "dtype": "float",
+            "value": null
+          },
+          {
+            "name": "aligned",
+            "dtype": "bool",
+            "value": true
+          }
+        ]
+      }
+    ]
+  }

@@ -21,8 +21,8 @@ foreach(SUB_DIR ${CURRENT_DIRS})
 endforeach()
 
 # 设置算子定义时支持的芯片类型
-set(SUPPORT_COMPUTE_UNIT "ascend950")
+set(SUPPORT_COMPUTE_UNIT "ascend950" "ascend960dt" "ascend960pr")
 # 设置每种芯片类型对应的tiling文件目录，即采用op_host目录下哪个文件夹下的tiling文件编译
-set(SUPPORT_TILING_DIR "arch35")
+set(SUPPORT_TILING_DIR "arch35" "arch35" "arch35")
 # aclnn_exclude：使用自定义 aclnn 接口（op_api/aclnn_roi_pooling_with_arg_max），roi_actual_num 与 pool_channel 不作为外部参数
 add_all_modules_sources(OPTYPE roi_pooling_with_arg_max ACLNNTYPE aclnn_exclude COMPUTE_UNIT ${SUPPORT_COMPUTE_UNIT} TILING_DIR ${SUPPORT_TILING_DIR} DISABLE_IN_OPP TRUE)

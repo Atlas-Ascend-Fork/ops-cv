@@ -43,6 +43,8 @@ public:
         this->AICore().AddConfig("ascend910b");
         this->AICore().AddConfig("ascend910_93");
         this->AICore().AddConfig("ascend950");
+        this->AICore().AddConfig("ascend960dt");
+        this->AICore().AddConfig("ascend960pr");
 
         OpAICoreConfig config_310p;
         config_310p.Input("bboxes")

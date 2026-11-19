@@ -66,6 +66,8 @@ public:
             .DynamicShapeSupportFlag(true)
             .ExtendCfgInfo("opFile.value", "roi_pooling_grad_with_arg_max");
         this->AICore().AddConfig("ascend950", aicoreConfig);
+        this->AICore().AddConfig("ascend960dt", aicoreConfig);
+        this->AICore().AddConfig("ascend960pr", aicoreConfig);
     }
 };
 
