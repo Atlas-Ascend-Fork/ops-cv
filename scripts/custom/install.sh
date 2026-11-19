@@ -124,7 +124,7 @@ upgrade()
                     read orn
                     if [ "$orn" = n ]; then
                         return 0
-                    elif [ "$orn" = m ]; then
+                    elif [ "$orn" = o ]; then
                         break;
                     elif [ "$orn" = r ]; then
                         [ -n "$targetdir" ] && [ -n "$vendordir" ] && [ -n "$1" ] && \
