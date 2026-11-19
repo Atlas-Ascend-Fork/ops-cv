@@ -591,10 +591,40 @@ endfunction()
 # get op_type from *_def.cpp
 # ######################################################################################################################
 function(check_op_supported OP_NAME OP_DIR COMPUTE_UNIT OP_SUPPORTED_COMPUTE_UNIT)
+  set(_check_npu_arch_upper "")
+  if(COMMAND get_npu_arch_by_soc_version)
+    get_npu_arch_by_soc_version("${COMPUTE_UNIT}" _check_npu_arch)
+    if(_check_npu_arch)
+      string(TOUPPER "${_check_npu_arch}" _check_npu_arch_upper)
+    endif()
+  endif()
+  # 旧风格注册：按行匹配，与基线行为保持一致
   execute_process(
     COMMAND find "${OP_DIR}" -name "${OP_NAME}_def.cpp" -exec grep "\\.AddConfig(\\s*\"${COMPUTE_UNIT}\"" {} \;
     OUTPUT_VARIABLE op_supported_compute_unit
     )
+  # AddConfigByArch 注册：grep 按行匹配无法覆盖换行写法，固定行数窗口又会把调用结束后的
+  # 无关架构值误算为注册项（或漏判更长跨行调用）。改为提取完整注册调用（自函数名起至语句
+  # 结束分号，可跨任意行）后在调用参数内匹配架构枚举值，不含调用结束后的代码；匹配前先
+  # 去除行注释与块注释，避免注释中的架构枚举值造成误判
+  if(NOT op_supported_compute_unit AND _check_npu_arch_upper)
+    file(GLOB_RECURSE _def_files "${OP_DIR}/${OP_NAME}_def.cpp" "${OP_DIR}/*/${OP_NAME}_def.cpp")
+    foreach(_def_file IN LISTS _def_files)
+      file(READ "${_def_file}" _def_src)
+      string(REGEX REPLACE "//[^\n]*" "" _def_src "${_def_src}")
+      set(_prev_src "")
+      while(NOT "${_def_src}" STREQUAL "${_prev_src}")
+        set(_prev_src "${_def_src}")
+        string(REGEX REPLACE "/\\*[^*]*\\*/" "" _def_src "${_def_src}")
+      endwhile()
+      string(REGEX MATCHALL "AddConfigByArch[^\;]*\;" _arch_calls "${_def_src}")
+      foreach(_arch_call IN LISTS _arch_calls)
+        if(_arch_call MATCHES "${_check_npu_arch_upper}")
+          set(op_supported_compute_unit TRUE)
+        endif()
+      endforeach()
+    endforeach()
+  endif()
   if(NOT op_supported_compute_unit)
     set(op_supported_compute_unit FALSE)
   else()

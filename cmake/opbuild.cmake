@@ -1,10 +1,10 @@
 # ---------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of 
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, 
-# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. 
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 # ---------------------------------------------------------------------------------------------------------
 
@@ -21,9 +21,24 @@ function(gen_opbuild_target)
   endif()
 
   add_library(gen_op_host_${OPBUILD_PREFIX} SHARED ${OPBUILD_IN_SRCS})
+  # 对齐 ops-math opbuild.cmake 的 gen_op_host 配置（上游已合入并 CI 验证的形态）：
+  # 1) AddConfigByArch 实现位于 opbase（op_arch_helper.cpp 编入 opbase_util_objs），gen 库会被
+  #    op_build 工具独立加载，须链入对象库保证符号——CANN 9.2.0-beta.2 兼容看护环境无
+  #    libops_base.so，-lops_base 兜底不成立时对象库是唯一可用路径（run#3654 已验证）；
+  # 2) def.cpp 引用 opbase 头（如 op_common/op_host/util/op_arch_helper.h），OPBASE_INC_DIRS
+  #    须显式挂到编译目标，不能依赖链接库传递（兼容看护环境 CANN include 树无 opbase 头）
   target_link_libraries(gen_op_host_${OPBUILD_PREFIX} PRIVATE $<BUILD_INTERFACE:intf_pub_cxx17> exe_graph register
-                                                              c_sec)
+                                                              c_sec
+                                                              $<$<TARGET_EXISTS:opbase_util_objs>:$<TARGET_OBJECTS:opbase_util_objs>>)
+  if(TARGET opbase_util_objs)
+    add_dependencies(gen_op_host_${OPBUILD_PREFIX} opbase_util_objs)
+  endif()
+  if(EXISTS "${ASCEND_CANN_PACKAGE_PATH}/${SYSTEM_PREFIX}/lib64/libops_base.so")
+    target_link_libraries(gen_op_host_${OPBUILD_PREFIX} PRIVATE
+                          -L${ASCEND_CANN_PACKAGE_PATH}/${SYSTEM_PREFIX}/lib64 -lops_base)
+  endif()
   target_compile_options(gen_op_host_${OPBUILD_PREFIX} PRIVATE -fno-common)
+  target_include_directories(gen_op_host_${OPBUILD_PREFIX} PRIVATE ${OPBASE_INC_DIRS})
   string(REPLACE ";" "\;" OPS_PRODUCT_NAME "${ASCEND_COMPUTE_UNIT}")
 
   if(ENABLE_ASAN)
@@ -142,7 +157,7 @@ function(gen_aclnn_with_opdef)
     set(aclnn_master_header_name "aclnn_ops_cv")
   endif()
   set(aclnn_master_header "${CMAKE_CURRENT_BINARY_DIR}/${aclnn_master_header_name}.h")
-  gen_aclnn_master_header(${aclnn_master_header_name} "${aclnn_master_header}" "${opbuild_out_headers}")          
+  gen_aclnn_master_header(${aclnn_master_header_name} "${aclnn_master_header}" "${opbuild_out_headers}")
 
   # 将头文件安装到packages/vendors/vendor_name/op_api/include
   if(ENABLE_PACKAGE)
@@ -208,7 +223,7 @@ endfunction()
 function(opbuild_aicpu_ini)
   message(STATUS "Opbuild generating sources")
   message("ARGN: ${ARGN}")
-  cmake_parse_arguments(OPBUILD "" "OUT_DIR;PROJECT_NAME;ACCESS_PREFIX;ENABLE_SOURCE" "OPS_SRC" ${ARGN}) 
+  cmake_parse_arguments(OPBUILD "" "OUT_DIR;PROJECT_NAME;ACCESS_PREFIX;ENABLE_SOURCE" "OPS_SRC" ${ARGN})
  	execute_process(COMMAND ${CMAKE_CXX_COMPILER} -g -fPIC -shared -std=c++11 ${OPBUILD_OPS_SRC} -D_GLIBCXX_USE_CXX11_ABI=0
                   -I ${ASCEND_CANN_PACKAGE_PATH}/include -I ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel -L ${ASCEND_CANN_PACKAGE_PATH}/lib64 -lexe_graph -lregister -ltiling_api
                   -o ${OPBUILD_OUT_DIR}/libaicpu_ops.so
@@ -235,7 +250,7 @@ function(opbuild_aicpu_ini)
                     RESULT_VARIABLE EXEC_RESULT
                     OUTPUT_VARIABLE EXEC_INFO
                     ERROR_VARIABLE  EXEC_ERROR
- 	  )	 
+ 	  )
  	  if (${EXEC_RESULT})
         message("opbuild ops info: ${EXEC_INFO}")
         message("opbuild ops error: ${EXEC_ERROR}")
