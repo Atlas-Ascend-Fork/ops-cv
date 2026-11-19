@@ -19,10 +19,14 @@ English | [简体中文](./README.md)
 
 - Computation formula:
 
-Forward Dilation2D formula:
+Forward Dilation2D formula (window coordinates are relative to the original input `x`):
 
 $$
-output[b, h_{out}, w_{out}, d] = \max_{fh, fw} \left( x[b, h_{out} \cdot stride_h + fh \cdot rate_h, w_{out} \cdot stride_w + fw \cdot rate_w, d] + filter[fh, fw, d] \right)
+h_{beg} = h_{out} \times stride_h - pad_{top}, \quad w_{beg} = w_{out} \times stride_w - pad_{left}
+$$
+
+$$
+output[b, h_{out}, w_{out}, d] = \max_{fh, fw} \left( x[b, h_{beg} + fh \cdot rate_h, w_{beg} + fw \cdot rate_w, d] + filter[fh, fw, d] \right)
 $$
 
 Backward BackpropInput formula:
@@ -35,7 +39,11 @@ $$
 in\_backprop[b, h_{in\_max}, w_{in\_max}, d] \mathrel{+}= out\_backprop[b, h_{out}, w_{out}, d]
 $$
 
-Here $(h_{in\_max}, w_{in\_max})$ is the position where `x + filter` reaches the maximum value in the window during the forward computation (`>` strictly greater than is used, and the first maximum value is selected). Out-of-bounds positions do not participate in argmax.
+Here, `pad_top` and `pad_left` are the top and left offsets: `SAME` derives total padding from the effective window and stride,
+then assigns half of each total, rounded down, to the top and left; `VALID` uses 0; `CALCULATED` uses `pads[0]` and `pads[2]`.
+$(h_{in\_max}, w_{in\_max})$ is the position where `x + filter` reaches the maximum in the forward window; strict `>` selects the first maximum.
+Out-of-bounds positions are skipped for `SAME` and `VALID`. For `CALCULATED`, padded positions use `-FLT_MAX` and remain in the comparison after
+adding the corresponding filter value. If a padded position wins, it receives no input-gradient accumulation.
 
 ## Parameter Description
 
@@ -135,7 +143,7 @@ Here $(h_{in\_max}, w_{in\_max})$ is the position where `x + filter` reaches the
   - The length of pads must be 4. In CALCULATED mode, pads[i] must be less than window_h/w (window_h = (filter_h - 1) * rate_h + 1).
   - The value of data_format must be one of {"NHWC", "NCHW"}.
 - **Format constraints**: The GE memory layout formats of x, filter, out_backprop, and y are all ND. data_format only defines the dimension order of the 4D shape: NHWC is (N, H, W, C), and NCHW is (N, C, H, W).
-- **Value constraints**: The argmax comparison uses `>` (strictly greater than). The position corresponding to the first maximum value is selected for gradient accumulation, and equal values are not accumulated to multiple positions. In CALCULATED mode, the padding area is filled with an extremely small value to ensure that it does not participate in argmax.
+- **Value constraints**: The argmax comparison uses `>` (strictly greater than). The position corresponding to the first maximum value is selected for gradient accumulation, and equal values are not accumulated to multiple positions.
 
 ## Invocation Description
 

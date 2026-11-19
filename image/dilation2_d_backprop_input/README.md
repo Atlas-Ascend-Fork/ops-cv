@@ -17,10 +17,14 @@
 
 - 计算公式：
 
-前向Dilation2D公式：
+前向Dilation2D公式（窗口坐标以原始输入`x`为基准）：
 
 $$
-output[b, h_{out}, w_{out}, d] = \max_{fh, fw} \left( x[b, h_{out} \cdot stride_h + fh \cdot rate_h, w_{out} \cdot stride_w + fw \cdot rate_w, d] + filter[fh, fw, d] \right)
+h_{beg} = h_{out} \times stride_h - pad_{top}, \quad w_{beg} = w_{out} \times stride_w - pad_{left}
+$$
+
+$$
+output[b, h_{out}, w_{out}, d] = \max_{fh, fw} \left( x[b, h_{beg} + fh \cdot rate_h, w_{beg} + fw \cdot rate_w, d] + filter[fh, fw, d] \right)
 $$
 
 反向BackpropInput公式：
@@ -33,7 +37,10 @@ $$
 in\_backprop[b, h_{in\_max}, w_{in\_max}, d] \mathrel{+}= out\_backprop[b, h_{out}, w_{out}, d]
 $$
 
-其中$(h_{in\_max}, w_{in\_max})$为前向计算时窗口内`x + filter`取最大值的位置（使用`>`严格大于，选第一个最大值），越界位置不参与argmax。
+其中`pad_top`、`pad_left`分别为当前模式确定的上、左偏移：`SAME`按有效窗口与步长推导总填充，上、左取总填充的一半向下取整；
+`VALID`为0；`CALCULATED`分别取`pads[0]`、`pads[2]`。$(h_{in\_max}, w_{in\_max})$为前向计算时窗口内`x + filter`取最大值的位置，
+使用`>`严格大于并选第一个最大值。`SAME`、`VALID`的越界位置不参与argmax；`CALCULATED`的填充位置取`-FLT_MAX`，
+与对应的`filter`值相加后仍参与比较，若填充位置获胜则不会向原始输入梯度累加。
 
 ## 参数说明
 
@@ -133,7 +140,7 @@ $$
   - pads长度必须为4，CALCULATED模式下pads[i]需小于window_h/w（window_h = (filter_h - 1) * rate_h + 1）。
   - data_format取值必须为{"NHWC", "NCHW"}之一。
 - **format约束**：x、filter、out_backprop、y的GE内存布局格式均为ND；data_format仅定义4D shape的维度顺序，NHWC为(N,H,W,C)，NCHW为(N,C,H,W)。
-- **值域约束**：argmax比较使用`>`严格大于，选择第一个最大值对应的位置进行梯度累加，相同值不累加到多个位置。CALCULATED模式下padding区域使用极小值填充，确保不参与argmax。
+- **值域约束**：argmax比较使用`>`严格大于，选择第一个最大值对应的位置进行梯度累加，相同值不累加到多个位置。
 
 ## 调用说明
 
