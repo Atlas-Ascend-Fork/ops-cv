@@ -9,8 +9,19 @@
  */
 
 #include "aicpu_test_utils.h"
+#include <cmath>
 
 using namespace std;
+
+namespace {
+template <typename T>
+bool NonFiniteMismatch(T actual, T expected)
+{
+    // NaNs never match; infinities match only when their signs agree.
+    return (!std::isfinite(static_cast<double>(actual)) || !std::isfinite(static_cast<double>(expected))) &&
+           actual != expected;
+}
+} // namespace
 
 uint64_t CalTotalElements(std::vector<std::vector<int64_t>>& shapes, uint32_t index)
 {
@@ -36,7 +47,7 @@ bool CompareResult(float output[], float expect_output[], uint64_t num)
         } else {
             relative_error = absolute_error / std::fabs(expect_output[i]);
         }
-        if ((absolute_error > 1e-6) && (relative_error > 1e-6)) {
+        if (NonFiniteMismatch(output[i], expect_output[i]) || ((absolute_error > 1e-6) && (relative_error > 1e-6))) {
             std::cout << "output[" << i << "] = ";
             std::cout << output[i];
             std::cout << ", expect_output[" << i << "] = ";
@@ -51,11 +62,15 @@ bool CompareResultAllClose(float output[], float expect_output[], uint64_t num)
 {
     bool result = true;
     for (uint64_t i = 0; i < num; ++i) {
+        if (output[i] == expect_output[i]) {
+            continue;
+        }
         double absolute_error = std::fabs(output[i] - expect_output[i]);
         float atol = 1e-4;
         float rtol = 1e-4;
         double relative_error = 0;
-        if (!(absolute_error <= (atol + rtol * std::fabs(expect_output[i])))) {
+        if (NonFiniteMismatch(output[i], expect_output[i]) ||
+            !(absolute_error <= (atol + rtol * std::fabs(expect_output[i])))) {
             std::cout << "output[" << i << "] = ";
             std::cout << output[i];
             std::cout << ", expect_output[" << i << "] = ";
@@ -79,7 +94,7 @@ bool CompareResult(double output[], double expect_output[], uint64_t num)
         } else {
             relative_error = absolute_error / std::fabs(expect_output[i]);
         }
-        if ((absolute_error > 1e-12) && (relative_error > 1e-10)) {
+        if (NonFiniteMismatch(output[i], expect_output[i]) || ((absolute_error > 1e-12) && (relative_error > 1e-10))) {
             std::cout << "output[" << i << "] = ";
             std::cout << output[i];
             std::cout << ", expect_output[" << i << "] = ";
@@ -111,8 +126,10 @@ bool CompareResult(complex<float> output[], complex<float> expect_output[], uint
             relative_imag_error = absolute_imag_error / std::fabs(expect_output[i].imag());
         }
 
-        if ((absolute_real_error > 1e-6) && (relative_real_error > 1e-6) ||
-            (absolute_imag_error > 1e-6) && (relative_imag_error > 1e-6)) {
+        if (NonFiniteMismatch(output[i].real(), expect_output[i].real()) ||
+            NonFiniteMismatch(output[i].imag(), expect_output[i].imag()) ||
+            ((absolute_real_error > 1e-6) && (relative_real_error > 1e-6)) ||
+            ((absolute_imag_error > 1e-6) && (relative_imag_error > 1e-6))) {
             result = false;
             std::cout << "output[" << i << "] = ";
             std::cout << output[i];
@@ -145,8 +162,10 @@ bool CompareResult(complex<double> output[], complex<double> expect_output[], ui
             relative_imag_error = absolute_imag_error / std::fabs(expect_output[i].imag());
         }
 
-        if ((absolute_real_error > 10e-8) && (relative_real_error > 10e-8) ||
-            (absolute_imag_error > 10e-8) && (relative_imag_error > 10e-8)) {
+        if (NonFiniteMismatch(output[i].real(), expect_output[i].real()) ||
+            NonFiniteMismatch(output[i].imag(), expect_output[i].imag()) ||
+            ((absolute_real_error > 10e-8) && (relative_real_error > 10e-8)) ||
+            ((absolute_imag_error > 10e-8) && (relative_imag_error > 10e-8))) {
             std::cout << "output[" << i << "] = ";
             std::cout << output[i];
             std::cout << ", expect_output[" << i << "] = ";
@@ -170,7 +189,8 @@ bool CompareResult(Eigen::half output[], Eigen::half expect_output[], uint64_t n
             relative_error = absolute_error / expect_output[i];
             relative_error = relative_error >= Eigen::half(0) ? relative_error : -relative_error;
         }
-        if ((absolute_error > Eigen::half(1e-3)) && (relative_error > Eigen::half(1e-3))) {
+        if (NonFiniteMismatch(output[i], expect_output[i]) ||
+            ((absolute_error > Eigen::half(1e-3)) && (relative_error > Eigen::half(1e-3)))) {
             std::cout << "output[" << i << "] = ";
             std::cout << output[i];
             std::cout << ", expect_output[" << i << "] = ";
