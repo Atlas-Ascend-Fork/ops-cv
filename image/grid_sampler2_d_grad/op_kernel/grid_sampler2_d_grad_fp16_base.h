@@ -29,39 +29,40 @@ public:
     __aicore__ inline void InitBuffer(TPipe* inputPipe);
     __aicore__ inline void InitBilinearLocalTensor();
     __aicore__ inline void InitNearestLocalTensor();
-    __aicore__ inline void CopyOut(const int32_t offset, const int32_t calCount);
-    __aicore__ inline void CopyIn(const int64_t offset, const int32_t calCount, const int32_t inputIndex);
+    __aicore__ inline void CopyOut(const int32_t offset, const int32_t copyElemCount);
+    __aicore__ inline void CopyIn(const int64_t offset, const int32_t copyElemCount, const int32_t inputTensorIndex);
     __aicore__ inline void Process();
-    __aicore__ inline void Compute(const int32_t computeCount, const int64_t curGridPointIndex);
+    __aicore__ inline void Compute(const int32_t gridCoordElemCount, const int64_t curGridPointIndex);
     __aicore__ inline void ComputeWeight(LocalTensor<T> dst, LocalTensor<T> xCoorTensor1, LocalTensor<T> xCoorTensor2,
                                          LocalTensor<T> yCoorTensor1, LocalTensor<T> yCoorTensor2,
-                                         const int32_t calCount);
+                                         const int32_t weightElemCount);
     __aicore__ inline void ComputeIndex(LocalTensor<int32_t> dstIndex, LocalTensor<int32_t> dstIndex2,
-                                        LocalTensor<int32_t> yCoor, LocalTensor<int32_t> xCoor, const int32_t calCount);
+                                        LocalTensor<int32_t> yCoor, LocalTensor<int32_t> xCoor,
+                                        const int32_t indexElemCount);
     __aicore__ inline void ComputeSourceIndexSetGrad(LocalTensor<T> dataTensor, LocalTensor<T> dupTensor, const T size,
-                                                     const int32_t calCount);
+                                                     const int32_t coordElemCount);
     __aicore__ inline void ReflectCoordinatesCommon(LocalTensor<T> dataTensor, LocalTensor<T> dupTensor, const T size,
-                                                    int32_t newCalCount);
+                                                    int32_t reflectElemCount);
     __aicore__ inline void ClipCoordinatesSetGrad(LocalTensor<T> dataTensor, LocalTensor<T> dupTensor, const T size,
-                                                  int32_t newCalCount);
+                                                  int32_t clipElemCount);
     __aicore__ inline void ReflectCoordinatesSetGrad(LocalTensor<T> dataTensor, LocalTensor<T> dupTensor,
                                                      LocalTensor<T> tmpDataTensor, LocalTensor<T> tmpDupTensor,
                                                      LocalTensor<int32_t> tmpIntTensor, LocalTensor<T> extraTensor,
                                                      LocalTensor<T> flipTensor, int64_t twiceLow, int64_t twiceHigh,
-                                                     int32_t calCount);
+                                                     int32_t reflectElemCount);
     __aicore__ inline void ComputeAfterTransposeGridGrad(LocalTensor<int32_t> srcIndex, LocalTensor<T> yCoor1,
                                                          LocalTensor<T> yCoor2, LocalTensor<T> xCoor1,
                                                          LocalTensor<T> xCoor2, LocalTensor<T> gOutLocalTensor,
                                                          LocalTensor<T> yIndex, LocalTensor<T> xIndex,
-                                                         const int32_t coorIndex, const int32_t batchIdx);
+                                                         const int32_t coordElemIndex, const int32_t batchIdx);
     __aicore__ inline void ComputeAfterTransposeXGrad(LocalTensor<int32_t> srcIndex, LocalTensor<T> weight,
-                                                      const int32_t coorIndex, const int64_t ncOffset,
+                                                      const int32_t coordElemIndex, const int64_t ncOffset,
                                                       LocalTensor<T> gOutLocalTensor, LocalTensor<T> yIndex,
                                                       LocalTensor<T> xIndex);
     __aicore__ inline void ComputeNearestXGrad(LocalTensor<int32_t> srcIndex, LocalTensor<T> weight,
-                                               const int32_t coorIndex, const int32_t cycle, const int64_t ncOffset,
-                                               LocalTensor<T> gOutLocalTensor, LocalTensor<T> yIndex,
-                                               LocalTensor<T> xIndex);
+                                               const int32_t coordElemIndex, const int32_t cycle,
+                                               const int64_t ncOffset, LocalTensor<T> gOutLocalTensor,
+                                               LocalTensor<T> yIndex, LocalTensor<T> xIndex);
     __aicore__ inline void WithinBounds2d(LocalTensor<T> dst, LocalTensor<T> iyT, LocalTensor<T> ixT,
                                           LocalTensor<T> weight, const int32_t calCount);
     __aicore__ inline void DupValue();
