@@ -24,6 +24,7 @@
 #include "opdev/platform.h"
 #include "opdev/op_log.h"
 #include "opdev/tensor_view_utils.h"
+#include "op_common/op_host/util/op_const_def.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -78,7 +79,7 @@ static bool CheckFormat(const aclTensor* grad_x, const aclTensor* idx, const acl
     const auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
     const auto gradXFormat = grad_x->GetStorageFormat();
     const auto gradYFormat = grad_y->GetStorageFormat();
-    if (curArch == NpuArch::DAV_3510) {
+    if (curArch == Ops::Base::DAV_3510) {
         if (gradXFormat != op::Format::FORMAT_ND) {
             OP_LOGE(ACLNN_ERR_PARAM_INVALID, "grad_x format must be ND on Ascend950.");
             return false;
@@ -258,7 +259,7 @@ aclnnStatus aclnnThreeInterpolateBackwardGetWorkspaceSize(const aclTensor* grad_
     CHECK_RET(weight_contiguous != nullptr, ACLNN_ERR_INNER_NULLPTR);
 
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
-    if (curArch == NpuArch::DAV_3510) {
+    if (curArch == Ops::Base::DAV_3510) {
         // 950(arch35)：def.cpp 该芯片 format=ND，kernel 原生 ND，跳过 5HD 转换直连
         auto outNd = l0op::ThreeInterpolateBackwardNd(grad_x_contiguous, idx_contiguous, weight_contiguous, m,
                                                       uniqueExecutor.get());

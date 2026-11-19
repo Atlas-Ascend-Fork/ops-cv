@@ -16,6 +16,7 @@
  */
 
 #include "register/op_def_registry.h"
+#include "op_common/op_host/util/op_arch_helper.h"
 
 namespace ops {
 class RotatedFeatureAlignGrad : public OpDef {
@@ -54,8 +55,7 @@ public:
             .NeedCheckSupportFlag(false)
             .PrecisionReduceFlag(true)
             .ExtendCfgInfo("opFile.value", "rotated_feature_align_grad_apt");
-        this->AICore().AddConfig("ascend950", aicoreConfig);
-        this->AICore().AddConfig("ascend350", aicoreConfig);
+        opbase::ArchConfigHelper::AddConfigByArch(this->AICore(), Ops::Base::DAV_3510, aicoreConfig);
     }
 };
 OP_ADD(RotatedFeatureAlignGrad);

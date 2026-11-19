@@ -21,9 +21,9 @@ foreach(SUB_DIR ${CURRENT_DIRS})
     endif()
 endforeach()
 
-set(SUPPORT_COMPUTE_UNIT "ascend950" "ascend350")
+set(SUPPORT_COMPUTE_UNIT "dav_3510")
 
-set(SUPPORT_TILING_DIR "arch35" "arch35")
+set(SUPPORT_TILING_DIR "arch35")
 
 # Disable FMA contraction only for the kernel source; host-side tiling code has
 # no TF bit-exact requirement and should keep default FP behavior.
