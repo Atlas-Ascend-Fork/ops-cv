@@ -64,9 +64,9 @@ The computation process is as follows:
 After processing all triangular faces in space according to the above steps, for each pixel $v_i = (x_i, y_i)$ on the screen of size $height * width$:
 
   1. Take the face index $f_{idx}$ corresponding to $v_i$ from the Z-Buffer, $findices (x_i, y_i) \gets f_{idx}$
-  2. Convert the three vertex coordinates $(v_0, v_1, v_2)$ of $f$ to screen coordinates $(v_{s0}, v_{s1}, v_{s2})$
+  2. Convert the three vertex coordinates $(v_0, v_1, v_2)$ of $f_{idx}$ to screen coordinates $(v_{s0}, v_{s1}, v_{s2})$
   3. Compute the center coordinate $v_c$ of $v_i$
-  4. Compute the barycentric coordinates $(\alpha, \beta, \gamma)$ of $v_c$ relative to triangle $f$
+  4. Compute the barycentric coordinates $(\alpha, \beta, \gamma)$ of $v_c$ relative to triangle $f_{idx}$
   5. Compute the perspective-corrected interpolation $(\tilde{\alpha}, \tilde{\beta}, \tilde{\gamma})$ using $(\alpha, \beta, \gamma)$
   6. $barycentric(x_i, y_i) \gets (\tilde{\alpha}, \tilde{\beta}, \tilde{\gamma})$
 
@@ -453,7 +453,7 @@ int main()
     std::vector<int64_t> baryShape = {10, 10, 3};
     int64_t height = 10;
     int64_t width = 10;
-    float occlusionTruncation = 0.0f;
+    double occlusionTruncation = 0.0;
     int64_t useDepthPrior = 0;
     std::vector<float> vData = {6.0f,       4.0f,       1.0f,      6.9f,       7.0928106f, 0.3491799f,
                                 3.0046327f, 6.6574745f, 7.308903f, 7.6934705f, 0.1315008f, 3.9899914f};

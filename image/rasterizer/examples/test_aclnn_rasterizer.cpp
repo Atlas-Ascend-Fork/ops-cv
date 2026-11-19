@@ -87,7 +87,7 @@ int main()
     std::vector<int64_t> baryShape = {10, 10, 3};
     int64_t height = 10;
     int64_t width = 10;
-    float occlusionTruncation = 0.0f;
+    double occlusionTruncation = 0.0;
     int64_t useDepthPrior = 0;
     std::vector<float> vData = {6.0f,       4.0f,       1.0f,      6.9f,       7.0928106f, 0.3491799f,
                                 3.0046327f, 6.6574745f, 7.308903f, 7.6934705f, 0.1315008f, 3.9899914f};

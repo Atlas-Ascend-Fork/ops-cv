@@ -26,7 +26,7 @@
 - 算子功能：实现Im2col的反向映射（Col2Im），将按滑窗展开的gradOutput重排为inputSize指定的梯度tensor。多个滑窗映射到同一输出位置时，对相应元素求和。
 - 计算公式：
 
-  考虑一个形状为$(C×\prod(kernel\_size),L)$或$(N,C×\prod(kernel\_size),L)$的gradOutput tensor，其中$N$是批处理维度，$C$是通道维度。
+  考虑一个形状为$(C×\prod(kernel\_size)，L)$或$(N，C×\prod(kernel\_size)，L)$的gradOutput tensor，其中$N$是批处理维度，$C$是通道维度。
 
   此操作将gradOutput重排为形状为$(C，spatial\_size[0]，spatial\_size[1])$或$(N，C，spatial\_size[0]，spatial\_size[1])$的out tensor。
 
@@ -155,7 +155,7 @@ aclnnStatus aclnnIm2colBackward(
       <td>out</td>
       <td>输出</td>
       <td>输出tensor。</td>
-      <td>shape为(C,spatial_size[0],spatial_size[1])或(N,C,spatial_size[0],spatial_size[1])。</td>
+      <td>shape为(C，spatial_size[0]，spatial_size[1])或(N，C，spatial_size[0]，spatial_size[1])。</td>
       <td>BFLOAT16、FLOAT16、FLOAT</td>
       <td>ND</td>
       <td>支持3维和4维，且维度比gradOutput的大1。</td>

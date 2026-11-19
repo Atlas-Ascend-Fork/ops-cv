@@ -70,10 +70,10 @@
     - paddingMode=1，表示对越界位置用边界值填充。
     - paddingMode=2，表示对越界位置用边界值的对称值填充。
   - 对input采样时，会根据interpolationMode进行不同处理：
-    - interpolationMode="bilinear"，表示取input中(x, y, z)周围八个坐标的加权平均值。
+    - interpolationMode=0，表示取input中(x, y, z)周围八个坐标的加权平均值。
 
       $$
-      {output(grad_z, grad_y, grad_x)} = \sum_{i=0}^{1}\sum_{j=0}^{1}\sum_{k=0}^{1}{w(i, j, k)} * {f(x_i, y_j, z_k)}
+      {output(n, c, d_{out}, h_{out}, w_{out})} = \sum_{i=0}^{1}\sum_{j=0}^{1}\sum_{k=0}^{1}{w(i, j, k)} * {f(x_i, y_j, z_k)}
       $$
 
       其中：
@@ -105,10 +105,10 @@
         w(i, j, k)= w(i) * w(j) * w(k)
         $$
 
-    - interpolationMode="nearest"，表示取input中距离(x, y, z)最近的坐标值。
+    - interpolationMode=1，表示取input中距离(x, y, z)最近的坐标值。
 
       $$
-      output(grad_z, grad_y, grad_x) = input(z_{in}, y_{in}, x_{in})
+      output(n, c, d_{out}, h_{out}, w_{out}) = input(z_{in}, y_{in}, x_{in})
       $$
 
       其中：

@@ -64,9 +64,9 @@
   按上述步骤对空间中所有的三角形面片进行处理后，对大小为$height * width$的屏幕上每个像素点$v_i = (x_i, y_i)$：
 
   1. 取Z-Buffer中$v_i$对应的面片索引$f_{idx}$，$findices (x_i, y_i) \gets f_{idx}$
-  2. 将$f$的三个顶点坐标$(v_0, v_1, v_2)$转换为屏幕坐标$(v_{s0}, v_{s1}, v_{s2})$
+  2. 将$f_{idx}$的三个顶点坐标$(v_0, v_1, v_2)$转换为屏幕坐标$(v_{s0}, v_{s1}, v_{s2})$
   3. 计算$v_i$的中心点坐标$v_c$
-  4. 计算$v_c$相对于三角形$f$的重心坐标$(\alpha, \beta, \gamma)$
+  4. 计算$v_c$相对于三角形$f_{idx}$的重心坐标$(\alpha, \beta, \gamma)$
   5. 使用$(\alpha, \beta, \gamma)$计算透视矫正插值$(\tilde{\alpha}, \tilde{\beta}, \tilde{\gamma})$
   6. $barycentric(x_i, y_i) \gets (\tilde{\alpha}, \tilde{\beta}, \tilde{\gamma})$
 
@@ -452,7 +452,7 @@ int main()
     std::vector<int64_t> baryShape = {10, 10, 3};
     int64_t height = 10;
     int64_t width = 10;
-    float occlusionTruncation = 0.0f;
+    double occlusionTruncation = 0.0;
     int64_t useDepthPrior = 0;
     std::vector<float> vData = {6.0f,       4.0f,       1.0f,      6.9f,       7.0928106f, 0.3491799f,
                                 3.0046327f, 6.6574745f, 7.308903f, 7.6934705f, 0.1315008f, 3.9899914f};

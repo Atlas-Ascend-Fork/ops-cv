@@ -70,7 +70,7 @@ Where N in input, grid, and output is consistent, C in input and output is consi
     - paddingMode=1 means out-of-range positions are filled with the boundary value.
     - paddingMode=2 means out-of-range positions are filled with the symmetric value of the boundary value.
   - When sampling input, different processing is applied according to interpolationMode:
-    - interpolationMode="bilinear" means taking the weighted average of the eight coordinates around (x, y, z) in input.
+    - interpolationMode=0 means taking the weighted average of the eight coordinates around (x, y, z) in input.
 
       $$
       {output(N, C, D_{out}, H_{out}, W_{out})} = \sum_{i=0}^{1}\sum_{j=0}^{1}\sum_{k=0}^{1}{w(i, j, k)} * {f(x', y', z')}
@@ -105,7 +105,7 @@ Where N in input, grid, and output is consistent, C in input and output is consi
         w(i, j, k)= w(i) * w(j) * w(k)
         $$
 
-    - interpolationMode="nearest" means taking the coordinate value closest to (x, y, z) in input.
+    - interpolationMode=1 means taking the coordinate value closest to (x, y, z) in input.
 
       $$
       output(N, C, D_{out}, H_{out}, W_{out}) = input(N, C, D_{in}, H_{in}, W_{in})

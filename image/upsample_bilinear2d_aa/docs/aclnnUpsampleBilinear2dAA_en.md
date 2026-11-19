@@ -334,7 +334,7 @@ The sample code is for reference only. For the specific compilation and executio
 #include <iostream>
 #include <vector>
 #include "acl/acl.h"
-#include "aclnnop/aclnn_upsample_bilinear_2d.h"
+#include "aclnnop/aclnn_upsample_bilinear2d_aa.h"
 
 #define CHECK_RET(cond, return_expr) \
     do {                             \
@@ -427,10 +427,10 @@ int main()
     // 3. Call the CANN operator library API; change it to the specific API name.
     uint64_t workspaceSize = 0;
     aclOpExecutor* executor;
-    // Call the first-phase API of aclnnUpsampleBilinear2d
-    ret = aclnnUpsampleBilinear2dGetWorkspaceSize(self, outputSizeArray, alignCorners, scalesH, scalesW, out,
+    // Call the first-phase API of aclnnUpsampleBilinear2dAA
+    ret = aclnnUpsampleBilinear2dAAGetWorkspaceSize(self, outputSizeArray, alignCorners, scalesH, scalesW, out,
                                                   &workspaceSize, &executor);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBilinear2dGetWorkspaceSize failed. ERROR: %d\n", ret);
+    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBilinear2dAAGetWorkspaceSize failed. ERROR: %d\n", ret);
               return ret);
     // Allocate device memory based on the workspaceSize computed by the first-phase API
     void* workspaceAddr = nullptr;
@@ -438,9 +438,9 @@ int main()
         ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
         CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret);
     }
-    // Call the second-phase API of aclnnUpsampleBilinear2d
-    ret = aclnnUpsampleBilinear2d(workspaceAddr, workspaceSize, executor, stream);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBilinear2d failed. ERROR: %d\n", ret); return ret);
+    // Call the second-phase API of aclnnUpsampleBilinear2dAA
+    ret = aclnnUpsampleBilinear2dAA(workspaceAddr, workspaceSize, executor, stream);
+    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBilinear2dAA failed. ERROR: %d\n", ret); return ret);
     // 4. (Boilerplate) Synchronize and wait for task execution to finish.
     ret = aclrtSynchronizeStream(stream);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret); return ret);

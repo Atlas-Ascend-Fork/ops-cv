@@ -354,15 +354,15 @@ int main()
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("Init acl failed. ERROR: %d\n", ret); return ret);
 
     // 2. 构造输入与输出，需要根据API的接口自定义构造
-    std::vector<int64_t> selfShape = {1, 1, 2};
-    std::vector<int64_t> outShape = {1, 1, 3};
+    std::vector<int64_t> selfShape = {1, 1, 3};
+    std::vector<int64_t> outShape = {1, 1, 2};
     void* selfDeviceAddr = nullptr;
     void* outDeviceAddr = nullptr;
     aclTensor* self = nullptr;
     aclTensor* out = nullptr;
-    std::vector<float> selfHostData = {1, 4.1};
-    std::vector<float> outHostData = {0, 0, 0};
-    double scales = 1.1;
+    std::vector<float> selfHostData = {1, 4.1, 0};
+    std::vector<float> outHostData = {0, 0};
+    double scales = 1.5;
 
     // 创建self aclTensor
     ret = CreateAclTensor(selfHostData, selfShape, &selfDeviceAddr, aclDataType::ACL_FLOAT, &self);
@@ -372,11 +372,11 @@ int main()
     ret = CreateAclTensor(outHostData, outShape, &outDeviceAddr, aclDataType::ACL_FLOAT, &out);
     CHECK_RET(ret == ACL_SUCCESS, return ret);
 
-    std::vector<int64_t> outArraySize = {2};
+    std::vector<int64_t> outArraySize = {3};
     const aclIntArray* outputSize = aclCreateIntArray(outArraySize.data(), outArraySize.size());
     CHECK_RET(outputSize != nullptr, return ACL_ERROR_INTERNAL_ERROR);
 
-    std::vector<int64_t> inputArraySize = {1, 1, 3};
+    std::vector<int64_t> inputArraySize = {1, 1, 2};
     const aclIntArray* inputSize = aclCreateIntArray(inputArraySize.data(), inputArraySize.size());
     CHECK_RET(inputSize != nullptr, return ACL_ERROR_INTERNAL_ERROR);
 

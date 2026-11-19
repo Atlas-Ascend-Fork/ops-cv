@@ -395,7 +395,7 @@ int main() {
   std::vector<uint32_t> idxHostData = {0, 3, 2, 3, 5, 1, 0, 3, 0, 0, 3, 5, 0, 4, 1};
   std::vector<float> weightHostData = {3.2081969,-0.86573875,-1.0929844,5.6045847,5.328887,-2.0821328,0.98572457,9.612394,2.216394,
                                        1.8722068,4.2976365,-7.019285,-8.4070425,1.0159919,-0.78814566};
-  std::vector<float> gradYHostData = {0};
+  std::vector<float> gradYHostData(bs * cs * ms, 0);
 
   ret = CreateAclTensor(gradXHostData, gradXShape, &gradXDeviceAddr, aclDataType::ACL_FLOAT, &gradX, aclFormat::ACL_FORMAT_NCHW);
   CHECK_RET(ret == ACL_SUCCESS, return ret);

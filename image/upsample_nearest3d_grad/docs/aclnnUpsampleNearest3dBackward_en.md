@@ -490,9 +490,12 @@ int main()
         LOG_PRINT("result[%ld] is: %f\n", i, resultData[i]);
     }
 
-    // 6. Release aclTensor and aclScalar; modify according to the specific API definition.
+    // 6. Release aclTensor and aclIntArray; modify according to the specific API definition.
     aclDestroyTensor(gradOut);
     aclDestroyTensor(gradInput);
+
+    aclDestroyIntArray(outputSize);
+    aclDestroyIntArray(inputSize);
 
     // 7. Release device resources; modify according to the specific API definition.
     aclrtFree(gradOutDeviceAddr);

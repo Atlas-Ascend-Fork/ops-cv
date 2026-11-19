@@ -488,6 +488,9 @@ int main()
     aclDestroyTensor(input);
     aclDestroyTensor(out);
 
+    aclDestroyIntArray(outputSizeArray);
+    aclDestroyIntArray(inputSizeArray);
+
     // 7. Release device resources; modify according to the specific API definition.
     aclrtFree(inputDeviceAddr);
     aclrtFree(outDeviceAddr);

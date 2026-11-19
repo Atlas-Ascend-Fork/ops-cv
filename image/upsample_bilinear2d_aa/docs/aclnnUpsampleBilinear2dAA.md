@@ -337,7 +337,7 @@ aclnnStatus：返回状态码，具体参见[aclnn返回码](../../../docs/zh/co
 #include <iostream>
 #include <vector>
 #include "acl/acl.h"
-#include "aclnnop/aclnn_upsample_bilinear_2d.h"
+#include "aclnnop/aclnn_upsample_bilinear2d_aa.h"
 
 #define CHECK_RET(cond, return_expr) \
     do {                             \
@@ -430,10 +430,10 @@ int main()
     // 3. 调用CANN算子库API，需要修改为具体的API名称
     uint64_t workspaceSize = 0;
     aclOpExecutor* executor;
-    // 调用aclnnUpsampleBilinear2d第一段接口
-    ret = aclnnUpsampleBilinear2dGetWorkspaceSize(self, outputSizeArray, alignCorners, scalesH, scalesW, out,
+    // 调用aclnnUpsampleBilinear2dAA第一段接口
+    ret = aclnnUpsampleBilinear2dAAGetWorkspaceSize(self, outputSizeArray, alignCorners, scalesH, scalesW, out,
                                                   &workspaceSize, &executor);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBilinear2dGetWorkspaceSize failed. ERROR: %d\n", ret);
+    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBilinear2dAAGetWorkspaceSize failed. ERROR: %d\n", ret);
               return ret);
     // 根据第一段接口计算出的workspaceSize申请device内存
     void* workspaceAddr = nullptr;
@@ -441,9 +441,9 @@ int main()
         ret = aclrtMalloc(&workspaceAddr, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST);
         CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("allocate workspace failed. ERROR: %d\n", ret); return ret);
     }
-    // 调用aclnnUpsampleBilinear2d第二段接口
-    ret = aclnnUpsampleBilinear2d(workspaceAddr, workspaceSize, executor, stream);
-    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBilinear2d failed. ERROR: %d\n", ret); return ret);
+    // 调用aclnnUpsampleBilinear2dAA第二段接口
+    ret = aclnnUpsampleBilinear2dAA(workspaceAddr, workspaceSize, executor, stream);
+    CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnUpsampleBilinear2dAA failed. ERROR: %d\n", ret); return ret);
     // 4. （固定写法）同步等待任务执行结束
     ret = aclrtSynchronizeStream(stream);
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclrtSynchronizeStream failed. ERROR: %d\n", ret); return ret);
