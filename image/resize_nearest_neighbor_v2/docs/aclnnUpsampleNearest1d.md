@@ -82,7 +82,7 @@ aclnnStatus aclnnUpsampleNearest1d(
       <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>表示进行上采样的输入数据，对应公式中的`self`。</td>
-      <td><ul><li>不支持空Tensor。。</li><li>输入维度必须是3维。当数据类型是DOUBLE、UINT8时，输入shape的`L`维度必须小于2^24。</li></ul></td>
+      <td><ul><li>不支持空Tensor。</li><li>输入维度必须是3维。当数据类型是DOUBLE、UINT8时，输入shape的`L`维度必须小于2^24。</li></ul></td>
       <td>FLOAT32、FLOAT16、BFLOAT16、DOUBLE、UINT8</td>
       <td>NCL</td>
       <td>3</td>
