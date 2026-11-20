@@ -113,6 +113,10 @@ the following types: int32, int64.
 the coordinate in the resized tensor to the coordinate in the original tensor. \n
 options: pytorch_half_pixel, align_corners, asymmetric, \n
 tf_crop_and_resize.
+* @note For nearest and linear interpolation on the non-DVPP graph-fusion path,
+* "tf_crop_and_resize" is not supported: ROI and extrapolation_value are not
+* forwarded to the fused ResizeV2 operator. Use a backend that explicitly
+* supports this mode.
 * @li cubic_coeff_a: An optional Float. Defaults to -0.75, only used in cubic interpolation. \n
 other optional: -0.5
 * @li exclude_outside: An optional Int. Defaults to 0, If set to 1, the weight of sampling \n
