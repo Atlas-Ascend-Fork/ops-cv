@@ -54,7 +54,7 @@ TEST_F(StackGroupPointsTiling, stack_group_points_tiling_fp16)
         },
         {}, &compileInfo, "Ascend950", SOC_CORE_NUM, SOC_UB_SIZE, TILING_DATA_SIZE);
     uint64_t expectTilingKey = 1;
-    std::string expectTilingData = "16 32 128 1 4096 65536 64 ";
+    std::string expectTilingData = "16 32 128 1 4096 65536 64 0 ";
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -81,7 +81,7 @@ TEST_F(StackGroupPointsTiling, stack_group_points_tiling_fp32)
         },
         {}, &compileInfo, "Ascend950", SOC_CORE_NUM, SOC_UB_SIZE, TILING_DATA_SIZE);
     uint64_t expectTilingKey = 0;
-    std::string expectTilingData = "16 32 128 1 4096 65536 64 ";
+    std::string expectTilingData = "16 32 128 1 4096 65536 64 0 ";
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -111,7 +111,7 @@ TEST_F(StackGroupPointsTiling, stack_group_points_tiling_total_elements_int64_bo
         },
         {}, &compileInfo, "Ascend950", SOC_CORE_NUM, SOC_UB_SIZE, TILING_DATA_SIZE);
     uint64_t expectTilingKey = 0;
-    std::string expectTilingData = "2000000000 2000000000 2 1 1 8000000000000000000 64 ";
+    std::string expectTilingData = "2000000000 2000000000 2 1 1 8000000000000000000 64 0 ";
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -448,7 +448,38 @@ TEST_F(StackGroupPointsTiling, stack_group_points_tiling_pos_output_underwrite)
         },
         {}, &compileInfo, "Ascend950", SOC_CORE_NUM, SOC_UB_SIZE, TILING_DATA_SIZE);
     uint64_t expectTilingKey = 0;
-    std::string expectTilingData = "0 32 128 1 4096 0 1 ";
+    std::string expectTilingData = "0 32 128 1 4096 0 1 0 ";
+    std::vector<size_t> expectWorkspaces = {16777216};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// 正例：N=0 空特征向量（features 首维 0 且计数和为 0）时，tiling 应派生 zeroFill=1
+// （N>0 用例 zeroFill=0），保护空特征向量 Duplicate+DataCopy 填充分支的路由标志
+TEST_F(StackGroupPointsTiling, stack_group_points_tiling_pos_zero_fill_n_zero)
+{
+    gert::StorageShape featuresShape = {{0, 32}, {0, 32}};
+    gert::StorageShape fbcShape = {{1}, {1}};
+    gert::StorageShape indicesShape = {{16, 128}, {16, 128}};
+    gert::StorageShape ibcShape = {{1}, {1}};
+    gert::StorageShape yShape = {{16, 32, 128}, {16, 32, 128}};
+
+    static const int32_t fbcDataN0[] = {0};
+    static const int32_t ibcDataN0[] = {16};
+    StackGroupPointsCompileInfo compileInfo = {0, 0};
+    gert::TilingContextPara tilingContextPara(
+        "StackGroupPoints",
+        {
+            {featuresShape, ge::DT_FLOAT, ge::FORMAT_ND, true, const_cast<void*>(static_cast<const void*>(fbcDataN0))},
+            {fbcShape, ge::DT_INT32, ge::FORMAT_ND, true, const_cast<void*>(static_cast<const void*>(fbcDataN0))},
+            {indicesShape, ge::DT_INT32, ge::FORMAT_ND},
+            {ibcShape, ge::DT_INT32, ge::FORMAT_ND, true, const_cast<void*>(static_cast<const void*>(ibcDataN0))},
+        },
+        {
+            {yShape, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {}, &compileInfo, "Ascend950", SOC_CORE_NUM, SOC_UB_SIZE, TILING_DATA_SIZE);
+    uint64_t expectTilingKey = 0;
+    std::string expectTilingData = "16 32 128 1 0 65536 64 1 ";
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -755,7 +786,7 @@ TEST_F(StackGroupPointsTiling, stack_group_points_tiling_pos_skip_value_validati
                                               {}, &compileInfo, "Ascend950", SOC_CORE_NUM, SOC_UB_SIZE,
                                               TILING_DATA_SIZE);
     uint64_t expectTilingKey = 0;
-    std::string expectTilingData = "16 32 128 1 4096 65536 64 ";
+    std::string expectTilingData = "16 32 128 1 4096 65536 64 0 ";
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }

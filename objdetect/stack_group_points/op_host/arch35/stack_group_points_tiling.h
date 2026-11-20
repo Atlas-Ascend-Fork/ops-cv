@@ -21,6 +21,7 @@ struct StackGroupPointsTilingData {
     int64_t n;
     int64_t totalElements;
     int64_t needCoreNum;
+    int64_t zeroFill;
 };
 
 struct StackGroupPointsCompileInfo {

@@ -19,6 +19,7 @@ struct StackGroupPointsTilingData {
     int64_t n = 0;
     int64_t totalElements = 0;
     int64_t needCoreNum = 0;
+    int64_t zeroFill = 0;
 };
 
 #endif // STACK_GROUP_POINTS_TILING_DATA_H_

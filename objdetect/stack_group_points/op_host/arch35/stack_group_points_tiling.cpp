@@ -299,7 +299,7 @@ static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& u
 
 // ========== FillTilingData ==========
 static void FillTilingData(StackGroupPointsTilingData* tiling, int64_t m, int64_t c, int64_t nsample, int64_t b,
-                           int64_t n, int64_t totalElements, int64_t needCoreNum)
+                           int64_t n, int64_t totalElements, int64_t needCoreNum, int64_t zeroFill)
 {
     tiling->m = m;
     tiling->c = c;
@@ -308,6 +308,7 @@ static void FillTilingData(StackGroupPointsTilingData* tiling, int64_t m, int64_
     tiling->n = n;
     tiling->totalElements = totalElements;
     tiling->needCoreNum = needCoreNum;
+    tiling->zeroFill = zeroFill;
 }
 
 // ========== DumpTilingData (DFX) ==========
@@ -383,7 +384,8 @@ static ge::graphStatus StackGroupPointsTilingFunc(gert::TilingContext* context)
     OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
     OP_CHECK_IF(memset_s(tiling, sizeof(StackGroupPointsTilingData), 0, sizeof(StackGroupPointsTilingData)) != EOK,
                 OP_LOGE(context, "memset_s failed"), return ge::GRAPH_FAILED);
-    FillTilingData(tiling, m, c, nsample, b, n, totalElements, needCoreNum);
+    FillTilingData(tiling, m, c, nsample, b, n, totalElements, needCoreNum, (n == 0) ? 1 : 0);
+    OP_LOGD(context, "StackGroupPointsTilingData: zeroFill=%ld", tiling->zeroFill);
 
     // 6. DFX 日志
     DumpTilingData(context, tiling);

@@ -29,10 +29,10 @@ __global__ __aicore__ void stack_group_points(GM_ADDR features, GM_ADDR features
     if constexpr (schMode == STACK_GROUP_POINTS_TPL_FP32) {
         NsStackGroupPoints::Process<float>(features, features_batch_cnt, indices, indices_batch_cnt, y, tilingData.m,
                                            tilingData.c, tilingData.nsample, tilingData.b, tilingData.n,
-                                           tilingData.totalElements);
+                                           tilingData.totalElements, tilingData.zeroFill);
     } else if constexpr (schMode == STACK_GROUP_POINTS_TPL_FP16) {
         NsStackGroupPoints::Process<half>(features, features_batch_cnt, indices, indices_batch_cnt, y, tilingData.m,
                                           tilingData.c, tilingData.nsample, tilingData.b, tilingData.n,
-                                          tilingData.totalElements);
+                                          tilingData.totalElements, tilingData.zeroFill);
     }
 }
