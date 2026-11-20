@@ -177,11 +177,11 @@ static aclnnStatus CheckParams(const aclTensor* self, Scales& scale, const aclIn
     // 2. 检查输入的数据类型是否在API支持的数据类型范围之内
     CHECK_RET(CheckDtypeValid(self, out), ACLNN_ERR_PARAM_INVALID);
 
-    // 3. 检查输入元素是否合法
-    CHECK_RET(CheckInputElement(self, scale, outputSize), ACLNN_ERR_PARAM_INVALID);
-
-    // 4. 检查shape是否支持
+    // 3. 检查shape是否支持（先校验outputSize的size与self维数，避免后续越界读）
     CHECK_RET(CheckShape(self, outputSize, out), ACLNN_ERR_PARAM_INVALID);
+
+    // 4. 检查输入元素是否合法
+    CHECK_RET(CheckInputElement(self, scale, outputSize), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;
 }

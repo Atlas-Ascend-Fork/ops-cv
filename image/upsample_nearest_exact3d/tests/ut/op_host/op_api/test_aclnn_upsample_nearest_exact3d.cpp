@@ -303,6 +303,24 @@ TEST_F(l2_upsample_nearest_exact3d_test, case_output_size_6_8_10_6_abnormal)
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
 
+TEST_F(l2_upsample_nearest_exact3d_test, case_output_size_empty_abnormal)
+{
+    auto self_desc = TensorDesc({2, 2, 3, 4, 5}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+    vector<int64_t> output_size = {};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales_d = 0.0;
+    const double_t scales_h = 0.0;
+    const double_t scales_w = 0.0;
+    auto out_desc = TensorDesc({2, 2, 6, 8, 10}, ACL_FLOAT, ACL_FORMAT_NCDHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact3d, INPUT(self_desc, output_size_desc, scales_d, scales_h, scales_w),
+                        OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
 TEST_F(l2_upsample_nearest_exact3d_test, case_output_size_element_0_abnormal)
 {
     auto self_desc = TensorDesc({2, 2, 3, 4, 5}, ACL_FLOAT, ACL_FORMAT_NCDHW);
