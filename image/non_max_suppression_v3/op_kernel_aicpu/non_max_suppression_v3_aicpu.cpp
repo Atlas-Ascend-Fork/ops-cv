@@ -112,6 +112,8 @@ uint32_t NonMaxSuppressionV3CpuKernel::GetInputAndCheck(const CpuKernelContext& 
     KERNEL_CHECK_FALSE((output_indices_ != nullptr), KERNEL_STATUS_PARAM_INVALID,
                        "GetInputAndCheck: get "
                        "output:0 output_indices failed.");
+    // The allocator writes a ResultSummary through this buffer after computation.
+    KERNEL_CHECK_NULLPTR(output_indices_->GetData(), KERNEL_STATUS_PARAM_INVALID, "output_indices data nullptr");
 
     boxes_scores_dtype_ = static_cast<DataType>(boxes_->GetDataType());
     if (static_cast<DataType>(scores_->GetDataType()) != boxes_scores_dtype_) {

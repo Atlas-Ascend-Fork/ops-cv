@@ -97,9 +97,66 @@ uint32_t RunBoxScoreDtypeCase(DataType boxes_dtype, DataType scores_dtype)
     }
     return CpuKernelRegister::Instance().RunCpuKernel(context);
 }
+
+uint32_t RunNullOutputDataCase()
+{
+    float boxes[8] = {0.0F, 0.0F, 1.0F, 1.0F, 10.0F, 10.0F, 11.0F, 11.0F};
+    float scores[2] = {0.8F, 0.6F};
+    int32_t max_output_size = 2;
+    float iou_threshold = 0.5F;
+    float score_threshold = 0.5F;
+    auto node_def = CpuKernelUtils::CpuKernelUtils::CreateNodeDef();
+    NodeDefBuilder(node_def.get(), "NonMaxSuppressionV3", "NonMaxSuppressionV3")
+        .Input({"boxes", DT_FLOAT, {2, 4}, boxes})
+        .Input({"scores", DT_FLOAT, {2}, scores})
+        .Input({"max_output_size", DT_INT32, {}, &max_output_size})
+        .Input({"iou_threshold", DT_FLOAT, {}, &iou_threshold})
+        .Input({"score_threshold", DT_FLOAT, {}, &score_threshold})
+        .Output({"selected_indices", DT_INT32, {-1}, nullptr});
+    CpuKernelContext context(HOST);
+    const uint32_t init_ret = context.Init(node_def.get());
+    if (init_ret != KERNEL_STATUS_OK) {
+        return KERNEL_STATUS_INNER_ERROR;
+    }
+    if (context.Output(0) == nullptr || context.Output(0)->GetData() != nullptr) {
+        return KERNEL_STATUS_INNER_ERROR;
+    }
+    return CpuKernelRegister::Instance().RunCpuKernel(context);
+}
 } // namespace
 
 class TEST_NON_MAX_SUPPRESSION_V3_UT : public testing::Test {};
+
+TEST_F(TEST_NON_MAX_SUPPRESSION_V3_UT, RejectsNullOutputData)
+{
+    EXPECT_EQ(RunNullOutputDataCase(), KERNEL_STATUS_PARAM_INVALID);
+}
+
+TEST_F(TEST_NON_MAX_SUPPRESSION_V3_UT, AllocatorRejectsNullInputAndOutputData)
+{
+    int32_t input = 1;
+    uint64_t summary[4] = {};
+    auto node_def = CpuKernelUtils::CpuKernelUtils::CreateNodeDef();
+    NodeDefBuilder(node_def.get(), "NonMaxSuppressionV3", "NonMaxSuppressionV3")
+        .Output({"selected_indices", DT_UINT64, {-1}, summary});
+    CpuKernelContext context(HOST);
+    ASSERT_EQ(context.Init(node_def.get()), KERNEL_STATUS_OK);
+    Tensor* output_ptr = context.Output(0);
+    ASSERT_NE(output_ptr, nullptr);
+    ASSERT_NE(output_ptr->GetData(), nullptr);
+    EXPECT_EQ(CpuKernelAllocatorUtils::UpdateOutputDataTensor({1}, DT_INT32, nullptr, sizeof(input), output_ptr),
+              KERNEL_STATUS_PARAM_INVALID);
+    auto null_node_def = CpuKernelUtils::CpuKernelUtils::CreateNodeDef();
+    NodeDefBuilder(null_node_def.get(), "NonMaxSuppressionV3", "NonMaxSuppressionV3")
+        .Output({"selected_indices", DT_UINT64, {-1}, nullptr});
+    CpuKernelContext null_context(HOST);
+    ASSERT_EQ(null_context.Init(null_node_def.get()), KERNEL_STATUS_OK);
+    output_ptr = null_context.Output(0);
+    ASSERT_NE(output_ptr, nullptr);
+    ASSERT_EQ(output_ptr->GetData(), nullptr);
+    EXPECT_EQ(CpuKernelAllocatorUtils::UpdateOutputDataTensor({1}, DT_INT32, &input, sizeof(input), output_ptr),
+              KERNEL_STATUS_PARAM_INVALID);
+}
 
 #define CREATE_NODEDEF_MEMCOPY(shapes, data_types, datas)                   \
     auto memcpy_node_def = CpuKernelUtils::CpuKernelUtils::CreateNodeDef(); \

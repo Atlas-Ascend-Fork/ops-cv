@@ -37,10 +37,13 @@ uint32_t CpuKernelAllocatorUtils::UpdateOutputDataTensor(const std::vector<int64
                                                          const void* data_ptr, int64_t input_data_size,
                                                          Tensor*& output_result_tensor)
 {
-    uint32_t check_ret = ParamCheck(dims, &data_ptr, output_result_tensor);
+    uint32_t check_ret = ParamCheck(dims, data_ptr, output_result_tensor);
     if (check_ret != KERNEL_STATUS_OK) {
         return check_ret;
     }
+    // ResultSummary is written after allocation, so reject a missing destination before allocating anything.
+    KERNEL_CHECK_NULLPTR(output_result_tensor->GetData(), KERNEL_STATUS_PARAM_INVALID,
+                         "output_result_tensor data nullptr");
     KERNEL_LOG_INFO("UpdateOutputDataTensor::START!!");
 
     int64_t data_size = GetInputDataSize(dims, type);
