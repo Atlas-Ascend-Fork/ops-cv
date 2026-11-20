@@ -86,3 +86,4 @@ aclnnStatus aclnnGaussianBlur(
 2. 调用 `aclnnGaussianBlurGetWorkspaceSize` 获取 workspace 大小和 executor。
 3. 按需申请 workspace，调用 `aclnnGaussianBlur`。
 4. 同步 stream 后读取输出。
+- `src` 支持非连续 Tensor，算子注册会在计算前将其转为连续存储；`dst` 由 Kernel 按连续线性地址写入，调用方必须提供连续的 ND Tensor。

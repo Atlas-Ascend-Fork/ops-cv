@@ -88,3 +88,4 @@ aclnnStatus aclnnGaussianBlur(
 | -------- | -------- | ---- |
 | ACLNN 调用 | [`docs/aclnnGaussianBlur.md`](./docs/aclnnGaussianBlur.md) | 接口约束、参数和返回值说明。 |
 | ACLNN 示例 | [`examples/test_aclnn_gaussian_blur.cpp`](./examples/test_aclnn_gaussian_blur.cpp) | 完整的 Tensor 创建、workspace 申请和算子执行示例。 |
+- `src` 支持非连续 Tensor，算子注册会在计算前将其转为连续存储；`dst` 由 Kernel 按连续线性地址写入，调用方必须提供连续的 ND Tensor。
