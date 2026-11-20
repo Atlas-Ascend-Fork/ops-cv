@@ -163,6 +163,25 @@ static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSi
     return true;
 }
 
+static bool CheckFormat(const aclTensor* self, const aclTensor* out)
+{
+    auto selfFormat = self->GetStorageFormat();
+    if (selfFormat != op::Format::FORMAT_NCL && selfFormat != op::Format::FORMAT_ND) {
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleNearestExact1d", "self",
+                                                op::ToString(selfFormat).GetString(),
+                                                "format of self only supports [NCL, ND], but format is");
+        return false;
+    }
+    auto outFormat = out->GetStorageFormat();
+    if (outFormat != op::Format::FORMAT_NCL && outFormat != op::Format::FORMAT_ND) {
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleNearestExact1d", "out",
+                                                op::ToString(outFormat).GetString(),
+                                                "format of out only supports [NCL, ND], but format is");
+        return false;
+    }
+    return true;
+}
+
 static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputSize, double scales,
                                const aclTensor* out)
 {
@@ -172,10 +191,13 @@ static aclnnStatus CheckParams(const aclTensor* self, const aclIntArray* outputS
     // 2. 检查输入的数据类型是否在API支持的数据类型范围之内
     CHECK_RET(CheckDtypeValid(self, out), ACLNN_ERR_PARAM_INVALID);
 
-    // 3. 检查输入元素是否合法（含 scales 与 outputSize 的一致性）
+    // 3. 检查输入输出的数据格式是否支持（NCL/ND）
+    CHECK_RET(CheckFormat(self, out), ACLNN_ERR_PARAM_INVALID);
+
+    // 4. 检查输入元素是否合法（含 scales 与 outputSize 的一致性）
     CHECK_RET(CheckInputElement(self, outputSize, scales), ACLNN_ERR_PARAM_INVALID);
 
-    // 4. 检查shape是否支持（含 out 期望形状）
+    // 5. 检查shape是否支持（含 out 期望形状）
     CHECK_RET(CheckShape(self, outputSize, out), ACLNN_ERR_PARAM_INVALID);
 
     return ACLNN_SUCCESS;
@@ -207,7 +229,8 @@ static const aclTensor* upsampleNearestExact1dCompute(const aclTensor* selfConti
             CHECK_RET(scalesArray != nullptr, nullptr);
             auto result = l0op::ResizeNearestNeighborV2(self4d, size, scalesArray, false, true, out4d, executor);
             CHECK_RET(result != nullptr, nullptr);
-            return View4dAs3d(result, selfContiguous->GetStorageFormat(), executor);
+            // 输出视图格式跟随 out 声明（NCL/ND 同族），避免 NCL self + ND out 时 ViewCopy 格式不匹配返回 561103
+            return View4dAs3d(result, outContiguous->GetStorageFormat(), executor);
         }
         return nullptr;
     } else {

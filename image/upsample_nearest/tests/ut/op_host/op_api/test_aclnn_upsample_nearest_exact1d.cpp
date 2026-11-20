@@ -10,6 +10,7 @@
 #include <array>
 #include <vector>
 #include "gtest/gtest.h"
+#include "opdev/platform.h"
 
 #include "../../../../op_host/op_api/aclnn_upsample_nearest_exact1d.h"
 
@@ -301,4 +302,58 @@ TEST_F(l2_upsample_nearest_exact1d_test, case_scale_noninteger_ceil_fail)
     uint64_t workspace_size = 0;
     aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
+// RegBase(950)：self NCL + out ND（issue #1699），输出视图应跟随 out 格式，第一段正常返回
+TEST_F(l2_upsample_nearest_exact1d_test, case_regbase_ncl_self_nd_out)
+{
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    auto self_desc = TensorDesc({1, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCL);
+    vector<int64_t> output_size = {6};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales = 0.0;
+    auto out_desc = TensorDesc({1, 2, 6}, ACL_FLOAT, ACL_FORMAT_ND);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact1d, INPUT(self_desc, output_size_desc, scales), OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACL_SUCCESS);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
+}
+
+// RegBase(950)：self ND + out NCL 对称组合，同样应正常返回
+TEST_F(l2_upsample_nearest_exact1d_test, case_regbase_nd_self_ncl_out)
+{
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    auto self_desc = TensorDesc({1, 2, 3}, ACL_FLOAT, ACL_FORMAT_ND);
+    vector<int64_t> output_size = {6};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales = 0.0;
+    auto out_desc = TensorDesc({1, 2, 6}, ACL_FLOAT, ACL_FORMAT_NCL);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact1d, INPUT(self_desc, output_size_desc, scales), OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACL_SUCCESS);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
+}
+
+// RegBase(950)：out 声明非 NCL/ND 格式时应在 CheckParams 阶段返回 ACLNN_ERR_PARAM_INVALID
+TEST_F(l2_upsample_nearest_exact1d_test, case_regbase_invalid_out_format_fail)
+{
+    SetPlatformSocVersion(SocVersion::ASCEND950);
+    auto self_desc = TensorDesc({1, 2, 3}, ACL_FLOAT, ACL_FORMAT_NCL);
+    vector<int64_t> output_size = {6};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scales = 0.0;
+    auto out_desc = TensorDesc({1, 2, 6}, ACL_FLOAT, ACL_FORMAT_NHWC);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact1d, INPUT(self_desc, output_size_desc, scales), OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+    SetPlatformSocVersion(SocVersion::ASCEND910B);
 }
