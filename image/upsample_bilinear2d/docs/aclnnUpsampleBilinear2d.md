@@ -326,6 +326,8 @@ aclnnStatus：返回状态码，具体参见[aclnn返回码](../../../docs/zh/co
   outputSize\_W = floor(self\_W * scalesW)
   $$
 
+- 当self和out的数据类型为DOUBLE时，计算精度与FLOAT32一致。
+
 - 确定性计算：
   - aclnnUpsampleBilinear2d默认确定性实现。
 

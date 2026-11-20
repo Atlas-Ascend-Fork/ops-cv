@@ -291,7 +291,9 @@ __aicore__ inline void UpsampleBilinear2dND<T>::calculateWidthExtension(int64_t 
         if (rowEnd != 0) {
             numM = rowEnd - rowStart;
         }
-        matmulW.SetOrgShape(numM, numN, input_shapes[3], singleCoreK, output_shapes[3]);
+        numM = Min(numM, input_shapes[0] * input_shapes[1] * input_shapes[2] - rowStart);
+        numN = Min(numN, output_shapes[3] - tensorCIndex);
+        matmulW.SetOrgShape(numM, matmulTiling_w->singleCoreN, input_shapes[3], singleCoreK, output_shapes[3]);
         matmulW.SetSingleShape(numM, numN, singleCoreK);
 
         if (tensorCIndex + slide_size_w > output_shapes[3]) {
@@ -322,14 +324,13 @@ __aicore__ inline void UpsampleBilinear2dND<T>::calculateHeightExtension(int64_t
     int64_t singleCoreM = matmulTiling_h->singleCoreM;
     int64_t singleCoreN = matmulTiling_h->singleCoreN;
 
-    if (tensorCIndex + slide_size_h > output_shapes[2]) {
-        singleCoreM = output_shapes[2] - tensorCIndex;
-    }
+    singleCoreM = Min(singleCoreM, output_shapes[2] - tensorCIndex);
+    singleCoreN = Min(singleCoreN, output_shapes[3]);
     matmulH.SetOrgShape(singleCoreM, output_shapes[3], matmulTiling_h->singleCoreK, output_shapes[2], output_shapes[3]);
     matmulH.SetSingleShape(singleCoreM, singleCoreN, singleCoreK);
 
     if (tensorCIndex + slide_size_h > output_shapes[2]) {
-        matmulH.SetTail(output_shapes[2] - tensorCIndex, singleCoreN, singleCoreK);
+        matmulH.SetTail(singleCoreM, singleCoreN, singleCoreK);
     }
     if (rowEnd == 0) {
         rowEnd = input_shapes[0] * input_shapes[1];
