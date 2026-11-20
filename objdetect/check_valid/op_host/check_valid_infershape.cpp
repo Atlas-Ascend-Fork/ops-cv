@@ -34,7 +34,7 @@ bool IsUnknownRank(const gert::Shape* shape)
  *
  * valid_tensor.shape = (bbox_tensor.shape[0], 1) = (N, 1).
  * Validates bbox_tensor rank/last dim and img_metas rank/minimum length when known.
- * Empty tensor (N==0) is supported 鈥?output (0, 1) propagates.
+ * Empty tensor (N==0) is supported — output (0, 1) propagates.
  */
 ge::graphStatus InferShapeForCheckValid(gert::InferShapeContext* context)
 {

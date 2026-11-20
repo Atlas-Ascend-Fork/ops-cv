@@ -74,7 +74,9 @@ The output `valid_tensor` is of the int8 type. 1 indicates valid, and 0 indicate
 - The shape of bbox_tensor must be (N, 4), and the last dimension is fixed to 4.
 - bbox_tensor and img_metas must have the same dtype. The supported pairs are (FLOAT16, FLOAT16) and (FLOAT, FLOAT).
 - img_metas must be a one-dimensional tensor with shape (G,), where G ≥ 3. Its first three elements are H, W, and r; any remaining elements are ignored. This constraint also applies when bbox_tensor is empty.
+- bbox_tensor may be empty (N=0): the output is an empty (0, 1) INT8 tensor; the host side still performs parameter checks and shape inference, and the compute entry returns early.
 - Only the ND data format is supported for the input.
+- bbox_tensor and img_metas may be non-contiguous: the framework converts them to contiguous layouts via the registered AutoContiguous mechanism (one copy) before computation, with identical semantics; the output is always contiguous ND.
 
 ## Invocation Description
 

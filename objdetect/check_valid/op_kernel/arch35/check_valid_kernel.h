@@ -18,7 +18,7 @@ constexpr int64_t kPhysNodes = 3;
 constexpr int32_t kBboxCols = 4;
 constexpr uint32_t kMetasElems = 3;
 
-// Cast traits for fp16鈫攆p32 conversions inside VF (dav_3510)
+// Cast traits for fp16<->fp32 conversions inside VF (dav_3510)
 constexpr AscendC::Reg::CastTrait kCastB16ToB32 = {AscendC::Reg::RegLayout::ZERO, AscendC::Reg::SatMode::UNKNOWN,
                                                    AscendC::Reg::MaskMergeMode::ZEROING, AscendC::RoundMode::UNKNOWN};
 constexpr AscendC::Reg::CastTrait kCastB32ToB16 = {AscendC::Reg::RegLayout::ZERO, AscendC::Reg::SatMode::NO_SAT,

@@ -74,7 +74,9 @@ $$
 - bbox_tensor的shape必须为(N, 4)，末维固定为4。
 - bbox_tensor与img_metas的dtype必须一致，支持组合为(FLOAT16, FLOAT16)和(FLOAT, FLOAT)。
 - img_metas必须是一维张量(G,)，G≥3；前三个元素为H、W、r，其余元素忽略。bbox_tensor为空时，该约束同样适用。
+- bbox_tensor允许为空（N=0）：此时输出为空(0, 1) INT8，host 侧仍完成参数校验与 shape 推导，计算入口提前返回。
 - 输入仅支持ND数据格式。
+- bbox_tensor与img_metas允许非连续内存布局：框架经注册的AutoContiguous机制隐式转换为连续布局（引入一次拷贝）后计算，语义与连续输入一致；输出恒为连续ND。
 
 ## 调用说明
 
