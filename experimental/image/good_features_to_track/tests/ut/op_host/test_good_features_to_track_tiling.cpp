@@ -18,6 +18,7 @@
  */
 
 #include <iostream>
+#include <limits>
 #include <gtest/gtest.h>
 #include "tiling_context_faker.h"
 #include "tiling_case_executor.h"
@@ -505,6 +506,23 @@ TEST_F(GoodFeaturesToTrackTiling, invalid_harris_k_negative)
                                      {{{1}, {1}}, ge::DT_INT32, ge::FORMAT_ND},
                                  },
                                  GFT_ATTRS(kMaxCorners, kQuality, kMinDistance, kBlockSize, true, -0.1F), &compileInfo,
+                                 "Ascend910B", 64, 262144, 4096);
+    ExecuteTestCase(para, ge::GRAPH_FAILED);
+}
+
+TEST_F(GoodFeaturesToTrackTiling, invalid_harris_k_nan)
+{
+    CompileInfo compileInfo;
+    const float nanK = std::numeric_limits<float>::quiet_NaN();
+    gert::TilingContextPara para("GoodFeaturesToTrack",
+                                 {
+                                     {{{1, 64, 64}, {1, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                 },
+                                 {
+                                     {{{1, 1000, 2}, {1, 1000, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                     {{{1}, {1}}, ge::DT_INT32, ge::FORMAT_ND},
+                                 },
+                                 GFT_ATTRS(kMaxCorners, kQuality, kMinDistance, kBlockSize, true, nanK), &compileInfo,
                                  "Ascend910B", 64, 262144, 4096);
     ExecuteTestCase(para, ge::GRAPH_FAILED);
 }

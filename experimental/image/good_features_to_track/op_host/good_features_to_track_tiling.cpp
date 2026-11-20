@@ -75,7 +75,7 @@ static ge::graphStatus GoodFeaturesToTrackTilingFunc(gert::TilingContext* contex
     const bool useHarris = attrs->GetBool(kUseHarrisAttr) != nullptr && *attrs->GetBool(kUseHarrisAttr);
     const float harrisK = attrs->GetFloat(kHarrisKAttr) == nullptr ? kDefaultHarrisK : *attrs->GetFloat(kHarrisKAttr);
     OP_CHECK_IF(quality <= 0.0F || quality > 1.0F || minDistance < 0.0F || blockSize <= 0 || (blockSize & 1) == 0 ||
-                    harrisK < 0.0F,
+                    !(harrisK >= 0.0F),
                 OP_LOGE(context, "invalid attributes"), return ge::GRAPH_FAILED);
 
     // 输入 dtype 校验：FLOAT16 / FLOAT32
