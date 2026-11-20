@@ -102,33 +102,64 @@ static bool CheckNotNull(const aclTensor* self, const aclIntArray* outputSize, c
 static bool CheckDtypeValid(const aclTensor* self, const aclTensor* out)
 {
     // 检查self的数据类型是否在UpsampleNearestExact1d算子的支持列表内（按 SoC 区分：950 不支持 uint8）
+    // EZ码细化：dtype 非支持列表由泛化 EZ1001 细化为 EZ0020，校验条件保持不变
     if (IsRegBase()) {
-        OP_CHECK_DTYPE_NOT_SUPPORT(self, DTYPE_AICORE_SUPPORT_LIST_REGBASE, return false);
+        OP_CHECK(CheckType(self->GetDataType(), DTYPE_AICORE_SUPPORT_LIST_REGBASE),
+                 OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON("aclnnUpsampleNearestExact1d", "self",
+                                                       op::ToString(self->GetDataType()).GetString(),
+                                                       (std::string("dtype should be in support list ") +
+                                                        op::ToString(DTYPE_AICORE_SUPPORT_LIST_REGBASE).GetString())
+                                                           .c_str()),
+                 return false);
     } else {
-        OP_CHECK_DTYPE_NOT_SUPPORT(self, DTYPE_AICORE_SUPPORT_LIST, return false);
+        OP_CHECK(
+            CheckType(self->GetDataType(), DTYPE_AICORE_SUPPORT_LIST),
+            OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(
+                "aclnnUpsampleNearestExact1d", "self", op::ToString(self->GetDataType()).GetString(),
+                (std::string("dtype should be in support list ") + op::ToString(DTYPE_AICORE_SUPPORT_LIST).GetString())
+                    .c_str()),
+            return false);
     }
-    // 检查self的数据类型是否与out一致
-    OP_CHECK_DTYPE_NOT_MATCH(self, out->GetDataType(), return false);
+    // 检查self的数据类型是否与out一致（EZ0021：多输入 dtype 关系错误）
+    OP_CHECK(self->GetDataType() == out->GetDataType(),
+             OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON("aclnnUpsampleNearestExact1d", "self,out",
+                                                    (std::string(op::ToString(self->GetDataType()).GetString()) + ", " +
+                                                     std::string(op::ToString(out->GetDataType()).GetString()))
+                                                        .c_str(),
+                                                    "dtype of self and out should be equal"),
+             return false);
     return true;
 }
 
 static bool CheckShape(const aclTensor* self, const aclIntArray* outputSize, const aclTensor* out)
 {
     size_t outputSizeNum = outputSize->Size();
-    OP_CHECK_WRONG_DIMENSION(self, DIM_LIMIT, return false);
+    // EZ码细化：rank 错误由泛化 EZ1001 细化为 EZ0011，校验条件保持不变
+    OP_CHECK(self->GetViewShape().GetDimNum() == DIM_LIMIT,
+             OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleNearestExact1d", "self",
+                                          (std::to_string(self->GetViewShape().GetDimNum()) + "D").c_str(), "3D"),
+             return false);
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
              OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearestExact1d", "output_size",
                                           std::to_string(outputSizeNum).c_str(), "1"),
              return false);
-    OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
+    OP_CHECK(out->GetViewShape().GetDimNum() == DIM_LIMIT,
+             OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleNearestExact1d", "out",
+                                          (std::to_string(out->GetViewShape().GetDimNum()) + "D").c_str(), "3D"),
+             return false);
 
-    // out 的 shape 应等于 (N, C, outputSize[0])
+    // out 的 shape 应等于 (N, C, outputSize[0])（EZ0010：多输入 shape 关系错误）
     op::Shape inputShape = self->GetViewShape();
     op::Shape expectShape;
     expectShape.AppendDim(inputShape.GetDim(DIM_ZERO));
     expectShape.AppendDim(inputShape.GetDim(DIM_ONE));
     expectShape.AppendDim((*outputSize)[DIM_ZERO]);
-    OP_CHECK_SHAPE_NOT_EQUAL_WITH_EXPECTED_SIZE(out, expectShape, return false);
+    OP_CHECK(out->GetViewShape() == expectShape,
+             OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                 "aclnnUpsampleNearestExact1d", "self,out", op::ToString(out->GetViewShape()).GetString(),
+                 (std::string("out shape should be same as expected shape ") + op::ToString(expectShape).GetString())
+                     .c_str()),
+             return false);
 
     return true;
 }
@@ -137,17 +168,31 @@ static constexpr double EPSILON = 1e-6;
 
 static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSize, double scales)
 {
+    // size 前置检查：本函数按索引访问 outputSize，须先于解引用确认元素个数，
+    // 与 CheckShape 中的 outputSize 数量校验保持同一上报方式（错误码分类不变）
+    OP_CHECK(outputSize->Size() == EXPECT_SIZE,
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearestExact1d", "output_size",
+                                          std::to_string(outputSize->Size()).c_str(), "1"),
+             return false);
+
     auto selfShape = self->GetViewShape();
     int64_t outN = selfShape.GetDim(DIM_ZERO);
     int64_t outC = selfShape.GetDim(DIM_ONE);
     int64_t inputL = selfShape.GetDim(DIM_TWO);
     int64_t outL = (*outputSize)[DIM_ZERO];
 
-    OP_CHECK(
-        outN > 0 && outC > 0 && inputL > 0 && outL > 0,
-        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearestExact1d", "input", std::to_string(outN).c_str(),
-                                                 "all input and output dims must be greater than 0"),
-        return false);
+    // EZ码细化：input 维度 size 校验维持 EZ0015；outputSize 元素值域拆分为独立 EZ0026，校验条件保持不变
+    OP_CHECK(outN > 0 && outC > 0 && inputL > 0,
+             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(
+                 "aclnnUpsampleNearestExact1d", "input_n,input_c,input_l",
+                 (std::to_string(outN) + ", " + std::to_string(outC) + ", " + std::to_string(inputL)).c_str(),
+                 "all input dims must be greater than 0"),
+             return false);
+    OP_CHECK(outL > 0,
+             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearestExact1d", "output_size",
+                                                   std::to_string(outL).c_str(),
+                                                   "output_size value should be greater than 0"),
+             return false);
     if (scales > 0) {
         // 资料约束：outputSize = floor(inputSize_L * scales)，非整数乘积时合法值是 floor 而非 ceil；
         // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合

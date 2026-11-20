@@ -62,8 +62,21 @@ static bool CheckNotNull(const aclTensor* gradOutput, const aclIntArray* outputS
 
 static bool CheckDtypeValid(const aclTensor* gradOutput, const aclTensor* out)
 {
-    OP_CHECK_DTYPE_NOT_SUPPORT(gradOutput, DTYPE_SUPPORT_LIST, return false);
-    OP_CHECK_DTYPE_NOT_MATCH(gradOutput, out->GetDataType(), return false);
+    // EZ码细化：dtype 非支持列表由泛化 EZ1001 细化为 EZ0020，校验条件保持不变
+    OP_CHECK(
+        CheckType(gradOutput->GetDataType(), DTYPE_SUPPORT_LIST),
+        OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(
+            "aclnnUpsampleBilinear2dAABackward", "grad_output", op::ToString(gradOutput->GetDataType()).GetString(),
+            (std::string("dtype should be in support list ") + op::ToString(DTYPE_SUPPORT_LIST).GetString()).c_str()),
+        return false);
+    // EZ码细化：dtype 不一致由泛化 EZ1001 细化为 EZ0021（多输入 dtype 关系错误），校验条件保持不变
+    OP_CHECK(gradOutput->GetDataType() == out->GetDataType(),
+             OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "grad_output,out",
+                                                    (std::string(op::ToString(gradOutput->GetDataType()).GetString()) +
+                                                     ", " + op::ToString(out->GetDataType()).GetString())
+                                                        .c_str(),
+                                                    "dtype of grad_output and out should be equal"),
+             return false);
     return true;
 }
 
@@ -72,7 +85,7 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
 {
     const op::Format gradOutputFormat = gradOutput->GetStorageFormat();
     if (gradOutputFormat != out->GetStorageFormat()) {
-        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBilinear2dAaBackward", "gradoutput,out",
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "gradoutput,out",
                                                 (std::string(op::ToString(gradOutputFormat).GetString()) + ", " +
                                                  op::ToString(out->GetStorageFormat()).GetString())
                                                     .c_str(),
@@ -81,18 +94,25 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
     }
     size_t inputSizeNum = inputSize->Size();
     size_t outputSizeNum = outputSize->Size();
-    OP_CHECK_WRONG_DIMENSION(gradOutput, DIM_LIMIT, return false);
-    OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
+    // EZ码细化：rank 错误由泛化 EZ1001 细化为 EZ0011，校验条件与顺序保持不变
+    OP_CHECK(gradOutput->GetViewShape().GetDimNum() == DIM_LIMIT,
+             OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleBilinear2dAABackward", "grad_output",
+                                          (std::to_string(gradOutput->GetViewShape().GetDimNum()) + "D").c_str(), "4D"),
+             return false);
+    OP_CHECK(out->GetViewShape().GetDimNum() == DIM_LIMIT,
+             OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleBilinear2dAABackward", "out",
+                                          (std::to_string(out->GetViewShape().GetDimNum()) + "D").c_str(), "4D"),
+             return false);
     OP_CHECK(inputSizeNum == EXPECT_INPUT_SIZE,
-             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBilinear2dAaBackward", "input_size",
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBilinear2dAABackward", "input_size",
                                           std::to_string(inputSizeNum).c_str(), "4"),
              return false);
     OP_CHECK(outputSizeNum == EXPECT_OUTPUT_SIZE,
-             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBilinear2dAaBackward", "output_size",
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBilinear2dAABackward", "output_size",
                                           std::to_string(outputSizeNum).c_str(), "2"),
              return false);
     OP_CHECK(gradOutputFormat == op::Format::FORMAT_ND || gradOutputFormat == op::Format::FORMAT_NCHW,
-             OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleBilinear2dAaBackward", "self",
+             OP_LOGE_FOR_INVALID_FORMAT("aclnnUpsampleBilinear2dAABackward", "self",
                                         op::ToString(gradOutputFormat).GetString(), "NCHW"),
              return false);
     return true;
@@ -100,18 +120,25 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
 
 static bool CheckScalesValid(const double weight, const double high)
 {
-    if (!std::isfinite(weight) || !std::isfinite(high)) {
-        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-            "aclnnUpsampleBilinear2dAaBackward", "scales_w,scales_h",
-            (std::string(std::to_string(weight).c_str()) + ", " + std::to_string(high).c_str()).c_str(),
-            "scales must be finite and non-negative");
+    // EZ码细化：合并校验拆分为单属性值域检查（EZ0027 → EZ0026），拒绝集与顺序保持不变
+    if (!std::isfinite(weight)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "scales_w",
+                                              std::to_string(weight).c_str(), "scales_w must be finite");
         return false;
     }
-    if ((high < 0) || (weight < 0)) {
-        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-            "aclnnUpsampleBilinear2dAaBackward", "scales_w,scales_h",
-            (std::string(std::to_string(weight).c_str()) + ", " + std::to_string(high).c_str()).c_str(),
-            "scales_w and scales_h cannot be negative");
+    if (!std::isfinite(high)) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "scales_h",
+                                              std::to_string(high).c_str(), "scales_h must be finite");
+        return false;
+    }
+    if (high < 0) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "scales_h",
+                                              std::to_string(high).c_str(), "scales_h cannot be negative");
+        return false;
+    }
+    if (weight < 0) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "scales_w",
+                                              std::to_string(weight).c_str(), "scales_w cannot be negative");
         return false;
     }
     return true;
@@ -136,41 +163,55 @@ static bool CheckInputElement(const aclIntArray* outputSize, const aclIntArray* 
     int64_t outH = (*outputSize)[DIM_ZERO];
     int64_t outW = (*outputSize)[DIM_ONE];
 
-    OP_CHECK(inputN > 0 && inputC > 0 && inputH > 0 && inputW > 0 && outH > 0 && outW > 0,
-             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAaBackward", "input_n",
-                                                      std::to_string(inputN).c_str(),
-                                                      "all input and output dims must be greater than 0"),
+    OP_CHECK(inputN > 0 && inputC > 0 && inputH > 0 && inputW > 0,
+             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "inputSize",
+                                                   (std::to_string(inputN) + ", " + std::to_string(inputC) + ", " +
+                                                    std::to_string(inputH) + ", " + std::to_string(inputW))
+                                                       .c_str(),
+                                                   "all inputSize elements must be greater than 0"),
+             return false);
+    OP_CHECK(outH > 0 && outW > 0,
+             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "outputSize",
+                                                   (std::to_string(outH) + ", " + std::to_string(outW)).c_str(),
+                                                   "all outputSize elements must be greater than 0"),
              return false);
 
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
     if (curArch == NpuArch::DAV_2201) {
-        OP_CHECK(inputN <= INT32_MAX && inputC <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
-                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAaBackward", "inputN",
-                                                          std::to_string(inputN).c_str(),
-                                                          "all dims must not exceed INT32_MAX"),
-                 return false);
+        OP_CHECK(
+            inputN <= INT32_MAX && inputC <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "inputN,inputC,inputH,inputW",
+                                                     (std::to_string(inputN) + ", " + std::to_string(inputC) + ", " +
+                                                      std::to_string(inputH) + ", " + std::to_string(inputW))
+                                                         .c_str(),
+                                                     "all dims must not exceed INT32_MAX"),
+            return false);
         OP_CHECK(outH <= INT32_MAX && outW <= INT32_MAX,
-                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAaBackward", "outH",
-                                                          std::to_string(outH).c_str(),
+                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "outH,outW",
+                                                          (std::to_string(outH) + ", " + std::to_string(outW)).c_str(),
                                                           "all dims must not exceed INT32_MAX"),
                  return false);
 
         int64_t M = inputN * inputC * outH;
         OP_CHECK(M <= INT32_MAX,
-                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAaBackward", "M",
+                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "M",
                                                           std::to_string(M).c_str(),
                                                           "N * C * outputSize_H must not exceed INT32_MAX"),
                  return false);
 
         double realScalesH = ComputeBilinear2dAABackwardScales(inputH, outH, scalesH);
         double realScalesW = ComputeBilinear2dAABackwardScales(inputW, outW, scalesW);
-        OP_CHECK(
-            realScalesH >= MIN_SUPPORT_SCALE && realScalesW >= MIN_SUPPORT_SCALE,
-            OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-                "aclnnUpsampleBilinear2dAaBackward", "scales_h,scales_w",
-                (std::string(std::to_string(realScalesH).c_str()) + ", " + std::to_string(realScalesW).c_str()).c_str(),
-                "scales_h and scales_w are too large; the supported scale range is exceeded"),
-            return false);
+        // EZ码细化：合并校验拆分为单属性值域检查（EZ0027 → EZ0026），拒绝集与顺序保持不变
+        OP_CHECK(realScalesH >= MIN_SUPPORT_SCALE,
+                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "scales_h",
+                                                       std::to_string(realScalesH).c_str(),
+                                                       "scales_h is too large; the supported scale range is exceeded"),
+                 return false);
+        OP_CHECK(realScalesW >= MIN_SUPPORT_SCALE,
+                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBilinear2dAABackward", "scales_w",
+                                                       std::to_string(realScalesW).c_str(),
+                                                       "scales_w is too large; the supported scale range is exceeded"),
+                 return false);
     }
     return true;
 }

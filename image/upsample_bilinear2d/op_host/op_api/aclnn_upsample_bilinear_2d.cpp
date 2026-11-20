@@ -69,10 +69,14 @@ static const std::initializer_list<op::DataType> AICORE_DTYPE_SUPPORT_LIST_FOR_A
 
 static const int64_t DIMLIMIT = 4;
 
-static bool CheckNotNull(const aclTensor* self, const aclTensor* out)
+static bool CheckNotNull(const aclTensor* self, const aclTensor* out, const aclIntArray* outputSize)
 {
     OP_CHECK_NULL(self, return false);
     OP_CHECK_NULL(out, return false);
+    // 返回码归类修正：outputSize 为 API 必选输入，其 null 检查归属空指针组（161001 + EZ1001），
+    // 原先放在 CheckOutputSize 内随调用点返回 161002 并以 ReportInvalidArgument 上报 EZ0037（该 EZ
+    // 设计场景为图侧输入缺失），与文档返回码表/err_code_norm §4.3 不符，且为族内异类；拦截行为不变
+    OP_CHECK_NULL(outputSize, return false);
     return true;
 }
 
@@ -148,10 +152,7 @@ static bool CheckScalesValid(const double weight, const double high)
 
 static bool CheckOutputSize(const aclTensor* out, const aclIntArray* outputSize)
 {
-    if (outputSize == nullptr) {
-        error_report::ReportInvalidArgument("aclnnUpsampleBilinear2d", "outputSize", "outputSize must not be null");
-        return false;
-    }
+    // outputSize 的 null 检查已前移至 CheckNotNull（161001 + EZ1001），此处不再重复
     if (outputSize->Size() != TWO) {
         OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBilinear2d", "outputSize",
                                      std::to_string(outputSize->Size()).c_str(), "2");
@@ -183,7 +184,7 @@ static aclnnStatus CheckParams(const aclTensor* selfRef, const aclTensor* out, c
 {
     // 错误码等DFX方案细化后刷新，错误日志在check接口内打印
     // 1. 检查参数是否为空指针
-    CHECK_RET(CheckNotNull(selfRef, out), ACLNN_ERR_PARAM_NULLPTR);
+    CHECK_RET(CheckNotNull(selfRef, out, outputSize), ACLNN_ERR_PARAM_NULLPTR);
 
     // 2. 检查输入的数据类型是否在API支持的数据类型范围之内，需要根据api定义校验
     CHECK_RET(CheckDtypeValid(selfRef), ACLNN_ERR_PARAM_INVALID);

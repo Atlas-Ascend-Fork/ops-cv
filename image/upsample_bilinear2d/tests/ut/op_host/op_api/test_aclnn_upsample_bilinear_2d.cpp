@@ -110,7 +110,28 @@ TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_nullptr_self)
     EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_NULLPTR);
 }
 
-// CheckNotNull_1
+// Case 2: outputSize=nullptr 应返回 161001（文档返回码表：空指针场景）
+// （修复前该检查在 CheckOutputSize 内随调用点返回 161002 并报 EZ0037，与文档/规范不符）
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_nullptr_output_size)
+{
+    const double_t scales_h = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {1, 1, 3, 3};
+    vector<int64_t> out = {1, 1, 3, 3};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT16, ACL_FORMAT_NCHW);
+    auto output_size_desc = nullptr;
+    auto output_desc = TensorDesc(out, ACL_FLOAT16, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_h), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_NULLPTR);
+}
+
 // TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_nullptr_out)
 // {
 //     const double_t scales_h = 2.0;

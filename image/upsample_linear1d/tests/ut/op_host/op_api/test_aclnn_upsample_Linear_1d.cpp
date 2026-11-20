@@ -105,6 +105,21 @@ TEST_F(l2_upsamplelinear1d_test, l2_upsamplelinear1d_test_dtype_int32)
     EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }
 
+// Case 30: scale=0 与 outputSize 冲突，应返回 161002 且经 ErrorManager 上报 EZ0026
+// （修复前 OP_LOGE_WITHOUT_REPORT 仅打 slog 不报 ErrorManager，错误详情为空）
+TEST_F(l2_upsamplelinear1d_test, l2_upsamplelinear1d_test_scale_zero_conflict)
+{
+    auto selfDesc = TensorDesc({1, 1, 2}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto outDesc = TensorDesc({1, 1, 4}, ACL_FLOAT, ACL_FORMAT_NCL);
+    auto sizeDesc = IntArrayDesc({4});
+    const double_t scales_h = 0.0;
+    bool align_corners = false;
+    auto ut = OP_API_UT(aclnnUpsampleLinear1d, INPUT(selfDesc, sizeDesc, align_corners, scales_h), OUTPUT(outDesc));
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
 // invalid dtype int64
 TEST_F(l2_upsamplelinear1d_test, l2_upsamplelinear1d_test_dtype_int64)
 {

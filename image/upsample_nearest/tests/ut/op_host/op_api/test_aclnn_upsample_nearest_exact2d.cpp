@@ -270,6 +270,24 @@ TEST_F(l2_upsample_nearest_exact2d_test, case_uint8_dtype_mismatch)
     EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
 }
 
+// dtype 不在支持列表（self/out 同为 INT32，排除 dtype 不一致分支），应返回 161002 并上报 EZ0020
+TEST_F(l2_upsample_nearest_exact2d_test, case_dtype_not_support_abnormal)
+{
+    auto self_desc = TensorDesc({1, 2, 3, 3}, ACL_INT32, ACL_FORMAT_NCHW);
+    vector<int64_t> output_size = {6, 6};
+    auto output_size_desc = IntArrayDesc(output_size);
+    const double_t scalesH = 0.0;
+    const double_t scalesW = 0.0;
+    auto out_desc = TensorDesc({1, 2, 6, 6}, ACL_INT32, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleNearestExact2d, INPUT(self_desc, output_size_desc, scalesH, scalesW),
+                        OUTPUT(out_desc));
+
+    uint64_t workspace_size = 0;
+    aclnnStatus aclRet = ut.TestGetWorkspaceSize(&workspace_size);
+    EXPECT_EQ(aclRet, ACLNN_ERR_PARAM_INVALID);
+}
+
 TEST_F(l2_upsample_nearest_exact2d_test, case_uint8_format_mismatch)
 {
     auto self_desc = TensorDesc({1, 2, 3, 3}, ACL_UINT8, ACL_FORMAT_NCHW);

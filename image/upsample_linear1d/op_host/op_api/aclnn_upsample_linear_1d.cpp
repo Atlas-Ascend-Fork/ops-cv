@@ -131,8 +131,10 @@ static bool CheckShape(const aclTensor* self, const aclTensor* out, const aclInt
     if (scale >= 0) {
         const double odim = static_cast<double>(self->GetViewShape().GetDim(DIM_TWO)) * scale;
         if (static_cast<int64_t>(odim) != outL) {
-            OP_LOGE_WITHOUT_REPORT(
-                ACLNN_ERR_PARAM_INVALID,
+            // EZ上报补齐：原 OP_LOGE_WITHOUT_REPORT 仅打 slog 不调 ErrorManager，导致返回 161002 但错误详情为空；
+            // 替换为单属性值域宏（EZ0026），校验条件、拦截位置与返回码保持不变
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                "aclnnUpsampleLinear1d", "scale", std::to_string(scale).c_str(),
                 "scale conflicts with outputSize; scale * input[2] should be equal to outputSize[0]");
             return false;
         }

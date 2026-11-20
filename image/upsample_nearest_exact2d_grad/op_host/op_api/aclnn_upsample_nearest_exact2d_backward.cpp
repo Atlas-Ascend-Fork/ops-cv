@@ -61,8 +61,15 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
     }
     size_t inputSizeNum = inputSize->Size();
     size_t outputSizeNum = outputSize->Size();
-    OP_CHECK_WRONG_DIMENSION(gradOutput, DIM_LIMIT, return false);
-    OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
+    // EZ码细化：rank 错误由泛化 EZ1001 细化为 EZ0011（携带实际/期望维度），校验条件保持不变
+    OP_CHECK(gradOutput->GetViewShape().GetDimNum() == DIM_LIMIT,
+             OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleNearestExact2dBackward", "grad_output",
+                                          (std::to_string(gradOutput->GetViewShape().GetDimNum()) + "D").c_str(), "4D"),
+             return false);
+    OP_CHECK(out->GetViewShape().GetDimNum() == DIM_LIMIT,
+             OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleNearestExact2dBackward", "out",
+                                          (std::to_string(out->GetViewShape().GetDimNum()) + "D").c_str(), "4D"),
+             return false);
     OP_CHECK(inputSizeNum == EXPECT_SIZE,
              OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleNearestExact2dBackward", "input_size",
                                           std::to_string(inputSizeNum).c_str(), "4"),
@@ -76,8 +83,20 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
 
 static bool CheckDtypeValid(const aclTensor* gradOutput, const aclTensor* out)
 {
-    OP_CHECK_DTYPE_NOT_SUPPORT(gradOutput, DTYPE_SUPPORT_LIST, return false);
-    OP_CHECK_DTYPE_NOT_MATCH(gradOutput, out->GetDataType(), return false);
+    // EZ码细化：dtype 非支持列表由泛化 EZ1001 细化为 EZ0020，self/out dtype 不一致细化为 EZ0021，校验条件保持不变
+    OP_CHECK(
+        CheckType(gradOutput->GetDataType(), DTYPE_SUPPORT_LIST),
+        OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(
+            "aclnnUpsampleNearestExact2dBackward", "grad_output", op::ToString(gradOutput->GetDataType()).GetString(),
+            (std::string("dtype should be in support list ") + op::ToString(DTYPE_SUPPORT_LIST).GetString()).c_str()),
+        return false);
+    OP_CHECK(gradOutput->GetDataType() == out->GetDataType(),
+             OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON("aclnnUpsampleNearestExact2dBackward", "grad_output,out",
+                                                    (std::string(op::ToString(gradOutput->GetDataType()).GetString()) +
+                                                     ", " + std::string(op::ToString(out->GetDataType()).GetString()))
+                                                        .c_str(),
+                                                    "dtype of grad_output and out should be equal"),
+             return false);
     return true;
 }
 
@@ -92,11 +111,16 @@ static double ComputeNearestExact2dBackwardScales(int64_t input_size, int64_t ou
 
 static bool CheckScalesValid(const double weight, const double high)
 {
-    if ((weight < 0) || (high < 0)) {
-        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-            "aclnnUpsampleNearestExact2dBackward", "scales_w,scales_h",
-            (std::string(std::to_string(weight).c_str()) + ", " + std::to_string(high).c_str()).c_str(),
-            "scales_w and scales_h cannot be negative");
+    // EZ码细化：scalesH/scalesW 负值合并校验拆分为单属性值域检查（EZ0027 → EZ0026），
+    // 检查顺序保持 scalesH 先于 scalesW，拒绝集保持不变
+    if (high < 0) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearestExact2dBackward", "scales_h",
+                                              std::to_string(high).c_str(), "scales_h cannot be negative");
+        return false;
+    }
+    if (weight < 0) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearestExact2dBackward", "scales_w",
+                                              std::to_string(weight).c_str(), "scales_w cannot be negative");
         return false;
     }
     return true;
@@ -121,19 +145,32 @@ static bool CheckInputElement(const aclTensor* gradOutput, const aclTensor* out,
     double realScalesH = ComputeNearestExact2dBackwardScales(inputH, outH, scalesH);
     double realScalesW = ComputeNearestExact2dBackwardScales(inputW, outW, scalesW);
 
-    OP_CHECK(
-        realScalesH >= MIN_SUPPORT_SCALE && realScalesW >= MIN_SUPPORT_SCALE,
-        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-            "aclnnUpsampleNearestExact2dBackward", "scales_h,scales_w",
-            (std::string(std::to_string(realScalesH).c_str()) + ", " + std::to_string(realScalesW).c_str()).c_str(),
-            "scales_h and scales_w are too large; the supported scale range is exceeded"),
-        return false);
-
-    OP_CHECK(inputH > 0 && inputW > 0 && outH > 0 && outW > 0,
-             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearestExact2dBackward", "input",
-                                                      std::to_string(inputH).c_str(),
-                                                      "the H and W dims of input and output must be greater than 0"),
+    // NaN/Inf 经 ComputeNearestExact2dBackwardScales 映射后不满足支持范围（NaN 比较/Inf→0），
+    // 在此拆分为单属性值域检查（EZ0027 → EZ0026），拒绝集保持不变
+    OP_CHECK(realScalesH >= MIN_SUPPORT_SCALE,
+             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearestExact2dBackward", "scales_h",
+                                                   std::to_string(realScalesH).c_str(),
+                                                   "scales_h is too large; the supported scale range is exceeded"),
              return false);
+    OP_CHECK(realScalesW >= MIN_SUPPORT_SCALE,
+             OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearestExact2dBackward", "scales_w",
+                                                   std::to_string(realScalesW).c_str(),
+                                                   "scales_w is too large; the supported scale range is exceeded"),
+             return false);
+
+    // EZ码细化：原混检拆分——inputSize H/W 为 list 元素值域违规，细化为 EZ0026；
+    // gradOutput/out 的 H/W 为 tensor 维度 size，维持 EZ0015，拒绝集保持不变
+    OP_CHECK(inputH > 0 && inputW > 0,
+             OP_LOGE_FOR_INVALID_VALUES_WITH_REASON("aclnnUpsampleNearestExact2dBackward", "input_size_h,input_size_w",
+                                                    (std::to_string(inputH) + ", " + std::to_string(inputW)).c_str(),
+                                                    "input_size H/W values should be greater than 0"),
+             return false);
+    OP_CHECK(
+        outH > 0 && outW > 0,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleNearestExact2dBackward", "grad_output_h,grad_output_w",
+                                                 (std::to_string(outH) + ", " + std::to_string(outW)).c_str(),
+                                                 "the H/W dims of grad_output must be greater than 0"),
+        return false);
 
     // gradOutput 的 shape 应等于 (inputSize[0], inputSize[1], outputSize[0], outputSize[1])，out 的 shape
     // 应等于 (inputSize[0], inputSize[1], inputSize[2], inputSize[3])，N/C 取自 inputSize，

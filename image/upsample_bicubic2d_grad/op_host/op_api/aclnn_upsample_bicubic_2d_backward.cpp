@@ -79,17 +79,38 @@ static bool CheckDtypeValid(const aclTensor* gradOut, const aclTensor* gradInput
     // the ResizeBicubicV2Grad operator
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
     if (IsRegBase(curArch)) {
-        OP_CHECK_DTYPE_NOT_SUPPORT(gradOut, DTYPE_SUPPORT_LIST_REGBASE, return false);
+        // EZ码细化：dtype 非支持列表由泛化 EZ1001 细化为 EZ0020，校验条件保持不变
+        OP_CHECK(
+            CheckType(gradOut->GetDataType(), DTYPE_SUPPORT_LIST_REGBASE),
+            OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(
+                "aclnnUpsampleBicubic2dBackward", "grad_output", op::ToString(gradOut->GetDataType()).GetString(),
+                (std::string("dtype should be in support list ") + op::ToString(DTYPE_SUPPORT_LIST_REGBASE).GetString())
+                    .c_str()),
+            return false);
     } else {
         bool is910BSocVersion = (curArch == NpuArch::DAV_2201 || IsRegBase(curArch));
         const std::initializer_list<op::DataType> dtypeSupportList = is910BSocVersion ? DTYPE_SUPPORT_LIST_910B :
                                                                                         DTYPE_SUPPORT_LIST_910;
 
-        OP_CHECK_DTYPE_NOT_SUPPORT(gradOut, dtypeSupportList, return false);
+        // EZ码细化：dtype 非支持列表由泛化 EZ1001 细化为 EZ0020，校验条件保持不变
+        OP_CHECK(
+            CheckType(gradOut->GetDataType(), dtypeSupportList),
+            OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(
+                "aclnnUpsampleBicubic2dBackward", "grad_output", op::ToString(gradOut->GetDataType()).GetString(),
+                (std::string("dtype should be in support list ") + op::ToString(dtypeSupportList).GetString()).c_str()),
+            return false);
     }
 
     // Check that the data type of gradInput is consistent with gradOut
-    OP_CHECK_DTYPE_NOT_MATCH(gradOut, gradInput->GetDataType(), return false);
+    // EZ码细化+标签修正：dtype 不一致由泛化 EZ1001 细化为 EZ0021，且上报对象
+    // 由原宏内固定的 grad_out 修正为实际不匹配的 grad_input，校验条件保持不变
+    OP_CHECK(gradInput->GetDataType() == gradOut->GetDataType(),
+             OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON("aclnnUpsampleBicubic2dBackward", "grad_input,grad_output",
+                                                    (std::string(op::ToString(gradInput->GetDataType()).GetString()) +
+                                                     ", " + op::ToString(gradOut->GetDataType()).GetString())
+                                                        .c_str(),
+                                                    "dtype of grad_input and grad_output should be equal"),
+             return false);
     return true;
 }
 

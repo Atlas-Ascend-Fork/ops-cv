@@ -68,7 +68,7 @@ static bool CheckShape(const aclTensor* x, const aclIntArray* outputSize, const 
     OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK(outputSizeNum == EXPECT_SIZE,
-             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBicubic2dAa", "output_size",
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBicubic2dAA", "output_size",
                                           std::to_string(outputSizeNum).c_str(), "2"),
              return false);
     auto inputShape = x->GetViewShape();
@@ -83,25 +83,27 @@ static bool CheckShape(const aclTensor* x, const aclIntArray* outputSize, const 
     int64_t outputW = outputShape.GetDim(DIM_THREE);
     int64_t outH = (*outputSize)[DIM_ZERO];
     int64_t outW = (*outputSize)[DIM_ONE];
-    OP_CHECK(
-        inputH > 0 && inputW > 0 && outH > 0 && outW > 0,
-        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAa", "input_h", std::to_string(inputH).c_str(),
-                                                 "all input and output dims must be greater than 0"),
-        return false);
+    OP_CHECK(inputH > 0 && inputW > 0 && outH > 0 && outW > 0,
+             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAA", "input_h,input_w,output_h,output_w",
+                                                      (std::to_string(inputH) + ", " + std::to_string(inputW) + ", " +
+                                                       std::to_string(outH) + ", " + std::to_string(outW))
+                                                          .c_str(),
+                                                      "all input and output dims must be greater than 0"),
+             return false);
     OP_CHECK(
         inputC > 0,
-        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnUpsampleBicubic2dAa", "self", op::ToString(inputShape).GetString(),
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnUpsampleBicubic2dAA", "self", op::ToString(inputShape).GetString(),
                                               "a non-empty 4D data tensor is required"),
         return false);
     OP_CHECK(inputN == outputN && inputC == outputC,
-             OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnUpsampleBicubic2dAa", "input,output",
+             OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnUpsampleBicubic2dAA", "input,output",
                                                     (std::string(op::ToString(x->GetViewShape()).GetString()) + ", " +
                                                      op::ToString(out->GetViewShape()).GetString())
                                                         .c_str(),
                                                     "N and C of input and output must be equal"),
              return false);
     OP_CHECK(outputH == outH && outputW == outW,
-             OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnUpsampleBicubic2dAa", "output,out",
+             OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnUpsampleBicubic2dAA", "output,out",
                                                     (std::string(op::ToString(out->GetViewShape()).GetString()) + ", " +
                                                      op::ToString(out->GetViewShape()).GetString())
                                                         .c_str(),
@@ -110,7 +112,7 @@ static bool CheckShape(const aclTensor* x, const aclIntArray* outputSize, const 
     OP_CHECK(
         (x->GetStorageFormat() == op::Format::FORMAT_ND || x->GetStorageFormat() == op::Format::FORMAT_NCHW) &&
             (out->GetStorageFormat() == op::Format::FORMAT_ND || out->GetStorageFormat() == op::Format::FORMAT_NCHW),
-        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBicubic2dAa", "input,output",
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBicubic2dAA", "input,output",
                                                 (std::string(op::ToString(x->GetStorageFormat()).GetString()) + ", " +
                                                  op::ToString(out->GetStorageFormat()).GetString())
                                                     .c_str(),
@@ -119,16 +121,19 @@ static bool CheckShape(const aclTensor* x, const aclIntArray* outputSize, const 
 
     // 检查上边界
     if (!IsRegBase()) {
-        OP_CHECK(inputN <= INT32_MAX && inputC <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
-                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAa", "inputN",
-                                                          std::to_string(inputN).c_str(),
-                                                          "all dims must not exceed INT32_MAX"),
-                 return false);
         OP_CHECK(
-            outH <= INT32_MAX && outW <= INT32_MAX,
-            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAa", "outH", std::to_string(outH).c_str(),
+            inputN <= INT32_MAX && inputC <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAA", "inputN,inputC,inputH,inputW",
+                                                     (std::to_string(inputN) + ", " + std::to_string(inputC) + ", " +
+                                                      std::to_string(inputH) + ", " + std::to_string(inputW))
+                                                         .c_str(),
                                                      "all dims must not exceed INT32_MAX"),
             return false);
+        OP_CHECK(outH <= INT32_MAX && outW <= INT32_MAX,
+                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAA", "outH,outW",
+                                                          (std::to_string(outH) + ", " + std::to_string(outW)).c_str(),
+                                                          "all dims must not exceed INT32_MAX"),
+                 return false);
     }
     return true;
 }
@@ -147,7 +152,7 @@ static bool CheckMaxScaleSupport(const aclTensor* x, const aclIntArray* outputSi
     OP_CHECK(
         realScalesH <= MAX_SUPPORT_SCALE && realScalesW <= MAX_SUPPORT_SCALE,
         OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-            "aclnnUpsampleBicubic2dAa", "scales_h,scales_w",
+            "aclnnUpsampleBicubic2dAA", "scales_h,scales_w",
             (std::to_string(realScalesH).c_str() + std::string(", ") + std::to_string(realScalesW).c_str()).c_str(),
             "scales must be less than 50"),
         return false);

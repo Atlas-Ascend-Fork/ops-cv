@@ -80,13 +80,26 @@ static const std::initializer_list<DataType>& GetDtypeSupportList()
 static bool CheckDtypeValid(const aclTensor* self)
 {
     auto supportDtypeList = GetDtypeSupportList();
-    OP_CHECK_DTYPE_NOT_SUPPORT(self, supportDtypeList, return false);
+    // EZ码细化：dtype 非支持列表由泛化 EZ1001 细化为 EZ0020（reason 动态携带 SoC 对应支持列表），校验条件保持不变
+    OP_CHECK(
+        CheckType(self->GetDataType(), supportDtypeList),
+        OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(
+            "aclnnUpsampleNearest1dV2", "self", op::ToString(self->GetDataType()).GetString(),
+            (std::string("dtype should be in support list ") + op::ToString(supportDtypeList).GetString()).c_str()),
+        return false);
     return true;
 }
 
 static bool CheckDtypeEqual(const aclTensor* self, const aclTensor* out)
 {
-    OP_CHECK_DTYPE_NOT_MATCH(self, out->GetDataType(), return false);
+    // 检查self的数据类型是否与out一致（EZ0021：多输入 dtype 关系错误）
+    OP_CHECK(self->GetDataType() == out->GetDataType(),
+             OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON("aclnnUpsampleNearest1dV2", "self,out",
+                                                    (std::string(op::ToString(self->GetDataType()).GetString()) + ", " +
+                                                     std::string(op::ToString(out->GetDataType()).GetString()))
+                                                        .c_str(),
+                                                    "dtype of self and out should be equal"),
+             return false);
     return true;
 }
 
