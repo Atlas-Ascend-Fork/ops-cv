@@ -147,7 +147,8 @@ static bool CheckScalesValid(const double scalesD, const double scalesH, const d
         return false;
     }
     const bool allPositive = scalesD > 0 && scalesH > 0 && scalesW > 0;
-    const bool allZero = scalesD == 0 && scalesH == 0 && scalesW == 0;
+    const bool allZero = std::fpclassify(scalesD) == FP_ZERO && std::fpclassify(scalesH) == FP_ZERO &&
+                         std::fpclassify(scalesW) == FP_ZERO;
     if (!allPositive && !allZero) {
         OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
             "aclnnUpsampleTrilinear3dBackward", "scales_d,scales_h,scales_w",
