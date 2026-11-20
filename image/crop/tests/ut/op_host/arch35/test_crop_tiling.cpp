@@ -63,10 +63,8 @@ TEST_F(CropTiling, crop_tiling_case0_float_4d)
     ASSERT_GE(tilingInfo.tilingDataSize, sizeof(CropTilingData));
     const CropTilingData* tilingData = reinterpret_cast<const CropTilingData*>(tilingInfo.tilingData.get());
     // y shape = (4,4,5,5), totalElements = 400
-    EXPECT_EQ(tilingData->needCoreNum, 1);
     EXPECT_EQ(tilingData->totalElements, 400);
     EXPECT_EQ(tilingData->rank, 4);
-    EXPECT_EQ(tilingData->axis, 2);
     // xStrides for (4,4,8,8): [256, 64, 8, 1]
     EXPECT_EQ(tilingData->xStrides[0], 256);
     EXPECT_EQ(tilingData->xStrides[1], 64);
@@ -111,10 +109,8 @@ TEST_F(CropTiling, crop_tiling_case1_float16_2d)
     ASSERT_GE(tilingInfo.tilingDataSize, sizeof(CropTilingData));
     const CropTilingData* tilingData = reinterpret_cast<const CropTilingData*>(tilingInfo.tilingData.get());
     // y shape = (5,20), totalElements = 100
-    EXPECT_EQ(tilingData->needCoreNum, 1);
     EXPECT_EQ(tilingData->totalElements, 100);
     EXPECT_EQ(tilingData->rank, 2);
-    EXPECT_EQ(tilingData->axis, 0);
     // xStrides for (10,20): [20, 1]
     EXPECT_EQ(tilingData->xStrides[0], 20);
     EXPECT_EQ(tilingData->xStrides[1], 1);
@@ -153,10 +149,8 @@ TEST_F(CropTiling, crop_tiling_case2_single_offset)
     ASSERT_GE(tilingInfo.tilingDataSize, sizeof(CropTilingData));
     const CropTilingData* tilingData = reinterpret_cast<const CropTilingData*>(tilingInfo.tilingData.get());
     // y shape = (2,3,6,6), totalElements = 216
-    EXPECT_EQ(tilingData->needCoreNum, 1);
     EXPECT_EQ(tilingData->totalElements, 216);
     EXPECT_EQ(tilingData->rank, 4);
-    EXPECT_EQ(tilingData->axis, 2);
     // xStrides for (2,3,10,10): [300, 100, 10, 1]
     EXPECT_EQ(tilingData->xStrides[0], 300);
     EXPECT_EQ(tilingData->xStrides[1], 100);
@@ -244,4 +238,313 @@ TEST_F(CropTiling, crop_tiling_negative_offset_reject)
     TilingInfo tilingInfo;
     bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
     EXPECT_FALSE(tilingOk);
+}
+
+// SS NDDMA path: 4-D u32 with per-dim offsets; verifies begin folding and NDDMA loop params.
+TEST_F(CropTiling, crop_tiling_ss_nddma_u32_offsets)
+{
+    struct CropCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Crop",
+        {
+            {{{30, 5, 10, 4}, {30, 5, 10, 4}}, ge::DT_UINT32, ge::FORMAT_ND}, // x
+            {{{30, 3, 8, 2}, {30, 3, 8, 2}}, ge::DT_UINT32, ge::FORMAT_ND},   // size
+        },
+        {
+            {{{30, 3, 8, 2}, {30, 3, 8, 2}}, ge::DT_UINT32, ge::FORMAT_ND}, // y
+        },
+        {
+            gert::TilingContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
+            gert::TilingContextPara::OpAttr("offsets", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 2, 1})),
+        },
+        &compileInfo, "Ascend950", 48, 262144, 4096);
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_TRUE(tilingOk);
+    EXPECT_EQ(tilingInfo.tilingKey, 0);
+    EXPECT_EQ(tilingInfo.blockNum, 30); // realCoreNum
+
+    ASSERT_GE(tilingInfo.tilingDataSize, sizeof(CropTilingData));
+    const CropTilingData* tilingData = reinterpret_cast<const CropTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_EQ(tilingData->useSsNddma, 1);
+    EXPECT_EQ(tilingData->useSimd, 0);
+    EXPECT_EQ(tilingData->useGather, 0);
+
+    const CropSsBaseTilingData* base = &tilingData->ssNddma.base;
+    EXPECT_EQ(base->inputDims, 4);
+    EXPECT_EQ(base->blkIndex, 0);
+    EXPECT_EQ(base->ubIndex, 0);
+    EXPECT_EQ(base->blkFactor, 1);
+    EXPECT_EQ(base->blkTailFactor, 0);
+    EXPECT_EQ(base->realCoreNum, 30);
+    EXPECT_EQ(base->ubFactor, 1);
+    EXPECT_EQ(base->ubTailFactor, 0);
+    EXPECT_EQ(base->ubTailTailFactor, 0);
+    EXPECT_EQ(base->ubInLoopSteps, 200); // ubFactor * inStride[0]
+    EXPECT_EQ(base->ubOutLoopSteps, 48); // ubFactor * innerProd
+    // Effective dims (outer -> inner) and folded offsets.
+    EXPECT_EQ(base->outputShape[0], 30);
+    EXPECT_EQ(base->outputShape[1], 3);
+    EXPECT_EQ(base->outputShape[2], 8);
+    EXPECT_EQ(base->outputShape[3], 2);
+    EXPECT_EQ(base->begin[0], 0);
+    EXPECT_EQ(base->begin[1], 1);
+    EXPECT_EQ(base->begin[2], 2);
+    EXPECT_EQ(base->begin[3], 1);
+    EXPECT_EQ(base->inputSteps[0], 6000); // xTotal
+    EXPECT_EQ(base->inputSteps[1], 200);
+    EXPECT_EQ(base->inputSteps[2], 40);
+    EXPECT_EQ(base->inputSteps[3], 4);
+    EXPECT_EQ(base->rowsOffsetSteps[0], 720); // 30 * 3 * 8
+    EXPECT_EQ(base->rowsOffsetSteps[1], 24);  // 3 * 8
+    EXPECT_EQ(base->rowsOffsetSteps[2], 8);
+    EXPECT_EQ(base->rowsOffsetSteps[3], 1);
+    // NDDMA loops are stored from the outermost slot (index CROP_SS_NDDMA_DIMS - j).
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSize[1], 1);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSize[2], 3);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSize[3], 8);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSize[4], 2);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSrcStride[1], 200);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSrcStride[2], 40);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSrcStride[3], 4);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSrcStride[4], 1);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopDstStride[1], 48);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopDstStride[2], 16);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopDstStride[3], 2);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopDstStride[4], 1);
+    EXPECT_EQ(tilingData->ssNddma.nddmaTotalNum, 48);
+}
+
+// Two full outer dims merge into one effective dim; its begin accumulates the outer offset.
+TEST_F(CropTiling, crop_tiling_ss_nddma_u32_merged_begin)
+{
+    struct CropCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Crop",
+        {
+            {{{3, 40, 10, 6}, {3, 40, 10, 6}}, ge::DT_UINT32, ge::FORMAT_ND}, // x
+            {{{3, 30, 10, 2}, {3, 30, 10, 2}}, ge::DT_UINT32, ge::FORMAT_ND}, // size
+        },
+        {
+            {{{3, 30, 10, 2}, {3, 30, 10, 2}}, ge::DT_UINT32, ge::FORMAT_ND}, // y
+        },
+        {
+            gert::TilingContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
+            gert::TilingContextPara::OpAttr("offsets", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 0, 2})),
+        },
+        &compileInfo, "Ascend950", 48, 262144, 4096);
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_TRUE(tilingOk);
+    EXPECT_EQ(tilingInfo.blockNum, 3);
+
+    ASSERT_GE(tilingInfo.tilingDataSize, sizeof(CropTilingData));
+    const CropTilingData* tilingData = reinterpret_cast<const CropTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_EQ(tilingData->useSsNddma, 1);
+    const CropSsBaseTilingData* base = &tilingData->ssNddma.base;
+    EXPECT_EQ(base->inputDims, 3);
+    EXPECT_EQ(base->outputShape[0], 3);
+    EXPECT_EQ(base->outputShape[1], 300); // 30 * 10 merged
+    EXPECT_EQ(base->outputShape[2], 2);
+    // Merged dim begin = offsets[1](1) * inner dim(10); innermost begin = offsets[3](2).
+    EXPECT_EQ(base->begin[0], 0);
+    EXPECT_EQ(base->begin[1], 10);
+    EXPECT_EQ(base->begin[2], 2);
+    EXPECT_EQ(base->inputSteps[0], 7200);
+    EXPECT_EQ(base->inputSteps[1], 2400);
+    EXPECT_EQ(base->inputSteps[2], 6);
+    EXPECT_EQ(base->rowsOffsetSteps[0], 900);
+    EXPECT_EQ(base->rowsOffsetSteps[1], 300);
+    EXPECT_EQ(base->rowsOffsetSteps[2], 1);
+    EXPECT_EQ(base->blkFactor, 1);
+    EXPECT_EQ(base->realCoreNum, 3);
+    EXPECT_EQ(base->ubFactor, 1);
+    EXPECT_EQ(base->ubInLoopSteps, 2400); // ubFactor * inStride[0]
+    EXPECT_EQ(base->ubOutLoopSteps, 600); // ubFactor * 300 * 2
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSize[2], 1);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSize[3], 300);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSize[4], 2);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSrcStride[2], 2400);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSrcStride[3], 6);
+    EXPECT_EQ(tilingData->ssNddma.nddmaLoopSrcStride[4], 1);
+    EXPECT_EQ(tilingData->ssNddma.nddmaTotalNum, 600);
+}
+
+// SS rejected (inner run too short) -> merged NDDMA row-partition path.
+TEST_F(CropTiling, crop_tiling_row_partition_after_ss_reject_u32)
+{
+    struct CropCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Crop",
+        {
+            {{{40, 50, 20}, {40, 50, 20}}, ge::DT_UINT32, ge::FORMAT_ND}, // x
+            {{{40, 50, 3}, {40, 50, 3}}, ge::DT_UINT32, ge::FORMAT_ND},   // size
+        },
+        {
+            {{{40, 50, 3}, {40, 50, 3}}, ge::DT_UINT32, ge::FORMAT_ND}, // y
+        },
+        {
+            gert::TilingContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(2)),
+            gert::TilingContextPara::OpAttr("offsets", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({0})),
+        },
+        &compileInfo, "Ascend950", 48, 262144, 4096);
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_TRUE(tilingOk);
+    EXPECT_EQ(tilingInfo.blockNum, 48); // simdCoreNum
+
+    ASSERT_GE(tilingInfo.tilingDataSize, sizeof(CropTilingData));
+    const CropTilingData* tilingData = reinterpret_cast<const CropTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_EQ(tilingData->useSsNddma, 0);
+    EXPECT_EQ(tilingData->useSimd, 1);
+    EXPECT_EQ(tilingData->useGather, 0);
+    EXPECT_EQ(tilingData->copyDimNum, 2);
+    EXPECT_EQ(tilingData->chunkDim, 1);
+    EXPECT_EQ(tilingData->outerDimNum, 0);
+    EXPECT_EQ(tilingData->rowTotal, 2000); // dim1(50) merged with dim0(40)
+    EXPECT_EQ(tilingData->chunkElems, 2000);
+    EXPECT_EQ(tilingData->baseElems, 6000); // 2000 * innerElems(3)
+    EXPECT_EQ(tilingData->numChunks, 1);
+    EXPECT_EQ(tilingData->tailElems, 0);
+    EXPECT_EQ(tilingData->totalIters, 42); // ceil(2000 / 48)
+    EXPECT_EQ(tilingData->simdCoreNum, 48);
+    EXPECT_EQ(tilingData->copySize[0], 3);
+    EXPECT_EQ(tilingData->copySize[1], 2000);
+    EXPECT_EQ(tilingData->copySrcStride[0], 1);
+    EXPECT_EQ(tilingData->copySrcStride[1], 20);
+}
+
+// Chunked path with an outer dim and a tail: chunkDimSize covers the whole chunked dim and
+// tailElems is the shorter last chunk of every outer row.
+TEST_F(CropTiling, crop_tiling_chunk_outer_tail_contract_u32)
+{
+    struct CropCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Crop",
+        {
+            {{{4, 4100, 5201}, {4, 4100, 5201}}, ge::DT_UINT32, ge::FORMAT_ND}, // x
+            {{{3, 4003, 200}, {3, 4003, 200}}, ge::DT_UINT32, ge::FORMAT_ND},   // size
+        },
+        {
+            {{{3, 4003, 200}, {3, 4003, 200}}, ge::DT_UINT32, ge::FORMAT_ND}, // y
+        },
+        {
+            gert::TilingContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(0)),
+            gert::TilingContextPara::OpAttr("offsets", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1, 1, 0})),
+        },
+        &compileInfo, "Ascend950", 48, 262144, 4096);
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_TRUE(tilingOk);
+    EXPECT_EQ(tilingInfo.blockNum, 48);
+
+    ASSERT_GE(tilingInfo.tilingDataSize, sizeof(CropTilingData));
+    const CropTilingData* tilingData = reinterpret_cast<const CropTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_EQ(tilingData->useSsNddma, 0);
+    EXPECT_EQ(tilingData->useSimd, 1);
+    EXPECT_EQ(tilingData->useGather, 0);
+    EXPECT_EQ(tilingData->copyDimNum, 2);
+    EXPECT_EQ(tilingData->chunkDim, 1);
+    EXPECT_EQ(tilingData->outerDimNum, 1);
+    EXPECT_EQ(tilingData->outerSize[0], 3);
+    EXPECT_EQ(tilingData->outerSrcStride[0], 21324100); // 5201 * 4100
+    EXPECT_EQ(tilingData->chunkDimSize, 4003);
+    EXPECT_EQ(tilingData->copySize[0], 200);
+    EXPECT_EQ(tilingData->copySrcStride[0], 1);
+    EXPECT_EQ(tilingData->copySrcStride[1], 5201);
+    EXPECT_EQ(tilingData->copyDstStride[0], 1);
+    EXPECT_EQ(tilingData->copyDstStride[1], 200);
+    EXPECT_GT(tilingData->numChunks, 1);
+    EXPECT_GT(tilingData->tailElems, 0);
+    EXPECT_EQ(tilingData->baseElems, tilingData->chunkElems * 200); // innerElems = 200
+    // Contract: full chunks plus the tail chunk cover the whole chunked dim.
+    EXPECT_EQ(tilingData->chunkDimSize,
+              (tilingData->numChunks - 1) * tilingData->chunkElems + tilingData->tailElems / 200);
+    EXPECT_EQ(tilingData->totalIters, tilingData->outerSize[0] * tilingData->numChunks);
+}
+
+// fp16 5-D case with a skipped size-1 dim; SS is rejected, the row-partition path is used.
+TEST_F(CropTiling, crop_tiling_row_partition_fp16_skipped_dim)
+{
+    struct CropCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Crop",
+        {
+            {{{37, 101, 97, 3, 47}, {37, 101, 97, 3, 47}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // x
+            {{{37, 101, 49, 1, 20}, {37, 101, 49, 1, 20}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // size
+        },
+        {
+            {{{37, 101, 49, 1, 20}, {37, 101, 49, 1, 20}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // y
+        },
+        {
+            gert::TilingContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(2)),
+            gert::TilingContextPara::OpAttr("offsets",
+                                            Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({16, 0, 26})),
+        },
+        &compileInfo, "Ascend950", 48, 262144, 4096);
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_TRUE(tilingOk);
+    EXPECT_EQ(tilingInfo.blockNum, 48);
+
+    ASSERT_GE(tilingInfo.tilingDataSize, sizeof(CropTilingData));
+    const CropTilingData* tilingData = reinterpret_cast<const CropTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_EQ(tilingData->useSsNddma, 0);
+    EXPECT_EQ(tilingData->useSimd, 1);
+    EXPECT_EQ(tilingData->copyDimNum, 3);
+    EXPECT_EQ(tilingData->chunkDim, 2);
+    EXPECT_EQ(tilingData->outerDimNum, 0);
+    EXPECT_EQ(tilingData->rowTotal, 3737); // dim0(37) merged with dim1(101)
+    EXPECT_EQ(tilingData->chunkElems, 64);
+    EXPECT_EQ(tilingData->baseElems, 62720); // 64 * 49 * 20
+    EXPECT_EQ(tilingData->numChunks, 59);    // ceil(3737 / 64)
+    EXPECT_EQ(tilingData->tailElems, 0);
+    EXPECT_EQ(tilingData->totalIters, 78); // ceil(3737 / 48)
+    EXPECT_EQ(tilingData->simdCoreNum, 48);
+    EXPECT_EQ(tilingData->copySize[0], 20);
+    EXPECT_EQ(tilingData->copySize[1], 49);
+    EXPECT_EQ(tilingData->copySize[2], 64);
+    EXPECT_EQ(tilingData->copySrcStride[0], 1);
+    EXPECT_EQ(tilingData->copySrcStride[1], 141);
+    EXPECT_EQ(tilingData->copySrcStride[2], 13677);
+    EXPECT_EQ(tilingData->copyDstStride[0], 1);
+    EXPECT_EQ(tilingData->copyDstStride[1], 20);
+    EXPECT_EQ(tilingData->copyDstStride[2], 980);
+}
+
+// Small output falls back to SIMT.
+TEST_F(CropTiling, crop_tiling_simt_fallback_small)
+{
+    struct CropCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Crop",
+        {
+            {{{3, 3}, {3, 3}}, ge::DT_FLOAT, ge::FORMAT_ND}, // x
+            {{{2, 2}, {2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND}, // size
+        },
+        {
+            {{{2, 2}, {2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND}, // y
+        },
+        {
+            gert::TilingContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(0)),
+            gert::TilingContextPara::OpAttr("offsets", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({0, 0})),
+        },
+        &compileInfo, "Ascend950", 48, 262144, 4096);
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_TRUE(tilingOk);
+    ASSERT_GE(tilingInfo.tilingDataSize, sizeof(CropTilingData));
+    const CropTilingData* tilingData = reinterpret_cast<const CropTilingData*>(tilingInfo.tilingData.get());
+    EXPECT_EQ(tilingData->useSsNddma, 0);
+    EXPECT_EQ(tilingData->useSimd, 0);
+    EXPECT_EQ(tilingData->useGather, 0);
+    EXPECT_EQ(tilingData->mainBlockFactor, 1024);
+    EXPECT_EQ(tilingData->tailBlockFactor, 4);
+    EXPECT_EQ(tilingData->baseOffset, 0);
 }

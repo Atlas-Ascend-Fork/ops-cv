@@ -16,6 +16,7 @@
  */
 
 #include "log/log.h"
+#include "graph/types.h"
 #include "platform/platform_ascendc.h"
 #include "util/math_util.h"
 #include "util/platform_util.h"
@@ -24,6 +25,7 @@
 #include "image/crop/op_kernel/arch35/crop_tiling_data.h"
 #include "image/crop/op_kernel/arch35/crop_tiling_key.h"
 
+#include <algorithm>
 #include <cstdint>
 
 namespace optiling {
@@ -36,6 +38,30 @@ constexpr uint32_t DCACHE_SIZE = 128 * 1024;
 constexpr uint32_t STATIC_UB_ESTIMATE = 0;
 constexpr int32_t INDEX_ATTR_AXIS = 0;
 constexpr int32_t INDEX_ATTR_OFFSETS = 1;
+
+// SIMD admission thresholds: min inner run bytes and min output elements
+constexpr int64_t SIMD_MIN_INNER_BYTES = 4;
+// Min payload per outer NDDMA step; below this SIMT wins unless the step count is small
+constexpr int64_t SIMD_MIN_STEP_BYTES = 512;
+constexpr int64_t SIMD_MAX_TOTAL_STEPS = 8192;
+// Per-iteration NDDMA overhead in element units for chunk selection
+constexpr int64_t SIMD_ITER_OVERHEAD_ELEMS = 256;
+// Upper bound on NDDMA iterations to avoid tiny-chunk overhead
+constexpr int64_t SIMD_MAX_TOTAL_ITERS = 65535;
+// Below this size SIMT launch cost is lower and NDDMA gives no benefit
+constexpr int64_t SIMD_MIN_TOTAL_ELEMENTS = 1024;
+// UB reserved for queue metadata; the rest is split into double buffers
+constexpr int64_t SIMD_UB_RESERVE_BYTES = 8 * 1024;
+constexpr int64_t SIMD_UB_ALIGN_BYTES = 64;
+
+// Merged effective output dims (inner -> outer)
+struct SimdEffDim {
+    int64_t size = 0;
+    int64_t stride = 0;
+};
+
+// Max box dims for the gather template
+constexpr int32_t SIMD_GATHER_MAX_DIMS = 3;
 
 struct CropCompileInfo {};
 
@@ -51,7 +77,7 @@ static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& u
     return ge::GRAPH_SUCCESS;
 }
 
-// 行优先 strides 计算：从最后一维向前，每维 stride = 后续维度乘积；乘积溢出 int64 时报错
+// Row-major strides: stride[d] = product of trailing dims; error on int64 overflow
 template <typename ShapeType>
 static ge::graphStatus ComputeStrides(const ShapeType& shape, int64_t* strides, int32_t ndim)
 {
@@ -87,7 +113,7 @@ static ge::graphStatus GetAttrsAndValidate(gert::TilingContext* context, int32_t
     const auto* axisPtr = attrs->GetAttrPointer<int64_t>(INDEX_ATTR_AXIS);
     OP_CHECK_NULL_WITH_CONTEXT(context, axisPtr);
     axis = *axisPtr;
-    // 负 axis 转正：如 axis=-1 对应最后一维
+    // Normalize negative axis (e.g. -1 -> last dim)
     if (axis < 0) {
         axis += static_cast<int64_t>(rank);
     }
@@ -97,7 +123,7 @@ static ge::graphStatus GetAttrsAndValidate(gert::TilingContext* context, int32_t
     const auto* offsetsVec = attrs->GetListInt(INDEX_ATTR_OFFSETS);
     OP_CHECK_NULL_WITH_CONTEXT(context, offsetsVec);
     size_t offsetsLen = offsetsVec->GetSize();
-    // offsets 长度必须为 1（广播）或 rank-axis（逐维指定）
+    // offsets length must be 1 (broadcast) or rank-axis (per-dim)
     OP_CHECK_IF(
         offsetsLen != 1 && offsetsLen != static_cast<size_t>(rank - axis),
         OP_LOGE(context, "Crop: offsets length=%zu, must be 1 or %ld", offsetsLen, static_cast<int64_t>(rank - axis)),
@@ -120,15 +146,15 @@ static ge::graphStatus ComputeOutputShape(gert::TilingContext* context, const in
                                           const int64_t* offsetsArr, int32_t rank, int64_t axis, int64_t* yShape)
 {
     for (int32_t i = 0; i < rank; i++) {
-        // axis 之前维度取 x（对齐 910 基线/Caffe：size 前 axis 维不参与裁剪）
+        // Dims before axis take x shape (size applies from axis onward)
         if (static_cast<int64_t>(i) < axis) {
             yShape[i] = xShape[i];
         } else {
-            // axis 及之后维度：output = size，需校验 offset+size <= x 且 offset >= 0
+            // From axis onward output = size; require offset >= 0 and offset+size <= x
             yShape[i] = sizeShape[i];
             OP_CHECK_IF(offsetsArr[i] < 0, OP_LOGE(context, "Crop: dim %d offset=%ld < 0", i, offsetsArr[i]),
                         return ge::GRAPH_FAILED);
-            // 无溢出等价判断：offset > xDim 单值比较；offset<=xDim 时 xDim-offset 非负无溢出
+            // Overflow-free check: offset > xDim first, then size > xDim - offset
             OP_CHECK_IF(offsetsArr[i] > xShape[i] || sizeShape[i] > xShape[i] - offsetsArr[i],
                         OP_LOGE(context, "Crop: dim %d offset=%ld + size=%ld > x=%ld", i, offsetsArr[i], sizeShape[i],
                                 xShape[i]),
@@ -138,14 +164,12 @@ static ge::graphStatus ComputeOutputShape(gert::TilingContext* context, const in
     return ge::GRAPH_SUCCESS;
 }
 
-static void FillTilingData(CropTilingData* tiling, int32_t needCoreNum, int64_t totalElements, int32_t rank,
-                           int32_t axis, const int64_t* xStrides, const int64_t* yStrides, const int64_t* offsetsArr,
-                           int64_t perCoreElements, int64_t tailElements)
+static void FillTilingData(CropTilingData* tiling, int64_t totalElements, int32_t rank, const int64_t* xStrides,
+                           const int64_t* yStrides, const int64_t* offsetsArr, int64_t perCoreElements,
+                           int64_t tailElements)
 {
-    tiling->needCoreNum = needCoreNum;
     tiling->totalElements = totalElements;
     tiling->rank = rank;
-    tiling->axis = axis;
     for (int32_t i = 0; i < rank; i++) {
         tiling->xStrides[i] = xStrides[i];
         tiling->yStrides[i] = yStrides[i];
@@ -153,12 +177,393 @@ static void FillTilingData(CropTilingData* tiling, int32_t needCoreNum, int64_t 
     tiling->mainBlockFactor = perCoreElements;
     tiling->tailBlockFactor = tailElements;
 
-    // 预计算 baseOffset = Σ offsets[i] * xStrides[i]，kernel 中偏移指针实现，不进 UB
+    // Precompute baseOffset = sum(offsets[i] * xStrides[i]); the kernel shifts the pointer
     int64_t baseOffset = 0;
     for (int32_t i = 0; i < rank; i++) {
         baseOffset += offsetsArr[i] * xStrides[i];
     }
     tiling->baseOffset = baseOffset;
+}
+
+// Sparse gather: 4B dtype, inner box with contiguous span, one outer dim, span/box <= 8.
+static bool BuildGatherTiling(CropTilingData* tiling, const SimdEffDim* eff, int32_t effNum, int64_t dtypeSize,
+                              uint64_t ubSize, int64_t coreNum)
+{
+    if (dtypeSize != 4 || effNum < 2 || effNum > SIMD_GATHER_MAX_DIMS + 1 || eff[0].stride != 1) {
+        return false;
+    }
+    int32_t boxDimNum = effNum - 1;
+    int64_t boxElems = 1;
+    int64_t maxAddr = 0;
+    for (int32_t i = 0; i < boxDimNum; i++) {
+        boxElems *= eff[i].size;
+        maxAddr += (eff[i].size - 1) * eff[i].stride;
+    }
+    int64_t span = maxAddr + 1;
+    int64_t blockNum = eff[effNum - 1].size;
+    int64_t blockStride = eff[effNum - 1].stride;
+    if (boxElems < 8 || span < boxElems || blockNum <= 0 || blockStride < span) {
+        return false;
+    }
+
+    int64_t ubUsable = static_cast<int64_t>(ubSize) - SIMD_UB_RESERVE_BYTES;
+    int64_t bufIn = 0;
+    int64_t bufOut = 0;
+
+    // Load whole spans contiguously, compact with Reg::Gather, then write contiguously
+    if (span > boxElems * 8) {
+        return false;
+    }
+
+    int64_t bytesPerBlock = (span + boxElems) * dtypeSize;
+    int64_t blocksPerIter = ubUsable / (2 * bytesPerBlock);
+    blocksPerIter = std::min<int64_t>(blocksPerIter, 65535);
+    blocksPerIter = std::min<int64_t>(blocksPerIter, blockNum);
+    if (blocksPerIter < 1) {
+        return false;
+    }
+    while (blocksPerIter >= 1) {
+        bufIn = (blocksPerIter * span * dtypeSize + SIMD_UB_ALIGN_BYTES - 1) / SIMD_UB_ALIGN_BYTES *
+                SIMD_UB_ALIGN_BYTES;
+        bufOut = (blocksPerIter * boxElems * dtypeSize + SIMD_UB_ALIGN_BYTES - 1) / SIMD_UB_ALIGN_BYTES *
+                 SIMD_UB_ALIGN_BYTES;
+        if (2 * (bufIn + bufOut) <= ubUsable) {
+            break;
+        }
+        blocksPerIter--;
+    }
+    if (blocksPerIter < 1) {
+        return false;
+    }
+
+    int64_t totalIters = (blockNum + blocksPerIter - 1) / blocksPerIter;
+    tiling->useGather = 1;
+    tiling->gDimNum = static_cast<uint32_t>(boxDimNum);
+    tiling->gOuterBlocks = blockNum;
+    tiling->gBlockSrcStride = blockStride;
+    tiling->gSpanElems = span;
+    tiling->gBoxElems = boxElems;
+    tiling->gBlocksPerIter = blocksPerIter;
+    tiling->gUbBlockStride = span;
+    tiling->gBufInBytes = static_cast<uint32_t>(bufIn);
+    tiling->gBufOutBytes = static_cast<uint32_t>(bufOut);
+    for (int32_t d = 0; d < boxDimNum; d++) {
+        // Box dims stored outer -> inner
+        tiling->gOutSize[d] = eff[boxDimNum - 1 - d].size;
+        tiling->gUbStride[d] = eff[boxDimNum - 1 - d].stride;
+    }
+    tiling->totalIters = totalIters;
+    tiling->simdCoreNum = static_cast<uint32_t>(std::min<int64_t>(coreNum, totalIters));
+    return true;
+}
+
+// Row-partition NDDMA: split the outermost dim into rows per core (blkFactor), tile rows by ubFactor.
+static bool BuildSsNddmaTiling(CropTilingData* tiling, int32_t rank, const int64_t* xShape, const int64_t* xStrides,
+                               const int64_t* yShape, const int64_t* xOffsets, int64_t xTotal, int64_t dtypeSize,
+                               uint64_t ubSize, int64_t coreNum)
+{
+    // Admission: inner run >= 64B or valid per 256B cacheline >= 64B; at most 5 dims.
+    int64_t cachelineElems = 256 / dtypeSize;
+    int64_t validNum = 1;
+    int64_t totalInCnt = xTotal < cachelineElems ? xTotal : cachelineElems;
+    for (int64_t idx = 1; idx < totalInCnt; idx++) {
+        int64_t rem = idx;
+        bool valid = true;
+        for (int32_t d = rank - 1; d >= 0; d--) {
+            int64_t coord = rem % xShape[d];
+            rem /= xShape[d];
+            if (coord >= yShape[d]) {
+                valid = false;
+                break;
+            }
+        }
+        if (valid) {
+            validNum++;
+        }
+    }
+    if (validNum * dtypeSize < 64 && yShape[rank - 1] * dtypeSize < 64) {
+        return false;
+    }
+    SimdEffDim eff[MAX_DIMS];
+    int64_t effBegin[MAX_DIMS] = {};
+    int64_t skippedOffset = 0;
+    int32_t n = 0;
+    for (int32_t d = rank - 1; d >= 0; d--) {
+        if (yShape[d] <= 1) {
+            if (yShape[d] == 1) {
+                skippedOffset += xOffsets[d] * xStrides[d];
+            }
+            continue;
+        }
+        if (n > 0 && xStrides[d] == eff[n - 1].size * eff[n - 1].stride) {
+            // Merge into the inner dim: outer begin is scaled by the inner dim length
+            effBegin[n - 1] += xOffsets[d] * eff[n - 1].size;
+            eff[n - 1].size *= yShape[d];
+        } else {
+            eff[n].size = yShape[d];
+            eff[n].stride = xStrides[d];
+            effBegin[n] = xOffsets[d];
+            n++;
+        }
+    }
+    if (n > 0) {
+        // Skipped size-1 dims add a constant offset, folded into the innermost dim
+        effBegin[0] += skippedOffset;
+    }
+    if (n < 2 || n > static_cast<int32_t>(CROP_SS_NDDMA_DIMS)) {
+        return false;
+    }
+    int64_t out[MAX_DIMS] = {};
+    int64_t inStride[MAX_DIMS] = {};
+    int64_t inBegin[MAX_DIMS] = {};
+    for (int32_t i = 0; i < n; i++) {
+        out[i] = eff[n - 1 - i].size;
+        inStride[i] = eff[n - 1 - i].stride;
+        inBegin[i] = effBegin[n - 1 - i];
+    }
+    if (inStride[n - 1] != 1) {
+        return false;
+    }
+    int64_t innerProd = 1;
+    for (int32_t i = 1; i < n; i++) {
+        innerProd *= out[i];
+    }
+    constexpr int64_t SS_UB_RESERVE = 8192;
+    int64_t ubElemNum = (static_cast<int64_t>(ubSize) - SS_UB_RESERVE) / dtypeSize / 2;
+    int64_t cmax = ubElemNum / innerProd;
+    if (cmax < 1) {
+        return false;
+    }
+    int64_t blkFactor = (out[0] + coreNum - 1) / coreNum;
+    int64_t blkTail = out[0] % blkFactor;
+    int64_t realCore = (out[0] + blkFactor - 1) / blkFactor;
+    if (blkFactor < 1 || realCore > coreNum) {
+        return false;
+    }
+    int64_t ubF = std::min(cmax, blkFactor);
+    int64_t ubTail = blkFactor % ubF;
+    int64_t ubTailTail = blkTail % ubF;
+    int64_t outProdFull = 1;
+    for (int32_t i = 1; i < n; i++) {
+        outProdFull *= out[i];
+    }
+
+    tiling->ssNddma = CropSsNddmaTilingData{};
+    CropSsBaseTilingData* base = &tiling->ssNddma.base;
+    base->blkFactor = blkFactor;
+    base->blkTailFactor = blkTail;
+    base->ubInLoopSteps = ubF * inStride[0];
+    base->ubOutLoopSteps = ubF * outProdFull;
+    base->ubSize = static_cast<int32_t>(ubSize);
+    base->ubFactor = static_cast<int32_t>(ubF);
+    base->ubTailFactor = static_cast<int32_t>(ubTail);
+    base->ubTailTailFactor = static_cast<int32_t>(ubTailTail);
+    base->realCoreNum = static_cast<int16_t>(realCore);
+    base->inputDims = static_cast<int16_t>(n);
+    base->blkIndex = 0;
+    base->ubIndex = 0;
+    for (int32_t i = 0; i < n; i++) {
+        base->outputShape[i] = out[i];
+        base->begin[i] = inBegin[i];
+        base->strides[i] = 1;
+        base->inputSteps[i] = (i == 0) ? xTotal : inStride[i - 1];
+    }
+    base->rowsOffsetSteps[n - 1] = 1;
+    for (int32_t i = n - 2; i >= 0; i--) {
+        base->rowsOffsetSteps[i] = out[i] * base->rowsOffsetSteps[i + 1];
+    }
+    tiling->ssNddma.nddmaTotalNum = 1;
+    for (int32_t j = 1; j <= n; j++) {
+        int32_t idx = static_cast<int32_t>(CROP_SS_NDDMA_DIMS) - j;
+        int64_t size = (j == n) ? ubF : out[n - j];
+        int64_t dst = 1;
+        for (int32_t k = 1; k < j; k++) {
+            dst *= out[n - k];
+        }
+        tiling->ssNddma.nddmaLoopSize[idx] = size;
+        tiling->ssNddma.nddmaLoopSrcStride[idx] = inStride[n - j];
+        tiling->ssNddma.nddmaLoopDstStride[idx] = dst;
+        tiling->ssNddma.nddmaTotalNum *= size;
+    }
+    tiling->useSsNddma = 1;
+    return true;
+}
+
+// NDDMA tiling: merge dims, inner dims form one copy, chunk the rest by UB; true = SIMD.
+static bool BuildSimdTiling(CropTilingData* tiling, int32_t rank, const int64_t* xShape, const int64_t* xStrides,
+                            const int64_t* yShape, const int64_t* xOffsets, int64_t dtypeSize, uint64_t ubSize,
+                            int64_t coreNum)
+{
+    if (dtypeSize <= 0) {
+        return false;
+    }
+    SimdEffDim eff[MAX_DIMS];
+    int32_t effNum = 0;
+    for (int32_t d = rank - 1; d >= 0; d--) {
+        if (yShape[d] <= 1) {
+            continue;
+        }
+        if (effNum > 0 && xStrides[d] == eff[effNum - 1].size * eff[effNum - 1].stride) {
+            eff[effNum - 1].size *= yShape[d];
+        } else {
+            eff[effNum].size = yShape[d];
+            eff[effNum].stride = xStrides[d];
+            effNum++;
+        }
+    }
+    if (effNum == 0) {
+        return false;
+    }
+
+    // Thresholds: keep SIMT when the inner run is tiny or the total size is small
+    int64_t innerBytes = eff[0].size * dtypeSize;
+    if (innerBytes < SIMD_MIN_INNER_BYTES || tiling->totalElements < SIMD_MIN_TOTAL_ELEMENTS) {
+        return false;
+    }
+
+    int64_t ubBudget = (static_cast<int64_t>(ubSize) - SIMD_UB_RESERVE_BYTES) / 2;
+    ubBudget = ubBudget / SIMD_UB_ALIGN_BYTES * SIMD_UB_ALIGN_BYTES;
+    if (ubBudget < dtypeSize) {
+        return false;
+    }
+
+    // Try the row-partition NDDMA path first
+    if (BuildSsNddmaTiling(tiling, rank, xShape, xStrides, yShape, xOffsets, tiling->xTotalElements, dtypeSize, ubSize,
+                           coreNum)) {
+        return true;
+    }
+
+    int32_t copyNum = effNum;
+    int64_t copyElems = 1;
+    for (int32_t i = 0; i < effNum; i++) {
+        copyElems *= eff[i].size;
+    }
+    // Strip outermost copy dims into the outer loop when exceeding the NDDMA limit
+    while (copyNum > SIMD_MAX_DIMS) {
+        copyNum--;
+        copyElems /= eff[copyNum].size;
+    }
+    // Keep stripping outermost copy dims until the inner part fits in UB
+    while (copyNum > 1) {
+        int64_t inner = copyElems / eff[copyNum - 1].size;
+        if (inner * dtypeSize <= ubBudget) {
+            break;
+        }
+        copyNum--;
+        copyElems /= eff[copyNum].size;
+    }
+    int64_t innerElems = (copyNum > 1) ? (copyElems / eff[copyNum - 1].size) : 1;
+    if (innerElems * dtypeSize > ubBudget) {
+        return false;
+    }
+
+    // Chunk the outermost copy dim to minimize ceil(iters/cores) * chunk payload.
+    int64_t outerIters = tiling->totalElements / (innerElems * eff[copyNum - 1].size);
+    int64_t dimD = eff[copyNum - 1].size;
+    int64_t cmax = ubBudget / (dtypeSize * innerElems);
+    cmax = std::min(cmax, dimD);
+    if (cmax < 1) {
+        return false;
+    }
+    int64_t bestC = cmax;
+    int64_t bestCrit = INT64_MAX;
+    auto consider = [&](int64_t c) {
+        if (c < 1 || c > cmax) {
+            return;
+        }
+        int64_t chunks = (dimD + c - 1) / c;
+        int64_t iters = outerIters * chunks;
+        if (iters > SIMD_MAX_TOTAL_ITERS) {
+            return;
+        }
+        int64_t crit = ((iters + coreNum - 1) / coreNum) * (c * innerElems + SIMD_ITER_OVERHEAD_ELEMS);
+        if (crit < bestCrit || (crit == bestCrit && c > bestC)) {
+            bestCrit = crit;
+            bestC = c;
+        }
+    };
+    consider(cmax);
+    if (dimD <= 8192) {
+        for (int64_t c = 1; c <= dimD; c++) {
+            consider(c);
+        }
+    } else {
+        int64_t kMax = dimD / (cmax * std::max<int64_t>(coreNum, 1)) + 2;
+        for (int64_t k = 1; k <= kMax; k++) {
+            consider((dimD + k * coreNum - 1) / (k * coreNum));
+        }
+    }
+    if (bestCrit == INT64_MAX) {
+        bestC = cmax;
+    }
+
+    int64_t chunkElems = bestC;
+    int64_t numChunks = (dimD + chunkElems - 1) / chunkElems;
+    int64_t tailChunk = dimD - (numChunks - 1) * chunkElems;
+    int64_t tailElems = (tailChunk == chunkElems) ? 0 : tailChunk * innerElems;
+    copyElems = chunkElems * innerElems;
+    bool chunked = true;
+    uint32_t chunkDim = static_cast<uint32_t>(copyNum - 1);
+
+    int64_t outerNum = effNum - copyNum;
+    for (int32_t j = 0; j < outerNum; j++) {
+        const SimdEffDim& dim = eff[copyNum + j];
+        tiling->outerSize[outerNum - 1 - j] = dim.size;
+        tiling->outerSrcStride[outerNum - 1 - j] = dim.stride;
+    }
+
+    int64_t dstStride = 1;
+    for (int32_t i = 0; i < copyNum; i++) {
+        uint32_t size = static_cast<uint32_t>((chunked && i == static_cast<int32_t>(chunkDim)) ? chunkElems :
+                                                                                                 eff[i].size);
+        tiling->copySize[i] = size;
+        tiling->copySrcStride[i] = static_cast<uint64_t>(eff[i].stride);
+        tiling->copyDstStride[i] = static_cast<uint32_t>(dstStride);
+        dstStride *= size;
+    }
+    tiling->outerDimNum = static_cast<uint32_t>(outerNum);
+    tiling->copyDimNum = static_cast<uint32_t>(copyNum);
+    tiling->chunkDim = chunkDim;
+    if (outerNum == 0 && copyNum > 1) {
+        // Row partition across cores, chunked by UB; pure 1-D copies use the regular path below.
+        tiling->chunkElems = cmax;
+        tiling->copySize[copyNum - 1] = static_cast<uint32_t>(cmax);
+        tiling->baseElems = cmax * innerElems;
+        tiling->rowTotal = dimD;
+        tiling->numChunks = (dimD + cmax - 1) / cmax;
+        tiling->tailElems = 0;
+        tiling->totalIters = (dimD + coreNum - 1) / coreNum;
+        tiling->simdCoreNum = static_cast<uint32_t>(std::min<int64_t>(coreNum, dimD));
+        tiling->simdUbBufferBytes = static_cast<uint32_t>(ubBudget);
+        tiling->useSimd = 1;
+        return true;
+    }
+    tiling->chunkElems = chunked ? chunkElems : 0;
+    tiling->chunkDimSize = dimD;
+    tiling->numChunks = chunked ? numChunks : 1;
+    tiling->baseElems = copyElems;
+    tiling->tailElems = tailElems;
+    tiling->totalIters = outerIters * tiling->numChunks;
+    if (tiling->totalIters <= 0) {
+        return false;
+    }
+    // Fall back to SIMT when the per-step payload is too small for NDDMA
+    int64_t stepPayloadElems = 1;
+    if (copyNum > 1) {
+        stepPayloadElems = copyElems / tiling->copySize[copyNum - 1];
+    } else if (tiling->copySrcStride[0] == 1) {
+        stepPayloadElems = copyElems;
+    }
+    int64_t totalSteps = tiling->totalElements / stepPayloadElems;
+    if (stepPayloadElems * dtypeSize < SIMD_MIN_STEP_BYTES && totalSteps > SIMD_MAX_TOTAL_STEPS) {
+        // Sparse case: try the vector gather template, else fall back to SIMT
+        return BuildGatherTiling(tiling, eff, effNum, dtypeSize, ubSize, coreNum);
+    }
+
+    tiling->simdUbBufferBytes = static_cast<uint32_t>(ubBudget);
+    tiling->simdCoreNum = static_cast<uint32_t>(std::min<int64_t>(coreNum, tiling->totalIters));
+    tiling->useSimd = 1;
+    return true;
 }
 
 static ge::graphStatus GetWorkspaceSize(gert::TilingContext* context)
@@ -182,8 +587,7 @@ static ge::graphStatus CropTilingFunc(gert::TilingContext* context)
     auto sizeInput = context->GetInputShape(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, sizeInput);
 
-    // GEIR 通路不调用 InferShape 且会归一化非首输入的 storage_shape，size 须取 origin
-    // （对齐 blend_face_bg_part_two）
+    // GEIR skips InferShape and normalizes non-first storage shapes; take size origin shape.
     const auto& sizeOriginShape = sizeInput->GetOriginShape();
 
     int32_t rank = static_cast<int32_t>(xInput->GetStorageShape().GetDimNum());
@@ -199,7 +603,7 @@ static ge::graphStatus CropTilingFunc(gert::TilingContext* context)
         xShapeArr[i] = xInput->GetStorageShape().GetDim(i);
         sizeShapeArr[i] = sizeOriginShape.GetDim(i);
     }
-    // 哨兵（-1/-2）与负维会经 kernel 无符号解释形成大规模越界访问，tiling 需具体非负维度
+    // Sentinels (-1/-2) and negative dims would wrap unsigned; require non-negative values
     for (int32_t i = 0; i < rank; i++) {
         OP_CHECK_IF(
             xShapeArr[i] < 0,
@@ -235,7 +639,7 @@ static ge::graphStatus CropTilingFunc(gert::TilingContext* context)
     OP_CHECK_IF(ComputeTotalElements(xShapeArr, rank, xTotalElements) != ge::GRAPH_SUCCESS,
                 OP_LOGE(context, "Crop: x element count overflows int64 range"), return ge::GRAPH_FAILED);
     int64_t perCoreElements = (totalElements > 0) ? Ops::Base::CeilDiv(totalElements, coreNum) : 0;
-    // 下限保护：避免小 shape 时核数过少导致并行度不足
+    // Lower bound to keep enough cores for small shapes
     if (perCoreElements > 0 && perCoreElements < PER_CORE_MIN_ELEMENTS) {
         perCoreElements = PER_CORE_MIN_ELEMENTS;
     }
@@ -250,22 +654,38 @@ static ge::graphStatus CropTilingFunc(gert::TilingContext* context)
     OP_CHECK_IF(memset_s(tiling, sizeof(CropTilingData), 0, sizeof(CropTilingData)) != EOK,
                 OP_LOGE(context, "Failed to set tiling data"), return ge::GRAPH_FAILED);
 
-    FillTilingData(tiling, needCoreNum, totalElements, rank, static_cast<int32_t>(axis), xStridesArr, yStridesArr,
-                   offsetsArr, perCoreElements, tailElements);
+    FillTilingData(tiling, totalElements, rank, xStridesArr, yStridesArr, offsetsArr, perCoreElements, tailElements);
+    tiling->xTotalElements = xTotalElements;
 
     OP_CHECK_IF(GetWorkspaceSize(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "GetWorkspaceSize error"),
                 return ge::GRAPH_FAILED);
 
-    context->SetBlockDim(needCoreNum);
-    OP_CHECK_IF((ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE),
-                OP_LOGE(context, "ubSize %lu <= DCACHE_SIZE + STATIC_UB_ESTIMATE", ubSize), return ge::GRAPH_FAILED);
-    auto res = context->SetLocalMemorySize(static_cast<uint32_t>(ubSize - DCACHE_SIZE - STATIC_UB_ESTIMATE));
-    OP_CHECK_IF((res != ge::GRAPH_SUCCESS), OP_LOGE(context, "SetLocalMemorySize failed"), return ge::GRAPH_FAILED);
+    const auto* xDesc = context->GetInputDesc(0);
+    OP_CHECK_NULL_WITH_CONTEXT(context, xDesc);
+    int64_t dtypeSize = static_cast<int64_t>(ge::GetSizeByDataType(xDesc->GetDataType()));
+    bool useSimd = BuildSimdTiling(tiling, rank, xShapeArr, xStridesArr, yShapeArr, offsetsArr, dtypeSize, ubSize,
+                                   coreNum);
 
-    // 32位/64位路径选择：输入总元素数 <= UINT32_MAX 时走 32 位路径。
-    // Crop 语义上 output 是 input 的子区域，totalElements <= xTotalElements 恒成立，
-    // 因此只需校验 xTotalElements <= UINT32_MAX 即可保证 baseIdx/count/outIdx/inIdx 均不溢出 uint32_t。
+    if (useSimd) {
+        if (tiling->useSsNddma != 0U) {
+            // Row-partition NDDMA: block dim = realCoreNum, LocalMemorySize untouched
+            context->SetBlockDim(static_cast<uint32_t>(tiling->ssNddma.base.realCoreNum));
+        } else {
+            context->SetBlockDim(tiling->simdCoreNum);
+        }
+    } else {
+        context->SetBlockDim(needCoreNum);
+        OP_CHECK_IF((ubSize <= DCACHE_SIZE + STATIC_UB_ESTIMATE),
+                    OP_LOGE(context, "ubSize %lu <= DCACHE_SIZE + STATIC_UB_ESTIMATE", ubSize),
+                    return ge::GRAPH_FAILED);
+        ge::graphStatus res = context->SetLocalMemorySize(
+            static_cast<uint32_t>(ubSize - DCACHE_SIZE - STATIC_UB_ESTIMATE));
+        OP_CHECK_IF(res != ge::GRAPH_SUCCESS, OP_LOGE(context, "SetLocalMemorySize failed"), return ge::GRAPH_FAILED);
+    }
+
+    // Use 32-bit indexing when xTotalElements <= UINT32_MAX (output is always a sub-region).
     bool use32Bit = (xTotalElements <= static_cast<int64_t>(UINT32_MAX));
+
     context->SetTilingKey(GET_TPL_TILING_KEY(static_cast<uint32_t>(use32Bit ? CROP_IDX_32 : CROP_IDX_64)));
 
     return ge::GRAPH_SUCCESS;

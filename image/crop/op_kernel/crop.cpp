@@ -18,17 +18,43 @@
  */
 
 #include "arch35/crop_simt.h"
+#include "arch35/crop_norm.h"
+#include "arch35/crop_gather.h"
 
 template <uint32_t idxWidth>
 __global__ __aicore__ void crop(GM_ADDR x, GM_ADDR size, GM_ADDR y, GM_ADDR workspace, GM_ADDR tiling)
 {
     REGISTER_TILING_DEFAULT(CropTilingData);
     GET_TILING_DATA_WITH_STRUCT(CropTilingData, tilingData, tiling);
-    // 32位/64位路径分发：由 Tiling 侧根据元素总量选择，32位索引节省寄存器和带宽。
-    // 两条路径统一使用 1024 线程（见 crop_simt.h THREAD_NUM 说明）。
-    if constexpr (idxWidth == CROP_IDX_32) {
-        NsCrop::CropProcess<DTYPE_X, uint32_t>(&tilingData, x, y);
+    // Dispatch: contiguous copies use NDDMA paths, others SIMT (32/64-bit index from tiling).
+    if (tilingData.useSsNddma != 0U) {
+        AscendC::TPipe pipe;
+        if constexpr (sizeof(DTYPE_X) == sizeof(int32_t)) {
+            NsCrop::CropSsNddma<int32_t> op;
+            op.Init(x, y, &tilingData.ssNddma, &pipe);
+            op.Process();
+        } else if constexpr (sizeof(DTYPE_X) == sizeof(int64_t)) {
+            NsCrop::CropSsNddma<int64_t> op;
+            op.Init(x, y, &tilingData.ssNddma, &pipe);
+            op.Process();
+        } else if constexpr (sizeof(DTYPE_X) == sizeof(int8_t)) {
+            NsCrop::CropSsNddma<int8_t> op;
+            op.Init(x, y, &tilingData.ssNddma, &pipe);
+            op.Process();
+        } else {
+            NsCrop::CropSsNddma<DTYPE_X> op;
+            op.Init(x, y, &tilingData.ssNddma, &pipe);
+            op.Process();
+        }
+    } else if (tilingData.useGather != 0U) {
+        NsCrop::CropGatherProcess<DTYPE_X>(&tilingData, x, y);
+    } else if (tilingData.useSimd != 0U) {
+        NsCrop::CropSimdProcess<DTYPE_X>(&tilingData, x, y);
     } else {
-        NsCrop::CropProcess<DTYPE_X, uint64_t>(&tilingData, x, y);
+        if constexpr (idxWidth == CROP_IDX_32) {
+            NsCrop::CropProcess<DTYPE_X, uint32_t>(&tilingData, x, y);
+        } else {
+            NsCrop::CropProcess<DTYPE_X, uint64_t>(&tilingData, x, y);
+        }
     }
 }
