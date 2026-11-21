@@ -35,8 +35,10 @@ constexpr AscendC::MicroAPI::CastTrait kCastB16ToB32 = {
 constexpr AscendC::MicroAPI::CastTrait kCastB32ToB16 = {
     AscendC::MicroAPI::RegLayout::ZERO, AscendC::MicroAPI::SatMode::NO_SAT, AscendC::MicroAPI::MaskMergeMode::ZEROING,
     AscendC::RoundMode::CAST_ROUND};
-static constexpr AscendC::Reg::DivSpecificMode kDivFtzFalse = {AscendC::Reg::MaskMergeMode::ZEROING, false,
-                                                               AscendC::DivAlgo::PRECISION_1ULP_FTZ_FALSE};
+static constexpr AscendC::Reg::DivSpecificMode kDivSubnormSafe = {AscendC::Reg::MaskMergeMode::ZEROING, true,
+                                                                  AscendC::DivAlgo::PRECISION_0ULP_FTZ_FALSE};
+static constexpr AscendC::Reg::DivSpecificMode kDivFtzTrue = {AscendC::Reg::MaskMergeMode::ZEROING, true,
+                                                              AscendC::DivAlgo::PRECISION_0ULP_FTZ_TRUE};
 static constexpr AscendC::Reg::LnSpecificMode kLnFtzFalse = {AscendC::Reg::MaskMergeMode::ZEROING,
                                                              AscendC::LnAlgo::PRECISION_1ULP_FTZ_FALSE};
 
@@ -57,17 +59,17 @@ __simd_callee__ inline void EncodeGroup(AscendC::Reg::RegTensor<float>& dx, Asce
     AscendC::Reg::Adds(gw, gw, WIDTH_BIAS, mask);
     AscendC::Reg::Sub(dx, gcx, pcx, mask);
     if constexpr (SubnormalSafe) {
-        AscendC::Reg::Div<float, &kDivFtzFalse>(dx, dx, pw, mask);
+        AscendC::Reg::Div<float, &kDivSubnormSafe>(dx, dx, pw, mask);
     } else {
-        AscendC::Reg::Div(dx, dx, pw, mask);
+        AscendC::Reg::Div<float, &kDivFtzTrue>(dx, dx, pw, mask);
     }
     AscendC::Reg::Adds(dx, dx, -meanC, mask);
     AscendC::Reg::Muls(dx, dx, stdC, mask);
     if constexpr (SubnormalSafe) {
-        AscendC::Reg::Div<float, &kDivFtzFalse>(rw, gw, pw, mask);
+        AscendC::Reg::Div<float, &kDivSubnormSafe>(rw, gw, pw, mask);
         AscendC::Reg::Ln<float, &kLnFtzFalse>(dw, rw, mask);
     } else {
-        AscendC::Reg::Div(rw, gw, pw, mask);
+        AscendC::Reg::Div<float, &kDivFtzTrue>(rw, gw, pw, mask);
         AscendC::Reg::Ln(dw, rw, mask);
     }
     AscendC::Reg::Adds(dw, dw, -meanW, mask);
