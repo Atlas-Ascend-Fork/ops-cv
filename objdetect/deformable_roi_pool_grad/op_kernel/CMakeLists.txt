@@ -11,7 +11,7 @@
 if(COMMAND add_kernel_sources)
     add_kernel_sources(
         KERNEL_SRC deformable_roi_pool_grad_apt.cpp
-        COMPUTE_UNITS ascend950
+        COMPUTE_UNITS dav_3510
         AUTO_SYNC false
         OPTIONS "--cce-use-fast-math=false"
     )

@@ -20,7 +20,7 @@ foreach(SUB_DIR ${CURRENT_DIRS})
     endif()
 endforeach()
 
-set(SUPPORT_COMPUTE_UNIT "ascend910b" "ascend910_93" "kirinx90" "kirin9030" "ascend950")
+set(SUPPORT_COMPUTE_UNIT "ascend910b" "ascend910_93" "kirinx90" "kirin9030" "dav_3510")
 
 set(SUPPORT_TILING_DIR "arch22" "arch22" "arch22" "arch22" "arch35")
 

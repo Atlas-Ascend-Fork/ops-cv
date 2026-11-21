@@ -22,9 +22,9 @@ foreach(SUB_DIR ${CURRENT_DIRS})
 endforeach()
 
 # 设置算子定义时支持的芯片类型
-set(SUPPORT_COMPUTE_UNIT "ascend950" "ascend350")
+set(SUPPORT_COMPUTE_UNIT "dav_3510")
 # 设置每种芯片类型对应的tiling文件目录，即采用op_host目录下哪个文件夹下的tiling文件编译
-set(SUPPORT_TILING_DIR "arch35" "arch35")
+set(SUPPORT_TILING_DIR "arch35")
 # 目录名 iou3d（用户裁决保留，不改为 OpType 框架 snake_case 形式 iou3_d）。
 # OPTYPE=iou3d 为本地文件命名域（仅用于 GLOB op_host/iou3d_def*.cpp + opFile.value=iou3d 的 src 路径解析），
 # 与算子原型 OpType=Iou3D、kernel 入口符号 iou3_d(=optype_snake(Iou3D)) 解耦：

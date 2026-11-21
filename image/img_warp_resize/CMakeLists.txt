@@ -21,6 +21,6 @@ foreach(SUB_DIR ${CURRENT_DIRS})
     endif()
 endforeach()
 
-set(SUPPORT_COMPUTE_UNIT "ascend950")
+set(SUPPORT_COMPUTE_UNIT "dav_3510")
 set(SUPPORT_TILING_DIR "arch35")
 add_all_modules_sources(OPTYPE img_warp_resize ACLNNTYPE aclnn_exclude COMPUTE_UNIT ${SUPPORT_COMPUTE_UNIT} TILING_DIR ${SUPPORT_TILING_DIR})
