@@ -201,7 +201,9 @@ static ge::graphStatus InferShapeImageProjectiveTransform(gert::InferShapeContex
     OP_CHECK_NULL_WITH_CONTEXT(context, imagesDesc);
     const auto format = ge::GetPrimaryFormat(imagesDesc->GetOriginFormat());
     OP_CHECK_IF(format != ge::FORMAT_NCHW && format != ge::FORMAT_NHWC,
-                OP_LOGE(context, "images format must be NCHW or NHWC"), return GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_FORMAT_WITH_REASON(context->GetNodeName(), "images", std::to_string(format).c_str(),
+                                                       "format must be NCHW or NHWC"),
+                return GRAPH_FAILED);
     const int64_t cIndex = format == ge::FORMAT_NHWC ? 3 : 1;
     const int64_t hIndex = format == ge::FORMAT_NHWC ? 1 : 2;
     const int64_t wIndex = format == ge::FORMAT_NHWC ? 2 : 3;

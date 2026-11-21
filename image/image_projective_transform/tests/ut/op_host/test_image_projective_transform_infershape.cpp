@@ -498,3 +498,21 @@ TEST_F(ImageProjectiveTransformInfershape, unknown_shape)
     std::vector<std::vector<int64_t>> expectOutputShape = {{-1, -1, -1, -1}};
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
+
+// 外部可构造负向用例：images origin format 非 NCHW/NHWC（HWCN），
+// infershape 拒绝并经 OP_LOGE_FOR_INVALID_FORMAT_WITH_REASON 上报 EZ0035
+TEST_F(ImageProjectiveTransformInfershape, rejects_images_format_not_nchw_nhwc)
+{
+    int64_t N = 2;
+    int64_t HIn = 4;
+    int64_t WIn = 5;
+    int64_t C = 3;
+    std::vector<int32_t> outputShapeData = {8, 9};
+    gert::InfershapeContextPara infershapeContextPara(
+        "ImageProjectiveTransform",
+        {{{{N, HIn, WIn, C}, {N, HIn, WIn, C}}, ge::DT_FLOAT, ge::FORMAT_HWCN},
+         {{{N, 8}, {N, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+         {{{2}, {2}}, ge::DT_INT32, ge::FORMAT_ND, true, outputShapeData.data()}},
+        {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_NHWC}});
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}

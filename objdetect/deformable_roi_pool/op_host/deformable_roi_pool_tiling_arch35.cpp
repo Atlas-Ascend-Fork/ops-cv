@@ -21,6 +21,7 @@
 #include <string>
 
 #include "log/log.h"
+#include "op_api/error_report_util.h"
 #include "platform/platform_ascendc.h"
 #include "util/math_util.h"
 #include "util/platform_util.h"
@@ -201,7 +202,13 @@ static ge::graphStatus ValidateInputContracts(gert::TilingContext* context, int6
     }
 
     const auto* offsetInput = context->GetOptionalInputShape(IDX_OFFSET);
-    OP_CHECK_NULL_WITH_CONTEXT(context, offsetInput);
+    OP_CHECK_IF(
+        offsetInput == nullptr,
+        error_report::ReportInvalidArgument(
+            context->GetNodeName(), "offset",
+            "the shape of input offset is missing in the tiling context while the offset branch is selected; check "
+            "that the graph node provides the offset input"),
+        return ge::GRAPH_FAILED);
     auto offsetShape = EnsureNotScalar(offsetInput->GetStorageShape());
     if (offsetShape.GetDimNum() != OFFSET_DIM_NUM) {
         OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "offset", std::to_string(offsetShape.GetDimNum()).c_str(),
