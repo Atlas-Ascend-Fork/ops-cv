@@ -30,16 +30,24 @@ main() {
   source build_env.sh
   opc_cmd_file="${task_path}/${OPC_TASK_NAME}"
 
-  if [[ -f "${opc_cmd_file}" && "$idx" =~ ^[0-9]+$ && "$idx" -gt 0 ]]; then
-      total_lines=$(wc -l < "${opc_cmd_file}")
-      if [ "$idx" -gt "$total_lines" ]; then
-        echo "[ERROR]task $idx is bigger than file:$opc_cmd_file lines: $total_lines, please check."
-        exit 1
-      fi
-      # step1: do compile kernel
-      set +e
-      cmd_task=$(sed -n ''${idx}'p;' ${opc_cmd_file})
-      key=$(echo "${cmd_task}" | grep -oP '\w*\.json_\d*')
+  if [[ ! -f "${opc_cmd_file}" ]]; then
+    echo "[ERROR]opc task file not found: ${opc_cmd_file}"
+    exit 1
+  fi
+  if [[ ! "$idx" =~ ^[0-9]+$ || "$idx" -le 0 ]]; then
+    echo "[ERROR]invalid task_id: ${idx}, expected positive integer."
+    exit 1
+  fi
+  total_lines=$(wc -l < "${opc_cmd_file}")
+  if [ "$idx" -gt "$total_lines" ]; then
+    echo "[ERROR]task $idx is bigger than file:$opc_cmd_file lines: $total_lines, please check."
+    exit 1
+  fi
+  # step1: do compile kernel
+  set +e
+  cmd_task=$(sed -n ''${idx}'p;' "${opc_cmd_file}")
+  key=$(echo "${cmd_task}" | grep -oP '\w*\.json_\d*')
+  key="${key:-task_${idx}}"
       echo "[INFO]exe_task: begin to build kernel with cmd: ${cmd_task}."
       start_time=$(date +%s)
 
@@ -67,7 +75,6 @@ main() {
       end_timestamp=$(date '+%Y-%m-%d %H:%M:%S')
       echo "[$end_timestamp] exe_time: $exe_time s" >> "$log_file"
       echo "[INFO]exe_task: end to build kernel: ${key} --exe_time=${exe_time}"
-  fi
 }
 set -o pipefail
 main "$@" | while IFS= read -r line; do echo "$(date '+[%Y-%m-%d %H:%M:%S]') $line"; done
