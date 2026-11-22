@@ -62,6 +62,9 @@ aclnnStatus aclnnBilateralFilter3D(
 不支持空张量（任一维为 0 会被拒绝）。InferShape 支持编译期未知维度（负数占位符）透传，
 运行时 Tiling 只接受已具体化的正维度。
 
+输入 `x` 支持非连续 Tensor，算子注册会在计算前将其转为连续存储；输出 `y` 由 Kernel 按连续线性地址写入，
+调用方必须提供连续的 ND Tensor。
+
 `sigma` 极小时 `0.5/sigma^2` 会在 FP32 下溢出，Host 侧将该倒数饱和到 `1e30`：此时非零距离/非零
 色差的权重 `exp(-x)` 恒为 0，输出收敛到中心体素值，而不会产生 `0*inf` 的 NaN。
 

@@ -53,6 +53,7 @@ weight   = exp(-( (dz²+dy²+dx²) / (2·sigma_space²) + (v - c)² / (2·sigma_
 - 维度上限：`D ≤ 1000`，`H ≤ 4096`，`W ≤ 4096`，前导维乘积（N·C）`≤ 12800`。
 - `kernel_size` 必须为 3/5/7/9 之一；`sigma_space` 与 `sigma_color` 必须为有限正数。
 - 输入与输出的 shape、dtype 必须一致。
+- 输入 `x` 支持非连续 Tensor，算子注册会在计算前将其转为连续存储；输出 `y` 由 Kernel 按连续线性地址写入，调用方必须提供连续的 ND Tensor。
 - `sigma` 极小时 `0.5/sigma²` 在 FP32 下溢出，Host 侧将该倒数饱和到 `1e30`。此时非零距离或
   非零色差的权重 `exp(-x)` 恒为 0，输出收敛到中心体素值，而不会产生 `0*inf` 的 NaN。
 - InferShape 对未知维度（负数占位符）透传以支持图模式，运行时 Tiling 只接受已具体化的正维度。
