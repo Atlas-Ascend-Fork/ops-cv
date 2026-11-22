@@ -80,8 +80,8 @@ create_opapi_latest_softlink() {
   fi
 
   # second the headfiles with 1 and 2 level
-  if [ -d $1/${architecture_dir}/include/aclnnop ]; then
-    for file_level1 in $(ls -1 -F ${opapi_include_level1_path} | grep -v [/$] | sed 's/\*$//'); do
+  if [ -d "$(dirname "$1")/latest/${architecture_dir}/include/aclnnop" ]; then
+    for file_level1 in $(ls -1 -F "${opapi_include_level1_path}" | grep -v '/$\|@$' | sed 's/\*$//'); do
       latest_arch_include_src_path="${opapi_include_level1_path}/${file_level1}"
       latest_arch_include_dst_path="$(dirname $1)/latest/${architecture_dir}/include/aclnnop/${file_level1}"
       if [ -f $latest_arch_include_dst_path ] || [ -L $latest_arch_include_dst_path ]; then
@@ -91,8 +91,8 @@ create_opapi_latest_softlink() {
     done
   fi
 
-  if [ -d $1/${architecture_dir}/include/aclnnop/level2 ]; then
-    for file_level2 in $(ls -1 -F ${opapi_include_level2_path} | grep -v [/$] | sed 's/\*$//'); do
+  if [ -d "$(dirname "$1")/latest/${architecture_dir}/include/aclnnop/level2" ]; then
+    for file_level2 in $(ls -1 -F "${opapi_include_level2_path}" | grep -v '/$\|@$' | sed 's/\*$//'); do
       latest_arch_include_src_path="${opapi_include_level2_path}/${file_level2}"
       latest_arch_include_dst_path="$(dirname $1)/latest/${architecture_dir}/include/aclnnop/level2/${file_level2}"
       if [ -f $latest_arch_include_dst_path ] || [ -L $latest_arch_include_dst_path ]; then
@@ -118,7 +118,7 @@ create_opapi_softlink() {
   fi
   # first the libopapi.so
   if [ -d $1/${architecture_dir}/lib64 ]; then
-    for file_so in $(ls -1 ${opapi_lib_path} | grep "so"$); do
+    for file_so in $(ls -1 "${opapi_lib_path}" | grep '\.so$'); do
       arch_lib64_src_path="${opapi_lib_path}/${file_so}"
       arch_lib64_dst_path="$1/${architecture_dir}/lib64/${file_so}"
       if [ -f $arch_lib64_dst_path ] || [ -L $arch_lib64_dst_path ]; then
@@ -141,7 +141,7 @@ create_opapi_softlink() {
 
   # second the headfiles with 1 and 2 level
   if [ -d $1/${architecture_dir}/include/aclnnop ]; then
-    for file_level1 in $(ls -1 -F ${opapi_include_level1_path} | grep -v [/$] | sed 's/\*$//'); do
+    for file_level1 in $(ls -1 -F ${opapi_include_level1_path} | grep -v '/$\|@$' | sed 's/\*$//'); do
       arch_include_src_path="${opapi_include_level1_path}/${file_level1}"
       arch_include_dst_path="$1/${architecture_dir}/include/aclnnop/${file_level1}"
       if [ -f $arch_include_dst_path ] || [ -L $arch_include_dst_path ]; then
@@ -159,7 +159,7 @@ create_opapi_softlink() {
   fi
 
   if [ -d $1/${architecture_dir}/include/aclnnop/level2 ]; then
-    for file_level2 in $(ls -1 -F ${opapi_include_level2_path} | grep -v [/$] | sed 's/\*$//'); do
+    for file_level2 in $(ls -1 -F ${opapi_include_level2_path} | grep -v '/$\|@$' | sed 's/\*$//'); do
       arch_include_src_path="${opapi_include_level2_path}/${file_level2}"
       arch_include_dst_path="$1/${architecture_dir}/include/aclnnop/level2/${file_level2}"
       if [ -f $arch_include_dst_path ] || [ -L $arch_include_dst_path ]; then
@@ -200,7 +200,7 @@ latest_softlinks_remove() {
   opapi_include_level2_path="${opapi_include_level1_path}/level2"
 
   if [ -d $(dirname $targetdir)/latest/${architecture_dir}/lib64 ]; then
-    for file_so in $(ls -l "$(dirname $targetdir)/latest/${architecture_dir}/lib64/" | grep -E "libaclnn_|libopapi.so"); do
+    for file_so in $(ls -1 "$(dirname "$targetdir")/latest/${architecture_dir}/lib64/" | grep -E "libaclnn_|libopapi\.so"); do
       latest_arch_lib64_path="$(dirname $targetdir)/latest/${architecture_dir}/lib64/${file_so}"
       remove_opapi_softlink ${latest_arch_lib64_path}
     done
@@ -208,14 +208,14 @@ latest_softlinks_remove() {
 
   # second the headfiles with 1 and 2 level
   if [ -d $(dirname $targetdir)/latest/${architecture_dir}/include/aclnnop ]; then
-    for file_level1 in $(ls -1 -F ${opapi_include_level1_path} | grep -v [/$] | sed 's/\*$//'); do
+    for file_level1 in $(ls -1 -F ${opapi_include_level1_path} | grep -v '/$\|@$' | sed 's/\*$//'); do
       latest_arch_include_path="$(dirname $targetdir)/latest/${architecture_dir}/include/aclnnop/${file_level1}"
       remove_opapi_softlink ${latest_arch_include_path}
     done
   fi
 
   if [ -d $(dirname $targetdir)/latest/${architecture_dir}/include/aclnnop/level2 ]; then
-    for file_level2 in $(ls -1 -F ${opapi_include_level2_path} | grep -v [/$] | sed 's/\*$//'); do
+    for file_level2 in $(ls -1 -F ${opapi_include_level2_path} | grep -v '/$\|@$' | sed 's/\*$//'); do
       latest_arch_include_path="$(dirname $targetdir)/latest/${architecture_dir}/include/aclnnop/level2/${file_level2}"
       remove_opapi_softlink ${latest_arch_include_path}
     done
@@ -242,7 +242,7 @@ softlinksRemove() {
   fi
 
   if [ -d $targetdir/opp/lib64 ]; then
-    for file_so in $(ls -l $targetdir/opp/lib64 | grep -E "libaclnn_|libopapi.so"); do
+    for file_so in $(ls -1 "$targetdir/opp/lib64" | grep -E "libaclnn_|libopapi\.so"); do
       opp_lib64_path="$targetdir/opp/lib64/${file_so}"
       remove_opapi_softlink ${opp_lib64_path}
     done
@@ -250,7 +250,7 @@ softlinksRemove() {
 
   # second the headfiles with 1 and 2 level
   if [ -d $targetdir/${architecture_dir}/include/aclnnop ]; then
-    for file_level1 in $(ls -1 -F ${opapi_include_level1_path} | grep -v [/$] | sed 's/\*$//'); do
+    for file_level1 in $(ls -1 -F ${opapi_include_level1_path} | grep -v '/$\|@$' | sed 's/\*$//'); do
       arch_include_path="$targetdir/${architecture_dir}/include/aclnnop/${file_level1}"
       remove_opapi_softlink ${arch_include_path}
 
@@ -260,7 +260,7 @@ softlinksRemove() {
   fi
 
   if [ -d $targetdir/${architecture_dir}/include/aclnnop/level2 ]; then
-    for file_level2 in $(ls -1 -F ${opapi_include_level2_path} | grep -v [/$] | sed 's/\*$//'); do
+    for file_level2 in $(ls -1 -F ${opapi_include_level2_path} | grep -v '/$\|@$' | sed 's/\*$//'); do
       arch_include_path="$targetdir/${architecture_dir}/include/aclnnop/level2/${file_level2}"
       remove_opapi_softlink ${arch_include_path}
 
