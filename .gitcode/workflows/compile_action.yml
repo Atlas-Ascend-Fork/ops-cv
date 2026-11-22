@@ -118,11 +118,13 @@ jobs:
           target_branch: ${{ env.TARGET_BRANCH }}
       -
         name: verify_package
+        if: ${{ inputs.task_name != 'Check_Example' }}
         uses: cann/.gitcode/actions/verify-package@master
         with:
           workspace: ${{ steps.process_checkout.outputs.path }}
       -
         name: upload
+        if: ${{ inputs.task_name != 'Check_Example' }}
         uses: obs-upload
         with:
           endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
