@@ -24,13 +24,16 @@ main() {
   source build_env.sh
   out_cmd_file="${task_path}/${OUT_TASK_NAME}"
 
-  if [ -f "${out_cmd_file}" ]; then
-      # step2: gen output one by one
-      cat ${out_cmd_file} | while read cmd_task; do
-        echo "[INFO]exe_task: begin to gen kernel list with cmd: ${cmd_task}."
-        ${cmd_task}
-      done
+  if [ ! -f "${out_cmd_file}" ]; then
+    echo "[ERROR]output task file not found: ${out_cmd_file}"
+    exit 1
   fi
+  # step2: gen output one by one
+  while IFS= read -r cmd_task || [ -n "${cmd_task}" ]; do
+    [ -z "${cmd_task}" ] && continue
+    echo "[INFO]exe_task: begin to gen kernel list with cmd: ${cmd_task}."
+    ${cmd_task}
+  done < "${out_cmd_file}"
 }
 set -o pipefail
 main "$@"
