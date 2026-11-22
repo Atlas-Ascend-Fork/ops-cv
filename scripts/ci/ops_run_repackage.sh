@@ -135,17 +135,16 @@ cp -rf "$TOP_DIR"/open_source/makeself/* "../$MAKESELF_TARGET_DIR" || die "Faile
 
 # 3. 拷贝 host/cann.run 为 host.run, 通常生成的原始host包名中没有custom
 cd $RUN_PACKAGE_SAVE_AB_PATH
-host_file_name=$(find . -type f -name "*.run" | grep -v "custom")
+host_file_name=$(find . -type f -name "*.run" | grep -v "custom" | head -n 1 || true)
 host_file_name="${host_file_name#./}"
 cd "${WORKDIR}"
 cd "${TEMP_RUN_DIR}"
 host_run_src="$RUN_PACKAGE_SAVE_AB_PATH/$host_file_name"
-if [ -e $host_run_src ]; then
-
-    cp -v $host_run_src "./$HOST_RUN_NAME" || die "Failed to copy host run file"
+if [[ -n "$host_file_name" && -f "$host_run_src" ]]; then
+    cp -v "$host_run_src" "./$HOST_RUN_NAME" || die "Failed to copy host run file"
     log "Copied host run file: $host_run_src -> $HOST_RUN_NAME"
 else
-    log "Host run file not found: $host_run_src"
+    die "Host run file not found in $RUN_PACKAGE_SAVE_AB_PATH"
 fi
 
 # 4. 解压 host.run
@@ -187,7 +186,7 @@ for runfile in kernel_*.run; do
     # 4. 提取目录名 (这就是你要的 custom_operator_group_3_cv)
         kernel_dir_name=$(basename "$full_path")
 
-        echo "kernel_dir_name is  $target_dir_name"
+        echo "kernel_dir_name is $kernel_dir_name"
     else
         echo "Not find kernel_dir"
         continue
@@ -259,7 +258,7 @@ for runfile in kernel_*.run; do
 done
 
 filelist_src_path="$HOST_EXTRACT_DIR/share/info/ops_cv/script/filelist.csv"
-rm $filelist_src_path
+rm -f "$filelist_src_path"
 
 # 6. 拷贝 host/ 到 makeself 目录
 ensure_dir "../$RUNFILE_TARGET_DIR"
@@ -269,7 +268,7 @@ cp -rf "$HOST_EXTRACT_DIR"/* "../$RUNFILE_TARGET_DIR"/ || \
 log "Host content copied to $RUNFILE_TARGET_DIR"
 
 # 7. 执行打包脚本
-cd "../" || echo "Failed to go back to workdir"
+cd "../" || die "Failed to go back to workdir"
 
 # 执行 package.py
 log "Executing package.py to generate final package..."
