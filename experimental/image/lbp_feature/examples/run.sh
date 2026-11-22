@@ -16,13 +16,24 @@ elif [ -n "$ASCEND_HOME_PATH" ]; then
 else
     _P="/usr/local/Ascend/cann"
 fi
-source ${_P}/bin/setenv.bash
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_ROOT=$(cd "${SCRIPT_DIR}/../../../.." && pwd)
 
-VENDOR_DIR=$(find ${_P}/opp/vendors -maxdepth 2 -type d -name custom_cv | head -1)
+if [ ! -f "${_P}/bin/setenv.bash" ]; then
+    echo "[ERROR] CANN setenv.bash not found under ${_P}" >&2
+    exit 1
+fi
+source "${_P}/bin/setenv.bash"
+
+VENDOR_DIR=$(find "${_P}/opp/vendors" -maxdepth 2 -type d -name custom_cv 2>/dev/null | head -1)
+if [ -z "${VENDOR_DIR}" ]; then
+    echo "[ERROR] custom_cv vendor directory not found under ${_P}/opp/vendors" >&2
+    exit 1
+fi
 echo "VENDOR_DIR=${VENDOR_DIR}"
-export LD_LIBRARY_PATH=${VENDOR_DIR}/op_api/lib:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH="${VENDOR_DIR}/op_api/lib:${LD_LIBRARY_PATH}"
 
-UT_DATA_DIR=/ddhome/operators_zny/ops-cv/build/tests/ut/op_kernel/lbp_feature_data
+UT_DATA_DIR="${UT_DATA_DIR:-${REPO_ROOT}/build/tests/ut/op_kernel/lbp_feature_data}"
 
 # ── 编译 ──
 rm -rf build && mkdir build && cd build
