@@ -9,10 +9,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-if [ -z "${INSTALL_PATH}" ]; then
-    echo "[ops-cv] [ERROR] INSTALL_PATH is not set." >&2
-    exit 1
-fi
 sourcedir="${INSTALL_PATH}"
 WHL_INSTALL_DIR_PATH="${sourcedir}/python/site-packages"
 export PYTHONPATH="${WHL_INSTALL_DIR_PATH}"

@@ -26,7 +26,6 @@ logandprint() {
     if [ "${is_quiet}" != "y" ] || [ "${is_error_level}" != "" ]; then
         echo "[OpsCv] [$(getdate)] ""$1"
     fi
-    mkdir -p "${_LOG_PATH}" 2>/dev/null || true
     echo "[OpsCv] [$(getdate)] ""$1" >> "${_INSTALL_LOG_FILE}"
 }
 
@@ -71,19 +70,15 @@ fi
 installed_path="$(cd "${CURR_PATH}/../../../.."; pwd)"
 parent_installed_path="$(cd "${installed_path}/../"; pwd)"
 cd ~
-if [ -n "${quiet_parameter}" ]; then
-    bash "${install_shell}" "--aa" "--aa" "--uninstall" "--install-path=${installed_path}" "${quiet_parameter}"
-else
-    bash "${install_shell}" "--aa" "--aa" "--uninstall" "--install-path=${installed_path}"
-fi
+sh "${install_shell}" "--aa" "--aa" "--uninstall" "--install-path=${installed_path}" "${quiet_parameter}"
 ret_status="$?"
 if [ "${ret_status}" != "0" ]; then
     exit 1
 fi
-if [ -d "${parent_installed_path}" ]; then
-    subdirs_param_install=$(ls -A "${parent_installed_path}" 2> /dev/null)
-    if [ -z "${subdirs_param_install}" ]; then
-        rmdir "${parent_installed_path}" 2> /dev/null || true
+if [ -d "${parent_installed_path}" ];then
+    subdirs_param_install=$(ls "${parent_installed_path}" 2> /dev/null)
+    if [ "${subdirs_param_install}" = "" ]; then
+        rm -rf "${parent_installed_path}"
     fi
 fi
 exit 0

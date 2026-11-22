@@ -9,28 +9,9 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set -euo pipefail
-
-if [ "$#" -lt 2 ] || [ -z "$1" ] || [ -z "$2" ]; then
-  echo "[ERROR] Usage: $0 <ascend_install_dir> <gen_file_dir>" >&2
-  exit 1
-fi
-
-ascend_install_dir="$1"
-gen_file_dir="$2"
-compiler_version_file="${ascend_install_dir}/compiler/version.info"
-
-if [ ! -f "${compiler_version_file}" ]; then
-  echo "[ERROR] compiler version.info not found: ${compiler_version_file}" >&2
-  exit 1
-fi
-
-mkdir -p "${gen_file_dir}"
+ascend_install_dir=$1
+gen_file_dir=$2
 
 # create version.info
-compiler_version=$(grep -w "Version" "${compiler_version_file}" | head -n 1 | awk -F = '{print $2}')
-if [ -z "${compiler_version}" ]; then
-  echo "[ERROR] Version field not found in ${compiler_version_file}" >&2
-  exit 1
-fi
-echo "custom_opp_compiler_version=${compiler_version}" > "${gen_file_dir}/version.info"
+compiler_version=$(grep "Version" -w ${ascend_install_dir}/compiler/version.info | awk -F = '{print $2}')
+echo "custom_opp_compiler_version=${compiler_version}" > ${gen_file_dir}/version.info

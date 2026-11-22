@@ -69,7 +69,7 @@ def extract_operator_name(file_path, is_experimental):
     operator_name = ""
     domain = ""
     if is_experimental == "TRUE":
-        if len(path_parts) >= 3 and path_parts[0] == "experimental":
+        if len(path_parts) >= 3:
             domain = path_parts[1]
             operator_name = path_parts[2]
             if operator_name == "common" or not os.path.exists(

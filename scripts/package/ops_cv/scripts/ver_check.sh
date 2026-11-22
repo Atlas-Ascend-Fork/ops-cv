@@ -39,22 +39,18 @@ check_path_pre() {
   done
   len="${index}"
   b=0
-  if [ "${len}" -gt 0 ]; then
-    for i in $(seq 0 $((len - 1))); do
-      select_last_dir_component "$(eval echo '$'arr_$i)"
-      ret=$last_component
-      if [ "${ret}" != "" ]; then
-        eval checked_path_temp_$b=$(eval echo '$'arr_$i)
-        b=$(expr $b + 1)
-      fi
-    done
-  fi
+  for i in $(seq 0 ${len}); do
+    select_last_dir_component "$(eval echo '$'arr_$i)"
+    ret=$last_component
+    if [ "${ret}" != "" ]; then
+      eval checked_path_temp_$b=$(eval echo '$'arr_$i)
+      b=$(expr $b + 1)
+    fi
+  done
   check_all_path=""
-  if [ "${b}" -gt 0 ]; then
-    for i in $(seq 0 $((b - 1))); do
-      check_all_path="$(eval echo '$'checked_path_temp_$i) $check_all_path"
-    done
-  fi
+  for i in $(seq 0 ${len}); do
+    check_all_path="$(eval echo '$'checked_path_temp_$i) $check_all_path"
+  done
   checked_path="${check_all_path}"
   return
 }
@@ -87,7 +83,7 @@ check_version_file() {
   run_pkg_path="${run_pkg_path_temp}""/${component_ret}"
   version_file="${run_pkg_path}""/version.info"
   if [ -f "${version_file}" ]; then
-    echo "${version_file}" >/dev/null 2>&1
+    echo "${version_file}" 2 >>/dev/null
   else
     logandprint "[ERROR]: ERR_NO:${FILE_NOT_EXIST}; The [${component_ret}] version.info in path [${pkg_path}] not exists."
     exit 1
@@ -103,7 +99,6 @@ check_opp_version_file() {
     ver_info="${_DEFAULT_INSTALL_PATH}/ops_cv/version.info"
   else
     logandprint "[ERROR]: ERR_NO:${FILE_NOT_EXIST}; The [ops_cv] version.info not exists."
-    exit 1
   fi
   return
 }
@@ -119,7 +114,6 @@ check_relation() {
     ret_situation=$ver_check_status
   else
     logandprint "[ERROR]: ERR_NO:${FILE_NOT_EXIST}; The ${_COMMON_INC_FILE} not exists."
-    exit 1
   fi
   return
 }
