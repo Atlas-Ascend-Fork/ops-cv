@@ -9,6 +9,10 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
+if [ -z "${INSTALL_PATH}" ]; then
+    echo "[ops-cv] [ERROR] INSTALL_PATH is not set." >&2
+    exit 1
+fi
 sourcedir="${INSTALL_PATH}"
 WHL_INSTALL_DIR_PATH="${sourcedir}/python/site-packages"
 unset PYTHONPATH
@@ -22,6 +26,7 @@ if [ -d "${whl_dir}" ]; then
     for whl in "${whl_dir}"/*.whl; do
         if [ -f "${whl}" ]; then
             echo "[ops-cv] installing ${whl}"
+            mkdir -p "${WHL_INSTALL_DIR_PATH}"
             chmod u+w "${WHL_INSTALL_DIR_PATH}" 2>/dev/null
             run_pip install --disable-pip-version-check --upgrade --no-deps --force-reinstall -t "${WHL_INSTALL_DIR_PATH}" "${whl}" \
                 && rm -f "${whl}" || true
