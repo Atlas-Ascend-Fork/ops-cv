@@ -24,14 +24,20 @@ version_ge() {
   local v2="$2"
 
   local v1_major v1_minor v2_major v2_minor
-  v1_major=$(echo "$v1" | cut -d. -f1)
-  v1_minor=$(echo "$v1" | cut -d. -f2)
-  v2_major=$(echo "$v2" | cut -d. -f1)
-  v2_minor=$(echo "$v2" | cut -d. -f2)
+  IFS='.' read -r v1_major v1_minor _ <<< "$v1"
+  IFS='.' read -r v2_major v2_minor _ <<< "$v2"
+  v1_major="${v1_major:-0}"
+  v1_minor="${v1_minor:-0}"
+  v2_major="${v2_major:-0}"
+  v2_minor="${v2_minor:-0}"
 
-  if [[ $v1_major -gt $v2_major ]]; then
+  if [[ ! "$v1_major" =~ ^[0-9]+$ || ! "$v1_minor" =~ ^[0-9]+$ ||         ! "$v2_major" =~ ^[0-9]+$ || ! "$v2_minor" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+
+  if (( 10#$v1_major > 10#$v2_major )); then
     return 0
-  elif [[ $v1_major -eq $v2_major && $v1_minor -ge $v2_minor ]]; then
+  elif (( 10#$v1_major == 10#$v2_major && 10#$v1_minor >= 10#$v2_minor )); then
     return 0
   else
     return 1
@@ -105,7 +111,7 @@ generate_coverage() {
     --directory "${_source_dir}" \
     --output-file "${_coverage_file}" \
     --rc geninfo_unexecuted_blocks=1 \
-    ${_ignore_opt}
+    ${_ignore_opt} || exit $?
 
   logging "generated coverage file ${_coverage_file}"
 }
@@ -156,7 +162,7 @@ filter_coverage() {
   esac
 
   # 执行过滤
-  lcov --remove "${_coverage_file}" "${remove_patterns[@]}" -o "${_filtered_file}" ${_ignore_opt}
+  lcov --remove "${_coverage_file}" "${remove_patterns[@]}" -o "${_filtered_file}" ${_ignore_opt} || exit $?
 
   # op_name filtering: if specified, keep only coverage records whose source file
   # path contains one of the given operator names.  Use lcov --extract to filter
@@ -173,8 +179,8 @@ filter_coverage() {
     done
     logging "Extracting coverage for operators: ${_op_names}"
     # Use lcov --extract to keep only files matching the operator patterns
-    lcov --extract "${_filtered_file}" ${extract_patterns} -o "${_filtered_file}.tmp" ${_ignore_opt}
-    mv "${_filtered_file}.tmp" "${_filtered_file}"
+    lcov --extract "${_filtered_file}" ${extract_patterns} -o "${_filtered_file}.tmp" ${_ignore_opt} || exit $?
+    mv "${_filtered_file}.tmp" "${_filtered_file}" || exit $?
   fi
 }
 
@@ -203,7 +209,7 @@ generate_html() {
   if [[ ! -s "${_filtered_file}" ]]; then
     logging "empty coverage data"
   else
-    genhtml "${_filtered_file}" -o "${_out_path}" ${_ignore_opt}
+    genhtml "${_filtered_file}" -o "${_out_path}" ${_ignore_opt} || exit $?
   fi
 }
 
