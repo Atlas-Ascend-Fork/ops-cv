@@ -11,12 +11,17 @@
 
 set -e
 
+if [ "$#" -lt 2 ] || [ -z "$1" ] || [ -z "$2" ]; then
+    echo "ERROR: Usage: $0 <input_file> <output_file>" >&2
+    exit 1
+fi
+
 INPUT_FILE="$1"
 OUTPUT_FILE="$2"
-OUTPUT_DIR=$(dirname ${OUTPUT_FILE})
+OUTPUT_DIR=$(dirname "${OUTPUT_FILE}")
 
-if [ ! -f "${INPUT_FILE}" ];then
-    echo "ERROR: input file '${INPUT_FILE}' not found."
+if [ ! -f "${INPUT_FILE}" ]; then
+    echo "ERROR: input file '${INPUT_FILE}' not found." >&2
     exit 1
 fi
 
@@ -30,11 +35,13 @@ else
     TIME_STAMP=$(date +"%Y%m%d_%H%M%S%3N")
 fi
 
-if [ ! -d "${OUTPUT_DIR}" ];then
-    mkdir -p ${OUTPUT_DIR}
+if [ ! -d "${OUTPUT_DIR}" ]; then
+    mkdir -p "${OUTPUT_DIR}"
 fi
 
-cp -f ${INPUT_FILE} ${OUTPUT_FILE}
+if [ ! "${INPUT_FILE}" -ef "${OUTPUT_FILE}" ]; then
+    cp -f "${INPUT_FILE}" "${OUTPUT_FILE}"
+fi
 
 if ! grep -q "^timestamp=" "$OUTPUT_FILE"; then
     if [ -s "$OUTPUT_FILE" ] && [ "$(tail -c 1 "$OUTPUT_FILE")" != "" ]; then
