@@ -51,7 +51,8 @@ static Status ParseParamsNpuAnchorResponseFlags(const ge::Operator& op_src, ge::
             }
         }
     } catch (const nlohmann::json::exception& e) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "JSON parse error: %s", e.what());
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(GetOpName(op_dest).c_str(), "attribute", "unparseable JSON",
+                                              std::string("JSON parse error: ") + e.what());
         return FAILED;
     } catch (...) {
         OP_LOGE(GetOpName(op_dest).c_str(), "get unknown exception, please check compile info json.");
@@ -59,7 +60,8 @@ static Status ParseParamsNpuAnchorResponseFlags(const ge::Operator& op_src, ge::
     }
 
     if (v_featmap_size.empty() || v_strides.empty() || req_attr_num != REQ_ATTR_NUM) {
-        OP_LOGE(GetOpName(op_dest).c_str(), "Node must have attr featmap_size, strides, num_base_anchors");
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(GetOpName(op_dest).c_str(), "featmap_size, strides, num_base_anchors",
+                                              "missing", "Node must have attr featmap_size, strides, num_base_anchors");
         return FAILED;
     }
 

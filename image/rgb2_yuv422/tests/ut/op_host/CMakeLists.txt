@@ -13,6 +13,9 @@ file(GLOB CURRENT_DIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOUR
 if(UT_TEST_ALL OR OP_HOST_UT)
     add_modules_ut_sources(UT_NAME ${OP_INFERSHAPE_MODULE_NAME} MODE PRIVATE DIR ${CMAKE_CURRENT_SOURCE_DIR})
     add_modules_ut_sources(UT_NAME ${OP_TILING_MODULE_NAME} MODE PRIVATE DIR ${CMAKE_CURRENT_SOURCE_DIR}/*)
+    # The tiling negative test reads real ErrorManager first-error records; upstream op_host
+    # targets do not link error_manager yet (see tests/ut/op_graph precedent for the pattern).
+    target_link_libraries(${OP_TILING_MODULE_NAME}_cases_obj PUBLIC error_manager)
 endif()
 
 if(NOT (UT_TEST_ALL OR OP_API_UT))

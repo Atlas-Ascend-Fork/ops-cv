@@ -151,7 +151,9 @@ static ge::graphStatus Rgb2yuv422TilingFunc(gert::TilingContext* context)
                 OP_LOGE(context, "GetPlatformInfo error"), return ge::GRAPH_FAILED);
 
     int64_t H, W, outerDims;
-    OP_CHECK_IF(GetShapeInfo(context, H, W, outerDims) != ge::GRAPH_SUCCESS, OP_LOGE(context, "GetShapeInfo error"),
+    const auto shapeRet = GetShapeInfo(context, H, W, outerDims);
+    OP_CHECK_IF(shapeRet != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(context, "Rgb2yuv422TilingFunc: GetShapeInfo failed, rc=%u", shapeRet),
                 return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(GetWorkspaceSize(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "GetWorkspaceSize error"),

@@ -14,6 +14,8 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <map>
+#include "base/err_mgr.h"
 
 #include <gtest/gtest.h>
 
@@ -39,7 +41,8 @@ struct InferResult {
     std::vector<int64_t> outputShape;
 };
 
-InferResult RunInfer(const std::vector<int64_t>& anchorDims, const std::vector<int64_t>& gtDims)
+InferResult RunInfer(const std::vector<int64_t>& anchorDims, const std::vector<int64_t>& gtDims,
+                     const std::vector<float>* weight = nullptr)
 {
     gert::InferShapeContextFaker faker;
     faker.NodeIoNum(2, 1);
@@ -65,6 +68,9 @@ InferResult RunInfer(const std::vector<int64_t>& anchorDims, const std::vector<i
         faker.NodeOutputTd(static_cast<int32_t>(i), outputs[i].dtype_, outputs[i].format_, outputs[i].format_);
     }
     faker.InputTensors(inputTensors);
+    if (weight != nullptr) {
+        faker.Attr("weight", *weight);
+    }
     auto holder = faker.SetOpType("RotatedBoxEncode").Build();
 
     auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
@@ -100,6 +106,36 @@ void PrintResult(const char* label, const InferResult& result)
 } // namespace
 
 class RotatedBoxEncodeShapeContract : public testing::Test {};
+
+TEST_F(RotatedBoxEncodeShapeContract, weight_length_reports_exact_formal_error)
+{
+    ASSERT_EQ(error_message::ErrMgrInit(error_message::ErrorMessageMode::INTERNAL_MODE), 0);
+    (void)error_message::GetErrMgrRawErrorMessages();
+    const std::vector<float> weight = {1, 1, 1, 1};
+    EXPECT_EQ(RunInfer({2, 5, 8}, {2, 5, 8}, &weight).status, ge::GRAPH_FAILED);
+    auto messages = error_message::GetErrMgrRawErrorMessages();
+    ASSERT_EQ(messages.size(), 1U);
+    ASSERT_NE(messages[0].error_id, nullptr);
+    EXPECT_EQ(std::string(messages[0].error_id.get()), "EZ0025");
+    ASSERT_EQ(messages[0].args_key.size(), 4U);
+    ASSERT_EQ(messages[0].args_value.size(), 4U);
+    std::map<std::string, std::string> args;
+    for (size_t i = 0; i < messages[0].args_key.size(); ++i) {
+        ASSERT_NE(messages[0].args_key[i], nullptr);
+        ASSERT_NE(messages[0].args_value[i], nullptr);
+        EXPECT_TRUE(args.emplace(messages[0].args_key[i].get(), messages[0].args_value[i].get()).second);
+    }
+    EXPECT_EQ(args.at("param_name"), "weight");
+    EXPECT_FALSE(args.at("op_name").empty());
+    EXPECT_EQ(args.at("incorrect_size"), "4");
+    EXPECT_EQ(args.at("correct_size"), "5");
+    EXPECT_TRUE(error_message::GetErrMgrRawErrorMessages().empty());
+    const std::vector<float> validWeight = {1, 1, 1, 1, 1};
+    const auto result = RunInfer({2, 5, 8}, {2, 5, 8}, &validWeight);
+    EXPECT_EQ(result.status, ge::GRAPH_SUCCESS);
+    EXPECT_EQ(result.outputShape, (std::vector<int64_t>{2, 5, 8}));
+    EXPECT_TRUE(error_message::GetErrMgrRawErrorMessages().empty());
+}
 
 TEST_F(RotatedBoxEncodeShapeContract, valid_control_succeeds)
 {

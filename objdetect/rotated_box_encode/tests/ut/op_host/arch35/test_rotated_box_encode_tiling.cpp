@@ -22,6 +22,8 @@
 #include <cstring>
 #include <limits>
 #include <vector>
+#include <map>
+#include "base/err_mgr.h"
 #include <gtest/gtest.h>
 #include "tiling_case_executor.h"
 #include "tiling_context_faker.h"
@@ -260,8 +262,27 @@ TEST_F(RotatedBoxEncodeTiling, tiling_case9_huge_dim0_does_not_overflow)
 
 TEST_F(RotatedBoxEncodeTiling, tiling_case10_weight_length_must_be_five)
 {
+    ASSERT_EQ(error_message::ErrMgrInit(error_message::ErrorMessageMode::INTERNAL_MODE), 0);
+    (void)error_message::GetErrMgrRawErrorMessages();
     TilingInfo info;
     EXPECT_FALSE(ExecuteTiling(MakeContext({2, 5, 8}, ge::DT_FLOAT, {1.0f, 1.0f, 1.0f, 1.0f}), info));
+    auto messages = error_message::GetErrMgrRawErrorMessages();
+    ASSERT_EQ(messages.size(), 1U);
+    ASSERT_NE(messages[0].error_id, nullptr);
+    EXPECT_EQ(std::string(messages[0].error_id.get()), "EZ0025");
+    ASSERT_EQ(messages[0].args_key.size(), 4U);
+    ASSERT_EQ(messages[0].args_value.size(), 4U);
+    std::map<std::string, std::string> args;
+    for (size_t i = 0; i < messages[0].args_key.size(); ++i) {
+        ASSERT_NE(messages[0].args_key[i], nullptr);
+        ASSERT_NE(messages[0].args_value[i], nullptr);
+        EXPECT_TRUE(args.emplace(messages[0].args_key[i].get(), messages[0].args_value[i].get()).second);
+    }
+    EXPECT_EQ(args.at("param_name"), "weight");
+    EXPECT_FALSE(args.at("op_name").empty());
+    EXPECT_EQ(args.at("incorrect_size"), "4");
+    EXPECT_EQ(args.at("correct_size"), "5");
+    EXPECT_TRUE(error_message::GetErrMgrRawErrorMessages().empty());
 }
 
 // Branch tiling failure must be propagated: a UB too small to hold one

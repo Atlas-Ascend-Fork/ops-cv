@@ -27,6 +27,9 @@
 
 #include <iostream>
 #include <gtest/gtest.h>
+#include <map>
+#include "base/err_mgr.h"
+#include "graph/utils/type_utils.h"
 #include "tiling_context_faker.h"
 #include "tiling_case_executor.h"
 #include "../../../../op_kernel/arch35/rotated_feature_align_tiling_data.h"
@@ -40,6 +43,32 @@ protected:
 
     static void TearDownTestCase() { std::cout << "RotatedFeatureAlignTiling TearDown" << std::endl; }
 };
+
+static void CheckParameterFirstError(gert::TilingContextPara& para, const std::string& code,
+                                     const std::map<std::string, std::string>& expectedFields)
+{
+    ASSERT_EQ(error_message::ErrMgrInit(error_message::ErrorMessageMode::INTERNAL_MODE), 0);
+    (void)error_message::GetErrMgrRawErrorMessages();
+    ASSERT_TRUE(error_message::GetErrMgrRawErrorMessages().empty());
+    ExecuteTestCase(para, ge::GRAPH_FAILED);
+    const auto messages = error_message::GetErrMgrRawErrorMessages();
+    ASSERT_EQ(messages.size(), 1U);
+    const auto& message = messages.front();
+    ASSERT_NE(message.error_id, nullptr);
+    EXPECT_EQ(std::string(message.error_id.get()), code);
+    ASSERT_EQ(message.args_key.size(), 4U);
+    ASSERT_EQ(message.args_value.size(), 4U);
+    std::map<std::string, std::string> actual;
+    for (size_t i = 0; i < message.args_key.size(); ++i) {
+        ASSERT_NE(message.args_key[i], nullptr);
+        ASSERT_NE(message.args_value[i], nullptr);
+        EXPECT_TRUE(actual.emplace(message.args_key[i].get(), message.args_value[i].get()).second);
+    }
+    auto expected = expectedFields;
+    expected.emplace("op_name", "RotatedFeatureAlign");
+    EXPECT_EQ(actual, expected);
+    EXPECT_TRUE(error_message::GetErrMgrRawErrorMessages().empty());
+}
 
 static std::map<std::string, std::string> soc_version_infos = {{"Short_SoC_version", "Ascend950"}};
 
@@ -178,7 +207,10 @@ TEST_F(RotatedFeatureAlignTiling, rotated_feature_align_dim0_mismatch_fail)
             gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
         },
         &compileInfo, "Ascend950", 64, 262144, 4096);
-    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+    CheckParameterFirstError(tilingContextPara, "EZ0010",
+                             {{"param_names", "x and bboxes"},
+                              {"incorrect_shapes", "x.dim0=2, bboxes.dim0=3"},
+                              {"reason", "dim0 of x and bboxes must be equal"}});
 }
 
 TEST_F(RotatedFeatureAlignTiling, rotated_feature_align_dtype_invalid_fail)
@@ -199,7 +231,10 @@ TEST_F(RotatedFeatureAlignTiling, rotated_feature_align_dtype_invalid_fail)
             gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
         },
         &compileInfo, "Ascend950", 64, 262144, 4096);
-    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+    CheckParameterFirstError(tilingContextPara, "EZ0019",
+                             {{"param_name", "x"},
+                              {"incorrect_dtype", ge::TypeUtils::DataTypeToSerialString(ge::DT_FLOAT16)},
+                              {"correct_dtype", "float32"}});
 }
 
 TEST_F(RotatedFeatureAlignTiling, rotated_feature_align_points_invalid_fail)
@@ -220,7 +255,10 @@ TEST_F(RotatedFeatureAlignTiling, rotated_feature_align_points_invalid_fail)
             gert::TilingContextPara::OpAttr("points", Ops::Cv::AnyValue::CreateFrom<int64_t>(3)),
         },
         &compileInfo, "Ascend950", 64, 262144, 4096);
-    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+    CheckParameterFirstError(tilingContextPara, "EZ0026",
+                             {{"param_name", "points"},
+                              {"incorrect_value", "3"},
+                              {"reason", "points must be 1 (center only) or 5 (center + 4 corners)"}});
 }
 
 TEST_F(RotatedFeatureAlignTiling, rotated_feature_align_x_not_4d_fail)

@@ -292,6 +292,7 @@ ge::graphStatus TilingRotatedBoxEncode(gert::TilingContext* ctx)
     const auto* wList = (attrs != nullptr) ? attrs->GetListFloat(0) : nullptr;
     int64_t wLen = (wList != nullptr) ? static_cast<int64_t>(wList->GetSize()) : BOX_CHANNELS;
     if (wLen != BOX_CHANNELS) {
+        OP_LOGE_FOR_INVALID_LISTSIZE(ctx->GetNodeName(), "weight", std::to_string(wLen).c_str(), "5");
         return ge::GRAPH_FAILED;
     }
 

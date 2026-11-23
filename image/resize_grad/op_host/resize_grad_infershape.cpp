@@ -21,6 +21,7 @@
 #include "register/op_impl_registry.h"
 #include "log/log.h"
 #include "util/shape_util.h"
+#include "graph/utils/type_utils.h"
 
 using namespace ge;
 
@@ -136,15 +137,17 @@ static ge::graphStatus ValidateOriginalSize(gert::InferShapeContext* context, in
     }
     ge::DataType oriDtype = oriTensor->GetDataType();
     OP_CHECK_IF(oriDtype != ge::DT_INT32 && oriDtype != ge::DT_INT64,
-                OP_LOGE(context->GetNodeName(), "original_size dtype %d is not supported, expected INT32 or INT64",
-                        static_cast<int32_t>(oriDtype)),
+                OP_LOGE_FOR_INVALID_DTYPE_WITH_REASON(context->GetNodeName(), "original_size",
+                                                      ge::TypeUtils::DataTypeToSerialString(oriDtype).c_str(),
+                                                      "original_size dtype must be DT_INT32 or DT_INT64"),
                 return ge::GRAPH_FAILED);
     constValues = GetOriValues(oriTensor, oriNum, ori);
     if (constValues) {
         for (int64_t i = 0; i < oriNum; ++i) {
             OP_CHECK_IF(ori[i] <= 0,
-                        OP_LOGE(context->GetNodeName(), "original_size[%s] = %s must be > 0", std::to_string(i).c_str(),
-                                std::to_string(ori[i]).c_str()),
+                        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                            context->GetNodeName(), ("original_size[" + std::to_string(i) + "]").c_str(),
+                            std::to_string(ori[i]).c_str(), "original_size values must be greater than 0"),
                         return ge::GRAPH_FAILED);
         }
     }
@@ -169,8 +172,10 @@ static ge::graphStatus InferShape4ResizeGrad(gert::InferShapeContext* context)
     int64_t ori[4] = {ge::UNKNOWN_DIM, ge::UNKNOWN_DIM, ge::UNKNOWN_DIM, ge::UNKNOWN_DIM};
     bool oriShapeKnown = false;
     bool oriConst = false;
-    OP_CHECK_IF(ValidateOriginalSize(context, oriNum, oriShapeKnown, oriConst, ori) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context->GetNodeName(), "ValidateOriginalSize failed"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        ValidateOriginalSize(context, oriNum, oriShapeKnown, oriConst, ori) != ge::GRAPH_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(context->GetNodeName(), "ValidateOriginalSize failed; preserve the helper first error"),
+        return ge::GRAPH_FAILED);
 
     if (Ops::Base::IsUnknownRank(*gradsShape)) {
         OP_LOGD(context->GetNodeName(), "grads is UnknownRank, set y UnknownRank.");

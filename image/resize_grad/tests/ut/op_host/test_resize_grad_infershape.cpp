@@ -20,6 +20,9 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <map>
+#include "base/err_mgr.h"
+#include "graph/utils/type_utils.h"
 #include "infershape_context_faker.h"
 #include "infershape_case_executor.h"
 
@@ -31,6 +34,30 @@ protected:
 };
 
 namespace {
+void CheckOriginalSizeFirstError(gert::InfershapeContextPara& para, const std::string& code,
+                                 const std::map<std::string, std::string>& expected)
+{
+    ASSERT_EQ(error_message::ErrMgrInit(error_message::ErrorMessageMode::INTERNAL_MODE), 0);
+    (void)error_message::GetErrMgrRawErrorMessages();
+    ASSERT_TRUE(error_message::GetErrMgrRawErrorMessages().empty());
+    ExecuteTestCase(para, ge::GRAPH_FAILED, {});
+    const auto messages = error_message::GetErrMgrRawErrorMessages();
+    ASSERT_EQ(messages.size(), 1U);
+    const auto& message = messages.front();
+    ASSERT_NE(message.error_id, nullptr);
+    EXPECT_EQ(std::string(message.error_id.get()), code);
+    ASSERT_EQ(message.args_key.size(), 4U);
+    ASSERT_EQ(message.args_value.size(), 4U);
+    std::map<std::string, std::string> actual;
+    for (size_t i = 0; i < message.args_key.size(); ++i) {
+        ASSERT_NE(message.args_key[i], nullptr);
+        ASSERT_NE(message.args_value[i], nullptr);
+        EXPECT_TRUE(actual.emplace(message.args_key[i].get(), message.args_value[i].get()).second);
+    }
+    EXPECT_EQ(actual, expected);
+    EXPECT_TRUE(error_message::GetErrMgrRawErrorMessages().empty());
+}
+
 std::vector<gert::InfershapeContextPara::OpAttr> MakeAttrs(const std::string& mode, const std::string& dataFormat,
                                                            const std::string& ctm = "half_pixel",
                                                            float cubicCoeffA = -0.75f)
@@ -217,7 +244,11 @@ TEST_F(ResizeGradInfershape, resize_grad_infershape_original_size_nonpositive_fa
             {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
         },
         MakeAttrs("cubic", "NCHW"));
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+    CheckOriginalSizeFirstError(infershapeContextPara, "EZ0026",
+                                {{"param_name", "original_size[2]"},
+                                 {"op_name", "ResizeGrad"},
+                                 {"incorrect_value", "0"},
+                                 {"reason", "original_size values must be greater than 0"}});
 }
 
 TEST_F(ResizeGradInfershape, resize_grad_infershape_original_size_nc_mismatch_failed)
@@ -309,5 +340,25 @@ TEST_F(ResizeGradInfershape, resize_grad_infershape_unknown_rank_bad_original_va
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       },
                                                       MakeAttrs("cubic", "NCHW"));
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+    CheckOriginalSizeFirstError(infershapeContextPara, "EZ0026",
+                                {{"param_name", "original_size[2]"},
+                                 {"op_name", "ResizeGrad"},
+                                 {"incorrect_value", "0"},
+                                 {"reason", "original_size values must be greater than 0"}});
+}
+
+TEST_F(ResizeGradInfershape, original_size_float_dtype_reports_single_formal_error)
+{
+    float oriData[4] = {1, 3, 32, 32};
+    gert::InfershapeContextPara para("ResizeGrad",
+                                     {{{{1, 3, 64, 64}, {1, 3, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                      {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                      {{{2}, {2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                      {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND, true, oriData}},
+                                     {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND}}, MakeAttrs("cubic", "NCHW"));
+    CheckOriginalSizeFirstError(para, "EZ0020",
+                                {{"param_name", "original_size"},
+                                 {"op_name", "ResizeGrad"},
+                                 {"incorrect_dtype", ge::TypeUtils::DataTypeToSerialString(ge::DT_FLOAT)},
+                                 {"reason", "original_size dtype must be DT_INT32 or DT_INT64"}});
 }

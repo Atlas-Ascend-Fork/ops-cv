@@ -72,7 +72,8 @@ static ge::graphStatus InferShapeForRotatedBoxEncode(gert::InferShapeContext* co
     if (attrs != nullptr) {
         const auto* weight = attrs->GetAttrPointer<gert::TypedContinuousVector<float>>(0);
         if (weight != nullptr && weight->GetSize() != static_cast<size_t>(5)) {
-            OP_LOGE(context->GetNodeName(), "weight length must be 5, but got %zu.", weight->GetSize());
+            OP_LOGE_FOR_INVALID_LISTSIZE(context->GetNodeName(), "weight", std::to_string(weight->GetSize()).c_str(),
+                                         "5");
             return GRAPH_FAILED;
         }
     }
