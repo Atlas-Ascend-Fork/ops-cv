@@ -15,7 +15,11 @@ if(UT_TEST_ALL OR OP_HOST_UT)
     add_modules_ut_sources(UT_NAME ${OP_TILING_MODULE_NAME} MODE PRIVATE DIR ${CMAKE_CURRENT_SOURCE_DIR}/*)
     # The tiling negative test reads real ErrorManager first-error records; upstream op_host
     # targets do not link error_manager yet (see tests/ut/op_graph precedent for the pattern).
-    target_link_libraries(${OP_TILING_MODULE_NAME}_cases_obj PUBLIC error_manager)
+    # Guard for single-op UT mode: the shared cases target is only created when rgb2_yuv422
+    # itself is in ASCEND_OP_NAME (see experimental/image/integral_image precedent).
+    if("${ASCEND_OP_NAME}" STREQUAL "" OR "rgb2_yuv422" IN_LIST ASCEND_OP_NAME)
+        target_link_libraries(${OP_TILING_MODULE_NAME}_cases_obj PUBLIC error_manager)
+    endif()
 endif()
 
 if(NOT (UT_TEST_ALL OR OP_API_UT))
