@@ -155,6 +155,6 @@ class DecodeBboxV2TestSpec:
     }
 
     tolerance = {
-        "float32": {"standard": "mix_tolerance", "rtol": 1.0e-05, "atol": 1.0e-05},
-        "float16": {"standard": "mix_tolerance", "rtol": 1.0e-03, "atol": 1.0e-03},
+        "float32": {"standard": "cross_check", "level": "L0"},
+        "float16": {"standard": "cross_check", "level": "L0"},
     }
