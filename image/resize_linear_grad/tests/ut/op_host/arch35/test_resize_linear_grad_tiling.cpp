@@ -9,12 +9,17 @@
  */
 #include <iostream>
 #include <fstream>
+#include <map>
+#include <memory>
+#include <string>
 #include <vector>
 #include <gtest/gtest.h>
 
 #include "../../../../op_host/arch35/resize_linear_grad_tiling_arch35.h"
 #include "tiling_context_faker.h"
 #include "tiling_case_executor.h"
+#include "platform/platform_infos_def.h"
+#include "base/registry/op_impl_space_registry_v2.h"
 
 using namespace ge;
 using namespace optiling;
@@ -172,4 +177,101 @@ TEST_F(ResizeLinearGradTilingTest, resize_linear_grad_tiling_07)
         &compileInfo);
     TilingInfo tilingInfo;
     EXPECT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+}
+
+// Test 08: scaleL=0.75 on A5(Ascend950), threshold 0.8, scaleL<threshold -> determine template
+TEST_F(ResizeLinearGradTilingTest, resize_linear_grad_tiling_08_a5_threshold_0p8)
+{
+    gert::StorageShape inputGradsShape = {{1, 3, 4}, {1, 3, 4}};
+    gert::StorageShape inputOriImageShape = {{1, 3, 3}, {1, 3, 3}};
+    gert::StorageShape outputShape = {{1, 3, 3}, {1, 3, 3}};
+
+    ResizeLinearGradCompileInfo compileInfo = {64, 200704, 32};
+
+    gert::TilingContextPara tilingContextPara(
+        "ResizeLinearGrad",
+        {{inputGradsShape, ge::DT_FLOAT, ge::FORMAT_ND}, {inputOriImageShape, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{outputShape, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+         gert::TilingContextPara::OpAttr("scale", Ops::Cv::AnyValue::CreateFrom<float>(0.0f))},
+        &compileInfo, "Ascend950");
+    TilingInfo tilingInfo;
+    ASSERT_TRUE(ExecuteTiling(tilingContextPara, tilingInfo));
+    // schId=0, isInt32=1, isCenter=0, isDetermine=1
+    ASSERT_EQ(tilingInfo.tilingKey, 16777472U);
+}
+
+// DAV_9201/9202场景scaleL=0.75: 阈值0.75, 0.75不小于阈值 -> no_determine模板(key=256)
+static void RunResizeLinearGradTilingWithNpuArch(const std::string& shortSoc, const std::string& npuArch,
+                                                 uint64_t expectTilingKey)
+{
+    gert::StorageShape inputGradsShape = {{1, 3, 4}, {1, 3, 4}};
+    gert::StorageShape inputOriImageShape = {{1, 3, 3}, {1, 3, 3}};
+    gert::StorageShape outputShape = {{1, 3, 3}, {1, 3, 3}};
+
+    ResizeLinearGradCompileInfo compileInfo = {64, 200704, 32};
+
+    fe::PlatFormInfos platformInfo;
+    platformInfo.Init();
+    auto tilingData = gert::TilingData::CreateCap(4096);
+    auto workspace = gert::ContinuousVector::Create<size_t>(4096);
+
+    std::vector<gert::Tensor*> inputTensors = {};
+    std::vector<gert::Tensor*> outputTensors = {};
+    std::vector<std::unique_ptr<gert::Tensor>> tensorsKeepAlive = {};
+    std::unique_ptr<gert::Tensor> curTensor = std::make_unique<gert::Tensor>(
+        inputGradsShape, gert::StorageFormat(ge::FORMAT_ND, ge::FORMAT_ND, gert::ExpandDimsType()),
+        gert::TensorPlacement::kOnHost, ge::DT_FLOAT, nullptr);
+    inputTensors.push_back(curTensor.get());
+    tensorsKeepAlive.push_back(std::move(curTensor));
+    curTensor = std::make_unique<gert::Tensor>(
+        inputOriImageShape, gert::StorageFormat(ge::FORMAT_ND, ge::FORMAT_ND, gert::ExpandDimsType()),
+        gert::TensorPlacement::kOnHost, ge::DT_FLOAT, nullptr);
+    inputTensors.push_back(curTensor.get());
+    tensorsKeepAlive.push_back(std::move(curTensor));
+    curTensor = std::make_unique<gert::Tensor>(
+        outputShape, gert::StorageFormat(ge::FORMAT_ND, ge::FORMAT_ND, gert::ExpandDimsType()),
+        gert::TensorPlacement::kOnHost, ge::DT_FLOAT, nullptr);
+    outputTensors.push_back(curTensor.get());
+    tensorsKeepAlive.push_back(std::move(curTensor));
+
+    auto contextHolder = gert::TilingContextFaker()
+                             .SetOpType("ResizeLinearGrad")
+                             .NodeIoNum(2, 1)
+                             .InputTensors(inputTensors)
+                             .OutputTensors(outputTensors)
+                             .Attr("align_corners", false)
+                             .Attr("scale", 0.0f)
+                             .CompileInfo(&compileInfo)
+                             .PlatformInfo(reinterpret_cast<char*>(&platformInfo))
+                             .TilingData(tilingData.get())
+                             .Workspace(reinterpret_cast<gert::ContinuousVector*>(workspace.get()))
+                             .Build();
+
+    auto tilingContext = contextHolder.GetContext();
+    ASSERT_NE(tilingContext, nullptr);
+    ASSERT_NE(tilingContext->GetPlatformInfo(), nullptr);
+    std::map<std::string, std::string> socVersion = {{"Short_SoC_version", shortSoc}, {"NpuArch", npuArch}};
+    tilingContext->GetPlatformInfo()->SetPlatformRes("version", socVersion);
+
+    auto spaceRegistry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(spaceRegistry, nullptr);
+    auto opImpl = spaceRegistry->GetOpImpl("ResizeLinearGrad");
+    ASSERT_NE(opImpl, nullptr);
+    ASSERT_NE(opImpl->tiling, nullptr);
+    ASSERT_EQ(opImpl->tiling(tilingContext), ge::GRAPH_SUCCESS);
+    // schId=0, isInt32=1, isCenter=0, isDetermine=0
+    ASSERT_EQ(tilingContext->GetTilingKey(), expectTilingKey);
+}
+
+// Test 09: scaleL=0.75 on DAV_9201, threshold 0.75 -> no_determine template
+TEST_F(ResizeLinearGradTilingTest, resize_linear_grad_tiling_09_dav9201_threshold_0p75)
+{
+    RunResizeLinearGradTilingWithNpuArch("Ascend960DT", "9201", 256U);
+}
+
+// Test 10: scaleL=0.75 on DAV_9202, threshold 0.75 -> no_determine template
+TEST_F(ResizeLinearGradTilingTest, resize_linear_grad_tiling_10_dav9202_threshold_0p75)
+{
+    RunResizeLinearGradTilingWithNpuArch("Ascend960PR", "9202", 256U);
 }

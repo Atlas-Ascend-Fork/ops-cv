@@ -27,7 +27,8 @@ static const uint64_t DIM_4 = 4;
 static const uint64_t DIM_5 = 5;
 static const int32_t EVEN_FACTOR = 2;
 static const int32_t DB = 2;
-static const float LOWER_DETERMINE = 0.8f; // scale小于此值走确定性实现
+static const float LOWER_DETERMINE = 0.8f; // scale小于此值走确定性实现(默认)
+static const float LOWER_DETERMINE_CALI = 0.75f;
 static const int64_t HIGH_DETERMINE = 100; // 重复个数大于此值走确定性实现
 class ResizeLinearGradTiling {
 public:
@@ -76,6 +77,7 @@ private:
     int64_t xSize_ = 0;
     float scaleL_ = 0.0f;
     float inverseScaleL_ = 0.0f;
+    float lowerDetermine_ = LOWER_DETERMINE;
 };
 
 void ResizeLinearGradTiling::CalculateCoreNum(int64_t inputSize, int64_t& realCoreNum, int64_t& ubLoopSizeT,
@@ -153,7 +155,7 @@ void ResizeLinearGradTiling::ComputeOther(bool oddScale, bool isIntScale)
         repeatNum = static_cast<int64_t>(static_cast<float>(lenDesL_) * scaleL_) - lenSrcLOrUb_;
     }
     OP_LOGI(context_->GetNodeName(), "repeatNum is %ld", repeatNum);
-    if (scaleL_ < LOWER_DETERMINE || repeatNum >= HIGH_DETERMINE) {
+    if (scaleL_ < lowerDetermine_ || repeatNum >= HIGH_DETERMINE) {
         OP_LOGI(context_->GetNodeName(),
                 "scaleL is smaller than LOWER_DETERMINE or repeatNum is greater than HIGH_DETERMINE");
         isDetermine_ = static_cast<uint64_t>(1);
@@ -382,8 +384,18 @@ void ResizeLinearGradTiling::LinearGetPlatformData(const ResizeLinearGradCompile
     coreNum_ = compileInfo->totalCoreNum;
     ubSize_ = static_cast<int64_t>(compileInfo->totalUbSize);
     blockSize_ = compileInfo->blockSize;
-    OP_LOGI(context_->GetNodeName(), "LinearGetPlatformData ubSize is %ld, coreNum_ is %d, blockSize_ is %d", ubSize_,
-            coreNum_, blockSize_);
+    auto platformInfo = context_->GetPlatformInfo();
+    if (platformInfo != nullptr) {
+        auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
+        NpuArch arch = ascendcPlatform.GetCurNpuArch();
+        // 芯片隔离
+        if (arch == NpuArch::DAV_9201 || arch == NpuArch::DAV_9202) {
+            lowerDetermine_ = LOWER_DETERMINE_CALI;
+        }
+    }
+    OP_LOGI(context_->GetNodeName(),
+            "LinearGetPlatformData ubSize is %ld, coreNum_ is %d, blockSize_ is %d, lowerDetermine is %f", ubSize_,
+            coreNum_, blockSize_, lowerDetermine_);
     return;
 }
 
