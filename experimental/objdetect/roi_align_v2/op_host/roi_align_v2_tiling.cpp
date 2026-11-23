@@ -13,6 +13,7 @@
  * \brief
  */
 
+#include <cmath>
 #include <limits>
 
 #include "log/log.h"
@@ -114,9 +115,20 @@ static ge::graphStatus RoiAlignV2TilingFunc(gert::TilingContext* context)
             spatialScale = *spatialScaleAttr;
         }
     }
+    // spatial_scale 为 OPTIONAL 属性，缺失时保持初值 0.0f：kernel 会用该值缩放全部 ROI 坐标
+    // （roi_align_v2.h:142-145），坐标被整体缩放为 0 后 ROI 塌缩，输出退化为退化 ROI 的池化值，
+    // 全程不报错。此处按 aclnn 侧契约（spatialScale 必须有限且大于 0）显式拒绝。
+    OP_CHECK_IF(!std::isfinite(spatialScale) || spatialScale <= 0.0f,
+                OP_LOGE(context, "spatial_scale must be finite and greater than 0, but got %f", spatialScale),
+                return ge::GRAPH_FAILED);
     if (attrs != nullptr) {
         const int64_t* samplingRatioAttr = attrs->GetInt(3);
         if (samplingRatioAttr != nullptr) {
+            // int64 -> int32 窄化前先校验上界，否则 2^32+1 等值回绕为正数后绕过语义约束
+            OP_CHECK_IF(
+                *samplingRatioAttr > MAX_POOLED_SIZE,
+                OP_LOGE(context, "sampling_ratio[%ld] exceeds INT32_MAX[%ld]", *samplingRatioAttr, MAX_POOLED_SIZE),
+                return ge::GRAPH_FAILED);
             samplingRatio = static_cast<int32_t>(*samplingRatioAttr);
         }
     }
