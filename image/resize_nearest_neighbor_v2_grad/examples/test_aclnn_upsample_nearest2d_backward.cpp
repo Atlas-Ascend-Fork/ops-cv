@@ -137,9 +137,11 @@ int main()
         LOG_PRINT("result[%ld] is: %f\n", i, resultData[i]);
     }
 
-    // 6. 释放aclTensor和aclScalar，需要根据具体API的接口定义修改
+    // 6. 释放aclTensor、aclIntArray和aclScalar，需要根据具体API的接口定义修改
     aclDestroyTensor(gradOut);
     aclDestroyTensor(gradInput);
+    aclDestroyIntArray(outputSize);
+    aclDestroyIntArray(inputSize);
 
     // 7. 释放device资源，需要根据具体API的接口定义修改
     aclrtFree(gradOutDeviceAddr);
