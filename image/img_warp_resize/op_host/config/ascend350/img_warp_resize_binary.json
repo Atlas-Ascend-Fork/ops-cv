@@ -1,0 +1,81 @@
+{
+  "op_type": "IMGWarpResize",
+  "op_list": [
+    {
+      "bin_filename": "IMGWarpResize_fp16_57573f158032b335b3075431e0e80291",
+      "inputs": [
+        {
+          "name": "img",
+          "index": 0,
+          "dtype": "float16",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ]
+        },
+        {
+          "name": "warp_index",
+          "index": 1,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "warp_img",
+          "index": 0,
+          "dtype": "float16",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ]
+        }
+      ],
+      "attrs": []
+    },
+    {
+      "bin_filename": "IMGWarpResize_fp32_6ec79ba41c084d959b4fdf5731061b80",
+      "inputs": [
+        {
+          "name": "img",
+          "index": 0,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ]
+        },
+        {
+          "name": "warp_index",
+          "index": 1,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "warp_img",
+          "index": 0,
+          "dtype": "float32",
+          "format": "ND",
+          "paramType": "required",
+          "shape": [
+            -2
+          ]
+        }
+      ],
+      "attrs": []
+    }
+  ]
+}
