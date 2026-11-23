@@ -80,10 +80,11 @@
 
 3. **（可选）卸载自定义算子包。**
 
-    自定义算子包安装后在```${ASCEND_HOME_PATH}/opp/vendors/${vendor_name}_cv/scripts```目录会生成`uninstall.sh`，通过该脚本可卸载自定义算子包，命令如下：
+    卸载脚本位于算子包安装根目录下的`vendors/${vendor_name}_cv/scripts`目录。默认安装根目录为`${ASCEND_HOME_PATH}/opp`；若安装时指定了`--install-path=${install_path}`，请使用同一个`install_path`。
 
     ```bash
-    bash ${ASCEND_HOME_PATH}/opp/vendors/${vendor_name}_cv/scripts/uninstall.sh
+    install_root="${install_path:-${ASCEND_HOME_PATH}/opp}"
+    bash "${install_root}/vendors/${vendor_name:-custom}_cv/scripts/uninstall.sh"
     ```
 
 ### ops-cv包
