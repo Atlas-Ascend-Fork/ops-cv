@@ -48,6 +48,7 @@ public:
             .DynamicShapeSupportFlag(true)
             .ExtendCfgInfo("opFile.value", "upsample_bicubic2d_aa_apt");
         this->AICore().AddConfig("ascend950", regbaseConfig);
+        this->AICore().AddConfig("ascend350", regbaseConfig);
         this->AICore().AddConfig("ascend960dt", regbaseConfig);
 
         OpAICoreConfig config_kirin = GetKirinCoreConfig();

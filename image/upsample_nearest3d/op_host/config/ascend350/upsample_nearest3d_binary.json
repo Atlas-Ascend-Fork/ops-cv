@@ -1,0 +1,495 @@
+{
+    "op_type": "UpsampleNearest3d",
+    "op_list": [
+        {
+            "bin_filename": "UpsampleNearest3d_220211162b11600ee3011a1557cd7709",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "float32",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "float32",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "bin_filename": "UpsampleNearest3d_6d7550889dc6d34c0c0548c10420c404",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "bfloat16",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "bfloat16",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "bin_filename": "UpsampleNearest3d_fefd1a67d811c3f3b648bbcf1c1cb02b",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "float16",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "float16",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "bin_filename": "UpsampleNearest3d_25fg7j162b11600ee3011a1557cd7709",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "double",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "double",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "bin_filename": "UpsampleNearest3d_25fg7j162b1125fj4l011a1557cd7709",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "uint8",
+                    "format": "ND",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "bin_filename": "UpsampleNearest3d_ncdhw1162b11600ee3011a1557cd7709",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "float32",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "float32",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "bin_filename": "UpsampleNearest3d_6d755088ncdhw34c0c0548c10420c404",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "bfloat16",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "bfloat16",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "bin_filename": "UpsampleNearest3d_fefd1a6ncdhwc3f3b648bbcf1c1cb02b",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "float16",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "float16",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "bin_filename": "UpsampleNearest3d_25fg7j1ncdhw600ee3011a1557cd7709",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "double",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "double",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        },
+        {
+            "bin_filename": "UpsampleNearest3d_25fg7j162b11ncdhwl011a1557cd7709",
+            "inputs": [
+                {
+                    "name": "x",
+                    "index": 0,
+                    "dtype": "uint8",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "y",
+                    "index": 0,
+                    "dtype": "uint8",
+                    "format": "NCDHW",
+                    "paramType": "required",
+                    "shape": [
+                        -2
+                    ]
+                }
+            ],
+            "attrs": [
+                {
+                    "name": "output_size",
+                    "dtype": "list_int",
+                    "value": []
+                },
+                {
+                    "name": "scale_d",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_h",
+                    "dtype": "float",
+                    "value": 0.0
+                },
+                {
+                    "name": "scale_w",
+                    "dtype": "float",
+                    "value": 0.0
+                }
+            ]
+        }
+    ]
+}
