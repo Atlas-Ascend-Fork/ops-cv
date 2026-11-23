@@ -26,8 +26,6 @@ static constexpr size_t POINTS_INDEX = 0U;
 static constexpr size_t POLYGONS_INDEX = 1U;
 static constexpr size_t OUTPUT_INDEX = 0U;
 static constexpr size_t INPUT_RANK = 2U;
-static constexpr int64_t POINTS_COORD_NUM = 2;
-static constexpr int64_t POLYGONS_VERTEX_NUM = 8;
 
 static ge::graphStatus InferShape4PointsInPolygons(gert::InferShapeContext* context)
 {
@@ -43,28 +41,13 @@ static ge::graphStatus InferShape4PointsInPolygons(gert::InferShapeContext* cont
         Ops::Base::SetUnknownRank(*outputShape);
         return ge::GRAPH_SUCCESS;
     }
-
-    OP_CHECK_IF(pointsShape->GetDimNum() != INPUT_RANK,
-                OP_LOGE(context, "points must be rank 2, but got %zu", pointsShape->GetDimNum()),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(polygonsShape->GetDimNum() != INPUT_RANK,
-                OP_LOGE(context, "polygons must be rank 2, but got %zu", polygonsShape->GetDimNum()),
-                return ge::GRAPH_FAILED);
+    if (Ops::Base::IsUnknownShape(*pointsShape) || Ops::Base::IsUnknownShape(*polygonsShape)) {
+        Ops::Base::SetUnknownShape(INPUT_RANK, *outputShape);
+        return ge::GRAPH_SUCCESS;
+    }
 
     // output.shape = (points.shape[0], polygons.shape[1]) = (N, M)
-    const int64_t N = pointsShape->GetDim(0);
-    const int64_t M = polygonsShape->GetDim(1);
-    if (N != 0 && M != 0) {
-        const int64_t coordNum = pointsShape->GetDim(1);
-        OP_CHECK_IF(coordNum != ge::UNKNOWN_DIM && coordNum != POINTS_COORD_NUM,
-                    OP_LOGE(context, "points second dim must be 2, but got %ld", coordNum), return ge::GRAPH_FAILED);
-        const int64_t vertexNum = polygonsShape->GetDim(0);
-        OP_CHECK_IF(vertexNum != ge::UNKNOWN_DIM && vertexNum != POLYGONS_VERTEX_NUM,
-                    OP_LOGE(context, "polygons first dim must be 8, but got %ld", vertexNum), return ge::GRAPH_FAILED);
-    }
-    outputShape->SetDimNum(0);
-    outputShape->AppendDim(N);
-    outputShape->AppendDim(M);
+    *outputShape = {pointsShape->GetDim(0), polygonsShape->GetDim(1)};
 
     return ge::GRAPH_SUCCESS;
 }

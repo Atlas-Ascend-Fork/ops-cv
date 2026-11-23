@@ -113,8 +113,8 @@ TEST_F(PointsInPolygonsInfershape, infershape_test5_single)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
 
-// 非法输入: points 为 rank 1 → GRAPH_FAILED
-TEST_F(PointsInPolygonsInfershape, infershape_rejects_points_rank_one)
+// points 为 rank 1 时仍直接取第 0 维，rank 校验由 tiling 处理。
+TEST_F(PointsInPolygonsInfershape, infershape_assigns_points_rank_one)
 {
     gert::InfershapeContextPara infershapeContextPara("PointsInPolygons",
                                                       {
@@ -124,25 +124,25 @@ TEST_F(PointsInPolygonsInfershape, infershape_rejects_points_rank_one)
                                                       {
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       });
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{4, 2}});
 }
 
-// 非法输入: polygons 为 rank 1 → GRAPH_FAILED
-TEST_F(PointsInPolygonsInfershape, infershape_rejects_polygons_rank_one)
+// polygons 为 rank 3 时仍直接取第 1 维，rank 校验由 tiling 处理。
+TEST_F(PointsInPolygonsInfershape, infershape_assigns_polygons_rank_three)
 {
     gert::InfershapeContextPara infershapeContextPara("PointsInPolygons",
                                                       {
                                                           {{{4, 2}, {4, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
-                                                          {{{8}, {8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                          {{{8, 2, 1}, {8, 2, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       },
                                                       {
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       });
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{4, 2}});
 }
 
-// 非法输入: points 坐标维不为 2 → GRAPH_FAILED
-TEST_F(PointsInPolygonsInfershape, infershape_rejects_points_coordinate_dim)
+// points 固定轴不影响输出赋值，其合法性由 tiling 校验。
+TEST_F(PointsInPolygonsInfershape, infershape_ignores_points_coordinate_dim)
 {
     gert::InfershapeContextPara infershapeContextPara("PointsInPolygons",
                                                       {
@@ -152,11 +152,11 @@ TEST_F(PointsInPolygonsInfershape, infershape_rejects_points_coordinate_dim)
                                                       {
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       });
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{4, 2}});
 }
 
-// 非法输入: polygons 顶点维不为 8 → GRAPH_FAILED
-TEST_F(PointsInPolygonsInfershape, infershape_rejects_polygon_coordinate_dim)
+// polygons 固定轴不影响输出赋值，其合法性由 tiling 校验。
+TEST_F(PointsInPolygonsInfershape, infershape_ignores_polygon_coordinate_dim)
 {
     gert::InfershapeContextPara infershapeContextPara("PointsInPolygons",
                                                       {
@@ -166,11 +166,11 @@ TEST_F(PointsInPolygonsInfershape, infershape_rejects_polygon_coordinate_dim)
                                                       {
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       });
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{4, 2}});
 }
 
-// 未知 N 时 polygons 顶点维不为 8 → GRAPH_FAILED
-TEST_F(PointsInPolygonsInfershape, infershape_rejects_polygon_coordinate_dim_with_unknown_n)
+// 含未知维时延后固定轴校验，output 为 (-1,-1)
+TEST_F(PointsInPolygonsInfershape, infershape_defers_polygon_coordinate_check_with_unknown_n)
 {
     gert::InfershapeContextPara infershapeContextPara("PointsInPolygons",
                                                       {
@@ -180,7 +180,7 @@ TEST_F(PointsInPolygonsInfershape, infershape_rejects_polygon_coordinate_dim_wit
                                                       {
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       });
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{-1, -1}});
 }
 
 // 未知 rank (-2): points 为 {-2} → 跳过校验，output 为 {-2}
@@ -217,7 +217,7 @@ TEST_F(PointsInPolygonsInfershape, infershape_unknown_rank_polygons)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
 
-// 未知维 (-1): points(-1,2), polygons(8,-1) → 固定维校验跳过 -1，output 为 (-1,-1)
+// 任一输入含未知维 (-1)，output 的全部维度设为 -1
 TEST_F(PointsInPolygonsInfershape, infershape_unknown_dims)
 {
     gert::InfershapeContextPara infershapeContextPara("PointsInPolygons",
@@ -234,7 +234,7 @@ TEST_F(PointsInPolygonsInfershape, infershape_unknown_dims)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
 
-// 未知维 (-1) 混合已知维: points(-1,2), polygons(8,4) → output 为 (-1,4)
+// 未知维 (-1) 混合已知维: points(-1,2), polygons(8,4) → output 为 (-1,-1)
 TEST_F(PointsInPolygonsInfershape, infershape_mixed_unknown_dims)
 {
     gert::InfershapeContextPara infershapeContextPara("PointsInPolygons",
@@ -246,13 +246,13 @@ TEST_F(PointsInPolygonsInfershape, infershape_mixed_unknown_dims)
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       });
     std::vector<std::vector<int64_t>> expectOutputShape = {
-        {-1, 4},
+        {-1, -1},
     };
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
 
-// 未知维 (-1) 时固定维校验仍生效: points(-1,3) 坐标维错误 → GRAPH_FAILED
-TEST_F(PointsInPolygonsInfershape, infershape_rejects_points_coordinate_dim_with_unknown_n)
+// 未知维 (-1) 时延后 points 固定轴校验，output 为 (-1,-1)
+TEST_F(PointsInPolygonsInfershape, infershape_defers_points_coordinate_check_with_unknown_n)
 {
     gert::InfershapeContextPara infershapeContextPara("PointsInPolygons",
                                                       {
@@ -262,5 +262,23 @@ TEST_F(PointsInPolygonsInfershape, infershape_rejects_points_coordinate_dim_with
                                                       {
                                                           {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
                                                       });
-    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, {{-1, -1}});
+}
+
+// 未知维位于任一固定轴时，也不能推导部分已知的输出。
+TEST_F(PointsInPolygonsInfershape, infershape_unknown_fixed_axes)
+{
+    const std::vector<std::vector<std::vector<int64_t>>> inputShapes = {
+        {{4, -1}, {8, 3}},
+        {{4, 2}, {-1, 3}},
+        {{4, 2}, {8, -1}},
+    };
+    for (const auto& shapes : inputShapes) {
+        gert::InfershapeContextPara para(
+            "PointsInPolygons",
+            {{{{shapes[0][0], shapes[0][1]}, {shapes[0][0], shapes[0][1]}}, ge::DT_FLOAT, ge::FORMAT_ND},
+             {{{shapes[1][0], shapes[1][1]}, {shapes[1][0], shapes[1][1]}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+            {{{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND}});
+        ExecuteTestCase(para, ge::GRAPH_SUCCESS, {{-1, -1}});
+    }
 }

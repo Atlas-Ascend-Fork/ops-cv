@@ -27,8 +27,9 @@ constexpr AscendC::Reg::DivSpecificMode kRayCastNormalDivMode = {AscendC::Reg::M
 
 constexpr uint32_t VL_F32 = 64; // 256B / 4B = 64 elements per vector register
 
-// Nonzero coordinates in [2^-40, 2^40] have differences in [2^-64, 2^41].
-// Their nonzero quotients stay normal, so FTZ division is safe in this range.
+// Nonzero coordinates in [2^-24, 2^24] have differences in [2^-48, 2^25].
+// The multiply-before-divide numerator stays in [2^-96, 2^50], and its
+// nonzero quotient stays in [2^-121, 2^98], so FTZ division is safe here.
 // Inspect bits so subnormal coordinates and signed zero are handled correctly.
 template <typename T>
 __simd_vf__ inline void CheckCoordinateRangeVF(__ubuf__ T* points, __ubuf__ T* polygons, __ubuf__ uint32_t* flag,
@@ -38,8 +39,8 @@ __simd_vf__ inline void CheckCoordinateRangeVF(__ubuf__ T* points, __ubuf__ T* p
     using namespace AscendC;
     using namespace AscendC::Reg;
     constexpr uint32_t kFloatAbsMask = 0x7fffffffU;
-    constexpr uint32_t kFastDivMinAbsCoordinateBits = 0x2b800000U; // 2^-40
-    constexpr uint32_t kFastDivMaxAbsCoordinateBits = 0x53800000U; // 2^40
+    constexpr uint32_t kFastDivMinAbsCoordinateBits = 0x33800000U; // 2^-24
+    constexpr uint32_t kFastDivMaxAbsCoordinateBits = 0x4b800000U; // 2^24
     constexpr uint16_t kPointCoordinateRows = 2;
     constexpr uint16_t kPolygonCoordinateRows = 8;
     RegTensor<uint32_t> bits, absBits, signMask, zero, one, dirty, laneDirty;
@@ -86,13 +87,12 @@ __simd_vf__ inline void RayCastComputeVF(__ubuf__ T* pxAddr, __ubuf__ T* pyAddr,
                                          uint16_t vfLoopPerRow)
 {
     AscendC::Reg::RegTensor<float> vPy, vPx;
-    AscendC::Reg::RegTensor<float> vYsK, vYsNext;
-    AscendC::Reg::RegTensor<float> vXsK, vXsNext;
-    AscendC::Reg::RegTensor<float> vPyMinusYsK, vDy, vSafeDy, vDx, vT, vXint;
+    AscendC::Reg::RegTensor<float> vYsK, vYsPrev;
+    AscendC::Reg::RegTensor<float> vXsK, vXsPrev;
+    AscendC::Reg::RegTensor<float> vPyMinusYsK, vDy, vDx, vT, vXint;
     AscendC::Reg::RegTensor<float> vCross, vCount, vHalf, vFloor, vTwoFloor, vTmp, vOut;
-    AscendC::Reg::RegTensor<float> vOnBoundary;
     AscendC::Reg::RegTensor<float> vZero, vOne;
-    AscendC::Reg::MaskReg mask, cmpMask1, cmpMask2, cmpCond, cmpEq, cmpXint, cmpOdd;
+    AscendC::Reg::MaskReg mask, active, cmpMask1, cmpMask2, cmpCond, cmpEq, cmpXint, cmpOdd, cmpPart;
 
     AscendC::Reg::Duplicate(vZero, 0.0f);
     AscendC::Reg::Duplicate(vOne, 1.0f);
@@ -110,66 +110,64 @@ __simd_vf__ inline void RayCastComputeVF(__ubuf__ T* pxAddr, __ubuf__ T* pyAddr,
             uint32_t mOff = (uint32_t)j * VL_F32;
 
             AscendC::Reg::Duplicate(vCount, 0.0f);
-            AscendC::Reg::Duplicate(vOnBoundary, 0.0f);
+            AscendC::Reg::MaskOr(active, mask, mask, mask);
 
-            for (uint16_t k = 0; k < 4; k++) { // 4 edges (closing edge V3→V0 via (k+1)%4)
+            for (uint16_t k = 0; k < 4; k++) { // MMCV: edges (V0,V3), (V1,V0), (V2,V1), (V3,V2)
                 __ubuf__ T* xsKRow = polyBase + (uint32_t)(2 * k) * tileM;
                 __ubuf__ T* ysKRow = polyBase + (uint32_t)(2 * k + 1) * tileM;
-                __ubuf__ T* xsNextRow = polyBase + (uint32_t)(2 * ((k + 1) % 4)) * tileM;
-                __ubuf__ T* ysNextRow = polyBase + (uint32_t)(2 * ((k + 1) % 4) + 1) * tileM;
+                __ubuf__ T* xsPrevRow = polyBase + (uint32_t)(2 * ((k + 3) % 4)) * tileM;
+                __ubuf__ T* ysPrevRow = polyBase + (uint32_t)(2 * ((k + 3) % 4) + 1) * tileM;
                 // Predicate the load itself: tileM may be smaller than one full vector.
                 AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vYsK, ysKRow + mOff, 1,
                                                                                             mask);
-                AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vYsNext, ysNextRow + mOff,
+                AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vYsPrev, ysPrevRow + mOff,
                                                                                             1, mask);
                 AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vXsK, xsKRow + mOff, 1,
                                                                                             mask);
-                AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vXsNext, xsNextRow + mOff,
+                AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vXsPrev, xsPrevRow + mOff,
                                                                                             1, mask);
 
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpMask1, vYsK, vPy, mask);
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpMask2, vYsNext, vPy, mask);
-                AscendC::Reg::MaskXor(cmpCond, cmpMask1, cmpMask2, mask);
-
-                AscendC::Reg::Sub<float>(vPyMinusYsK, vPy, vYsK, mask);
-                AscendC::Reg::Sub<float>(vDy, vYsNext, vYsK, mask);
-                AscendC::Reg::Compares<float, AscendC::CMPMODE::EQ>(cmpEq, vDy, 0.0f, mask);
-                AscendC::Reg::Select<float>(vSafeDy, vOne, vDy, cmpEq); // (dy==0)?1.0:dy
-                if constexpr (preserveSubnormals) {
-                    AscendC::Reg::Div<float, &kRayCastNonFtzDivMode>(vT, vPyMinusYsK, vSafeDy, mask);
-                } else {
-                    AscendC::Reg::Div<float, &kRayCastNormalDivMode>(vT, vPyMinusYsK, vSafeDy, mask);
-                }
-                AscendC::Reg::Sub<float>(vDx, vXsNext, vXsK, mask);
-                AscendC::Reg::Mul<float>(vT, vT, vDx, mask);
-                AscendC::Reg::Add<float>(vXint, vT, vXsK, mask);
-
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpXint, vXint, vPx, mask);
-                AscendC::Reg::MaskAnd(cmpXint, cmpCond, cmpXint, mask);
-                AscendC::Reg::Select<float>(vCross, vOne, vZero, cmpXint);
-
-                AscendC::Reg::Add<float>(vCount, vCount, vCross, mask);
-
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vXsK, vPx, mask);
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpXint, vYsK, vPy, mask);
-                AscendC::Reg::MaskAnd(cmpMask1, cmpEq, cmpXint, mask);
-                AscendC::Reg::Select<float>(vOnBoundary, vOne, vOnBoundary, cmpMask1);
-
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vYsK, vPy, mask);
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpXint, vYsNext, vPy, mask);
-                AscendC::Reg::MaskAnd(cmpMask1, cmpEq, cmpXint, mask);
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::LE>(cmpEq, vXsK, vPx, mask);
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::LE>(cmpXint, vXsNext, vPx, mask);
-                AscendC::Reg::MaskXor(cmpMask2, cmpEq, cmpXint, mask);
+                // A vertex hit stops this pair without clearing earlier crossings.
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpMask1, vXsK, vPx, mask);
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpMask2, vYsK, vPy, mask);
+                AscendC::Reg::MaskAnd(cmpEq, cmpMask1, cmpMask2, mask);
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpMask1, vXsPrev, vPx, mask);
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpMask2, vYsPrev, vPy, mask);
                 AscendC::Reg::MaskAnd(cmpMask1, cmpMask1, cmpMask2, mask);
-                AscendC::Reg::Select<float>(vOnBoundary, vOne, vOnBoundary, cmpMask1);
+                AscendC::Reg::MaskOr(cmpEq, cmpEq, cmpMask1, mask);
+                AscendC::Reg::MaskAnd(cmpEq, cmpEq, active, mask);
+                AscendC::Reg::MaskXor(active, active, cmpEq, mask);
 
-                AscendC::Reg::Sub<float>(vCross, vPy, vYsNext, mask);
-                AscendC::Reg::Mul<float>(vCross, vPyMinusYsK, vCross, mask);
-                AscendC::Reg::Compares<float, AscendC::CMPMODE::LE>(cmpCond, vCross, 0.0f, mask);
-                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vXint, vPx, mask);
-                AscendC::Reg::MaskAnd(cmpMask1, cmpEq, cmpCond, mask);
-                AscendC::Reg::Select<float>(vOnBoundary, vOne, vOnBoundary, cmpMask1);
+                // Only min(sy,ty) < py <= max(sy,ty) can contribute a crossing.
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::LT>(cmpMask1, vYsK, vPy, mask);
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::GE>(cmpMask2, vYsPrev, vPy, mask);
+                AscendC::Reg::MaskAnd(cmpCond, cmpMask1, cmpMask2, mask);
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::GE>(cmpMask1, vYsK, vPy, mask);
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::LT>(cmpMask2, vYsPrev, vPy, mask);
+                AscendC::Reg::MaskAnd(cmpPart, cmpMask1, cmpMask2, mask);
+                AscendC::Reg::MaskOr(cmpCond, cmpCond, cmpPart, mask);
+                AscendC::Reg::MaskAnd(cmpCond, cmpCond, active, mask);
+
+                // Match MMCV's FP32 evaluation order: sx + ((py-sy)*(tx-sx))/(ty-sy).
+                AscendC::Reg::Sub<float>(vPyMinusYsK, vPy, vYsK, cmpCond);
+                AscendC::Reg::Sub<float>(vDx, vXsPrev, vXsK, cmpCond);
+                AscendC::Reg::Sub<float>(vDy, vYsPrev, vYsK, cmpCond);
+                AscendC::Reg::Mul<float>(vT, vPyMinusYsK, vDx, cmpCond);
+                if constexpr (preserveSubnormals) {
+                    AscendC::Reg::Div<float, &kRayCastNonFtzDivMode>(vT, vT, vDy, cmpCond);
+                } else {
+                    AscendC::Reg::Div<float, &kRayCastNormalDivMode>(vT, vT, vDy, cmpCond);
+                }
+                AscendC::Reg::Add<float>(vXint, vT, vXsK, cmpCond);
+
+                // An exact intersection hit also preserves the current count and stops.
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vXint, vPx, cmpCond);
+                AscendC::Reg::MaskAnd(cmpEq, cmpEq, cmpCond, mask);
+                AscendC::Reg::MaskXor(active, active, cmpEq, mask);
+                AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpXint, vXint, vPx, cmpCond);
+                AscendC::Reg::MaskAnd(cmpXint, cmpXint, cmpCond, mask);
+                AscendC::Reg::Select<float>(vCross, vOne, vZero, cmpXint);
+                AscendC::Reg::Add<float>(vCount, vCount, vCross, mask);
             }
 
             AscendC::Reg::Muls<float>(vHalf, vCount, 0.5f, mask);
@@ -179,9 +177,6 @@ __simd_vf__ inline void RayCastComputeVF(__ubuf__ T* pxAddr, __ubuf__ T* pyAddr,
             AscendC::Reg::Sub<float>(vTmp, vCount, vTwoFloor, mask);
             AscendC::Reg::Compares<float, AscendC::CMPMODE::NE>(cmpOdd, vTmp, 0.0f, mask);
             AscendC::Reg::Select<float>(vOut, vOne, vZero, cmpOdd);
-
-            AscendC::Reg::Compares<float, AscendC::CMPMODE::NE>(cmpOdd, vOnBoundary, 0.0f, mask);
-            AscendC::Reg::Select<float>(vOut, vZero, vOut, cmpOdd);
 
             __ubuf__ T* outRow = outBase + (uint32_t)row * cmAligned + mOff;
             AscendC::Reg::StoreAlign(outRow, vOut, mask);
@@ -195,12 +190,11 @@ __simd_vf__ inline void RayCastComputeVF_N(__ubuf__ T* pxAddr, __ubuf__ T* pyAdd
                                            __ubuf__ T* outBase, uint32_t curNVec, uint32_t M, uint32_t mIdx)
 {
     AscendC::Reg::RegTensor<float> vPx, vPy;
-    AscendC::Reg::RegTensor<float> vSxK, vSyK, vTxNext, vTyNext;
-    AscendC::Reg::RegTensor<float> vPyMinusSyK, vDy, vSafeDy, vDx, vT, vXint;
+    AscendC::Reg::RegTensor<float> vSxK, vSyK, vTxPrev, vTyPrev;
+    AscendC::Reg::RegTensor<float> vPyMinusSyK, vDy, vDx, vT, vXint;
     AscendC::Reg::RegTensor<float> vCross, vCount, vHalf, vFloor, vTwoFloor, vTmp, vOut;
-    AscendC::Reg::RegTensor<float> vOnBoundary;
     AscendC::Reg::RegTensor<float> vZero, vOne;
-    AscendC::Reg::MaskReg mask, cmpMask1, cmpMask2, cmpCond, cmpEq, cmpXint, cmpOdd;
+    AscendC::Reg::MaskReg mask, active, cmpMask1, cmpMask2, cmpCond, cmpEq, cmpXint, cmpOdd, cmpPart;
 
     AscendC::Reg::Duplicate(vZero, 0.0f);
     AscendC::Reg::Duplicate(vOne, 1.0f);
@@ -216,63 +210,61 @@ __simd_vf__ inline void RayCastComputeVF_N(__ubuf__ T* pxAddr, __ubuf__ T* pyAdd
         AscendC::Reg::LoadAlign<float, AscendC::Reg::DataCopyMode::DATA_BLOCK_COPY>(vPy, pyAddr + mOff, 1, mask);
 
         AscendC::Reg::Duplicate(vCount, 0.0f);
-        AscendC::Reg::Duplicate(vOnBoundary, 0.0f);
+        AscendC::Reg::MaskOr(active, mask, mask, mask);
 
         for (uint16_t k = 0; k < 4; k++) {
-            uint32_t kNext = (uint32_t)((k + 1) % 4);
+            uint32_t kPrev = (uint32_t)((k + 3) % 4);
             // (8, M) row-major: addr = row*M + col=mIdx
             AscendC::Reg::LoadAlign<float, AscendC::Reg::LoadDist::DIST_BRC_B32>(
                 vSyK, polyBase + (uint32_t)(2 * k + 1) * M + mIdx);
-            AscendC::Reg::LoadAlign<float, AscendC::Reg::LoadDist::DIST_BRC_B32>(vTyNext,
-                                                                                 polyBase + (2 * kNext + 1) * M + mIdx);
+            AscendC::Reg::LoadAlign<float, AscendC::Reg::LoadDist::DIST_BRC_B32>(vTyPrev,
+                                                                                 polyBase + (2 * kPrev + 1) * M + mIdx);
             AscendC::Reg::LoadAlign<float, AscendC::Reg::LoadDist::DIST_BRC_B32>(
                 vSxK, polyBase + (uint32_t)(2 * k) * M + mIdx);
-            AscendC::Reg::LoadAlign<float, AscendC::Reg::LoadDist::DIST_BRC_B32>(vTxNext,
-                                                                                 polyBase + (2 * kNext) * M + mIdx);
+            AscendC::Reg::LoadAlign<float, AscendC::Reg::LoadDist::DIST_BRC_B32>(vTxPrev,
+                                                                                 polyBase + (2 * kPrev) * M + mIdx);
 
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpMask1, vSyK, vPy, mask);
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpMask2, vTyNext, vPy, mask);
-            AscendC::Reg::MaskXor(cmpCond, cmpMask1, cmpMask2, mask);
-
-            AscendC::Reg::Sub<float>(vPyMinusSyK, vPy, vSyK, mask);
-            AscendC::Reg::Sub<float>(vDy, vTyNext, vSyK, mask);
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vDy, vZero, mask);
-            AscendC::Reg::Select<float>(vSafeDy, vOne, vDy, cmpEq);
-            if constexpr (preserveSubnormals) {
-                AscendC::Reg::Div<float, &kRayCastNonFtzDivMode>(vT, vPyMinusSyK, vSafeDy, mask);
-            } else {
-                AscendC::Reg::Div<float, &kRayCastNormalDivMode>(vT, vPyMinusSyK, vSafeDy, mask);
-            }
-            AscendC::Reg::Sub<float>(vDx, vTxNext, vSxK, mask);
-            AscendC::Reg::Mul<float>(vT, vT, vDx, mask);
-            AscendC::Reg::Add<float>(vXint, vT, vSxK, mask);
-
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpXint, vXint, vPx, mask);
-            AscendC::Reg::MaskAnd(cmpXint, cmpCond, cmpXint, mask);
-            AscendC::Reg::Select<float>(vCross, vOne, vZero, cmpXint);
-
-            AscendC::Reg::Add<float>(vCount, vCount, vCross, mask);
-
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vSxK, vPx, mask);
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpXint, vSyK, vPy, mask);
-            AscendC::Reg::MaskAnd(cmpMask1, cmpEq, cmpXint, mask);
-            AscendC::Reg::Select<float>(vOnBoundary, vOne, vOnBoundary, cmpMask1);
-
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vSyK, vPy, mask);
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpXint, vTyNext, vPy, mask);
-            AscendC::Reg::MaskAnd(cmpMask1, cmpEq, cmpXint, mask);
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::LE>(cmpEq, vSxK, vPx, mask);
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::LE>(cmpXint, vTxNext, vPx, mask);
-            AscendC::Reg::MaskXor(cmpMask2, cmpEq, cmpXint, mask);
+            // A vertex hit stops this pair without clearing earlier crossings.
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpMask1, vSxK, vPx, mask);
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpMask2, vSyK, vPy, mask);
+            AscendC::Reg::MaskAnd(cmpEq, cmpMask1, cmpMask2, mask);
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpMask1, vTxPrev, vPx, mask);
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpMask2, vTyPrev, vPy, mask);
             AscendC::Reg::MaskAnd(cmpMask1, cmpMask1, cmpMask2, mask);
-            AscendC::Reg::Select<float>(vOnBoundary, vOne, vOnBoundary, cmpMask1);
+            AscendC::Reg::MaskOr(cmpEq, cmpEq, cmpMask1, mask);
+            AscendC::Reg::MaskAnd(cmpEq, cmpEq, active, mask);
+            AscendC::Reg::MaskXor(active, active, cmpEq, mask);
 
-            AscendC::Reg::Sub<float>(vCross, vPy, vTyNext, mask);
-            AscendC::Reg::Mul<float>(vCross, vPyMinusSyK, vCross, mask);
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::LE>(cmpCond, vCross, vZero, mask);
-            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vXint, vPx, mask);
-            AscendC::Reg::MaskAnd(cmpMask1, cmpEq, cmpCond, mask);
-            AscendC::Reg::Select<float>(vOnBoundary, vOne, vOnBoundary, cmpMask1);
+            // Only min(sy,ty) < py <= max(sy,ty) can contribute a crossing.
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::LT>(cmpMask1, vSyK, vPy, mask);
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::GE>(cmpMask2, vTyPrev, vPy, mask);
+            AscendC::Reg::MaskAnd(cmpCond, cmpMask1, cmpMask2, mask);
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::GE>(cmpMask1, vSyK, vPy, mask);
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::LT>(cmpMask2, vTyPrev, vPy, mask);
+            AscendC::Reg::MaskAnd(cmpPart, cmpMask1, cmpMask2, mask);
+            AscendC::Reg::MaskOr(cmpCond, cmpCond, cmpPart, mask);
+            AscendC::Reg::MaskAnd(cmpCond, cmpCond, active, mask);
+
+            // Match MMCV's FP32 evaluation order: sx + ((py-sy)*(tx-sx))/(ty-sy).
+            AscendC::Reg::Sub<float>(vPyMinusSyK, vPy, vSyK, cmpCond);
+            AscendC::Reg::Sub<float>(vDx, vTxPrev, vSxK, cmpCond);
+            AscendC::Reg::Sub<float>(vDy, vTyPrev, vSyK, cmpCond);
+            AscendC::Reg::Mul<float>(vT, vPyMinusSyK, vDx, cmpCond);
+            if constexpr (preserveSubnormals) {
+                AscendC::Reg::Div<float, &kRayCastNonFtzDivMode>(vT, vT, vDy, cmpCond);
+            } else {
+                AscendC::Reg::Div<float, &kRayCastNormalDivMode>(vT, vT, vDy, cmpCond);
+            }
+            AscendC::Reg::Add<float>(vXint, vT, vSxK, cmpCond);
+
+            // An exact intersection hit also preserves the current count and stops.
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::EQ>(cmpEq, vXint, vPx, cmpCond);
+            AscendC::Reg::MaskAnd(cmpEq, cmpEq, cmpCond, mask);
+            AscendC::Reg::MaskXor(active, active, cmpEq, mask);
+            AscendC::Reg::Compare<float, AscendC::CMPMODE::GT>(cmpXint, vXint, vPx, cmpCond);
+            AscendC::Reg::MaskAnd(cmpXint, cmpXint, cmpCond, mask);
+            AscendC::Reg::Select<float>(vCross, vOne, vZero, cmpXint);
+            AscendC::Reg::Add<float>(vCount, vCount, vCross, mask);
         }
 
         AscendC::Reg::Muls<float>(vHalf, vCount, 0.5f, mask);
@@ -282,9 +274,6 @@ __simd_vf__ inline void RayCastComputeVF_N(__ubuf__ T* pxAddr, __ubuf__ T* pyAdd
         AscendC::Reg::Sub<float>(vTmp, vCount, vTwoFloor, mask);
         AscendC::Reg::Compare<float, AscendC::CMPMODE::NE>(cmpOdd, vTmp, vZero, mask);
         AscendC::Reg::Select<float>(vOut, vOne, vZero, cmpOdd);
-
-        AscendC::Reg::Compare<float, AscendC::CMPMODE::NE>(cmpOdd, vOnBoundary, vZero, mask);
-        AscendC::Reg::Select<float>(vOut, vZero, vOut, cmpOdd);
 
         AscendC::Reg::StoreAlign(outBase + mOff, vOut, mask);
     }

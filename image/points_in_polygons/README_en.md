@@ -15,14 +15,14 @@ English | [简体中文](./README.md)
 
 ## Function Description
 
-PointsInPolygons is an operator that determines the membership between points and quadrilaterals. Given N 2D points and M quadrilaterals (each quadrilateral has 4 vertices expanded in order into 8 scalars), the operator determines whether each point falls inside each quadrilateral (a point on an edge or a vertex is regarded as outside) and outputs an N×M binary floating-point matrix, where `1.0` indicates inside and `0.0` indicates outside.
+PointsInPolygons is an operator that determines the membership between points and quadrilaterals. Given N 2D points and M quadrilaterals (each quadrilateral has 4 vertices expanded in order into 8 scalars), the operator determines whether each point falls inside each quadrilateral and outputs an N×M binary floating-point matrix, where `1.0` indicates inside and `0.0` indicates outside.
 
   $$
-  x\_intersect_k = x_k + \frac{py - y_k}{y_{k+1} - y_k} \times (x_{k+1} - x_k)
+  x\_intersect_k = x_k + \frac{(py - y_k) \times (x_{k-1} - x_k)}{y_{k-1} - y_k}
   $$
 
   $$
-  c = \sum_{k=0}^{3} ((y_k > py) \neq (y_{k+1} > py)) \land (x\_intersect_k > px)
+  c = \sum_{k=0}^{3} ((y_k < py \land y_{k-1} \ge py) \lor (y_k \ge py \land y_{k-1} < py)) \land (x\_intersect_k > px)
   $$
 
   $$
@@ -31,12 +31,9 @@ PointsInPolygons is an operator that determines the membership between points an
 
 In the formula, px and py are the coordinates of point i, and x_k and y_k are the coordinates of the k-th vertex of polygon j.
 
-Two supplementary conventions apply to the formula above:
+Vertices are visited in the order k=0,1,2,3, with k-1 taken modulo 4. An exact vertex hit, or an exact match between px and a crossing edge's intersection x coordinate, ends traversal for that pair. The output uses the parity accumulated before the hit. A boundary point can therefore produce `0.0` or `1.0`, depending on vertex ordering and traversal order.
 
-- Boundary priority: if a point falls on any edge or any vertex of a quadrilateral, the point is on the boundary, the output is directly set to `0.0`, and the parity of the intersection count is no longer used for the determination.
-- Crossing condition: the operator computes `x_intersect_k` and counts an intersection only for an edge whose two y coordinates cross py (that is, an edge satisfying `(y_k > py) ≠ (y_{k+1} > py)`). A horizontal edge (`y_{k+1} = y_k`) does not satisfy the crossing condition, so the operator skips the intersection calculation and division by zero never occurs.
-
-Boundary comparisons use exact float32 equality without an epsilon. Very close points can differ from a float64 geometric reference because coordinate differences, division, multiplication and addition round in float32. Ray intersections use correctly rounded float32 division, including the subnormal path.
+Intersections use float32 multiplication before division. Only crossing edges participate; horizontal edges are skipped. Comparisons use exact equality without an epsilon, so near-boundary results can differ from a float64 geometric reference. Division is correctly rounded in float32, including the subnormal path.
 
 ## Parameter Description
 
@@ -88,7 +85,7 @@ Boundary comparisons use exact float32 equality without an epsilon. Very close p
 
 - Inputs and output support FLOAT (float32) in ND format only.
 - points and polygons must both be rank 2. All actual input dimensions must be nonnegative.
-- output.shape=(N,M), where N=points.shape[0] and M=polygons.shape[1].
+- output.shape=(N,M), where N=points.shape[0] and M=polygons.shape[1]. A dynamic declaration containing -1 produces (-1,-1); tiling validates the actual shapes.
 - When both N and M are nonzero, points.shape[1] must be 2 and polygons.shape[0] must be 8. When N=0 or M=0, return an empty output and skip these two dimension checks.
 - For membership computation, polygons must use contiguous (8,M) layout, with one quadrilateral per column. Transpose row-wise (M,8) data and make it contiguous before invocation.
 
