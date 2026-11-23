@@ -98,22 +98,31 @@ static ge::graphStatus InferShapeDeformableRoiPool(gert::InferShapeContext* cont
         return GRAPH_FAILED;
     }
 
+    // No fixed-rank requirement for x (align with the canndev built-in): the chip-agnostic
+    // registration also serves A2/A3, whose execute-stage re-inference sees the 5HD storage
+    // shape (rank 5) after GE format assignment. Only two dims are needed to derive the
+    // output channels. The strict rank-4 NCHW contract is enforced by the arch35 tiling
+    // which only runs on 950/350.
     const bool xUnknownRank = Ops::Base::IsUnknownRank(*xShape);
-    if (!xUnknownRank && xShape->GetDimNum() != OUTPUT_DIM_NUM) {
-        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "x", std::to_string(xShape->GetDimNum()).c_str(), "4");
+    if (!xUnknownRank && xShape->GetDimNum() < 2) {
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "x", std::to_string(xShape->GetDimNum()).c_str(),
+                                              "rank must be at least 2 to infer the output channels");
         return GRAPH_FAILED;
     }
-    if (!xUnknownRank) {
+    if (!xUnknownRank && xShape->GetDimNum() == OUTPUT_DIM_NUM) {
         const int64_t batch = xShape->GetDim(0);
         const int64_t channels = xShape->GetDim(1);
         const int64_t height = xShape->GetDim(2);
         const int64_t width = xShape->GetDim(3);
+        // Empty feature maps (N/C/H/W == 0) are tolerated here: infershape registration is
+        // chip-agnostic and A2/A3 built-in kernels accept them. The strict kernel contract
+        // (C/H/W >= 1) is enforced by the arch35 tiling which only runs on 950/350.
         if ((batch != ge::UNKNOWN_DIM && (batch < 0 || batch > MAX_INT32_VALUE)) ||
-            (channels != ge::UNKNOWN_DIM && (channels <= 0 || channels > MAX_INT32_VALUE)) ||
-            (height != ge::UNKNOWN_DIM && (height <= 0 || height > MAX_INT32_VALUE)) ||
-            (width != ge::UNKNOWN_DIM && (width <= 0 || width > MAX_INT32_VALUE))) {
+            (channels != ge::UNKNOWN_DIM && (channels < 0 || channels > MAX_INT32_VALUE)) ||
+            (height != ge::UNKNOWN_DIM && (height < 0 || height > MAX_INT32_VALUE)) ||
+            (width != ge::UNKNOWN_DIM && (width < 0 || width > MAX_INT32_VALUE))) {
             OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "x", "N, C, H, W",
-                                                  "N must be in [0, INT32_MAX], C/H/W in [1, INT32_MAX]");
+                                                  "N/C/H/W must be in [0, INT32_MAX]");
             return GRAPH_FAILED;
         }
     }
@@ -133,14 +142,21 @@ static ge::graphStatus InferShapeDeformableRoiPool(gert::InferShapeContext* cont
                                                   "num_rois must be in [0, INT32_MAX]");
             return GRAPH_FAILED;
         }
-        if (roiCols != ge::UNKNOWN_DIM && roiCols != ROIS_DIM1) {
+        // Empty rois (zero-element placeholder, e.g. shape [0, 0]) is tolerated here: the infershape
+        // registration is chip-agnostic and the A2/A3 built-in infershape performs no such check.
+        // The strict kernel contract (dim[1] == 5) is enforced by the arch35 tiling on 950/350.
+        const bool emptyRois = numRois == 0 || roiCols == 0;
+        if (!emptyRois && roiCols != ge::UNKNOWN_DIM && roiCols != ROIS_DIM1) {
             OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "rois", std::to_string(roiCols).c_str(),
                                                   "rois dim[1] must be 5");
             return GRAPH_FAILED;
         }
     }
 
-    if (offsetShape != nullptr && !Ops::Base::IsUnknownRank(*offsetShape)) {
+    const bool emptyOffset = offsetShape == nullptr || Ops::Base::IsUnknownRank(*offsetShape) ||
+                             offsetShape->GetDimNum() == 0 ||
+                             (offsetShape->GetDimNum() == 1 && offsetShape->GetDim(0) == 0);
+    if (!emptyOffset) {
         if (offsetShape->GetDimNum() != OFFSET_DIM_NUM) {
             OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "offset",
                                          std::to_string(offsetShape->GetDimNum()).c_str(), "4");

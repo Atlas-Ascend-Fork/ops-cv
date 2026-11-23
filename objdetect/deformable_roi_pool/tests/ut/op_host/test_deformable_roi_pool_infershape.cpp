@@ -108,7 +108,27 @@ TEST_F(DeformableRoiPoolInfershape, rejects_invalid_offset_shape)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
 }
 
-TEST_F(DeformableRoiPoolInfershape, rejects_zero_spatial_dimension)
+TEST_F(DeformableRoiPoolInfershape, accepts_empty_offset_vector)
+{
+    auto attrs = MakeAttrs({7, 7});
+    gert::InfershapeContextPara infershapeContextPara(
+        "DeformableRoiPool",
+        {
+            {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+            {{{4, 5}, {4, 5}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+            {{{0}, {0}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        attrs);
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {4, 3, 7, 7},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+TEST_F(DeformableRoiPoolInfershape, accepts_zero_spatial_dimension)
 {
     auto attrs = MakeAttrs({7, 7});
     gert::InfershapeContextPara infershapeContextPara(
@@ -121,6 +141,78 @@ TEST_F(DeformableRoiPoolInfershape, rejects_zero_spatial_dimension)
             {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
         },
         attrs);
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {4, 3, 7, 7},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+TEST_F(DeformableRoiPoolInfershape, accepts_empty_rois)
+{
+    auto attrs = MakeAttrs({7, 7});
+    gert::InfershapeContextPara infershapeContextPara(
+        "DeformableRoiPool",
+        {
+            {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+            {{{0, 0}, {0, 0}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        attrs, {1, 1, 0}, {1});
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {0, 3, 7, 7},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+TEST_F(DeformableRoiPoolInfershape, rejects_non_empty_rois_with_invalid_dim1)
+{
+    auto attrs = MakeAttrs({7, 7});
+    gert::InfershapeContextPara infershapeContextPara(
+        "DeformableRoiPool",
+        {
+            {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+            {{{4, 4}, {4, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        attrs, {1, 1, 0}, {1});
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(DeformableRoiPoolInfershape, passes_through_five_dim_x)
+{
+    auto attrs = MakeAttrs({7, 7});
+    gert::InfershapeContextPara infershapeContextPara(
+        "DeformableRoiPool",
+        {
+            {{{2, 3, 8, 8, 16}, {2, 3, 8, 8, 16}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+            {{{4, 5}, {4, 5}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+        },
+        attrs, {1, 1, 0}, {1});
+    std::vector<std::vector<int64_t>> expectOutputShape = {
+        {4, 3, 7, 7},
+    };
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+TEST_F(DeformableRoiPoolInfershape, rejects_insufficient_x_rank)
+{
+    auto attrs = MakeAttrs({7, 7});
+    gert::InfershapeContextPara infershapeContextPara("DeformableRoiPool",
+                                                      {
+                                                          {{{5}, {5}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                                          {{{4, 5}, {4, 5}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                                      },
+                                                      attrs, {1, 1, 0}, {1});
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
 }
 

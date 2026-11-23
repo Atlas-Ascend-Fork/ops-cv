@@ -80,6 +80,32 @@ TEST_F(DeformableRoiPoolTiling, deformable_roi_pool_fp32_no_offset)
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
 
+TEST_F(DeformableRoiPoolTiling, deformable_roi_pool_empty_offset_vector_treated_as_no_offset)
+{
+    struct DeformableRoiPoolCompileInfo {
+    } compileInfo;
+    std::vector<gert::TilingContextPara::OpAttr> attrs;
+    attrs.emplace_back("spatial_scale", Ops::Cv::AnyValue::CreateFrom(1.0f));
+    attrs.emplace_back("output_size", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{14, 14}));
+    attrs.emplace_back("sampling_ratio", Ops::Cv::AnyValue::CreateFrom(static_cast<int64_t>(2)));
+    attrs.emplace_back("gamma", Ops::Cv::AnyValue::CreateFrom(0.1f));
+    gert::TilingContextPara tilingContextPara(
+        "DeformableRoiPool",
+        {
+            {{{2, 16, 56, 56}, {2, 16, 56, 56}}, ge::DT_FLOAT, ge::FORMAT_ND}, // x
+            {{{8, 5}, {8, 5}}, ge::DT_FLOAT, ge::FORMAT_ND},                   // rois
+            {{{0}, {0}}, ge::DT_FLOAT, ge::FORMAT_ND},                         // empty offset
+        },
+        {
+            {{{8, 16, 14, 14}, {8, 16, 14, 14}}, ge::DT_FLOAT, ge::FORMAT_ND}, // y
+        },
+        attrs, &compileInfo, "Ascend950", 4, 262144, 4096);
+    uint64_t expectTilingKey = 1;
+    string expectTilingData = "8589934596 8589934600 240518168592 60129542200 8589934606 4453159313468293120 ";
+    std::vector<size_t> expectWorkspaces = {16777216};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
 TEST_F(DeformableRoiPoolTiling, rejects_invalid_offset_shape)
 {
     struct DeformableRoiPoolCompileInfo {
@@ -118,6 +144,49 @@ TEST_F(DeformableRoiPoolTiling, rejects_mismatched_rois_dtype)
                                               },
                                               {
                                                   {{{4, 3, 7, 7}, {4, 3, 7, 7}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                              },
+                                              attrs, &compileInfo, "Ascend950", 4, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(DeformableRoiPoolTiling, rejects_five_dim_x)
+{
+    struct DeformableRoiPoolCompileInfo {
+    } compileInfo;
+    std::vector<gert::TilingContextPara::OpAttr> attrs;
+    attrs.emplace_back("spatial_scale", Ops::Cv::AnyValue::CreateFrom(1.0f));
+    attrs.emplace_back("output_size", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{7, 7}));
+    attrs.emplace_back("sampling_ratio", Ops::Cv::AnyValue::CreateFrom(static_cast<int64_t>(0)));
+    attrs.emplace_back("gamma", Ops::Cv::AnyValue::CreateFrom(0.1f));
+    gert::TilingContextPara tilingContextPara(
+        "DeformableRoiPool",
+        {
+            {{{2, 3, 8, 8, 16}, {2, 3, 8, 8, 16}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // x
+            {{{4, 5}, {4, 5}}, ge::DT_FLOAT16, ge::FORMAT_ND},                     // rois
+        },
+        {
+            {{{4, 3, 7, 7}, {4, 3, 7, 7}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // y
+        },
+        attrs, &compileInfo, "Ascend950", 4, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(DeformableRoiPoolTiling, rejects_rois_with_zero_dim1)
+{
+    struct DeformableRoiPoolCompileInfo {
+    } compileInfo;
+    std::vector<gert::TilingContextPara::OpAttr> attrs;
+    attrs.emplace_back("spatial_scale", Ops::Cv::AnyValue::CreateFrom(1.0f));
+    attrs.emplace_back("output_size", Ops::Cv::AnyValue::CreateFrom(std::vector<int64_t>{7, 7}));
+    attrs.emplace_back("sampling_ratio", Ops::Cv::AnyValue::CreateFrom(static_cast<int64_t>(0)));
+    attrs.emplace_back("gamma", Ops::Cv::AnyValue::CreateFrom(0.1f));
+    gert::TilingContextPara tilingContextPara("DeformableRoiPool",
+                                              {
+                                                  {{{1, 3, 32, 32}, {1, 3, 32, 32}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                                  {{{0, 0}, {0, 0}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{0, 3, 7, 7}, {0, 3, 7, 7}}, ge::DT_FLOAT16, ge::FORMAT_ND},
                                               },
                                               attrs, &compileInfo, "Ascend950", 4, 262144, 4096);
     ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
