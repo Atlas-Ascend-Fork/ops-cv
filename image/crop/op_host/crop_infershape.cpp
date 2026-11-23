@@ -92,11 +92,13 @@ static ge::graphStatus InferShapeCrop(gert::InferShapeContext* context)
     size_t xRank = xShape->GetDimNum();
     size_t sizeRank = sizeShape->GetDimNum();
     if (xRank != sizeRank) {
-        OP_LOGE(context, "Crop: rank(x)=%zu != rank(size)=%zu", xRank, sizeRank);
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(context->GetNodeName(), "x, size", std::to_string(xRank).c_str(),
+                                                  "The rank of x must equal the rank of size");
         return GRAPH_FAILED;
     }
     if (xRank < 1 || xRank > static_cast<size_t>(MAX_DIMS)) {
-        OP_LOGE(context, "Crop: rank=%zu out of range [1, %d]", xRank, MAX_DIMS);
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "x", std::to_string(xRank).c_str(),
+                                                 "The rank of x must be in [1, " + std::to_string(MAX_DIMS) + "]");
         return GRAPH_FAILED;
     }
 
@@ -110,7 +112,8 @@ static ge::graphStatus InferShapeCrop(gert::InferShapeContext* context)
         axis += static_cast<int64_t>(xRank);
     }
     if (axis < 0 || axis >= static_cast<int64_t>(xRank)) {
-        OP_LOGE(context, "Crop: axis=%ld out of range [0, %zu)", axis, xRank);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "axis", std::to_string(axis).c_str(),
+                                              "The value of axis must be in [0, " + std::to_string(xRank) + ")");
         return GRAPH_FAILED;
     }
 
@@ -118,7 +121,8 @@ static ge::graphStatus InferShapeCrop(gert::InferShapeContext* context)
     OP_CHECK_NULL_WITH_CONTEXT(context, offsetsVec);
     size_t offsetsLen = offsetsVec->GetSize();
     if (offsetsLen != 1 && offsetsLen != static_cast<size_t>(static_cast<int64_t>(xRank) - axis)) {
-        OP_LOGE(context, "Crop: offsets length=%zu, must be 1 or %ld", offsetsLen, static_cast<int64_t>(xRank) - axis);
+        OP_LOGE_FOR_INVALID_LISTSIZE_WITH_REASON(context->GetNodeName(), "offsets", std::to_string(offsetsLen).c_str(),
+                                                 "The length of offsets must be 1 or " + std::to_string(xRank - axis));
         return GRAPH_FAILED;
     }
 

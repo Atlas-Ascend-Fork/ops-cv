@@ -111,4 +111,45 @@ TEST(Lut3DInferShape, RejectsKnownLutDimensionAboveMaximum)
 
     ExecuteTestCase(context, ge::GRAPH_FAILED);
 }
+TEST(Lut3DInferShape, RejectsInvalidImageRank5)
+{
+    gert::InfershapeContextPara context("LUT3D",
+                                        {
+                                            {{{2, 32, 32, 3, 1}, {2, 32, 32, 3, 1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                            {{{2, 32, 32, 3}, {2, 32, 32, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                        },
+                                        {
+                                            {{{1}, {1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                        });
+
+    ExecuteTestCase(context, ge::GRAPH_FAILED);
+}
+
+TEST(Lut3DInferShape, RejectsImageLastDimNot3)
+{
+    gert::InfershapeContextPara context("LUT3D",
+                                        {
+                                            {{{2, 32, 32, 4}, {2, 32, 32, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                            {{{2, 32, 32, 3}, {2, 32, 32, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                        },
+                                        {
+                                            {{{1}, {1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                        });
+
+    ExecuteTestCase(context, ge::GRAPH_FAILED);
+}
+
+TEST(Lut3DInferShape, RejectsLutRank3AndLastDimNot3)
+{
+    gert::InfershapeContextPara context("LUT3D",
+                                        {
+                                            {{{2, 32, 32, 3}, {2, 32, 32, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                            {{{17, 17, 17}, {17, 17, 17}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                        },
+                                        {
+                                            {{{1}, {1}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                        });
+
+    ExecuteTestCase(context, ge::GRAPH_FAILED);
+}
 } // namespace

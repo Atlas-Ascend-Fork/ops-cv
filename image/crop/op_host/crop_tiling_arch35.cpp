@@ -118,7 +118,9 @@ static ge::graphStatus GetAttrsAndValidate(gert::TilingContext* context, int32_t
         axis += static_cast<int64_t>(rank);
     }
     OP_CHECK_IF(axis < 0 || axis >= static_cast<int64_t>(rank),
-                OP_LOGE(context, "Crop: axis=%ld out of range [0, %d)", axis, rank), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "axis", std::to_string(axis).c_str(),
+                                                      "The value of axis must be in [0, " + std::to_string(rank) + ")"),
+                return ge::GRAPH_FAILED);
 
     const auto* offsetsVec = attrs->GetListInt(INDEX_ATTR_OFFSETS);
     OP_CHECK_NULL_WITH_CONTEXT(context, offsetsVec);
@@ -126,7 +128,8 @@ static ge::graphStatus GetAttrsAndValidate(gert::TilingContext* context, int32_t
     // offsets length must be 1 (broadcast) or rank-axis (per-dim)
     OP_CHECK_IF(
         offsetsLen != 1 && offsetsLen != static_cast<size_t>(rank - axis),
-        OP_LOGE(context, "Crop: offsets length=%zu, must be 1 or %ld", offsetsLen, static_cast<int64_t>(rank - axis)),
+        OP_LOGE_FOR_INVALID_LISTSIZE_WITH_REASON(context->GetNodeName(), "offsets", std::to_string(offsetsLen).c_str(),
+                                                 "The length of offsets must be 1 or " + std::to_string(rank - axis)),
         return ge::GRAPH_FAILED);
 
     if (offsetsLen == 1) {
@@ -591,11 +594,17 @@ static ge::graphStatus CropTilingFunc(gert::TilingContext* context)
     const auto& sizeOriginShape = sizeInput->GetOriginShape();
 
     int32_t rank = static_cast<int32_t>(xInput->GetStorageShape().GetDimNum());
-    OP_CHECK_IF(rank < 1 || rank > MAX_DIMS, OP_LOGE(context, "Crop: rank=%d out of range [1, %d]", rank, MAX_DIMS),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        rank < 1 || rank > MAX_DIMS,
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "x", std::to_string(rank).c_str(),
+                                                 "The rank of x must be in [1, " + std::to_string(MAX_DIMS) + "]"),
+        return ge::GRAPH_FAILED);
     int32_t sizeRank = static_cast<int32_t>(sizeOriginShape.GetDimNum());
-    OP_CHECK_IF(rank != sizeRank, OP_LOGE(context, "Crop: rank(x)=%d != rank(size)=%d", rank, sizeRank),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        rank != sizeRank,
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(context->GetNodeName(), "x, size", std::to_string(rank).c_str(),
+                                                  "The rank of x must equal the rank of size"),
+        return ge::GRAPH_FAILED);
 
     int64_t xShapeArr[MAX_DIMS] = {};
     int64_t sizeShapeArr[MAX_DIMS] = {};
@@ -607,12 +616,14 @@ static ge::graphStatus CropTilingFunc(gert::TilingContext* context)
     for (int32_t i = 0; i < rank; i++) {
         OP_CHECK_IF(
             xShapeArr[i] < 0,
-            OP_LOGE(context, "Crop: x dim[%d]=%ld must be concrete and non-negative at tiling", i, xShapeArr[i]),
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x", std::to_string(xShapeArr[i]).c_str(),
+                                                  "Each dim of x must be concrete and non-negative"),
             return ge::GRAPH_FAILED);
-        OP_CHECK_IF(
-            sizeShapeArr[i] < 0,
-            OP_LOGE(context, "Crop: size dim[%d]=%ld must be concrete and non-negative at tiling", i, sizeShapeArr[i]),
-            return ge::GRAPH_FAILED);
+        OP_CHECK_IF(sizeShapeArr[i] < 0,
+                    OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "size",
+                                                          std::to_string(sizeShapeArr[i]).c_str(),
+                                                          "Each dim of size must be concrete and non-negative"),
+                    return ge::GRAPH_FAILED);
     }
 
     int64_t axis = 0;

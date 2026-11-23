@@ -518,6 +518,78 @@ TEST_F(CropTiling, crop_tiling_row_partition_fp16_skipped_dim)
 }
 
 // Small output falls back to SIMT.
+// axis 越界 [0, rank): 应失败 (EZ0026)
+TEST_F(CropTiling, crop_tiling_axis_oob_reject)
+{
+    struct CropCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Crop",
+        {
+            {{{3, 3}, {3, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2, 2}, {2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{2, 2}, {2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(2)),
+            gert::TilingContextPara::OpAttr("offsets", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({0, 0})),
+        },
+        &compileInfo, "Ascend950", 48, 262144, 4096);
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_FALSE(tilingOk);
+}
+
+// offsets 长度既非 1 也非 rank-axis: 应失败 (EZ0038)
+TEST_F(CropTiling, crop_tiling_offsets_len_mismatch_reject)
+{
+    struct CropCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Crop",
+        {
+            {{{3, 3}, {3, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2, 2}, {2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{2, 2}, {2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(0)),
+            gert::TilingContextPara::OpAttr("offsets", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({0, 1, 2})),
+        },
+        &compileInfo, "Ascend950", 48, 262144, 4096);
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_FALSE(tilingOk);
+}
+
+// rank(x) != rank(size): 3D vs 2D, 应失败 (EZ0013)
+TEST_F(CropTiling, crop_tiling_rank_mismatch_reject)
+{
+    struct CropCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Crop",
+        {
+            {{{4, 3, 3}, {4, 3, 3}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{2, 2}, {2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{4, 2, 2}, {4, 2, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
+            gert::TilingContextPara::OpAttr("offsets", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({0, 0})),
+        },
+        &compileInfo, "Ascend950", 48, 262144, 4096);
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_FALSE(tilingOk);
+}
+
 TEST_F(CropTiling, crop_tiling_simt_fallback_small)
 {
     struct CropCompileInfo {

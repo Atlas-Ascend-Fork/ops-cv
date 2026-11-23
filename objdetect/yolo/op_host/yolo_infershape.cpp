@@ -59,7 +59,9 @@ static ge::graphStatus InferShapeYolo(gert::InferShapeContext* context)
 
     // Validate input dimensions: rank must be >= 4; only dims 0/2/3 are used
     OP_CHECK_IF(xShape->GetDimNum() < 4,
-                OP_LOGE(context, "Yolo: input dim num = %zu, should be >= 4", xShape->GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "x",
+                                                         std::to_string(xShape->GetDimNum()).c_str(),
+                                                         "The rank of x must be at least 4"),
                 return ge::GRAPH_FAILED);
 
     // Validate attribute constraints
@@ -74,17 +76,23 @@ static ge::graphStatus InferShapeYolo(gert::InferShapeContext* context)
     int64_t W = xShape->GetDim(IDX_3);
 
     // Validate batch dimension (SE requires N >= 1, no empty tensor)
-    OP_CHECK_IF(N != ge::UNKNOWN_DIM && N <= 0, OP_LOGE(context, "Yolo: N must be >= 1, got N=%ld", N),
+    OP_CHECK_IF(N != ge::UNKNOWN_DIM && N <= 0,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x", std::to_string(N).c_str(),
+                                                      "The N of x must be >= 1"),
                 return ge::GRAPH_FAILED);
 
     // Validate spatial dimensions
-    OP_CHECK_IF((H != ge::UNKNOWN_DIM && H <= 0) || (W != ge::UNKNOWN_DIM && W <= 0),
-                OP_LOGE(context, "Yolo: H and W must be > 0, got H=%ld, W=%ld", H, W), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (H != ge::UNKNOWN_DIM && H <= 0) || (W != ge::UNKNOWN_DIM && W <= 0),
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x", std::to_string((H <= 0) ? H : W).c_str(),
+                                              "The H and W of x must be > 0"),
+        return ge::GRAPH_FAILED);
 
     // Validate channel consistency
     int64_t expectedC = boxes * (coords + 1 + classes);
     OP_CHECK_IF(C != ge::UNKNOWN_DIM && C != expectedC,
-                OP_LOGE(context, "Yolo: input channel C=%ld, expected boxes*(coords+1+classes)=%ld", C, expectedC),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x", std::to_string(C).c_str(),
+                                                      "The C of x must equal boxes * (coords + 1 + classes)"),
                 return ge::GRAPH_FAILED);
 
     // H/W unknown: dims derived from H*W stay unknown

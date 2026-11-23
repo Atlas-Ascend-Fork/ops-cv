@@ -300,6 +300,33 @@ TEST_F(YoloTiling, yolo_invalid_dim_num)
     ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
 }
 
+// N=0 空输入: 应失败 (EZ0026)
+TEST_F(YoloTiling, yolo_invalid_zero_batch)
+{
+    struct YoloCompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "Yolo",
+        {
+            {{{0, 255, 13, 13}, {0, 255, 13, 13}}, ge::DT_FLOAT, ge::FORMAT_ND}, // N=0
+        },
+        {
+            {{{1, 12, 192}, {1, 12, 192}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 528}, {1, 528}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{1, 80, 528}, {1, 80, 528}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::TilingContextPara::OpAttr("boxes", Ops::Cv::AnyValue::CreateFrom<int64_t>(3)),
+            gert::TilingContextPara::OpAttr("coords", Ops::Cv::AnyValue::CreateFrom<int64_t>(4)),
+            gert::TilingContextPara::OpAttr("classes", Ops::Cv::AnyValue::CreateFrom<int64_t>(80)),
+            gert::TilingContextPara::OpAttr("yolo_version", Ops::Cv::AnyValue::CreateFrom<std::string>("V3")),
+            gert::TilingContextPara::OpAttr("softmax", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+            gert::TilingContextPara::OpAttr("background", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+        },
+        &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
 TEST_F(YoloTiling, yolo_invalid_channel_mismatch)
 {
     struct YoloCompileInfo {

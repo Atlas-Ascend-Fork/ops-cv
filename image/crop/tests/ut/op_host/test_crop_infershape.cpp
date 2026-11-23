@@ -428,6 +428,25 @@ TEST_F(CropInfershape, crop_infershape_offsets_len_mismatch_reject)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
 }
 
+// rank(x) != rank(size): 4D vs 3D, 应失败 (EZ0013)
+TEST_F(CropInfershape, crop_infershape_rank_mismatch_reject)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "Crop",
+        {
+            {{{4, 4, 8, 8}, {4, 4, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{4, 5, 5}, {4, 5, 5}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr("axis", Ops::Cv::AnyValue::CreateFrom<int64_t>(1)),
+            gert::InfershapeContextPara::OpAttr("offsets", Ops::Cv::AnyValue::CreateFrom<std::vector<int64_t>>({1})),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
 // UNKNOWN 维度 + INT64_MAX offset: 应跳过边界校验, 成功
 TEST_F(CropInfershape, crop_infershape_unknown_dim_with_extreme_offset_success)
 {

@@ -163,14 +163,16 @@ static ge::graphStatus ValidateAttr(gert::TilingContext* context, int32_t& bayer
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
     const char* pBayerPattern = attrs->GetAttrPointer<char>(0);
     OP_CHECK_IF(pBayerPattern == nullptr,
-                OP_LOGE_WITH_INVALID_ATTR(context->GetNodeName(), "bayer_pattern", "null", "'binning' or 'quad'"),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "bayer_pattern", "null",
+                                                      "The value must be 'binning' or 'quad'"),
                 return ge::GRAPH_FAILED);
     if (strcmp(pBayerPattern, "quad") == 0) {
         bayerPattern = MODE_QUAD;
     } else if (strcmp(pBayerPattern, "binning") == 0) {
         bayerPattern = MODE_BINNING;
     } else {
-        OP_LOGE_WITH_INVALID_ATTR(context->GetNodeName(), "bayer_pattern", pBayerPattern, "'binning' or 'quad'");
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "bayer_pattern", pBayerPattern,
+                                              "The value must be 'binning' or 'quad'");
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;

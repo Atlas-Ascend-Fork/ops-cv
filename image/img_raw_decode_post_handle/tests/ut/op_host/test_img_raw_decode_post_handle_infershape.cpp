@@ -121,6 +121,27 @@ TEST_F(ImgRawDecodePostHandleInfershape, img_raw_decode_post_handle_infershape_i
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
 }
 
+// 负向: img_size 元素数不足(1个int32), infershape 应失败 (EZ0015)
+TEST_F(ImgRawDecodePostHandleInfershape, img_raw_decode_post_handle_infershape_imgsize_short_fail)
+{
+    std::vector<int32_t> imgSizeValues = {64};
+
+    gert::InfershapeContextPara infershapeContextPara(
+        "ImgRawDecodePostHandle",
+        {
+            {{{64, 64}, {64, 64}}, ge::DT_UINT16, ge::FORMAT_ND},                  // img_channel_0
+            {{{64, 64}, {64, 64}}, ge::DT_UINT16, ge::FORMAT_ND},                  // img_channel_1
+            {{{64, 64}, {64, 64}}, ge::DT_UINT16, ge::FORMAT_ND},                  // img_channel_2
+            {{{64, 64}, {64, 64}}, ge::DT_UINT16, ge::FORMAT_ND},                  // img_channel_3
+            {{{1}, {1}}, ge::DT_INT32, ge::FORMAT_ND, true, imgSizeValues.data()}, // img_size (仅1元素)
+            {{{4}, {4}}, ge::DT_FLOAT, ge::FORMAT_ND},                             // gamma
+        },
+        {
+            {{{}, {}}, ge::DT_UINT16, ge::FORMAT_ND},
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED);
+}
+
 // 负向: gamma shape[0]=3 (应为 4), infershape 应失败
 TEST_F(ImgRawDecodePostHandleInfershape, img_raw_decode_post_handle_infershape_gamma_shape_fail)
 {

@@ -313,7 +313,9 @@ static ge::graphStatus YoloTilingFunc(gert::TilingContext* context)
     int64_t boxesHw = 0;
     int64_t boxesHw2 = 0;
     OP_CHECK_IF(!SafeMul(HW, 2, hw2) || !SafeMul(boxes, HW, boxesHw) || !SafeMul(boxesHw, 2, boxesHw2),
-                OP_LOGE(context, "aligned output dimension overflows int64"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x", "overflow",
+                                                      "The aligned output dimension overflows int64"),
+                return ge::GRAPH_FAILED);
     int64_t ceilHW = (hw2 + 32 + 31) / 32 * 32 / 2;
     int64_t ceilBoxesHw = (boxesHw2 + 32 + 31) / 32 * 32 / 2;
 

@@ -65,9 +65,9 @@ ge::graphStatus CheckInputs(gert::TilingContext* ctx, int64_t& dim0, bool& rever
         return ge::GRAPH_FAILED;
     }
     if (dtBoxes != dtAnchors) {
-        OP_LOGE(nodeName, "boxes/anchors dtype mismatch: %s vs %s",
-                ge::TypeUtils::DataTypeToSerialString(dtBoxes).c_str(),
-                ge::TypeUtils::DataTypeToSerialString(dtAnchors).c_str());
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(nodeName, "boxes, anchors",
+                                               ge::TypeUtils::DataTypeToSerialString(dtAnchors).c_str(),
+                                               "The dtype of anchors must match the dtype of boxes");
         return ge::GRAPH_FAILED;
     }
 
@@ -130,7 +130,8 @@ ge::graphStatus CheckInputs(gert::TilingContext* ctx, int64_t& dim0, bool& rever
     const float* clipPtr = attrs->GetFloat(1);
     decodeClip = (clipPtr != nullptr) ? *clipPtr : 0.0f;
     if (std::isnan(decodeClip) || decodeClip < kDecodeClipMin || decodeClip > kDecodeClipMax) {
-        OP_LOGE(nodeName, "decode_clip must be in [0.0, 10.0], got %f", decodeClip);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(nodeName, "decode_clip", std::to_string(decodeClip).c_str(),
+                                              "The value of decode_clip must be in [0.0, 10.0]");
         return ge::GRAPH_FAILED;
     }
 
@@ -143,7 +144,9 @@ ge::graphStatus CheckInputs(gert::TilingContext* ctx, int64_t& dim0, bool& rever
     int64_t a0 = anchorsShape->GetStorageShape().GetDim(0);
     int64_t a1 = anchorsShape->GetStorageShape().GetDim(1);
     if (b0 != a0 || b1 != a1) {
-        OP_LOGE(nodeName, "boxes/anchors shape mismatch: boxes=[%ld,%ld] anchors=[%ld,%ld]", b0, b1, a0, a1);
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(nodeName, "boxes, anchors",
+                                               (std::to_string(b0) + "," + std::to_string(b1)).c_str(),
+                                               "The shape of anchors must match the shape of boxes");
         return ge::GRAPH_FAILED;
     }
     if (reversedBox) {

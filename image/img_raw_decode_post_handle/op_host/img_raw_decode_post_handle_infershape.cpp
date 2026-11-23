@@ -167,9 +167,9 @@ static ge::graphStatus InferOutputShape(gert::InferShapeContext* context)
     const gert::Shape* imgSizeShape = context->GetInputShape(IDX_4);
     int64_t imgSizeDim0 = (imgSizeShape == nullptr) ? UNKNOWN_DIM : imgSizeShape->GetDim(IDX_0);
     if (imgSizeDim0 != UNKNOWN_DIM && imgSizeTensor->GetSize() < IMG_SIZE_BYTES) {
-        OP_LOGE_WITH_INVALID_INPUT_SHAPESIZE(context->GetNodeName(), IDX_4,
-                                             std::to_string(imgSizeTensor->GetSize() / sizeof(int32_t)).c_str(),
-                                             std::to_string(IMG_SIZE_ELEM_NUM).c_str());
+        OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(
+            context->GetNodeName(), "img_size", std::to_string(imgSizeTensor->GetSize() / sizeof(int32_t)).c_str(),
+            "The element count of img_size must be " + std::to_string(IMG_SIZE_ELEM_NUM));
         return GRAPH_FAILED;
     }
     int64_t hOut = static_cast<int64_t>(imgSizeData[IDX_0]);

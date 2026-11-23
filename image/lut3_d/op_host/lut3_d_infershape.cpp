@@ -44,8 +44,9 @@ static ge::graphStatus InferShapeLut3D(gert::InferShapeContext* context)
     const auto* lutDesc = context->GetInputDesc(IDX_1);
     OP_CHECK_NULL_WITH_CONTEXT(context, lutDesc);
     if (imgDesc->GetDataType() != lutDesc->GetDataType()) {
-        OP_LOGE(context, "img.dtype (%d) and lut_table.dtype (%d) must be the same",
-                static_cast<int>(imgDesc->GetDataType()), static_cast<int>(lutDesc->GetDataType()));
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "img, lut_table",
+                                               std::to_string(static_cast<int>(lutDesc->GetDataType())).c_str(),
+                                               "The dtype of lut_table must match the dtype of img");
         return GRAPH_FAILED;
     }
 
@@ -55,41 +56,61 @@ static ge::graphStatus InferShapeLut3D(gert::InferShapeContext* context)
     // Validate img dims: 3D or 4D, last dim = 3
     const size_t imgDimNum = imgShape->GetDimNum();
     if (!imgUnknownRank) {
-        OP_CHECK_IF(imgDimNum != 3 && imgDimNum != 4,
-                    OP_LOGE(context, "The dims of img must be 3 or 4, but got %zu", imgDimNum), return GRAPH_FAILED);
+        OP_CHECK_IF(
+            imgDimNum != 3 && imgDimNum != 4,
+            OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "img", std::to_string(imgDimNum).c_str(),
+                                                     "The rank of img must be 3 or 4"),
+            return GRAPH_FAILED);
         for (size_t i = 0; i < imgDimNum; ++i) {
             const int64_t imgDim = imgShape->GetDim(i);
-            OP_CHECK_IF(imgDim < 0 && imgDim != ge::UNKNOWN_DIM,
-                        OP_LOGE(context, "img dim[%zu] must be non-negative or UNKNOWN_DIM, but got %ld", i, imgDim),
-                        return GRAPH_FAILED);
+            OP_CHECK_IF(
+                imgDim < 0 && imgDim != ge::UNKNOWN_DIM,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "img", std::to_string(imgDim).c_str(),
+                                                      "Each dim of img must be non-negative or UNKNOWN_DIM"),
+                return GRAPH_FAILED);
         }
         const int64_t imgChannel = imgShape->GetDim(imgDimNum - 1);
-        OP_CHECK_IF(imgChannel != ge::UNKNOWN_DIM && imgChannel != 3, OP_LOGE(context, "img last dim must be 3"),
-                    return GRAPH_FAILED);
+        OP_CHECK_IF(
+            imgChannel != ge::UNKNOWN_DIM && imgChannel != 3,
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "img", std::to_string(imgChannel).c_str(),
+                                                  "The last dim of img must be 3"),
+            return GRAPH_FAILED);
     }
 
     // Validate lut_table dims: 4D, last dim = 3, first 3 dims equal, N <= 20
     if (!lutUnknownRank) {
         OP_CHECK_IF(lutShape->GetDimNum() != 4,
-                    OP_LOGE(context, "The dims of lut_table must be 4, but got %zu", lutShape->GetDimNum()),
+                    OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "lut_table",
+                                                             std::to_string(lutShape->GetDimNum()).c_str(),
+                                                             "The rank of lut_table must be 4"),
                     return GRAPH_FAILED);
         const int64_t lutDim0 = lutShape->GetDim(0);
         const int64_t lutDim1 = lutShape->GetDim(1);
         const int64_t lutDim2 = lutShape->GetDim(2);
         const int64_t lutChannel = lutShape->GetDim(3);
         OP_CHECK_IF(lutChannel != ge::UNKNOWN_DIM && lutChannel != 3,
-                    OP_LOGE(context, "Dim of table_info[3] should be 3"), return GRAPH_FAILED);
-        OP_CHECK_IF((lutDim0 != ge::UNKNOWN_DIM && lutDim1 != ge::UNKNOWN_DIM && lutDim0 != lutDim1) ||
-                        (lutDim0 != ge::UNKNOWN_DIM && lutDim2 != ge::UNKNOWN_DIM && lutDim0 != lutDim2) ||
-                        (lutDim1 != ge::UNKNOWN_DIM && lutDim2 != ge::UNKNOWN_DIM && lutDim1 != lutDim2),
-                    OP_LOGE(context, "Dim of table_info[0], [1] and [2] should be equal"), return GRAPH_FAILED);
-        OP_CHECK_IF((lutDim0 != ge::UNKNOWN_DIM && lutDim0 < 1) || (lutDim1 != ge::UNKNOWN_DIM && lutDim1 < 1) ||
-                        (lutDim2 != ge::UNKNOWN_DIM && lutDim2 < 1),
-                    OP_LOGE(context, "The first three dims of table_info should not be less than 1"),
+                    OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "lut_table",
+                                                          std::to_string(lutChannel).c_str(),
+                                                          "The dim 3 of lut_table must be 3"),
                     return GRAPH_FAILED);
-        OP_CHECK_IF(lutDim0 > 20 || lutDim1 > 20 || lutDim2 > 20,
-                    OP_LOGE(context, "The first three dims of table_info should not be greater than 20"),
-                    return GRAPH_FAILED);
+        OP_CHECK_IF(
+            (lutDim0 != ge::UNKNOWN_DIM && lutDim1 != ge::UNKNOWN_DIM && lutDim0 != lutDim1) ||
+                (lutDim0 != ge::UNKNOWN_DIM && lutDim2 != ge::UNKNOWN_DIM && lutDim0 != lutDim2) ||
+                (lutDim1 != ge::UNKNOWN_DIM && lutDim2 != ge::UNKNOWN_DIM && lutDim1 != lutDim2),
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "lut_table", std::to_string(lutDim0).c_str(),
+                                                  "The first three dims of lut_table must be equal"),
+            return GRAPH_FAILED);
+        OP_CHECK_IF(
+            (lutDim0 != ge::UNKNOWN_DIM && lutDim0 < 1) || (lutDim1 != ge::UNKNOWN_DIM && lutDim1 < 1) ||
+                (lutDim2 != ge::UNKNOWN_DIM && lutDim2 < 1),
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "lut_table", std::to_string(lutDim0).c_str(),
+                                                  "Each of the first three dims of lut_table must be >= 1"),
+            return GRAPH_FAILED);
+        OP_CHECK_IF(
+            lutDim0 > 20 || lutDim1 > 20 || lutDim2 > 20,
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "lut_table", std::to_string(lutDim0).c_str(),
+                                                  "Each of the first three dims of lut_table must be <= 20"),
+            return GRAPH_FAILED);
     }
 
     // Output shape = img shape
