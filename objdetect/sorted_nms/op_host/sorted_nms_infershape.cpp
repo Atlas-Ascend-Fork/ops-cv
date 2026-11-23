@@ -10,6 +10,7 @@
 
 #include "register/op_impl_registry.h"
 #include "log/log.h"
+#include <string>
 
 namespace {
 constexpr int64_t INPUT_BOXES = 0;
@@ -23,7 +24,8 @@ static ge::graphStatus InferShapeForSortedNMS(gert::InferShapeContext* context)
     auto boxesShape = context->GetInputShape(INPUT_BOXES);
     auto selectedShape = context->GetOutputShape(OUTPUT_SELECTED_INDICES);
     if (boxesShape == nullptr || selectedShape == nullptr) {
-        OP_LOGE(context, "boxes shape or selected_indices shape is nullptr");
+        OP_LOGE_FOR_INVALID_ARGUMENT_WITH_REASON(context->GetNodeName(), "boxes and selected_indices",
+                                                 "the boxes shape or the selected_indices shape is nullptr");
         return ge::GRAPH_FAILED;
     }
 
@@ -36,7 +38,9 @@ static ge::graphStatus InferShapeForSortedNMS(gert::InferShapeContext* context)
 
 static ge::graphStatus InferShapeRangeForSortedNMS(gert::InferShapeRangeContext* context)
 {
-    OP_CHECK_IF(context == nullptr, OP_LOGE("SortedNMS", "InferShapeRangeContext is nullptr"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(context == nullptr,
+                OP_LOGE_FOR_INVALID_ARGUMENT_WITH_REASON("SortedNMS", "context", "InferShapeRangeContext is nullptr"),
+                return ge::GRAPH_FAILED);
 
     auto boxesRange = context->GetInputShapeRange(INPUT_BOXES);
     auto selectedRange = context->GetOutputShapeRange(OUTPUT_SELECTED_INDICES);
@@ -47,7 +51,10 @@ static ge::graphStatus InferShapeRangeForSortedNMS(gert::InferShapeRangeContext*
     OP_CHECK_NULL_WITH_CONTEXT(context, selectedRange->GetMax());
 
     OP_CHECK_IF(boxesRange->GetMax()->GetDimNum() == 0,
-                OP_LOGE(context, "boxes shape range must contain a first dimension"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "boxes",
+                                                      Ops::Base::ToString(*(boxesRange->GetMax())).c_str(),
+                                                      "the boxes shape range must contain a first dimension"),
+                return ge::GRAPH_FAILED);
     const int64_t maxBoxesNum = boxesRange->GetMax()->GetDim(0);
 
     selectedRange->GetMin()->SetDimNum(OUTPUT_RANK);

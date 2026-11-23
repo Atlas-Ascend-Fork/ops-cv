@@ -9,6 +9,7 @@
  */
 
 #include <cstdint>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -23,19 +24,37 @@ struct CompileInfo {
     uint64_t ubSize{262144};
 };
 
-gert::TilingContextPara MakeContext(int64_t boxes, int64_t classes, int64_t maxBoxes, uint64_t ubSize = 262144)
+gert::StorageShape VecToShape(const std::vector<int64_t>& dims)
+{
+    gert::StorageShape shape;
+    shape.MutableOriginShape().SetDimNum(dims.size());
+    shape.MutableStorageShape().SetDimNum(dims.size());
+    for (size_t i = 0; i < dims.size(); ++i) {
+        shape.MutableOriginShape().SetDim(i, dims[i]);
+        shape.MutableStorageShape().SetDim(i, dims[i]);
+    }
+    return shape;
+}
+
+gert::TilingContextPara MakeContext(int64_t boxes, int64_t classes, int64_t maxBoxes, uint64_t ubSize = 262144,
+                                    ge::DataType maxOutputDtype = ge::DT_INT32,
+                                    const std::vector<int64_t>& iouShape = {1},
+                                    ge::DataType indexDtype = ge::DT_FLOAT16, std::vector<int64_t> indexShape = {})
 {
     static CompileInfo compileInfo;
     compileInfo = CompileInfo{64, ubSize};
+    if (indexShape.empty()) {
+        indexShape = {1, classes, boxes, 3};
+    }
     return gert::TilingContextPara(
         "NonMaxSuppressionV7",
         {
             {gert::StorageShape({1, boxes, 4}, {1, boxes, 4}), ge::DT_FLOAT, ge::FORMAT_ND},
             {gert::StorageShape({1, classes, boxes}, {1, classes, boxes}), ge::DT_FLOAT, ge::FORMAT_ND},
-            {gert::StorageShape({1}, {1}), ge::DT_INT32, ge::FORMAT_ND},
+            {gert::StorageShape({1}, {1}), maxOutputDtype, ge::FORMAT_ND},
+            {VecToShape(iouShape), ge::DT_FLOAT, ge::FORMAT_ND},
             {gert::StorageShape({1}, {1}), ge::DT_FLOAT, ge::FORMAT_ND},
-            {gert::StorageShape({1}, {1}), ge::DT_FLOAT, ge::FORMAT_ND},
-            {gert::StorageShape({1, classes, boxes, 3}, {1, classes, boxes, 3}), ge::DT_FLOAT16, ge::FORMAT_ND},
+            {VecToShape(indexShape), indexDtype, ge::FORMAT_ND},
         },
         {
             {gert::StorageShape({maxBoxes, 3}, {maxBoxes, 3}), ge::DT_INT32, ge::FORMAT_ND},
@@ -97,4 +116,55 @@ TEST(NonMaxSuppressionV7Tiling, vector_tile_excludes_simt_data_cache)
     // 64 KiB total - 32 KiB DCache - 16 KiB fixed reserve leaves 16 KiB.
     // floor(16 KiB / (11 * sizeof(float) + sizeof(uint8_t))) aligned to 64 is 320.
     EXPECT_EQ(tiling->tileSize, 320);
+}
+
+TEST(NonMaxSuppressionV7Tiling, rejects_wrong_optional_scalar_dtype)
+{
+    auto context = MakeContext(16, 80, 4, 262144, ge::DT_FLOAT);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}
+
+TEST(NonMaxSuppressionV7Tiling, rejects_non_scalar_optional_scalar)
+{
+    auto context = MakeContext(16, 80, 4, 262144, ge::DT_INT32, {2});
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}
+
+TEST(NonMaxSuppressionV7Tiling, rejects_wrong_index_id_dtype)
+{
+    auto context = MakeContext(16, 80, 4, 262144, ge::DT_INT32, {1}, ge::DT_FLOAT);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}
+
+TEST(NonMaxSuppressionV7Tiling, rejects_wrong_index_id_rank)
+{
+    auto context = MakeContext(16, 80, 4, 262144, ge::DT_INT32, {1}, ge::DT_FLOAT16, {1, 80, 16});
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}
+
+TEST(NonMaxSuppressionV7Tiling, rejects_index_id_leading_dims_mismatch)
+{
+    auto context = MakeContext(16, 80, 4, 262144, ge::DT_INT32, {1}, ge::DT_FLOAT16, {2, 80, 16, 3});
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}
+
+TEST(NonMaxSuppressionV7Tiling, rejects_index_id_width_not_3_or_4)
+{
+    auto context = MakeContext(16, 80, 4, 262144, ge::DT_INT32, {1}, ge::DT_FLOAT16, {1, 80, 16, 5});
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}
+
+TEST(NonMaxSuppressionV7Tiling, rejects_insufficient_platform_resources)
+{
+    // 40 KiB UB cannot cover the 48 KiB SIMT data cache plus fixed reserve,
+    // so the platform-resource guard must fail through the report path.
+    auto context = MakeContext(16, 80, 4, 40U * 1024U);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
 }

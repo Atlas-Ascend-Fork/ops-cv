@@ -8,6 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <string>
+
 #include "log/log.h"
 #include "register/op_impl_registry.h"
 
@@ -29,11 +31,18 @@ static ge::graphStatus InferShapeForBatchMultiClassNonMaxSuppression(gert::Infer
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
     OP_CHECK_NULL_WITH_CONTEXT(context, scoresShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
-    OP_CHECK_IF(scoresShape->GetDimNum() == 0, OP_LOGE(context, "scores shape is empty."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(scoresShape->GetDimNum() == 0,
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "scores",
+                                                      Ops::Base::ToString(*scoresShape).c_str(),
+                                                      "the shape of scores must not be empty"),
+                return ge::GRAPH_FAILED);
     const int64_t* maxTotalSize = attrs->GetAttrPointer<int64_t>(kMaxTotalSizeAttrIndex);
     OP_CHECK_NULL_WITH_CONTEXT(context, maxTotalSize);
-    OP_CHECK_IF(*maxTotalSize < 1 || *maxTotalSize > kMaxTotalSize,
-                OP_LOGE(context, "max_total_size must be in [1, %ld].", kMaxTotalSize), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        *maxTotalSize < 1 || *maxTotalSize > kMaxTotalSize,
+        OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "max_total_size", std::to_string(*maxTotalSize).c_str(),
+                                  ("[1, " + std::to_string(kMaxTotalSize) + "]").c_str()),
+        return ge::GRAPH_FAILED);
     const bool* transposeBoxAttr = attrs->GetAttrPointer<bool>(kTransposeBoxAttrIndex);
     const bool transposeBox = transposeBoxAttr != nullptr && *transposeBoxAttr;
 

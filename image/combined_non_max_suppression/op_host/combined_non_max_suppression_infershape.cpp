@@ -9,6 +9,7 @@
  */
 
 #include <algorithm>
+#include <string>
 #include "log/log.h"
 #include "register/op_impl_registry.h"
 
@@ -29,12 +30,15 @@ constexpr int32_t MAX_OUTPUT_SIZE = 1000;
 constexpr int32_t MAX_CLASSES = 200;
 
 template <typename T>
-ge::graphStatus ReadScalar(gert::InferShapeContext* context, int32_t index, T& value)
+ge::graphStatus ReadScalar(gert::InferShapeContext* context, int32_t index, const char* paramName, T& value)
 {
     const gert::Tensor* tensor = context->GetInputTensor(index);
     OP_CHECK_NULL_WITH_CONTEXT(context, tensor);
     const T* data = tensor->GetData<T>();
-    OP_CHECK_IF(data == nullptr, OP_LOGE(context, "input %d scalar data is null", index), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(data == nullptr,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), paramName, "null",
+                                                      "scalar data of the input is null"),
+                return ge::GRAPH_FAILED);
     value = data[0];
     return ge::GRAPH_SUCCESS;
 }
@@ -46,33 +50,64 @@ ge::graphStatus InferShapeCombinedNonMaxSuppression(gert::InferShapeContext* con
     OP_CHECK_NULL_WITH_CONTEXT(context, boxesShape);
     OP_CHECK_NULL_WITH_CONTEXT(context, scoresShape);
     OP_CHECK_IF(boxesShape->GetDimNum() != BOXES_RANK,
-                OP_LOGE(context, "boxes must be 4D, got %zuD", boxesShape->GetDimNum()), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "boxes",
+                                             (std::to_string(boxesShape->GetDimNum()) + "D").c_str(), "4D"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(scoresShape->GetDimNum() != SCORES_RANK,
-                OP_LOGE(context, "scores must be 3D, got %zuD", scoresShape->GetDimNum()), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "scores",
+                                             (std::to_string(scoresShape->GetDimNum()) + "D").c_str(), "3D"),
+                return ge::GRAPH_FAILED);
 
     const int64_t batch = boxesShape->GetDim(0);
     const int64_t numBoxes = boxesShape->GetDim(1);
     const int64_t boxClasses = boxesShape->GetDim(2);
     const int64_t classes = scoresShape->GetDim(2);
     OP_CHECK_IF(batch <= 0 || numBoxes <= 0 || classes <= 0,
-                OP_LOGE(context, "boxes and scores dimensions must be positive"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(classes > MAX_CLASSES, OP_LOGE(context, "num_classes must be <= %d", MAX_CLASSES),
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and scores",
+                    (Ops::Base::ToString(*boxesShape) + " and " + Ops::Base::ToString(*scoresShape)).c_str(),
+                    "the batch, num_boxes and num_classes dimensions must be positive"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(boxesShape->GetDim(3) != BOX_COORDS, OP_LOGE(context, "boxes last dimension must be 4"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        classes > MAX_CLASSES,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "num_classes", std::to_string(classes).c_str(),
+                                              ("num_classes must be <= " + std::to_string(MAX_CLASSES)).c_str()),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        boxesShape->GetDim(3) != BOX_COORDS,
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "boxes", Ops::Base::ToString(*boxesShape).c_str(),
+                                              "the last dimension of boxes must be 4"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(scoresShape->GetDim(0) != batch || scoresShape->GetDim(1) != numBoxes,
-                OP_LOGE(context, "boxes and scores batch/num_boxes dimensions must match"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(boxClasses != 1 && boxClasses != classes,
-                OP_LOGE(context, "boxes q dimension must be 1 or equal to num_classes"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and scores",
+                    (Ops::Base::ToString(*boxesShape) + " and " + Ops::Base::ToString(*scoresShape)).c_str(),
+                    "the batch and num_boxes dimensions of boxes and scores must match"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        boxClasses != 1 && boxClasses != classes,
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "boxes", Ops::Base::ToString(*boxesShape).c_str(),
+                                              "the q dimension of boxes must be 1 or equal to num_classes"),
+        return ge::GRAPH_FAILED);
 
     int32_t maxPerClass = 0;
     int32_t maxTotal = 0;
-    OP_CHECK_IF(ReadScalar(context, MAX_PER_CLASS_INDEX, maxPerClass) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "failed to read max_output_size_per_class"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(ReadScalar(context, MAX_TOTAL_INDEX, maxTotal) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "failed to read max_total_size"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(maxPerClass <= 0 || maxPerClass > MAX_OUTPUT_SIZE || maxTotal <= 0 || maxTotal > MAX_OUTPUT_SIZE,
-                OP_LOGE(context, "max output sizes must be in [1, %d]", MAX_OUTPUT_SIZE), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ReadScalar(context, MAX_PER_CLASS_INDEX, "max_output_size_per_class", maxPerClass) != ge::GRAPH_SUCCESS,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "max_output_size_per_class", "unreadable",
+                                                      "failed to read max_output_size_per_class"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ReadScalar(context, MAX_TOTAL_INDEX, "max_total_size", maxTotal) != ge::GRAPH_SUCCESS,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "max_total_size", "unreadable",
+                                                      "failed to read max_total_size"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        maxPerClass <= 0 || maxPerClass > MAX_OUTPUT_SIZE || maxTotal <= 0 || maxTotal > MAX_OUTPUT_SIZE,
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            context->GetNodeName(), "max_output_size_per_class and max_total_size",
+            (std::to_string(maxPerClass) + " and " + std::to_string(maxTotal)).c_str(),
+            ("max_output_size_per_class and max_total_size must be in [1, " + std::to_string(MAX_OUTPUT_SIZE) + "]")
+                .c_str()),
+        return ge::GRAPH_FAILED);
 
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);

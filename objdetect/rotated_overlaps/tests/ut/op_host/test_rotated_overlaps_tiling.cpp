@@ -22,7 +22,7 @@
 namespace {
 struct CompileInfo {};
 
-gert::TilingContextPara MakeContext(int64_t batch, int64_t boxes, int64_t queries)
+gert::TilingContextPara MakeContext(int64_t batch, int64_t boxes, int64_t queries, uint64_t ubSize = 262144)
 {
     static CompileInfo compileInfo;
     return gert::TilingContextPara(
@@ -37,7 +37,7 @@ gert::TilingContextPara MakeContext(int64_t batch, int64_t boxes, int64_t querie
         {
             gert::TilingContextPara::OpAttr("trans", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
         },
-        &compileInfo, "Ascend950", 64, 262144);
+        &compileInfo, "Ascend950", 64, ubSize);
 }
 
 const RotatedOverlapsTilingData* GetTilingData(const TilingInfo& info)
@@ -118,4 +118,14 @@ TEST(RotatedOverlapsTiling, splits_multiple_query_tiles_into_independent_tasks)
     EXPECT_EQ(tiling->vectorizeBoxes, 0U);
     EXPECT_EQ(tiling->tilesPerOuter, 2U);
     EXPECT_EQ(tiling->totalTasks, 130U);
+}
+
+TEST(RotatedOverlapsTiling, rejects_insufficient_ub_for_minimum_tile)
+{
+    // 36 KiB UB minus the 32 KiB SIMT Data Cache reserve leaves only 4 KiB,
+    // which cannot hold even the minimum 8-element vector tile plus math
+    // workspace (8 * 153 * 4 + sincos tmp + 256-byte mask reserve).
+    auto context = MakeContext(1, 4, 4, 36U * 1024U);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
 }

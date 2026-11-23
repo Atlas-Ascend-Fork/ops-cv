@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <string>
 
 #include "log/log.h"
 #include "op_common/op_host/util/shape_util.h"
@@ -56,8 +57,13 @@ static ge::graphStatus InferShapeForRotatedOverlaps(gert::InferShapeContext* con
         Ops::Base::SetUnknownRank(*outputShape);
         return ge::GRAPH_SUCCESS;
     }
-    OP_CHECK_IF(boxesShape->GetDimNum() != 3 || queryBoxesShape->GetDimNum() != 3,
-                OP_LOGE(context, "RotatedOverlaps inputs must both be rank 3."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        boxesShape->GetDimNum() != 3 || queryBoxesShape->GetDimNum() != 3,
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+            context->GetNodeName(), "boxes and query_boxes",
+            (std::to_string(boxesShape->GetDimNum()) + " and " + std::to_string(queryBoxesShape->GetDimNum())).c_str(),
+            "boxes and query_boxes must both be rank 3"),
+        return ge::GRAPH_FAILED);
 
     const int64_t batch = boxesShape->GetDim(0);
     const int64_t queryBatch = queryBoxesShape->GetDim(0);
@@ -65,19 +71,35 @@ static ge::graphStatus InferShapeForRotatedOverlaps(gert::InferShapeContext* con
     const int64_t numQueries = queryBoxesShape->GetDim(2);
     OP_CHECK_IF((IsKnown(boxesShape->GetDim(1)) && boxesShape->GetDim(1) != kCoordinateCount) ||
                     (IsKnown(queryBoxesShape->GetDim(1)) && queryBoxesShape->GetDim(1) != kCoordinateCount),
-                OP_LOGE(context, "RotatedOverlaps channel dimension must be 5."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and query_boxes",
+                    (Ops::Base::ToString(*boxesShape) + " and " + Ops::Base::ToString(*queryBoxesShape)).c_str(),
+                    "the channel dimension of boxes and query_boxes must be 5"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(!IsKnownPositive(batch) || !IsKnownPositive(queryBatch) || !IsKnownPositive(numBoxes) ||
                     !IsKnownPositive(numQueries),
-                OP_LOGE(context, "RotatedOverlaps known dimensions B, N and K must be positive."),
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and query_boxes",
+                    (Ops::Base::ToString(*boxesShape) + " and " + Ops::Base::ToString(*queryBoxesShape)).c_str(),
+                    "the known dimensions B, N and K must be positive"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(IsKnown(numQueries) && numQueries > kMaxQueries,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                    context->GetNodeName(), "query_boxes", std::to_string(numQueries).c_str(),
+                    ("RotatedOverlaps supports at most " + std::to_string(kMaxQueries) + " query boxes").c_str()),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(
-        IsKnown(numQueries) && numQueries > kMaxQueries,
-        OP_LOGE(context, "RotatedOverlaps supports at most %ld query boxes, but got %ld.", kMaxQueries, numQueries),
+        IsKnown(batch) && IsKnown(queryBatch) && batch != queryBatch,
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(context->GetNodeName(), "boxes and query_boxes",
+                                               (std::to_string(batch) + " and " + std::to_string(queryBatch)).c_str(),
+                                               "the batch dimensions of boxes and query_boxes must match"),
         return ge::GRAPH_FAILED);
-    OP_CHECK_IF(IsKnown(batch) && IsKnown(queryBatch) && batch != queryBatch,
-                OP_LOGE(context, "RotatedOverlaps batch dimensions must match."), return ge::GRAPH_FAILED);
     OP_CHECK_IF(!ProductFitsInt64(batch, numBoxes, numQueries),
-                OP_LOGE(context, "RotatedOverlaps output element count overflows int64."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and query_boxes",
+                    (Ops::Base::ToString(*boxesShape) + " and " + Ops::Base::ToString(*queryBoxesShape)).c_str(),
+                    "the output element count B * N * K overflows int64"),
+                return ge::GRAPH_FAILED);
 
     outputShape->SetDimNum(3);
     outputShape->SetDim(0, batch);

@@ -10,6 +10,8 @@
 
 #include <gtest/gtest.h>
 #include <limits>
+#include <string>
+#include <vector>
 #include "tiling_case_executor.h"
 #include "tiling_context_faker.h"
 #include "../../../../op_kernel/arch35/combined_non_max_suppression_tiling_data.h"
@@ -40,7 +42,7 @@ gert::TilingContextPara MakeContext(const std::vector<int64_t>& boxesShape, cons
                                     CombinedNonMaxSuppressionCompileInfoForTest* compileInfo, bool clipBoxes = true,
                                     const std::vector<int64_t>& outputScoresShape = {},
                                     const std::vector<int64_t>& outputClassesShape = {},
-                                    const std::vector<int64_t>& outputValidShape = {})
+                                    const std::vector<int64_t>& outputValidShape = {}, uint64_t ubSize = 262144)
 {
     const std::vector<int64_t> outputVectorShape = {outputBoxesShape[0], outputBoxesShape[1]};
     const gert::StorageShape boxes = MakeStorageShape(boxesShape);
@@ -71,7 +73,7 @@ gert::TilingContextPara MakeContext(const std::vector<int64_t>& boxesShape, cons
         "CombinedNonMaxSuppression", inputs, outputs,
         {gert::TilingContextPara::OpAttr("pad_per_class", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
          gert::TilingContextPara::OpAttr("clip_boxes", Ops::Cv::AnyValue::CreateFrom<bool>(clipBoxes))},
-        compileInfo, "Ascend950", 4, 262144, 4096);
+        compileInfo, "Ascend950", 4, ubSize, 4096);
 }
 
 TEST(CombinedNonMaxSuppressionTiling, BuildsWorkspaceForSharedBoxes)
@@ -266,6 +268,21 @@ TEST(CombinedNonMaxSuppressionTiling, RejectsTaskCountOutsideInt32Range)
     auto context = MakeContext({batch, 1, 1, 4}, {batch, 1, numClasses}, {batch, 1, 4}, &maxPerClass, &maxTotal,
                                &iouThreshold, &scoreThreshold, &compileInfo);
     ExecuteTestCase(context, ge::GRAPH_FAILED);
+}
+
+TEST(CombinedNonMaxSuppressionTiling, RejectsUbTooSmallForSimtReserve)
+{
+    int32_t maxPerClass = 2;
+    int32_t maxTotal = 4;
+    float iouThreshold = 0.5F;
+    float scoreThreshold = 0.25F;
+    CombinedNonMaxSuppressionCompileInfoForTest compileInfo;
+    // A UB size that cannot even cover the 32 KiB SIMT reserve must fail via
+    // the platform-resource report path.
+    auto context = MakeContext({2, 5, 1, 4}, {2, 5, 3}, {2, 4, 4}, &maxPerClass, &maxTotal, &iouThreshold,
+                               &scoreThreshold, &compileInfo, false, {}, {}, {}, 32U * 1024U);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
 }
 
 } // namespace

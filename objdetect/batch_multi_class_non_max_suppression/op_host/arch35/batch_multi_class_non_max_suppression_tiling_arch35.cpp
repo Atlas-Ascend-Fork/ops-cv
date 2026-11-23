@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include "op_api/error_report_util.h"
 #include "batch_multi_class_non_max_suppression_tiling_arch35.h"
 #include "objdetect/batch_multi_class_non_max_suppression/op_kernel/arch35/batch_multi_class_non_max_suppression_tiling_key.h"
 
@@ -15,6 +16,8 @@
 #include <cstdint>
 #include <limits>
 #include <securec.h>
+#include <string>
+#include <vector>
 
 #include "graph/utils/type_utils.h"
 #include "log/log.h"
@@ -113,10 +116,18 @@ ge::graphStatus ParseRequiredInputsAndAttrs(gert::TilingContext* context, Parsed
     OP_CHECK_NULL_WITH_CONTEXT(context, scoresInput);
     const gert::Shape& boxesShape = boxesInput->GetStorageShape();
     const gert::Shape& scoresShape = scoresInput->GetStorageShape();
-    OP_CHECK_IF(boxesShape.GetDimNum() != 4 || scoresShape.GetDimNum() != 3,
-                OP_LOGE(context, "boxes must be rank 4 and scores must be rank 3."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        boxesShape.GetDimNum() != 4 || scoresShape.GetDimNum() != 3,
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+            context->GetNodeName(), "boxes and scores",
+            (std::to_string(boxesShape.GetDimNum()) + " and " + std::to_string(scoresShape.GetDimNum())).c_str(),
+            "boxes must be rank 4 and scores must be rank 3"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(!HasPositiveDims(boxesShape) || !HasPositiveDims(scoresShape),
-                OP_LOGE(context, "Dynamic or non-positive dimensions are not supported by this tiling."),
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and scores",
+                    (Ops::Base::ToString(boxesShape) + " and " + Ops::Base::ToString(scoresShape)).c_str(),
+                    "dynamic or non-positive dimensions are not supported by this tiling"),
                 return ge::GRAPH_FAILED);
 
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
@@ -133,22 +144,32 @@ ge::graphStatus ParseRequiredInputsAndAttrs(gert::TilingContext* context, Parsed
     OP_CHECK_NULL_WITH_CONTEXT(context, maxTotalSize);
     OP_CHECK_NULL_WITH_CONTEXT(context, changeCoordinateFrame);
     OP_CHECK_NULL_WITH_CONTEXT(context, transposeBox);
-    OP_CHECK_IF(*maxSizePerClass <= 0 || *maxSizePerClass > kMaxOutputSize || *maxTotalSize <= 0 ||
-                    *maxTotalSize > kMaxOutputSize,
-                OP_LOGE(context, "max_size_per_class and max_total_size must be in [1, %ld].", kMaxOutputSize),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        *maxSizePerClass <= 0 || *maxSizePerClass > kMaxOutputSize || *maxTotalSize <= 0 ||
+            *maxTotalSize > kMaxOutputSize,
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            context->GetNodeName(), "max_size_per_class and max_total_size",
+            (std::to_string(*maxSizePerClass) + " and " + std::to_string(*maxTotalSize)).c_str(),
+            ("max_size_per_class and max_total_size must be in [1, " + std::to_string(kMaxOutputSize) + "]").c_str()),
+        return ge::GRAPH_FAILED);
 
     params.batch = boxesShape.GetDim(0);
     params.transposeBox = *transposeBox;
     if (params.transposeBox) {
         params.boxClassesNum = boxesShape.GetDim(1);
-        OP_CHECK_IF(boxesShape.GetDim(2) != 4, OP_LOGE(context, "boxes dim 2 must be 4 when transpose_box is true."),
+        OP_CHECK_IF(boxesShape.GetDim(2) != 4,
+                    OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "boxes",
+                                                          Ops::Base::ToString(boxesShape).c_str(),
+                                                          "boxes dim 2 must be 4 when transpose_box is true"),
                     return ge::GRAPH_FAILED);
         params.boxesNum = boxesShape.GetDim(3);
     } else {
         params.boxesNum = boxesShape.GetDim(1);
         params.boxClassesNum = boxesShape.GetDim(2);
-        OP_CHECK_IF(boxesShape.GetDim(3) != 4, OP_LOGE(context, "boxes last dimension must be 4."),
+        OP_CHECK_IF(boxesShape.GetDim(3) != 4,
+                    OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "boxes",
+                                                          Ops::Base::ToString(boxesShape).c_str(),
+                                                          "the last dimension of boxes must be 4"),
                     return ge::GRAPH_FAILED);
     }
     constexpr size_t kScoresFirstInnerAxis = 1;
@@ -158,19 +179,32 @@ ge::graphStatus ParseRequiredInputsAndAttrs(gert::TilingContext* context, Parsed
     params.classesNum = scoresShape.GetDim(scoresClassAxis);
     OP_CHECK_IF(scoresShape.GetDim(0) != params.batch || scoresShape.GetDim(scoresBoxesAxis) != params.boxesNum ||
                     (params.boxClassesNum != 1 && params.boxClassesNum != params.classesNum),
-                OP_LOGE(context, "boxes and scores shapes are incompatible."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and scores",
+                    (Ops::Base::ToString(boxesShape) + " and " + Ops::Base::ToString(scoresShape)).c_str(),
+                    "boxes and scores shapes are incompatible: the batch and num_boxes dimensions must match and the "
+                    "class dimension of boxes must be 1 or num_classes"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(params.batch > std::numeric_limits<int64_t>::max() / params.classesNum,
-                OP_LOGE(context, "batch-by-class task count overflow."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    context->GetNodeName(), "batch and num_classes",
+                    (std::to_string(params.batch) + " and " + std::to_string(params.classesNum)).c_str(),
+                    "batch * num_classes overflows int64"),
+                return ge::GRAPH_FAILED);
 
     const auto* boxesDesc = context->GetInputDesc(kBoxesIndex);
     const auto* scoresDesc = context->GetInputDesc(kScoresIndex);
     OP_CHECK_NULL_WITH_CONTEXT(context, boxesDesc);
     OP_CHECK_NULL_WITH_CONTEXT(context, scoresDesc);
     params.boxesType = boxesDesc->GetDataType();
-    OP_CHECK_IF((params.boxesType != ge::DT_FLOAT16 && params.boxesType != ge::DT_FLOAT) ||
-                    scoresDesc->GetDataType() != params.boxesType,
-                OP_LOGE(context, "boxes and scores must have the same dtype in {float16, float}."),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        (params.boxesType != ge::DT_FLOAT16 && params.boxesType != ge::DT_FLOAT) ||
+            scoresDesc->GetDataType() != params.boxesType,
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+            context->GetNodeName(), "boxes and scores",
+            (Ops::Base::ToString(params.boxesType) + " and " + Ops::Base::ToString(scoresDesc->GetDataType())).c_str(),
+            "boxes and scores must have the same dtype in {float16, float}"),
+        return ge::GRAPH_FAILED);
 
     params.scoreThreshold = *scoreThreshold;
     params.iouThreshold = *iouThreshold;
@@ -193,34 +227,56 @@ ge::graphStatus ValidateOptionalInputs(gert::TilingContext* context, ParsedTilin
         // fourth argument position for num_valid_boxes.
         if (clipWindowDesc->GetDataType() == ge::DT_INT32) {
             const gert::Shape& numValidBoxesShape = clipWindowInput->GetStorageShape();
-            OP_CHECK_IF(numValidBoxesShape.GetDimNum() != 1 || numValidBoxesShape.GetDim(0) != params.batch,
-                        OP_LOGE(context, "num_valid_boxes must have shape [B]."), return ge::GRAPH_FAILED);
-            OP_CHECK_IF(numValidBoxesInput != nullptr,
-                        OP_LOGE(context, "num_valid_boxes is present in both optional input slots."),
-                        return ge::GRAPH_FAILED);
+            OP_CHECK_IF(
+                numValidBoxesShape.GetDimNum() != 1 || numValidBoxesShape.GetDim(0) != params.batch,
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(
+                    context->GetNodeName(), "num_valid_boxes", Ops::Base::ToString(numValidBoxesShape).c_str(),
+                    ("num_valid_boxes must have shape [batch], got batch " + std::to_string(params.batch)).c_str()),
+                return ge::GRAPH_FAILED);
+            OP_CHECK_IF(
+                numValidBoxesInput != nullptr,
+                OP_LOGE_FOR_INVALID_ARGUMENT_WITH_REASON(context->GetNodeName(), "num_valid_boxes",
+                                                         "num_valid_boxes is present in both optional input slots"),
+                return ge::GRAPH_FAILED);
             params.hasNumValidBoxes = true;
         } else {
             params.hasClipWindow = true;
             const gert::Shape& clipWindowShape = clipWindowInput->GetStorageShape();
-            OP_CHECK_IF(clipWindowShape.GetDimNum() != 2 || clipWindowShape.GetDim(0) != params.batch ||
-                            clipWindowShape.GetDim(1) != 4,
-                        OP_LOGE(context, "clip_window must have shape [B, 4]."), return ge::GRAPH_FAILED);
+            OP_CHECK_IF(
+                clipWindowShape.GetDimNum() != 2 || clipWindowShape.GetDim(0) != params.batch ||
+                    clipWindowShape.GetDim(1) != 4,
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(
+                    context->GetNodeName(), "clip_window", Ops::Base::ToString(clipWindowShape).c_str(),
+                    ("clip_window must have shape [batch, 4], got batch " + std::to_string(params.batch)).c_str()),
+                return ge::GRAPH_FAILED);
             OP_CHECK_IF(clipWindowDesc->GetDataType() != params.boxesType,
-                        OP_LOGE(context, "clip_window dtype must equal boxes dtype."), return ge::GRAPH_FAILED);
+                        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "clip_window and boxes",
+                                                               (Ops::Base::ToString(clipWindowDesc->GetDataType()) +
+                                                                " and " + Ops::Base::ToString(params.boxesType))
+                                                                   .c_str(),
+                                                               "clip_window dtype must equal boxes dtype"),
+                        return ge::GRAPH_FAILED);
         }
     }
     if (numValidBoxesInput != nullptr) {
         const gert::Shape& numValidBoxesShape = numValidBoxesInput->GetStorageShape();
         OP_CHECK_IF(numValidBoxesShape.GetDimNum() != 1 || numValidBoxesShape.GetDim(0) != params.batch,
-                    OP_LOGE(context, "num_valid_boxes must have shape [B]."), return ge::GRAPH_FAILED);
+                    OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(
+                        context->GetNodeName(), "num_valid_boxes", Ops::Base::ToString(numValidBoxesShape).c_str(),
+                        ("num_valid_boxes must have shape [batch], got batch " + std::to_string(params.batch)).c_str()),
+                    return ge::GRAPH_FAILED);
         const auto* numValidBoxesDesc = context->GetInputDesc(kNumValidBoxesIndex);
         OP_CHECK_NULL_WITH_CONTEXT(context, numValidBoxesDesc);
         OP_CHECK_IF(numValidBoxesDesc->GetDataType() != ge::DT_INT32,
-                    OP_LOGE(context, "num_valid_boxes must be int32."), return ge::GRAPH_FAILED);
+                    OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "num_valid_boxes",
+                                              Ops::Base::ToString(numValidBoxesDesc->GetDataType()).c_str(), "int32"),
+                    return ge::GRAPH_FAILED);
         params.hasNumValidBoxes = true;
     }
     OP_CHECK_IF(params.changeCoordinateFrame && !params.hasClipWindow,
-                OP_LOGE(context, "change_coordinate_frame requires clip_window."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "change_coordinate_frame", "true",
+                                                      "change_coordinate_frame requires clip_window"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -261,7 +317,12 @@ ge::graphStatus ValidateOutputContract(gert::TilingContext* context, const Parse
                     outputNumShape.GetDimNum() != (params.transposeBox ? kMatrixOutputRank : kVectorOutputRank) ||
                     outputNumShape.GetDim(kBatchAxis) != params.batch ||
                     (params.transposeBox && outputNumShape.GetDim(kFirstInnerAxis) != kPaddedCountStride),
-                OP_LOGE(context, "Output shapes do not match BatchMultiClassNonMaxSuppression contract."),
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "nmsed_boxes, nmsed_scores, nmsed_classes and nmsed_num",
+                    (Ops::Base::ToString(outputBoxesShape) + ", " + Ops::Base::ToString(outputScoresShape) + ", " +
+                     Ops::Base::ToString(outputClassesShape) + " and " + Ops::Base::ToString(outputNumShape))
+                        .c_str(),
+                    "output shapes do not match the BatchMultiClassNonMaxSuppression contract"),
                 return ge::GRAPH_FAILED);
     const auto* outputBoxesDesc = context->GetOutputDesc(kNmsedBoxesIndex);
     const auto* outputScoresDesc = context->GetOutputDesc(kNmsedScoresIndex);
@@ -274,7 +335,14 @@ ge::graphStatus ValidateOutputContract(gert::TilingContext* context, const Parse
     OP_CHECK_IF(
         outputBoxesDesc->GetDataType() != params.boxesType || outputScoresDesc->GetDataType() != params.boxesType ||
             outputClassesDesc->GetDataType() != params.boxesType || outputNumDesc->GetDataType() != ge::DT_INT32,
-        OP_LOGE(context, "Output dtypes do not match BatchMultiClassNonMaxSuppression contract."),
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+            context->GetNodeName(), "nmsed_boxes, nmsed_scores, nmsed_classes and nmsed_num",
+            (Ops::Base::ToString(outputBoxesDesc->GetDataType()) + ", " +
+             Ops::Base::ToString(outputScoresDesc->GetDataType()) + ", " +
+             Ops::Base::ToString(outputClassesDesc->GetDataType()) + " and " +
+             Ops::Base::ToString(outputNumDesc->GetDataType()))
+                .c_str(),
+            "nmsed_boxes, nmsed_scores and nmsed_classes must share the boxes dtype and nmsed_num must be int32"),
         return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
@@ -315,28 +383,48 @@ ge::graphStatus BatchMultiClassNonMaxSuppressionTiling::SetTilingData()
         context_->GetCompileInfo());
     OP_CHECK_NULL_WITH_CONTEXT(context_, compileInfo);
     OP_CHECK_IF(compileInfo->coreNum == 0 || compileInfo->ubSize == 0,
-                OP_LOGE(context_, "Ascend950 platform resource query failed."), return ge::GRAPH_FAILED);
+                error_report::ReportTilingStageError(
+                    context_->GetNodeName(),
+                    "PlatformAscendC resource query failed: coreNum=" + std::to_string(compileInfo->coreNum) +
+                        ", ubSize=" + std::to_string(compileInfo->ubSize)),
+                return ge::GRAPH_FAILED);
 
     tilingData_ = context_->GetTilingData<BatchMultiClassNonMaxSuppressionTilingData>();
     OP_CHECK_NULL_WITH_CONTEXT(context_, tilingData_);
-    OP_CHECK_IF(memset_s(tilingData_, sizeof(BatchMultiClassNonMaxSuppressionTilingData), 0,
-                         sizeof(BatchMultiClassNonMaxSuppressionTilingData)) != EOK,
-                OP_LOGE(context_, "Failed to initialize tiling data."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        memset_s(tilingData_, sizeof(BatchMultiClassNonMaxSuppressionTilingData), 0,
+                 sizeof(BatchMultiClassNonMaxSuppressionTilingData)) != EOK,
+        error_report::ReportTilingStageError(context_->GetNodeName(), "memset_s failed to initialize the tiling data"),
+        return ge::GRAPH_FAILED);
     const int64_t taskCount = batch_ * classesNum_;
-    OP_CHECK_IF(taskCount <= 0, OP_LOGE(context_, "Invalid batch-by-class task count."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(taskCount <= 0,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "batch * num_classes",
+                                                      std::to_string(taskCount).c_str(),
+                                                      "batch-by-class task count must be positive"),
+                return ge::GRAPH_FAILED);
     const int64_t usedCoreNum = std::min<int64_t>(taskCount, static_cast<int64_t>(compileInfo->coreNum));
 
     OP_CHECK_IF(classesNum_ > std::numeric_limits<int64_t>::max() / maxSizePerClass_,
-                OP_LOGE(context_, "Cross-class TopK input size overflow."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    context_->GetNodeName(), "num_classes and max_size_per_class",
+                    (std::to_string(classesNum_) + " and " + std::to_string(maxSizePerClass_)).c_str(),
+                    "num_classes * max_size_per_class overflows int64"),
+                return ge::GRAPH_FAILED);
     const int64_t mergeInputCount = classesNum_ * maxSizePerClass_;
     OP_CHECK_IF(mergeInputCount <= 0 || mergeInputCount > std::numeric_limits<int32_t>::max() - kTopKAlignment,
-                OP_LOGE(context_, "Cross-class TopK input size is not supported."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "num_classes * max_size_per_class",
+                                                      std::to_string(mergeInputCount).c_str(),
+                                                      "cross-class TopK input size is not supported"),
+                return ge::GRAPH_FAILED);
     const int64_t mergeInputSize = std::min<int64_t>(
         kMergeTopKInputCapacity, (mergeInputCount + kTopKAlignment - 1) / kTopKAlignment * kTopKAlignment);
     const int64_t mergeOutputCount = std::min<int64_t>(maxTotalSize_, mergeInputCount);
     const int64_t mergeOutputSize = (mergeOutputCount + kTopKAlignment - 1) / kTopKAlignment * kTopKAlignment;
     OP_CHECK_IF(mergeInputSize < mergeOutputSize,
-                OP_LOGE(context_, "Cross-class TopK merge input capacity is smaller than its output size."),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "max_total_size",
+                                                      std::to_string(maxTotalSize_).c_str(),
+                                                      "cross-class TopK merge input capacity is smaller than its "
+                                                      "output size"),
                 return ge::GRAPH_FAILED);
 
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(context_->GetPlatformInfo());
@@ -344,13 +432,20 @@ ge::graphStatus BatchMultiClassNonMaxSuppressionTiling::SetTilingData()
     OP_CHECK_IF(!AscendC::TopKTilingFunc(ascendcPlatform, static_cast<uint32_t>(mergeInputSize), 1,
                                          static_cast<uint32_t>(mergeOutputCount), sizeof(float), true,
                                          AscendC::TopKMode::TOPK_NORMAL, true, mergeTopKTiling),
-                OP_LOGE(context_, "Ascend950 TopK tiling failed for cross-class merge."), return ge::GRAPH_FAILED);
+                error_report::ReportTilingStageError(context_->GetNodeName(),
+                                                     "AscendC::TopKTilingFunc failed for the cross-class merge: "
+                                                     "mergeInputSize=" +
+                                                         std::to_string(mergeInputSize)),
+                return ge::GRAPH_FAILED);
     uint32_t topKMaxTmpBytes = 0;
     uint32_t topKMinTmpBytes = 0;
     OP_CHECK_IF(!AscendC::GetTopKMaxMinTmpSize(ascendcPlatform, static_cast<uint32_t>(mergeInputSize), 1, false, true,
                                                AscendC::TopKMode::TOPK_NORMAL, true, sizeof(float), topKMaxTmpBytes,
                                                topKMinTmpBytes),
-                OP_LOGE(context_, "Ascend950 TopK workspace query failed for cross-class merge."),
+                error_report::ReportTilingStageError(context_->GetNodeName(),
+                                                     "AscendC::GetTopKMaxMinTmpSize failed for the cross-class merge: "
+                                                     "mergeInputSize=" +
+                                                         std::to_string(mergeInputSize)),
                 return ge::GRAPH_FAILED);
     const uint64_t topKTempBytes = std::max<uint64_t>(topKMaxTmpBytes, kWorkspaceAlignment);
     const uint64_t mergeFixedUbBytes = static_cast<uint64_t>(mergeInputSize) * (sizeof(float) + sizeof(int32_t)) +
@@ -358,7 +453,14 @@ ge::graphStatus BatchMultiClassNonMaxSuppressionTiling::SetTilingData()
                                        topKTempBytes;
     OP_CHECK_IF(
         compileInfo->ubSize <= kSimtUbReserveBytes || mergeFixedUbBytes >= compileInfo->ubSize - kSimtUbReserveBytes,
-        OP_LOGE(context_, "Insufficient UB for cross-class TopK merge."), return ge::GRAPH_FAILED);
+        error_report::ReportTilingStageError(
+            context_->GetNodeName(),
+            "insufficient UB for the cross-class TopK merge: ubSize=" + std::to_string(compileInfo->ubSize) +
+                ", available=" +
+                std::to_string(compileInfo->ubSize > kSimtUbReserveBytes ? compileInfo->ubSize - kSimtUbReserveBytes :
+                                                                           0U) +
+                ", required=" + std::to_string(mergeFixedUbBytes)),
+        return ge::GRAPH_FAILED);
     const uint64_t availableUbBytes = compileInfo->ubSize - kSimtUbReserveBytes - mergeFixedUbBytes;
     const uint64_t bytesPerTileElement = kVectorFloatFieldCount * sizeof(float) + sizeof(uint8_t);
     int64_t tileSize = std::min<int64_t>(boxesNum_,
@@ -366,51 +468,85 @@ ge::graphStatus BatchMultiClassNonMaxSuppressionTiling::SetTilingData()
     if (tileSize < mergeOutputSize) {
         const uint64_t minimumReduceBytes = static_cast<uint64_t>(mergeOutputSize) * sizeof(float);
         OP_CHECK_IF(minimumReduceBytes > availableUbBytes,
-                    OP_LOGE(context_, "Insufficient UB for cross-class TopK reduction."), return ge::GRAPH_FAILED);
+                    error_report::ReportTilingStageError(
+                        context_->GetNodeName(), "insufficient UB for the cross-class TopK reduction: available=" +
+                                                     std::to_string(availableUbBytes) +
+                                                     ", required=" + std::to_string(minimumReduceBytes)),
+                    return ge::GRAPH_FAILED);
         tileSize = std::min<int64_t>(tileSize, static_cast<int64_t>((availableUbBytes - minimumReduceBytes) /
                                                                     (bytesPerTileElement - sizeof(float))));
     }
     if (tileSize >= kTileAlignment) {
         tileSize = tileSize / kTileAlignment * kTileAlignment;
     }
-    OP_CHECK_IF(tileSize <= 0, OP_LOGE(context_, "Insufficient UB for BatchMultiClassNonMaxSuppression tile."),
+    OP_CHECK_IF(tileSize <= 0,
+                error_report::ReportTilingStageError(context_->GetNodeName(),
+                                                     "insufficient UB for the BatchMultiClassNonMaxSuppression tile: "
+                                                     "ubSize=" +
+                                                         std::to_string(compileInfo->ubSize)),
                 return ge::GRAPH_FAILED);
     const int64_t reduceBufferSize = std::max<int64_t>(tileSize, mergeOutputSize);
 
     const uint64_t boxesNum = static_cast<uint64_t>(boxesNum_);
     const uint64_t taskCountU64 = static_cast<uint64_t>(taskCount);
     const uint64_t maxSizePerClass = static_cast<uint64_t>(maxSizePerClass_);
-    OP_CHECK_IF(boxesNum > std::numeric_limits<uint64_t>::max() / sizeof(float),
-                OP_LOGE(context_, "Scratch workspace size overflow."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        boxesNum > std::numeric_limits<uint64_t>::max() / sizeof(float),
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "num_boxes", std::to_string(boxesNum_).c_str(),
+                                              "scratch workspace size overflows uint64"),
+        return ge::GRAPH_FAILED);
     const uint64_t scratchFieldBytes = boxesNum * sizeof(float);
-    OP_CHECK_IF(scratchFieldBytes > std::numeric_limits<uint64_t>::max() - (kWorkspaceAlignment - 1),
-                OP_LOGE(context_, "Scratch workspace size overflow."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        scratchFieldBytes > std::numeric_limits<uint64_t>::max() - (kWorkspaceAlignment - 1),
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "num_boxes", std::to_string(boxesNum_).c_str(),
+                                              "scratch workspace size overflows uint64"),
+        return ge::GRAPH_FAILED);
     const uint64_t scratchFieldStride = (scratchFieldBytes + kWorkspaceAlignment - 1) / kWorkspaceAlignment *
                                         kWorkspaceAlignment;
-    OP_CHECK_IF(scratchFieldStride > std::numeric_limits<uint64_t>::max() / kScratchFloatFieldCount,
-                OP_LOGE(context_, "Scratch workspace size overflow."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        scratchFieldStride > std::numeric_limits<uint64_t>::max() / kScratchFloatFieldCount,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "num_boxes", std::to_string(boxesNum_).c_str(),
+                                              "scratch workspace size overflows uint64"),
+        return ge::GRAPH_FAILED);
     const uint64_t scratchBytesPerCore = scratchFieldStride * kScratchFloatFieldCount;
     // Non-transpose inputs are gathered by one persistent SIMT VF per AIV
     // core.  Each batch/class task therefore needs its own staging region so
     // the AIV NMS stage can consume it without relaunching the VF task.
     OP_CHECK_IF(taskCountU64 > std::numeric_limits<uint64_t>::max() / scratchBytesPerCore,
-                OP_LOGE(context_, "Scratch workspace size overflow."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "batch * num_classes",
+                                                      std::to_string(taskCount).c_str(),
+                                                      "scratch workspace size overflows uint64"),
+                return ge::GRAPH_FAILED);
     const uint64_t scratchBytes = taskCountU64 * scratchBytesPerCore;
     OP_CHECK_IF(taskCountU64 > std::numeric_limits<uint64_t>::max() / maxSizePerClass,
-                OP_LOGE(context_, "Class result workspace size overflow."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "batch * num_classes",
+                                                      std::to_string(taskCount).c_str(),
+                                                      "class result workspace size overflows uint64"),
+                return ge::GRAPH_FAILED);
     const uint64_t classResultCount = taskCountU64 * maxSizePerClass;
     OP_CHECK_IF(classResultCount > std::numeric_limits<uint64_t>::max() / (4 * sizeof(float)) ||
                     taskCountU64 > std::numeric_limits<uint64_t>::max() / sizeof(int32_t),
-                OP_LOGE(context_, "Class result workspace size overflow."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    context_->GetNodeName(), "batch * num_classes and max_size_per_class",
+                    (std::to_string(taskCount) + " and " + std::to_string(maxSizePerClass_)).c_str(),
+                    "class result workspace size overflows uint64"),
+                return ge::GRAPH_FAILED);
     const uint64_t classBoxesBytes = classResultCount * 4 * sizeof(float);
     const uint64_t classScoresBytes = classResultCount * sizeof(float);
     const uint64_t classCountsBytes = taskCountU64 * sizeof(float);
     OP_CHECK_IF(
         static_cast<uint64_t>(batch_) > std::numeric_limits<uint64_t>::max() / static_cast<uint64_t>(maxTotalSize_),
-        OP_LOGE(context_, "Cross-class TopK workspace size overflow."), return ge::GRAPH_FAILED);
+        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+            context_->GetNodeName(), "batch and max_total_size",
+            (std::to_string(batch_) + " and " + std::to_string(maxTotalSize_)).c_str(),
+            "cross-class TopK workspace size overflows uint64"),
+        return ge::GRAPH_FAILED);
     const uint64_t mergeResultCount = static_cast<uint64_t>(batch_) * static_cast<uint64_t>(maxTotalSize_);
     OP_CHECK_IF(mergeResultCount > std::numeric_limits<uint64_t>::max() / sizeof(float),
-                OP_LOGE(context_, "Cross-class TopK workspace size overflow."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "batch * max_total_size",
+                                                      std::to_string(mergeResultCount).c_str(),
+                                                      "cross-class TopK workspace size overflows uint64"),
+                return ge::GRAPH_FAILED);
     const uint64_t mergeScoresBytes = mergeResultCount * sizeof(float);
     const uint64_t mergeIndicesBytes = mergeResultCount * sizeof(int32_t);
     uint64_t classBoxesOffset = scratchBytes;
@@ -424,7 +560,11 @@ ge::graphStatus BatchMultiClassNonMaxSuppressionTiling::SetTilingData()
                     !AddAligned(classCountsOffset, classCountsBytes, mergeScoresOffset) ||
                     !AddAligned(mergeScoresOffset, mergeScoresBytes, mergeIndicesOffset) ||
                     !AddAligned(mergeIndicesOffset, mergeIndicesBytes, userWorkspaceBytes),
-                OP_LOGE(context_, "Class result workspace size overflow."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                    context_->GetNodeName(), "batch * num_classes and max_total_size",
+                    (std::to_string(taskCount) + " and " + std::to_string(maxTotalSize_)).c_str(),
+                    "class result workspace size overflows uint64"),
+                return ge::GRAPH_FAILED);
     tilingData_->batch = batch_;
     tilingData_->boxesNum = boxesNum_;
     tilingData_->classesNum = classesNum_;
@@ -460,7 +600,10 @@ ge::graphStatus BatchMultiClassNonMaxSuppressionTiling::SetTilingData()
     size_t* workspace = context_->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context_, workspace);
     OP_CHECK_IF(userWorkspaceBytes > std::numeric_limits<size_t>::max() - ascendcPlatform.GetLibApiWorkSpaceSize(),
-                OP_LOGE(context_, "Workspace size exceeds platform limit."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context_->GetNodeName(), "workspace size",
+                                                      std::to_string(userWorkspaceBytes).c_str(),
+                                                      "workspace size exceeds the platform limit"),
+                return ge::GRAPH_FAILED);
     workspace[0] = ascendcPlatform.GetLibApiWorkSpaceSize() + static_cast<size_t>(userWorkspaceBytes);
     context_->SetBlockDim(usedCoreNum);
     context_->SetScheduleMode(kScheduleMode);
@@ -469,8 +612,10 @@ ge::graphStatus BatchMultiClassNonMaxSuppressionTiling::SetTilingData()
     auto rawTilingData = context_->GetRawTilingData();
     OP_CHECK_NULL_WITH_CONTEXT(context_, rawTilingData);
     const size_t tilingDataSize = sizeof(BatchMultiClassNonMaxSuppressionTilingData);
-    OP_CHECK_IF(memcpy_s(rawTilingData->GetData(), rawTilingData->GetCapacity(), tilingData_, tilingDataSize) != EOK,
-                OP_LOGE(context_, "Failed to serialize tiling data."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        memcpy_s(rawTilingData->GetData(), rawTilingData->GetCapacity(), tilingData_, tilingDataSize) != EOK,
+        error_report::ReportTilingStageError(context_->GetNodeName(), "memcpy_s failed to serialize the tiling data"),
+        return ge::GRAPH_FAILED);
     rawTilingData->SetDataSize(tilingDataSize);
     return ge::GRAPH_SUCCESS;
 }
@@ -492,7 +637,11 @@ static ge::graphStatus TilingPrepareForBatchMultiClassNonMaxSuppression(gert::Ti
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAiv();
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, compileInfo->ubSize);
     OP_CHECK_IF(compileInfo->coreNum == 0 || compileInfo->ubSize == 0,
-                OP_LOGE(context, "Ascend950 platform resource query failed."), return ge::GRAPH_FAILED);
+                error_report::ReportTilingStageError(
+                    context->GetNodeName(),
+                    "PlatformAscendC resource query failed: coreNum=" + std::to_string(compileInfo->coreNum) +
+                        ", ubSize=" + std::to_string(compileInfo->ubSize)),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 

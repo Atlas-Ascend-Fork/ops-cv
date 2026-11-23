@@ -8,12 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include "op_api/error_report_util.h"
 #include "objdetect/rotated_overlaps/op_kernel/arch35/rotated_overlaps_tiling_data.h"
 #include "objdetect/rotated_overlaps/op_kernel/arch35/rotated_overlaps_tiling_key.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <string>
+#include <vector>
 
 #include <securec.h>
 
@@ -63,10 +66,15 @@ ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& ubSize, 
     OP_CHECK_NULL_WITH_CONTEXT(context, platformInfo);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     const int64_t aivCoreNum = ascendcPlatform.GetCoreNumAiv();
-    OP_CHECK_IF(aivCoreNum <= 0, OP_LOGE(context, "RotatedOverlaps: AIV core count is invalid."),
+    OP_CHECK_IF(aivCoreNum <= 0,
+                error_report::ReportTilingStageError(
+                    context->GetNodeName(), "PlatformAscendC::GetCoreNumAiv returned " + std::to_string(aivCoreNum)),
                 return ge::GRAPH_FAILED);
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSize);
-    OP_CHECK_IF(ubSize == 0U, OP_LOGE(context, "RotatedOverlaps: UB size is invalid."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        ubSize == 0U,
+        error_report::ReportTilingStageError(context->GetNodeName(), "PlatformAscendC::GetCoreMemSize(UB) returned 0"),
+        return ge::GRAPH_FAILED);
     coreNum = static_cast<uint64_t>(aivCoreNum);
     return ge::GRAPH_SUCCESS;
 }
@@ -84,24 +92,39 @@ ge::graphStatus ParseAndValidate(gert::TilingContext* context, ShapeParams& para
     const gert::Shape& outputShape = output->GetStorageShape();
 
     OP_CHECK_IF(boxesShape.GetDimNum() != kRank || queryShape.GetDimNum() != kRank,
-                OP_LOGE(context, "RotatedOverlaps: boxes and query_boxes must both be rank 3."),
+                OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+                    context->GetNodeName(), "boxes and query_boxes",
+                    (std::to_string(boxesShape.GetDimNum()) + " and " + std::to_string(queryShape.GetDimNum())).c_str(),
+                    "boxes and query_boxes must both be rank 3"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(boxesShape.GetDim(1) != kCoordinateCount || queryShape.GetDim(1) != kCoordinateCount,
-                OP_LOGE(context, "RotatedOverlaps: coordinate dimension must be 5."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and query_boxes",
+                    (Ops::Base::ToString(boxesShape) + " and " + Ops::Base::ToString(queryShape)).c_str(),
+                    "the coordinate dimension of boxes and query_boxes must be 5"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(boxesShape.GetDim(0) <= 0 || boxesShape.GetDim(2) <= 0 || queryShape.GetDim(0) <= 0 ||
                     queryShape.GetDim(2) <= 0,
-                OP_LOGE(context, "RotatedOverlaps: B, N and K must be positive at tiling time."),
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and query_boxes",
+                    (Ops::Base::ToString(boxesShape) + " and " + Ops::Base::ToString(queryShape)).c_str(),
+                    "the dimensions B, N and K must be positive at tiling time"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(boxesShape.GetDim(0) != queryShape.GetDim(0),
-                OP_LOGE(context, "RotatedOverlaps: batch dimensions must match."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and query_boxes",
+                    (std::to_string(boxesShape.GetDim(0)) + " and " + std::to_string(queryShape.GetDim(0))).c_str(),
+                    "the batch dimensions of boxes and query_boxes must match"),
+                return ge::GRAPH_FAILED);
 
     params.batch = static_cast<uint64_t>(boxesShape.GetDim(0));
     params.numBoxes = static_cast<uint64_t>(boxesShape.GetDim(2));
     params.numQueries = static_cast<uint64_t>(queryShape.GetDim(2));
-    OP_CHECK_IF(
-        params.numQueries > kMaxQueries,
-        OP_LOGE(context, "RotatedOverlaps: K=%lu exceeds the first-release limit %lu.", params.numQueries, kMaxQueries),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(params.numQueries > kMaxQueries,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                    context->GetNodeName(), "query_boxes", std::to_string(params.numQueries).c_str(),
+                    ("K exceeds the first-release limit " + std::to_string(kMaxQueries)).c_str()),
+                return ge::GRAPH_FAILED);
     uint64_t inputChannelCount = 0U;
     uint64_t boxesElementCount = 0U;
     uint64_t queryElementCount = 0U;
@@ -110,15 +133,28 @@ ge::graphStatus ParseAndValidate(gert::TilingContext* context, ShapeParams& para
                     !MulChecked(inputChannelCount, params.numQueries, queryElementCount) ||
                     boxesElementCount > std::numeric_limits<size_t>::max() / kBytesPerFloat ||
                     queryElementCount > std::numeric_limits<size_t>::max() / kBytesPerFloat,
-                OP_LOGE(context, "RotatedOverlaps: input element or byte count overflows."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and query_boxes",
+                    (Ops::Base::ToString(boxesShape) + " and " + Ops::Base::ToString(queryShape)).c_str(),
+                    "the input element or byte count overflows"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(!MulChecked(params.batch, params.numBoxes, params.totalRows) ||
                     !MulChecked(params.totalRows, params.numQueries, params.totalPairs) ||
                     params.totalPairs > std::numeric_limits<size_t>::max() / kBytesPerFloat,
-                OP_LOGE(context, "RotatedOverlaps: output element or byte count overflows."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "boxes and query_boxes",
+                    (Ops::Base::ToString(boxesShape) + " and " + Ops::Base::ToString(queryShape)).c_str(),
+                    "the output element or byte count overflows"),
+                return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(outputShape.GetDimNum() != kRank || outputShape.GetDim(0) != boxesShape.GetDim(0) ||
                     outputShape.GetDim(1) != boxesShape.GetDim(2) || outputShape.GetDim(2) != queryShape.GetDim(2),
-                OP_LOGE(context, "RotatedOverlaps: output shape must be [B,N,K]."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(
+                    context->GetNodeName(), "overlaps", Ops::Base::ToString(outputShape).c_str(),
+                    ("the output shape must be [B, N, K], got B=" + std::to_string(boxesShape.GetDim(0)) +
+                     ", N=" + std::to_string(boxesShape.GetDim(2)) + ", K=" + std::to_string(queryShape.GetDim(2)))
+                        .c_str()),
+                return ge::GRAPH_FAILED);
     const auto* boxesDesc = context->GetInputDesc(kBoxesIndex);
     const auto* queryDesc = context->GetInputDesc(kQueryBoxesIndex);
     const auto* outputDesc = context->GetOutputDesc(kOutputIndex);
@@ -127,7 +163,13 @@ ge::graphStatus ParseAndValidate(gert::TilingContext* context, ShapeParams& para
     OP_CHECK_NULL_WITH_CONTEXT(context, outputDesc);
     OP_CHECK_IF(boxesDesc->GetDataType() != ge::DT_FLOAT || queryDesc->GetDataType() != ge::DT_FLOAT ||
                     outputDesc->GetDataType() != ge::DT_FLOAT,
-                OP_LOGE(context, "RotatedOverlaps: only float32 is supported."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "boxes, query_boxes and overlaps",
+                                                       (Ops::Base::ToString(boxesDesc->GetDataType()) + ", " +
+                                                        Ops::Base::ToString(queryDesc->GetDataType()) + " and " +
+                                                        Ops::Base::ToString(outputDesc->GetDataType()))
+                                                           .c_str(),
+                                                       "only float32 is supported"),
+                return ge::GRAPH_FAILED);
 
     const gert::RuntimeAttrs* attrs = context->GetAttrs();
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
@@ -162,7 +204,9 @@ ge::graphStatus SelectTileAndMathWorkspace(gert::TilingContext* context, uint64_
             return ge::GRAPH_SUCCESS;
         }
     }
-    OP_LOGE(context, "RotatedOverlaps: UB cannot hold the minimum vector tile and math workspace.");
+    error_report::ReportTilingStageError(
+        context->GetNodeName(),
+        "UB cannot hold the minimum vector tile and math workspace: available=" + std::to_string(ubSize));
     return ge::GRAPH_FAILED;
 }
 } // namespace
@@ -174,25 +218,37 @@ static ge::graphStatus RotatedOverlapsTiling(gert::TilingContext* context)
         return ge::GRAPH_FAILED;
     }
     ShapeParams params;
+    // ParseAndValidate already reports the specific shape/dtype cause, so
+    // only supplement a plain log here instead of re-reporting a generic
+    // parameter error.
     OP_CHECK_IF(ParseAndValidate(context, params) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "RotatedOverlaps: input contract validation failed."), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(context->GetNodeName(), "input contract validation failed"),
+                return ge::GRAPH_FAILED);
 
     uint64_t ubSize = 0U;
     uint64_t availableCoreNum = 0U;
     OP_CHECK_IF(GetPlatformInfo(context, ubSize, availableCoreNum) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "RotatedOverlaps: platform query failed."), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(context->GetNodeName(), "platform query failed"), return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(ubSize <= kRotatedOverlapsSimtDataCacheReserveBytes,
-                OP_LOGE(context, "RotatedOverlaps: UB cannot reserve the SIMT data cache."), return ge::GRAPH_FAILED);
+                error_report::ReportTilingStageError(
+                    context->GetNodeName(), "PlatformAscendC::GetCoreMemSize(UB) returned " + std::to_string(ubSize) +
+                                                ", which cannot reserve the SIMT data cache of " +
+                                                std::to_string(kRotatedOverlapsSimtDataCacheReserveBytes)),
+                return ge::GRAPH_FAILED);
     const uint64_t localMemorySize = ubSize - kRotatedOverlapsSimtDataCacheReserveBytes;
     OP_CHECK_IF(localMemorySize > std::numeric_limits<uint32_t>::max() ||
                     context->SetLocalMemorySize(static_cast<uint32_t>(localMemorySize)) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "RotatedOverlaps: failed to reserve the SIMT data cache."), return ge::GRAPH_FAILED);
+                error_report::ReportTilingStageError(
+                    context->GetNodeName(),
+                    "failed to reserve the SIMT data cache: localMemorySize=" + std::to_string(localMemorySize)),
+                return ge::GRAPH_FAILED);
 
     uint32_t tileLen = 0U;
     uint32_t mathTmpBytes = 0U;
     OP_CHECK_IF(SelectTileAndMathWorkspace(context, localMemorySize, tileLen, mathTmpBytes) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "RotatedOverlaps: tile or math workspace selection failed."), return ge::GRAPH_FAILED);
+                OP_LOGE_WITHOUT_REPORT(context->GetNodeName(), "tile or math workspace selection failed"),
+                return ge::GRAPH_FAILED);
 
     const uint64_t queryTilesPerBox = CeilDiv(params.numQueries, tileLen);
     const uint64_t boxTilesPerQuery = CeilDiv(params.numBoxes, tileLen);
@@ -202,7 +258,10 @@ static ge::graphStatus RotatedOverlapsTiling(gert::TilingContext* context)
     OP_CHECK_IF(!MulChecked(params.totalRows, queryTilesPerBox, queryVectorTasks) ||
                     !MulChecked(params.batch, params.numQueries, queryRows) ||
                     !MulChecked(queryRows, boxTilesPerQuery, boxVectorTasks),
-                OP_LOGE(context, "RotatedOverlaps: tile task count overflows."), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "batch * num_boxes * num_queries",
+                                                      std::to_string(params.totalPairs).c_str(),
+                                                      "the tile task count overflows uint64"),
+                return ge::GRAPH_FAILED);
 
     // Keep contiguous [K] output writes when both directions need the same
     // number of core waves.  Vectorising boxes is selected only when it
@@ -219,15 +278,19 @@ static ge::graphStatus RotatedOverlapsTiling(gert::TilingContext* context)
     const uint64_t simtUsedCoreNum = std::min<uint64_t>(availableCoreNum,
                                                         CeilDiv(params.totalPairs, kRotatedOverlapsSimtThreadNum));
     const uint64_t usedCoreNum = usePairParallelSimt ? simtUsedCoreNum : vectorUsedCoreNum;
-    OP_CHECK_IF(totalTasks == 0U || tasksPerCore == 0U || usedCoreNum == 0U ||
-                    usedCoreNum > std::numeric_limits<uint32_t>::max() ||
-                    tilesPerOuter > std::numeric_limits<uint32_t>::max(),
-                OP_LOGE(context, "RotatedOverlaps: invalid tile-task core partition."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        totalTasks == 0U || tasksPerCore == 0U || usedCoreNum == 0U ||
+            usedCoreNum > std::numeric_limits<uint32_t>::max() || tilesPerOuter > std::numeric_limits<uint32_t>::max(),
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "used_core_num",
+                                              std::to_string(usedCoreNum).c_str(), "invalid tile-task core partition"),
+        return ge::GRAPH_FAILED);
 
     RotatedOverlapsTilingData* tiling = context->GetTilingData<RotatedOverlapsTilingData>();
     OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
-    OP_CHECK_IF(memset_s(tiling, sizeof(RotatedOverlapsTilingData), 0, sizeof(RotatedOverlapsTilingData)) != EOK,
-                OP_LOGE(context, "RotatedOverlaps: failed to initialize tiling data."), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        memset_s(tiling, sizeof(RotatedOverlapsTilingData), 0, sizeof(RotatedOverlapsTilingData)) != EOK,
+        error_report::ReportTilingStageError(context->GetNodeName(), "memset_s failed to initialize the tiling data"),
+        return ge::GRAPH_FAILED);
     tiling->batch = params.batch;
     tiling->numBoxes = params.numBoxes;
     tiling->numQueries = params.numQueries;
