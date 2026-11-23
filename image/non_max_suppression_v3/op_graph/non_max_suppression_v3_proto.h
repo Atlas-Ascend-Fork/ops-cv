@@ -33,11 +33,11 @@ namespace ge {
 * format with x1 < x2 and y1 < y2.
 * @li scores: A 1-D float tensor of shape [num_boxes] representing a single
 * score corresponding to each box (each row of boxes).
-* @li max_output_size: A scalar integer tensor representing the maximum number
-* of boxes to be selected by non max suppression.
-* @li iou_threshold: A 0-D float tensor representing the threshold for deciding
-* whether boxes overlap too much with respect to IOU.
-* @li score_threshold: A 0-D float tensor representing the threshold for
+* @li max_output_size: A scalar (rank-0) or 1-D integer tensor with shape [1],
+* representing the maximum number of boxes to be selected by non max suppression.
+* @li iou_threshold: A scalar (rank-0) or 1-D float tensor with shape [1],
+* representing the threshold for deciding whether boxes overlap too much with respect to IOU.
+* @li score_threshold: A scalar (rank-0) or 1-D float tensor with shape [1], representing the threshold for
 * deciding when to remove boxes based on score . \n
 
 * @par Attributes:
