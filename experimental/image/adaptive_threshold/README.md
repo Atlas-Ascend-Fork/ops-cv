@@ -48,6 +48,7 @@
 - `adaptive_method` 取值必须为 `MEAN` 或 `GAUSSIAN`。
 - `threshold_type` 取值必须为 `THRESH_BINARY` 或 `THRESH_BINARY_INV`。
 - `block_size` 必须为奇数，且满足 `3 <= block_size <= 255`。
+- `max_value` 与 `C` 必须为有限浮点值，不支持 `NaN` 或 `Inf`。
 - 当前仅支持 `ND` 格式。
 - 非空 `FLOAT32` 输入暂不支持 `block_size=255`；该组合的空图可正常返回。
 - `max_value` 与 `C` 的取值语义与输入数据类型相关：
