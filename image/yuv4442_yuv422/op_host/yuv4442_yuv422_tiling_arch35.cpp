@@ -88,6 +88,12 @@ static ge::graphStatus GetShapeInfo(gert::TilingContext* context, int64_t& h, in
         return ge::GRAPH_FAILED;
     }
     totalPairs = h * wPairs;
+    // Odd-width processing appends one orphan item per row in the kernel.
+    // Keep the derived total representable before serializing tiling data.
+    if ((w & 1) != 0 && h > std::numeric_limits<int64_t>::max() - totalPairs) {
+        OP_LOGE(context, "totalPairsAll overflow: H=%ld, W=%ld, totalPairs=%ld", h, w, totalPairs);
+        return ge::GRAPH_FAILED;
+    }
 
     return ge::GRAPH_SUCCESS;
 }

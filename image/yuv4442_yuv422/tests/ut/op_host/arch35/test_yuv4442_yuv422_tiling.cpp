@@ -197,23 +197,24 @@ TEST_F(Yuv4442yuv422Tiling, yuv4442_yuv422_representable_upper_bound)
 {
     struct Yuv4442yuv422CompileInfo {
     } compileInfo;
-    // h=2, w=INT64_MAX: totalPairs = 2*(w/2) = INT64_MAX-1 is representable, must succeed
+    // h=2, w=INT64_MAX-1: totalPairs = 2*(w/2) = INT64_MAX-1 is representable, must succeed
     int64_t maxInt64 = std::numeric_limits<int64_t>::max();
+    int64_t representableWidth = maxInt64 - 1;
     gert::TilingContextPara tilingContextPara(
         "YUV4442YUV422",
         {
-            {{{2, maxInt64, 4}, {2, maxInt64, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // input x
+            {{{2, representableWidth, 4}, {2, representableWidth, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // input x
         },
         {
-            {{{2, maxInt64, 2}, {2, maxInt64, 2}}, ge::DT_UINT8, ge::FORMAT_ND}, // output y
+            {{{2, representableWidth, 2}, {2, representableWidth, 2}}, ge::DT_UINT8, ge::FORMAT_ND}, // output y
         },
         {
             /* attrs */
         },
         &compileInfo, "Ascend950", 64, 262144, 4096);
     uint64_t expectTilingKey = 0;
-    // totalPairs(9223372036854775806) h(2) w(9223372036854775807) needCoreNum(64)
-    string expectTilingData = "9223372036854775806 2 9223372036854775807 64 ";
+    // totalPairs(9223372036854775806) h(2) w(9223372036854775806) needCoreNum(64)
+    string expectTilingData = "9223372036854775806 2 9223372036854775806 64 ";
     std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
@@ -261,5 +262,49 @@ TEST_F(Yuv4442yuv422Tiling, yuv4442_yuv422_zero_width)
     // totalPairs(0) h(2) w(0) needCoreNum(1)
     string expectTilingData = "0 2 0 1 ";
     std::vector<size_t> expectWorkspaces = {16777216};
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+TEST_F(Yuv4442yuv422Tiling, yuv4442_yuv422_odd_width_total_pairs_all_overflow)
+{
+    struct Yuv4442yuv422CompileInfo {
+    } compileInfo;
+    // For odd W the kernel adds one orphan item per row.  totalPairs itself
+    // fits int64, but totalPairs + H does not and must be rejected.
+    const int64_t h = std::numeric_limits<int64_t>::max() / 2 + 1;
+    gert::TilingContextPara tilingContextPara("YUV4442YUV422",
+                                              {
+                                                  {{{h, 3, 4}, {h, 3, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{h, 3, 2}, {h, 3, 2}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(Yuv4442yuv422Tiling, yuv4442_yuv422_odd_width_representable)
+{
+    struct Yuv4442yuv422CompileInfo {
+    } compileInfo;
+    // A small legal odd-width image remains successful and uses the existing
+    // totalPairs serialization.
+    gert::TilingContextPara tilingContextPara("YUV4442YUV422",
+                                              {
+                                                  {{{2, 3, 4}, {2, 3, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{2, 3, 2}, {2, 3, 2}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  /* attrs */
+                                              },
+                                              &compileInfo, "Ascend950", 64, 262144, 4096);
+    const uint64_t expectTilingKey = 0;
+    const string expectTilingData = "2 2 3 1 ";
+    const std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
 }
