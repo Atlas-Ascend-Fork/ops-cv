@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <limits>
 #include <vector>
 #include "Eigen/Core"
@@ -933,6 +934,65 @@ TEST_F(TEST_CropAndResize_UTest, CropAndResizeKernel_BilinearV2_IntegerBoundaryE
         ASSERT_EQ(CpuKernelRegister::Instance().RunCpuKernel(ctx), KERNEL_STATUS_OK);
         EXPECT_FLOAT_EQ(output[kBoundaryOutput], -1.0f);
     }
+}
+
+TEST_F(TEST_CropAndResize_UTest, CropAndResizeKernel_UnsupportedInputDtype)
+{
+    bool image[1] = {true};
+    float boxes[1][4] = {0.0F};
+    int32_t boxIndex[1] = {0};
+    int32_t cropSize[2] = {1, 1};
+    bool output[1] = {false};
+
+    auto nodeDef = CpuKernelUtils::CreateNodeDef();
+    nodeDef->SetOpType("CropAndResize");
+    auto method = CpuKernelUtils::CreateAttrValue();
+    method->SetString("bilinear");
+    nodeDef->AddAttrs("method", method.get());
+    auto extrapolationValue = CpuKernelUtils::CreateAttrValue();
+    extrapolationValue->SetFloat(0.0F);
+    nodeDef->AddAttrs("extrapolation_value", extrapolationValue.get());
+
+    auto imageInput = nodeDef->AddInputs();
+    imageInput->GetTensorShape()->SetDimSizes({1, 1, 1, 1});
+    imageInput->SetDataType(DT_BOOL);
+    imageInput->SetData(image);
+    imageInput->SetDataSize(sizeof(image));
+
+    auto boxesInput = nodeDef->AddInputs();
+    boxesInput->GetTensorShape()->SetDimSizes({1, 4});
+    boxesInput->SetDataType(DT_FLOAT);
+    boxesInput->SetData(boxes);
+    boxesInput->SetDataSize(sizeof(boxes));
+
+    auto boxIndexInput = nodeDef->AddInputs();
+    boxIndexInput->GetTensorShape()->SetDimSizes({1});
+    boxIndexInput->SetDataType(DT_INT32);
+    boxIndexInput->SetData(boxIndex);
+    boxIndexInput->SetDataSize(sizeof(boxIndex));
+
+    auto cropSizeInput = nodeDef->AddInputs();
+    cropSizeInput->GetTensorShape()->SetDimSizes({2});
+    cropSizeInput->SetDataType(DT_INT32);
+    cropSizeInput->SetData(cropSize);
+    cropSizeInput->SetDataSize(sizeof(cropSize));
+
+    auto outputTensor = nodeDef->AddOutputs();
+    outputTensor->GetTensorShape()->SetDimSizes({1, 1, 1, 1});
+    outputTensor->SetDataType(DT_BOOL);
+    outputTensor->SetData(output);
+    outputTensor->SetDataSize(sizeof(output));
+
+    CpuKernelContext ctx(DEVICE);
+    ASSERT_EQ(ctx.Init(nodeDef.get()), KERNEL_STATUS_OK);
+    uint32_t result = KERNEL_STATUS_OK;
+    try {
+        result = CpuKernelRegister::Instance().RunCpuKernel(ctx);
+    } catch (const std::bad_function_call&) {
+        ADD_FAILURE() << "unsupported input dtype must return KERNEL_STATUS_PARAM_INVALID";
+        return;
+    }
+    EXPECT_EQ(result, KERNEL_STATUS_PARAM_INVALID);
 }
 
 TEST_F(TEST_CropAndResize_UTest, BilinearFiniteOppositeSignPixels)

@@ -168,7 +168,12 @@ uint32_t CropAndResizeMsCpuKernel::Compute(CpuKernelContext& ctx)
     calls[DT_UINT8] = CalCropAndResize<uint8_t>;
     calls[DT_UINT16] = CalCropAndResize<uint16_t>;
 
-    return calls[x_dtype_](inputs_, outputs_, x_shape_, boxes_shape_, method_, extrapolation_value_, ctx);
+    auto call = calls.find(x_dtype_);
+    if (call == calls.end()) {
+        KERNEL_LOG_ERROR("Unsupported input data type: [%d]", static_cast<int>(x_dtype_));
+        return KERNEL_STATUS_PARAM_INVALID;
+    }
+    return call->second(inputs_, outputs_, x_shape_, boxes_shape_, method_, extrapolation_value_, ctx);
 }
 
 OPS_CV_REGISTER_CPU_KERNELV2(kCropAndResize, CropAndResizeMsCpuKernel);
