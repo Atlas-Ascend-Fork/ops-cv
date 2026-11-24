@@ -95,7 +95,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <td class="tg-0pky">Must have the same data type as gradOutput and gradInput.</td>
       <td class="tg-0pky">FLOAT</td>
       <td class="tg-0pky">ND</td>
-      <td class="tg-0pky">2-dimensional, shape (K, 5)<br>5 represents the box-related information (image_id, x1, y1, x2, y2).<br>image_id value range [0, B), rounded down to the image id, where B is the first value of inputShape.<br>Coordinates satisfy 0 <= x1 <= x2 <= inputWidth/spatialScale and 0 <= y1 <= y2 <= inputHeight/spatialScale.</td>
+      <td class="tg-0pky">2-dimensional, shape (K, 5)<br>5 represents the box-related information (image_id, x1, y1, x2, y2).<br>image_id value range [0, B), rounded down to the image id, where B is the first value of inputShape.<br>Coordinates satisfy 0 <= x1 <= x2 <= inputWidth/spatialScale and 0 <= y1 <= y2 <= inputHeight/spatialScale, guaranteed by the caller.</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
@@ -273,8 +273,19 @@ aclnnStatus aclnnRoiAlignV2Backward(
 ## Constraints
 
 - Deterministic computation:
-  - Determinism depends on the implementation/product: the Atlas 910 series uses atomic accumulation by default (non-deterministic); Ascend 950 is deterministic.
+
+  <!-- npu="910" id7 -->
+  - <term>Atlas training products</term>: uses atomic accumulation by default (non-deterministic).
+  <!-- end id7 -->
+  <!-- npu="950" id8 -->
+  - <term>Ascend 950PR&950DT products</term>: deterministic.
+  <!-- end id8 -->
 - inputShape: B, C, inputHeight, and inputWidth must all be greater than 0 and at most INT32_MAX; pooledHeight/pooledWidth must be greater than 0 and at most INT32_MAX.
+- boxes: coordinates must satisfy `0 <= x1 <= x2 <= inputWidth/spatialScale` and `0 <= y1 <= y2 <= inputHeight/spatialScale`, guaranteed by the caller. When the coordinates exceed the inputWidth/spatialScale or inputHeight/spatialScale upper bound, the operator does not report an error; after scaling to the feature map, sampling points outside the sampling window `[-1, inputWidth] x [-1, inputHeight]` produce no gradient (the gradient decreases in proportion to the sampling points outside the window). Reversed boxes (x1 > x2 or y1 > y2) violate the constraint; the operator does not report an error and does not guarantee a zero contribution.
+
+  <!-- npu="950" id9 -->
+  - <term>Ascend 950PR&950DT products</term>: reversed boxes (`x1 > x2` or `y1 > y2`) use an ROI width/height lower bound of 1.0 when aligned=false, and sample with negative width/height when aligned=true; a zero contribution is not guaranteed; do not rely on it.
+  <!-- end id9 -->
 - spatialScale: must be finite and greater than 0.
 - sample_num/samplingRatio must be non-negative, capped at INT32_MAX; values above are treated as invalid parameters. A value of 0 means adaptive sampling (ceil(roi_size / pooled_size)).
 - Empty tensor: when the number of rois is 0 the operator returns all zeros; pooledHeight/pooledWidth equal to 0 is invalid input.

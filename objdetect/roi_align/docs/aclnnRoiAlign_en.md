@@ -92,7 +92,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0pky">rois (aclTensor*)</td>
       <td class="tg-0pky">Input</td>
       <td class="tg-0pky">Region of interest.</td>
-      <td class="tg-0pky"><ul><li>Must have the same data type as self/out.</li><li>The coordinate format is (x1, y1, x2, y2), satisfying 0 <= x1 <= x2 <= W/spatialScale and 0 <= y1 <= y2 <= H/spatialScale.</li></ul></td>
+      <td class="tg-0pky"><ul><li>Must have the same data type as self/out.</li><li>The coordinate format is (x1, y1, x2, y2), satisfying 0 <= x1 <= x2 <= W/spatialScale and 0 <= y1 <= y2 <= H/spatialScale, guaranteed by the caller.</li></ul></td>
       <td class="tg-0pky">FLOAT, FLOAT16</td>
       <td class="tg-0pky">ND</td>
       <td class="tg-0pky">2-dimensional, with shape (numRois, 4)</td>
@@ -301,6 +301,7 @@ aclnnStatus aclnnRoiAlign(
 
 - Deterministic computation:
   - aclnnRoiAlign defaults to a deterministic implementation.
+- rois: coordinates must satisfy `0 <= x1 <= x2 <= W/spatialScale` and `0 <= y1 <= y2 <= H/spatialScale`, guaranteed by the caller. When the coordinates exceed the W/spatialScale or H/spatialScale upper bound, the operator does not report an error; after scaling to the feature map, sampling points outside the sampling window `[-1, W] x [-1, H]` do not participate in interpolation (contribution is 0).
 - outputHeight/outputWidth: must satisfy `1 <= value <= INT32_MAX`.
 - samplingRatio: must satisfy `0 <= value <= 46340` (floor(sqrt(INT32_MAX))).
 - spatialScale: must be finite and greater than 0.

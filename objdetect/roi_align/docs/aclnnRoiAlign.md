@@ -92,7 +92,7 @@ aclnnStatus aclnnRoiAlign(
       <td class="tg-0pky">rois(aclTensor*)</td>
       <td class="tg-0pky">输入</td>
       <td class="tg-0pky">感兴趣区域。</td>
-      <td class="tg-0pky"><ul><li>必须与self/out数据类型一致。</li><li>坐标格式为(x1, y1, x2, y2)，且满足0 <= x1 <= x2 <= W/spatialScale、0 <= y1 <= y2 <= H/spatialScale。</li></ul></td>
+      <td class="tg-0pky"><ul><li>必须与self/out数据类型一致。</li><li>坐标格式为(x1, y1, x2, y2)，且满足0 <= x1 <= x2 <= W/spatialScale、0 <= y1 <= y2 <= H/spatialScale，由调用方保证。</li></ul></td>
       <td class="tg-0pky">FLOAT、FLOAT16</td>
       <td class="tg-0pky">ND</td>
       <td class="tg-0pky">2维，为(numRois, 4)</td>
@@ -301,6 +301,7 @@ aclnnStatus aclnnRoiAlign(
 - 确定性计算：
   - aclnnRoiAlign默认确定性实现。
 - batchIndices：每个元素需满足 `0 <= v < self.shape[0]`，由调用方保证合法；算子不对索引取值做运行时校验。
+- rois：坐标需满足 `0 <= x1 <= x2 <= W/spatialScale`、`0 <= y1 <= y2 <= H/spatialScale`，由调用方保证；坐标超出W/spatialScale、H/spatialScale上界时算子不报错，换算到特征图尺度后落在采样窗口`[-1, W]×[-1, H]`之外的采样点不参与插值（贡献为0）。
 - outputHeight/outputWidth：需满足 `1 <= 值 <= INT32_MAX`。
 - samplingRatio：需满足 `0 <= 值 <= 46340`（即 floor(sqrt(INT32_MAX))）。
 - spatialScale：需为有限值且大于 0。

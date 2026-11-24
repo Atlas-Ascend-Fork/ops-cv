@@ -95,7 +95,7 @@ aclnnStatus aclnnRoiAlignV2Backward(
       <td class="tg-0pky">必须与gradOutput、gradInput数据类型一致。</td>
       <td class="tg-0pky">FLOAT</td>
       <td class="tg-0pky">ND</td>
-      <td class="tg-0pky">2维，shape为（K，5）<br>5代表box相关信息（image_id，x1，y1，x2，y2）。<br>image_id取值范围[0, B)，向下取整到图像id，B为inputShape第一个值。<br>坐标需满足0 &lt;= x1 &lt;= x2 &lt;= inputWidth/spatialScale、0 &lt;= y1 &lt;= y2 &lt;= inputHeight/spatialScale，由调用方保证；若 x1 &gt; x2 或 y1 &gt; y2（反转框），算子不报错，对应 ROI 对 gradInput 的贡献为全 0。</td>
+      <td class="tg-0pky">2维，shape为（K，5）<br>5代表box相关信息（image_id，x1，y1，x2，y2）。<br>image_id取值范围[0, B)，向下取整到图像id，B为inputShape第一个值。<br>坐标需满足0 &lt;= x1 &lt;= x2 &lt;= inputWidth/spatialScale、0 &lt;= y1 &lt;= y2 &lt;= inputHeight/spatialScale，由调用方保证。</td>
       <td class="tg-0pky">√</td>
     </tr>
     <tr>
@@ -272,8 +272,19 @@ aclnnStatus aclnnRoiAlignV2Backward(
 ## 约束说明
 
 - 确定性计算：
-  - 确定性取决于具体实现/产品：Atlas 910系列默认采用原子累加（非确定性）；Ascend 950为确定性实现。
+
+  <!-- npu="910" id7 -->
+  - <term>Atlas训练系列产品</term>：默认采用原子累加（非确定性）。
+  <!-- end id7 -->
+  <!-- npu="950" id8 -->
+  - <term>Ascend 950PR&950DT系列产品</term>：确定性实现。
+  <!-- end id8 -->
 - inputShape：B、C、inputHeight、inputWidth均需大于0且不超过INT32_MAX；pooledHeight/pooledWidth需大于0且不超过INT32_MAX。
+- boxes：坐标需满足 `0 <= x1 <= x2 <= inputWidth/spatialScale`、`0 <= y1 <= y2 <= inputHeight/spatialScale`，由调用方保证；坐标超出inputWidth/spatialScale、inputHeight/spatialScale上界时算子不报错，换算到特征图尺度后落在采样窗口`[-1, inputWidth]×[-1, inputHeight]`之外的采样点不产生梯度（梯度按窗口外采样点的占比相应减少）；反转框（`x1 > x2`或`y1 > y2`）属于违反上述约束的输入，算子不报错，不保证贡献为0。
+
+  <!-- npu="950" id9 -->
+  - <term>Ascend 950PR&950DT系列产品</term>：反转框（`x1 > x2`或`y1 > y2`）在aligned=false时ROI宽或高按不小于1.0计算，aligned=true时按负的宽或高参与采样；不保证贡献为0，请勿依赖。
+  <!-- end id9 -->
 - spatialScale：需为有限值且大于0。
 - sample_num/samplingRatio取非负整数，上限INT32_MAX，超出上限按非法参数处理；取0表示自适应采样（ceil(roi_size / pooled_size)）。
 - 空tensor：rois数量为0时返回全0；pooledHeight/pooledWidth为0属非法输入。
