@@ -9,15 +9,19 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------
 
-"""dilation2_d_backprop_input 在 kernel/geir 测试路径下的三方 golden。
+"""dilation2_d_backprop_input 的 Kernel、GEIR 和 TensorFlow E2E Golden。
 
 Kernel/GEIR 的 golden 收到 numpy.ndarray，转 tf tensor 后调 tf.raw_ops.Dilation2DBackpropInput 计算，
 结果转回 numpy；
 third_party 的 tf vendor 收到 tf.Tensor（框架按 vendor 自动转换），直接调同一接口，无需手动转换。
+TensorFlow E2E 按原生 API 签名接收参数并直接执行该接口。
 无 torch 现成接口，以 tf.raw_ops.Dilation2DBackpropInput 作为三方标杆。
 """
 
-__spec__ = {"dilation2_d_backprop_input": "Dilation2DBackpropInputKernelSpec"}
+__spec__ = {
+    "dilation2_d_backprop_input": "Dilation2DBackpropInputKernelSpec",
+    "tf.raw_ops.Dilation2DBackpropInput": "TfDilation2DBackpropInputSpec",
+}
 
 import numpy as np
 import tensorflow as tf
@@ -254,3 +258,21 @@ class Dilation2DBackpropInputKernelSpec:
 
     third_party = {"tf": ThirdPartyImpl}
     tolerance = {"float32": {"standard": "cross_check", "level": "L1"}}
+
+
+class TfDilation2DBackpropInputSpec:
+    """TensorFlow E2E Golden，参数名与 tf.raw_ops 接口一致。"""
+
+    @staticmethod
+    def golden(input, filter, out_backprop, strides, rates, padding, name=None):
+        return [
+            tf.raw_ops.Dilation2DBackpropInput(
+                input=input,
+                filter=filter,
+                out_backprop=out_backprop,
+                strides=strides,
+                rates=rates,
+                padding=padding,
+                name=name,
+            )
+        ]
