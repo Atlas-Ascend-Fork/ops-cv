@@ -23,12 +23,12 @@
 #include "opdev/op_executor.h"
 #include "opdev/op_dfx.h"
 #include "opdev/op_log.h"
-#include "opdev/tensor_view_utils.h"
-#include "op_api/aclnn_check.h"
 #ifndef OP_LOG_LIBOPAPI_ONLY
 #define OP_LOG_LIBOPAPI_ONLY
 #endif
 #include "log/log.h"
+#include "opdev/tensor_view_utils.h"
+#include "op_api/aclnn_check.h"
 
 using namespace op;
 #ifdef __cplusplus
@@ -47,20 +47,41 @@ static constexpr size_t EXPECT_SIZE = 4;
 static const double MIN_SUPPORT_SCALE = 0.02;
 static constexpr size_t EXPECT_OUTPUTSIZE = 2;
 
+static bool CheckRequiredPointer(const void* ptr, const char* name)
+{
+    if (ptr != nullptr) {
+        return true;
+    }
+    const std::vector<const char*> keys = {"functionName", "paraName"};
+    const std::vector<const char*> values = {"aclnnUpsampleBicubic2dAAGradGetWorkspaceSize", name};
+    REPORT_PREDEFINED_ERR_MSG("EZ1011", keys, values);
+    return false;
+}
+
 static bool CheckNotNull(const aclTensor* gradOutput, const aclIntArray* outputSize, const aclIntArray* inputSize,
                          const aclTensor* out)
 {
-    OP_CHECK_NULL(gradOutput, return false);
-    OP_CHECK_NULL(outputSize, return false);
-    OP_CHECK_NULL(inputSize, return false);
-    OP_CHECK_NULL(out, return false);
+    CHECK_RET(CheckRequiredPointer(gradOutput, "gradOutput"), false);
+    CHECK_RET(CheckRequiredPointer(outputSize, "outputSize"), false);
+    CHECK_RET(CheckRequiredPointer(inputSize, "inputSize"), false);
+    CHECK_RET(CheckRequiredPointer(out, "out"), false);
     return true;
 }
 
 static bool CheckDtypeValid(const aclTensor* gradOut, const aclTensor* out)
 {
-    OP_CHECK_DTYPE_NOT_SUPPORT(gradOut, DTYPE_SUPPORT_LIST, return false);
-    OP_CHECK_DTYPE_NOT_MATCH(gradOut, out->GetDataType(), return false);
+    OP_CHECK(CheckType(gradOut->GetDataType(), DTYPE_SUPPORT_LIST),
+             OP_LOGE_FOR_INVALID_DTYPE("aclnnUpsampleBicubic2dAAGrad", "gradOutput",
+                                       op::ToString(gradOut->GetDataType()).GetString(),
+                                       op::ToString(DTYPE_SUPPORT_LIST).GetString()),
+             return false);
+    OP_CHECK(gradOut->GetDataType() == out->GetDataType(),
+             OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON("aclnnUpsampleBicubic2dAAGrad", "gradOutput,out",
+                                                    (std::string(op::ToString(gradOut->GetDataType()).GetString()) +
+                                                     "," + op::ToString(out->GetDataType()).GetString())
+                                                        .c_str(),
+                                                    "dtypes must match"),
+             return false);
     return true;
 }
 
@@ -69,23 +90,29 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
 {
     const op::Format gradOutputFormat = gradOutput->GetStorageFormat();
     if (gradOutputFormat != out->GetStorageFormat()) {
-        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBicubic2dAaGrad", "gradoutput,out",
-                                                (std::string(op::ToString(gradOutputFormat).GetString()) + ", " +
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBicubic2dAAGrad", "gradOutput,out",
+                                                (std::string(op::ToString(gradOutputFormat).GetString()) + "," +
                                                  op::ToString(out->GetStorageFormat()).GetString())
                                                     .c_str(),
-                                                "format of gradoutput and out must be the same");
+                                                "storage formats must match");
         return false;
     }
-    OP_CHECK_WRONG_DIMENSION(gradOutput, DIM_LIMIT, return false);
-    OP_CHECK_WRONG_DIMENSION(out, DIM_LIMIT, return false);
+    OP_CHECK(gradOutput->GetViewShape().GetDimNum() == DIM_LIMIT,
+             OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleBicubic2dAAGrad", "gradOutput",
+                                          std::to_string(gradOutput->GetViewShape().GetDimNum()).c_str(), "4"),
+             return false);
+    OP_CHECK(out->GetViewShape().GetDimNum() == DIM_LIMIT,
+             OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnUpsampleBicubic2dAAGrad", "out",
+                                          std::to_string(out->GetViewShape().GetDimNum()).c_str(), "4"),
+             return false);
     size_t inputSizeNum = inputSize->Size();
     size_t outputSizeNum = outputSize->Size();
     OP_CHECK(inputSizeNum == EXPECT_SIZE,
-             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBicubic2dAaGrad", "input_size",
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBicubic2dAAGrad", "inputSize",
                                           std::to_string(inputSizeNum).c_str(), "4"),
              return false);
     OP_CHECK(outputSizeNum == EXPECT_OUTPUTSIZE,
-             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBicubic2dAaGrad", "output_size",
+             OP_LOGE_FOR_INVALID_LISTSIZE("aclnnUpsampleBicubic2dAAGrad", "outputSize",
                                           std::to_string(outputSizeNum).c_str(), "2"),
              return false);
     return true;
@@ -93,11 +120,14 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* out, const 
 
 static bool CheckScalesValid(const double width, const double high)
 {
-    if ((width < 0) || (high < 0)) {
-        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-            "aclnnUpsampleBicubic2dAaGrad", "scales_w,scales_h",
-            (std::string(std::to_string(width).c_str()) + ", " + std::to_string(high).c_str()).c_str(),
-            "scales_w and scales_h cannot be negative");
+    if (width < 0) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBicubic2dAAGrad", "scalesW", std::to_string(width).c_str(),
+                                              "must be nonnegative");
+        return false;
+    }
+    if (high < 0) {
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBicubic2dAAGrad", "scalesH", std::to_string(high).c_str(),
+                                              "must be nonnegative");
         return false;
     }
     return true;
@@ -131,39 +161,43 @@ static bool CheckInputElement(const aclTensor* gradOutput, const aclIntArray* in
     outW = gradOutputShape.GetDim(DIM_THREE);
 
     OP_CHECK(outN > 0 && inputH > 0 && inputW > 0 && outC > 0 && outH > 0 && outW > 0,
-             OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAaGrad", "output_n",
-                                                      std::to_string(outN).c_str(),
-                                                      "all input and output dims must be greater than 0"),
+             OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                 "aclnnUpsampleBicubic2dAAGrad", "gradOutput,inputSize",
+                 (std::string(op::ToString(gradOutputShape).GetString()) + "," + std::to_string(inputN) + "," +
+                  std::to_string(inputC) + "," + std::to_string(inputH) + "," + std::to_string(inputW))
+                     .c_str(),
+                 "gradOutput N,C,H,W and inputSize H,W must be positive"),
              return false);
     OP_CHECK(
         (gradOutput->GetStorageFormat() == op::Format::FORMAT_ND ||
          gradOutput->GetStorageFormat() == op::Format::FORMAT_NCHW) &&
             (out->GetStorageFormat() == op::Format::FORMAT_ND || out->GetStorageFormat() == op::Format::FORMAT_NCHW),
-        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBicubic2dAaGrad", "input,output",
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON("aclnnUpsampleBicubic2dAAGrad", "gradOutput,out",
                                                 (std::string(op::ToString(gradOutput->GetStorageFormat()).GetString()) +
-                                                 ", " + op::ToString(out->GetStorageFormat()).GetString())
+                                                 "," + op::ToString(out->GetStorageFormat()).GetString())
                                                     .c_str(),
-                                                "only NCHW is supported for input and output storage format"),
+                                                "only ND and NCHW are supported"),
         return false);
     if (!IsRegBase()) {
         double realScalesH = ComputeBicubic2dAABackwardScales(inputH, outH, scalesH);
         double realScalesW = ComputeBicubic2dAABackwardScales(inputW, outW, scalesW);
-        OP_CHECK(
-            realScalesH >= MIN_SUPPORT_SCALE && realScalesW >= MIN_SUPPORT_SCALE,
-            OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-                "aclnnUpsampleBicubic2dAaGrad", "scales_h,scales_w",
-                (std::string(std::to_string(realScalesH).c_str()) + ", " + std::to_string(realScalesW).c_str()).c_str(),
-                "scales_h and scales_w are too large; the supported scale range is exceeded"),
-            return false);
+        OP_CHECK(realScalesH >= MIN_SUPPORT_SCALE && realScalesW >= MIN_SUPPORT_SCALE,
+                 OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                     "aclnnUpsampleBicubic2dAAGrad", "scalesH,scalesW",
+                     (std::to_string(realScalesH) + "," + std::to_string(realScalesW)).c_str(),
+                     "the effective backward scales must be at least 0.02"),
+                 return false);
         OP_CHECK(outN <= INT32_MAX && outC <= INT32_MAX && outH <= INT32_MAX && outW <= INT32_MAX,
-                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAaGrad", "outN",
-                                                          std::to_string(outN).c_str(),
-                                                          "all dims must not exceed INT32_MAX"),
+                 OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnUpsampleBicubic2dAAGrad", "gradOutput",
+                                                       op::ToString(gradOutputShape).GetString(),
+                                                       "dimensions must not exceed INT32_MAX"),
                  return false);
         OP_CHECK(inputN <= INT32_MAX && inputC <= INT32_MAX && inputH <= INT32_MAX && inputW <= INT32_MAX,
-                 OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON("aclnnUpsampleBicubic2dAaGrad", "input_n",
-                                                          std::to_string(inputN).c_str(),
-                                                          "all dims of inputSize must not exceed INT32_MAX"),
+                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleBicubic2dAAGrad", "inputSize",
+                                                       (std::to_string(inputN) + "," + std::to_string(inputC) + "," +
+                                                        std::to_string(inputH) + "," + std::to_string(inputW))
+                                                           .c_str(),
+                                                       "elements must not exceed INT32_MAX"),
                  return false);
     }
     return true;
@@ -186,7 +220,15 @@ static aclnnStatus CheckParams(const aclTensor* gradOutput, const aclIntArray* o
 
     // 5.检查gradOutput和out N/C轴的大小是否一致
     if (gradOutput->GetStorageFormat() == op::Format::FORMAT_NCHW) {
-        CHECK_RET(CheckNCDimValid(gradOutput, out), ACLNN_ERR_PARAM_INVALID);
+        OP_CHECK(
+            gradOutput->GetViewShape().GetDim(0) == out->GetViewShape().GetDim(0) &&
+                gradOutput->GetViewShape().GetDim(1) == out->GetViewShape().GetDim(1),
+            OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnUpsampleBicubic2dAAGrad", "gradOutput,out",
+                                                   (std::string(op::ToString(gradOutput->GetViewShape()).GetString()) +
+                                                    "," + op::ToString(out->GetViewShape()).GetString())
+                                                       .c_str(),
+                                                   "N and C dimensions must match"),
+            return ACLNN_ERR_PARAM_INVALID);
     }
 
     // 6. 检查输入元素是否合法
@@ -200,7 +242,8 @@ aclnnStatus aclnnUpsampleBicubic2dAAGradGetWorkspaceSize(const aclTensor* gradOu
                                                          double scalesH, double scalesW, aclTensor* out,
                                                          uint64_t* workspaceSize, aclOpExecutor** executor)
 {
-    OP_CHECK_COMM_INPUT(workspaceSize, executor);
+    CHECK_RET(CheckRequiredPointer(workspaceSize, "workspaceSize"), ACLNN_ERR_PARAM_NULLPTR);
+    CHECK_RET(CheckRequiredPointer(executor, "executor"), ACLNN_ERR_PARAM_NULLPTR);
 
     L2_DFX_PHASE_1(aclnnUpsampleBicubic2dAAGrad,
                    DFX_IN(gradOutput, outputSize, inputSize, alignCorners, scalesH, scalesW), DFX_OUT(out));

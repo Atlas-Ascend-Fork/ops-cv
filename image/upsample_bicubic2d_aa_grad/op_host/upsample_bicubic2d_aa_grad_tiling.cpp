@@ -20,7 +20,7 @@
 #include "log/log.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "upsample_bicubic2d_aa_grad_tiling.h"
-#include "op_api/error_report_util.h"
+#include "upsample_bicubic2d_aa_grad_error.h"
 
 namespace optiling {
 constexpr uint32_t BEST_PERFORMANCE_SIZE = 16;
@@ -223,11 +223,13 @@ ge::graphStatus UpsampleBicubic2dAAGradTiling::RunBigKernelTiling()
     }
     auto srcTensor = tilingContext->GetInputTensor(0);
     if (srcTensor == nullptr) {
+        ReportBicubicGradMissingArgument(tilingContext->GetNodeName(), "gradOutput", "input tensor is missing");
         return ge::GRAPH_FAILED;
     }
 
     const gert::RuntimeAttrs* attrs = tilingContext->GetAttrs();
     if (attrs == nullptr) {
+        ReportBicubicGradTilingError(tilingContext->GetNodeName(), "attribute container is missing");
         return ge::GRAPH_FAILED;
     }
 
@@ -236,55 +238,44 @@ ge::graphStatus UpsampleBicubic2dAAGradTiling::RunBigKernelTiling()
     align_corners = attrs->GetAttrPointer<bool>(ALIGN_INDEX);
     scale_h = attrs->GetAttrPointer<float>(SCALEX_INDEX);
     scale_w = attrs->GetAttrPointer<float>(SCALEY_INDEX);
-    OP_CHECK_IF(input_size == nullptr,
-                error_report::ReportTilingStageError(tilingContext->GetNodeName(),
-                                                     "the attr input_size is missing in the tiling context; check the "
-                                                     "operator registration and the TilingContext construction"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(output_size == nullptr,
-                error_report::ReportTilingStageError(
-                    tilingContext->GetNodeName(),
-                    "output_size is null in the tiling context; check the TilingContext construction"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        input_size == nullptr,
+        ReportBicubicGradMissingArgument(tilingContext->GetNodeName(), "input_size", "required attribute is missing"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        output_size == nullptr,
+        ReportBicubicGradMissingArgument(tilingContext->GetNodeName(), "output_size", "required attribute is missing"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(align_corners == nullptr,
-                error_report::ReportTilingStageError(
-                    tilingContext->GetNodeName(),
-                    "align_corners is null in the tiling context; check the TilingContext construction"),
+                ReportBicubicGradMissingArgument(tilingContext->GetNodeName(), "align_corners",
+                                                 "required attribute is missing"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(scale_h == nullptr,
-                error_report::ReportTilingStageError(
-                    tilingContext->GetNodeName(),
-                    "scale_h is null in the tiling context; check the TilingContext construction"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(scale_w == nullptr,
-                error_report::ReportTilingStageError(
-                    tilingContext->GetNodeName(),
-                    "scale_w is null in the tiling context; check the TilingContext construction"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        scale_h == nullptr,
+        ReportBicubicGradMissingArgument(tilingContext->GetNodeName(), "scales_h", "required attribute is missing"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        scale_w == nullptr,
+        ReportBicubicGradMissingArgument(tilingContext->GetNodeName(), "scales_w", "required attribute is missing"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(output_size->GetSize() != 2,
-                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(tilingContext->GetNodeName(), "output_size",
-                                                          std::to_string(output_size->GetSize()).c_str(),
-                                                          "output_size length is , invalid, must be 2"),
+                OP_LOGE_FOR_INVALID_LISTSIZE(tilingContext->GetNodeName(), "output_size",
+                                             std::to_string(output_size->GetSize()).c_str(), "2"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(input_size->GetSize() != SHAPE_SIZE,
-                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(tilingContext->GetNodeName(), "input_size",
-                                                          std::to_string(input_size->GetSize()).c_str(),
-                                                          "input_size length is , invalid, must be 4"),
+                OP_LOGE_FOR_INVALID_LISTSIZE(tilingContext->GetNodeName(), "input_size",
+                                             std::to_string(input_size->GetSize()).c_str(), "4"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        output_size->GetData() == nullptr,
-        error_report::ReportTilingStageError(
-            tilingContext->GetNodeName(), "data is null in the tiling context; check the TilingContext construction"),
-        return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        input_size->GetData() == nullptr,
-        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "data",
-                                            "the input desc/shape of required input data is missing in the tiling "
-                                            "context; check that the graph node provides all required inputs"),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(output_size->GetData() == nullptr,
+                ReportBicubicGradTilingError(tilingContext->GetNodeName(), "output_size has length 2 but no data"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(input_size->GetData() == nullptr,
+                ReportBicubicGradTilingError(tilingContext->GetNodeName(), "input_size has length 4 but no data"),
+                return ge::GRAPH_FAILED);
 
     auto tempTensor = tilingContext->GetInputDesc(TEMP_INDEX);
     if (tempTensor == nullptr) {
+        ReportBicubicGradMissingArgument(tilingContext->GetNodeName(), "gradOutput", "input descriptor is missing");
         return ge::GRAPH_FAILED;
     }
     ge::DataType srcDtype = ge::DT_UNDEFINED;
@@ -294,40 +285,53 @@ ge::graphStatus UpsampleBicubic2dAAGradTiling::RunBigKernelTiling()
         dataType = srcDtype;
         dataTypeSize = GetDataTypeSize();
     } else if (srcDtype != dataType) {
+        ReportBicubicGradTilingError(tilingContext->GetNodeName(), "input dtype differs from the cached tiling dtype");
         return ge::GRAPH_FAILED;
     }
 
     auto src_shape = tilingContext->GetInputShape(0);
-    OP_CHECK_IF(
-        src_shape == nullptr,
-        error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "src_shape",
-                                            "the input shape of required input src_shape is missing in the tiling "
-                                            "context; check that the graph node provides all required inputs"),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(src_shape == nullptr,
+                ReportBicubicGradMissingArgument(tilingContext->GetNodeName(), "gradOutput", "input shape is missing"),
+                return ge::GRAPH_FAILED);
     auto dst_shape = tilingContext->GetOutputShape(0);
     OP_CHECK_IF(dst_shape == nullptr,
-                error_report::ReportTilingStageError(
-                    tilingContext->GetNodeName(),
-                    "dst_shape is null in the tiling context; check the TilingContext construction"),
+                ReportBicubicGradTilingError(tilingContext->GetNodeName(), "output shape container is missing"),
                 return ge::GRAPH_FAILED);
     const auto& srcStorageShape = src_shape->GetStorageShape();
     const auto& dstStorageShape = dst_shape->GetStorageShape();
-    OP_CHECK_IF(srcStorageShape.GetDimNum() != SHAPE_SIZE || dstStorageShape.GetDimNum() != SHAPE_SIZE,
-                error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "input",
-                                                    "input and output shapes must be 4D"),
-                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        srcStorageShape.GetDimNum() != SHAPE_SIZE || dstStorageShape.GetDimNum() != SHAPE_SIZE,
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+            tilingContext->GetNodeName(), "gradOutput,gradInput",
+            (std::to_string(srcStorageShape.GetDimNum()) + "," + std::to_string(dstStorageShape.GetDimNum())).c_str(),
+            "both ranks must be 4"),
+        return ge::GRAPH_FAILED);
     dim = src_shape->GetStorageShape().GetDimNum() - H_INDEX;
     input_shape = src_shape->GetOriginShape();
     const int64_t* outputSizeArray = static_cast<const int64_t*>(output_size->GetData());
     const int64_t* inputSizeArray = static_cast<const int64_t*>(input_size->GetData());
-    OP_CHECK_IF(input_shape.GetDim(H_INDEX) != outputSizeArray[0] || input_shape.GetDim(W_INDEX) != outputSizeArray[1],
-                error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "output_size",
-                                                    "output_size does not match grad_output shape"),
-                return ge::GRAPH_FAILED);
+    if (input_shape.GetDim(H_INDEX) != outputSizeArray[0] || input_shape.GetDim(W_INDEX) != outputSizeArray[1]) {
+        if (outputSizeArray[0] <= 0 || outputSizeArray[1] <= 0) {
+            OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                tilingContext->GetNodeName(), "output_size",
+                (std::to_string(outputSizeArray[0]) + "," + std::to_string(outputSizeArray[1])).c_str(),
+                "elements must be positive");
+        } else {
+            OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                tilingContext->GetNodeName(), "gradOutput,output_size",
+                (std::to_string(input_shape.GetDim(H_INDEX)) + "," + std::to_string(input_shape.GetDim(W_INDEX)) + ";" +
+                 std::to_string(outputSizeArray[0]) + "," + std::to_string(outputSizeArray[1]))
+                    .c_str(),
+                "gradOutput spatial dimensions must match output_size");
+        }
+        return ge::GRAPH_FAILED;
+    }
     for (int8_t i = 0; i < SHAPE_SIZE; ++i) {
         OP_CHECK_IF(dstStorageShape.GetDim(i) != inputSizeArray[i],
-                    error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "input_size",
-                                                        "input_size does not match grad_input shape"),
+                    OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
+                        tilingContext->GetNodeName(), "gradInput,input_size",
+                        (std::to_string(dstStorageShape.GetDim(i)) + "," + std::to_string(inputSizeArray[i])).c_str(),
+                        ("dimensions must match at index " + std::to_string(i)).c_str()),
                     return ge::GRAPH_FAILED);
     }
 
@@ -676,19 +680,19 @@ static ge::graphStatus tiling4UpsampleBicubicAAGradTiling(gert::TilingContext* c
 static ge::graphStatus tilingPrepareTiling(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<UpsampleBicubic2dAAGradCompileInfo>();
-    OP_CHECK_IF(
-        compileInfo == nullptr,
-        error_report::ReportTilingStageError(
-            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(compileInfo == nullptr,
+                ReportBicubicGradTilingError(context->GetNodeName(), "compiled information is missing"),
+                return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
+    OP_CHECK_IF(platformInfo == nullptr,
+                ReportBicubicGradTilingError(context->GetNodeName(), "platform information is missing"),
+                return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAic();
 
     OP_CHECK_IF(compileInfo->coreNum <= 0,
-                error_report::ReportTilingStageError(context->GetNodeName(),
-                                                     std::string("failed to get the hardware info; vectorCoreNum: ") +
-                                                         std::to_string(compileInfo->coreNum)),
+                ReportBicubicGradTilingError(context->GetNodeName(), "platform core count must be positive, got " +
+                                                                         std::to_string(compileInfo->coreNum)),
                 return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }

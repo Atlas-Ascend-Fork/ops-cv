@@ -17,6 +17,35 @@
 
 using namespace std;
 
+class BicubicAAGradErrors : public testing::TestWithParam<int> {};
+
+TEST_P(BicubicAAGradErrors, parameter_diagnostic)
+{
+    const bool regbase = GetParam() >= 4;
+    const int scenario = GetParam() % 4;
+    struct CompileInfo {
+        int32_t coreNum;
+    } compileInfo = {48};
+    vector<int64_t> outputSize = scenario == 0 ? vector<int64_t>{8} : vector<int64_t>{8, 8};
+    vector<int64_t> inputSize = scenario == 1 ? vector<int64_t>{1, 1, 4} : vector<int64_t>{1, 1, 4, 4};
+    if (scenario == 2)
+        outputSize[0] = 7;
+    if (scenario == 3)
+        inputSize[2] = 3;
+    gert::TilingContextPara para(
+        "UpsampleBicubic2dAAGrad", {{{{1, 1, 8, 8}, {1, 1, 8, 8}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{{{1, 1, 4, 4}, {1, 1, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("output_size", Ops::Cv::AnyValue::CreateFrom<vector<int64_t>>(outputSize)),
+         gert::TilingContextPara::OpAttr("input_size", Ops::Cv::AnyValue::CreateFrom<vector<int64_t>>(inputSize)),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(false)),
+         gert::TilingContextPara::OpAttr("scales_h", Ops::Cv::AnyValue::CreateFrom<float>(0.0)),
+         gert::TilingContextPara::OpAttr("scales_w", Ops::Cv::AnyValue::CreateFrom<float>(0.0))},
+        &compileInfo, regbase ? "Ascend950" : "Ascend910b", 48, 192 * 1024, 8192);
+    ExecuteTestCase(para, ge::GRAPH_FAILED);
+}
+
+INSTANTIATE_TEST_SUITE_P(NegativeParameters, BicubicAAGradErrors, testing::Range(0, 8));
+
 class UpsampleBicubic2dAAGradTiling : public testing::Test {
 protected:
     static void SetUpTestCase() { std::cout << "UpsampleBicubic2dAAGradTiling SetUp" << std::endl; }
