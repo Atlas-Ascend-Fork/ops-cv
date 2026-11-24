@@ -66,14 +66,15 @@ gert::StorageShape ScalarShape() { return gert::StorageShape({}, {}); }
 
 gert::TilingContextPara MakeContext(const gert::StorageShape& maxOutputShape, const gert::StorageShape& iouShape,
                                     const gert::StorageShape& scoreShape, int64_t boxesNum = 2,
-                                    ge::DataType boxesDtype = ge::DT_FLOAT, uint64_t ubSize = 262144)
+                                    ge::DataType boxesDtype = ge::DT_FLOAT, uint64_t ubSize = 262144,
+                                    ge::Format boxesFormat = ge::FORMAT_ND)
 {
     static CompileInfo compileInfo;
     compileInfo = CompileInfo{64, ubSize};
     return gert::TilingContextPara(
         "SortedNMS",
         {
-            {gert::StorageShape({boxesNum, 4}, {boxesNum, 4}), boxesDtype, ge::FORMAT_ND},
+            {gert::StorageShape({boxesNum, 4}, {boxesNum, 4}), boxesDtype, boxesFormat},
             {gert::StorageShape({boxesNum}, {boxesNum}), boxesDtype, ge::FORMAT_ND},
             {gert::StorageShape({boxesNum}, {boxesNum}), ge::DT_INT32, ge::FORMAT_ND},
             {maxOutputShape, ge::DT_INT32, ge::FORMAT_ND},
@@ -107,6 +108,13 @@ TEST(SortedNMSTiling, rejects_rank_two_single_element_parameter)
     const auto rankTwo = gert::StorageShape({1, 1}, {1, 1});
     const auto one = OneElementShape();
     auto context = MakeContext(rankTwo, one, one);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(context, info));
+}
+
+TEST(SortedNMSTiling, rejects_non_nd_storage_format)
+{
+    auto context = MakeContext(ScalarShape(), ScalarShape(), ScalarShape(), 2, ge::DT_FLOAT, 262144, ge::FORMAT_NCHW);
     TilingInfo info;
     EXPECT_FALSE(ExecuteTiling(context, info));
 }

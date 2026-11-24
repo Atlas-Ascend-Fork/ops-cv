@@ -116,6 +116,16 @@ static ge::graphStatus CheckInputDesc(gert::TilingContext* context)
                     "the input desc is nullptr"),
                 return ge::GRAPH_FAILED);
 
+    OP_CHECK_IF(boxesDesc->GetStorageFormat() != ge::FORMAT_ND || scoresDesc->GetStorageFormat() != ge::FORMAT_ND ||
+                    indicesDesc->GetStorageFormat() != ge::FORMAT_ND ||
+                    maxOutputDesc->GetStorageFormat() != ge::FORMAT_ND ||
+                    iouDesc->GetStorageFormat() != ge::FORMAT_ND || scoreThrDesc->GetStorageFormat() != ge::FORMAT_ND,
+                OP_LOGE_FOR_INVALID_ARGUMENT_WITH_REASON(
+                    context->GetNodeName(),
+                    "boxes, sorted_scores, input_indices, max_output_size, iou_threshold and score_threshold",
+                    "all inputs must use ND storage format"),
+                return ge::GRAPH_FAILED);
+
     OP_CHECK_IF(dataDtypes.count(boxesDesc->GetDataType()) == 0,
                 OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "boxes",
                                           Ops::Base::ToString(boxesDesc->GetDataType()).c_str(), "float16 or float32"),
