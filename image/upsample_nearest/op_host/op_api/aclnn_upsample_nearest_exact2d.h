@@ -26,7 +26,8 @@ extern "C" {
  * @domain aclnn_ops_train aclnn_ops_infer
  * 参数描述：
  * @param [in]   self
- * 输入Tensor，数据类型支持FLOAT，FLOAT16，BFLOAT16。支持非连续Tensor，数据格式支持ND、NCHW。
+ * 输入Tensor，数据类型支持FLOAT，FLOAT16，BFLOAT16，UINT8。支持非连续Tensor，数据格式支持ND、NCHW。
+ * UINT8仅Atlas A2/A3系列产品支持，Atlas推理系列和Ascend 950PR&950DT系列产品不支持。
  * @param [in]   outputSize
  * 输出的size大小，数据类型支持INT32、INT64。
  * @param [in]   scaleH
@@ -34,7 +35,8 @@ extern "C" {
  * @param [in]   scaleW
  * 输出的W方向缩放系数，数据类型支持DOUBLE。
  * @param [in]   out
- * 输出Tensor，数据类型支持FLOAT，FLOAT16，BFLOAT16。支持非连续Tensor，数据格式支持ND、NCHW。
+ * 输出Tensor，数据类型支持FLOAT，FLOAT16，BFLOAT16，UINT8。支持非连续Tensor，数据格式支持ND、NCHW。
+ * UINT8仅Atlas A2/A3系列产品支持，Atlas推理系列和Ascend 950PR&950DT系列产品不支持。
  * @param [out]  workspaceSize   返回用户需要在npu device侧申请的workspace大小。
  * @param [out]  executor         返回op执行器，包含了算子计算流程。
  * @return       aclnnStatus      返回状态码

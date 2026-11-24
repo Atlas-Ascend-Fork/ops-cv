@@ -23,7 +23,7 @@ extern "C" {
  * @domain aclnn_ops_infer
  * 算子功能：调整输入张量的大小
  * @param [in]   self 输入Tensor，数据类型支持FLOAT,  FLOAT16。支持非连续Tensor，数据格式支持NCHW.
- * @param [in]   scales 输入aclFloatArray，数据类型支持 INT32.
+ * @param [in]   scales 输入aclFloatArray，数据类型支持 FLOAT.
  * @param [in]   mode 输入属性，数据类型支持const char*
  * @param [out]  workspaceSize 返回用户需要在npu device侧申请的workspace大小。
  * @param [out]  executor 返回op执行器，包含了算子计算流程。
