@@ -19,6 +19,7 @@
 #include "aclnn/aclnn_base.h"
 #include "acl/acl_rt.h"
 #include "op_api/aclnn_check.h"
+#include "op_common/op_host/util/op_const_def.h"
 
 using namespace op;
 
@@ -77,7 +78,8 @@ const std::tuple<aclTensor*, aclTensor*> GridSampler3DGrad(const aclTensor* grad
     bool checkDtypeSupport = CheckType(gradOutput->GetDataType(), AICORE_DTYPE_SUPPORT_LIST) &&
                              CheckType(input->GetDataType(), AICORE_DTYPE_SUPPORT_LIST) &&
                              CheckType(grid->GetDataType(), AICORE_DTYPE_SUPPORT_LIST);
-    if ((curArch == NpuArch::DAV_2201 || IsRegBase(curArch)) && channel <= AICORE_CHANNEL_LIMIT && checkDtypeSupport) {
+    if ((curArch == Ops::Base::DAV_2201 || IsRegBase(curArch)) && channel <= AICORE_CHANNEL_LIMIT &&
+        checkDtypeSupport) {
         // aicore kernel
         OP_LOGD("GridSampler3DGrad AiCore Kernel.");
         auto ret = ADD_TO_LAUNCHER_LIST_AICORE(

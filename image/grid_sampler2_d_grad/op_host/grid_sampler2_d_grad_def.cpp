@@ -13,6 +13,7 @@
  * \brief
  */
 #include "register/op_def_registry.h"
+#include "op_common/op_host/util/op_arch_helper.h"
 
 namespace ops {
 class GridSampler2DGrad : public OpDef {
@@ -50,8 +51,8 @@ public:
         this->Attr("align_corners").AttrType(REQUIRED).Bool(false);
         this->AICore().AddConfig("ascend910b");
         this->AICore().AddConfig("ascend910_93");
-        this->AICore().AddConfig("ascend950");
-        this->AICore().AddConfig("ascend960dt");
+        opbase::ArchConfigHelper::AddConfigByArch(this->AICore(), Ops::Base::DAV_3510);
+        opbase::ArchConfigHelper::AddConfigByArch(this->AICore(), Ops::Base::DAV_9201);
     }
 };
 OP_ADD(GridSampler2DGrad);

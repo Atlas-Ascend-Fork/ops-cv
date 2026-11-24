@@ -21,6 +21,7 @@
 #include "opdev/op_dfx.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
+#include "op_common/op_host/util/op_const_def.h"
 #ifndef OP_LOG_LIBOPAPI_ONLY
 #define OP_LOG_LIBOPAPI_ONLY
 #endif
@@ -75,12 +76,12 @@ static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST_910B = {
 static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST = {op::DataType::DT_FLOAT, op::DataType::DT_FLOAT16,
                                                                        op::DataType::DT_DOUBLE};
 
-static inline bool Is960SocVersion(const NpuArch curArch) { return curArch == NpuArch::DAV_9201; }
+static inline bool Is960SocVersion(const NpuArch curArch) { return curArch == Ops::Base::DAV_9201; }
 
 static inline bool CheckSocVersionGe910B(void)
 {
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
-    return curArch == NpuArch::DAV_2201 || Is960SocVersion(curArch) || IsRegBase(curArch);
+    return curArch == Ops::Base::DAV_2201 || Is960SocVersion(curArch) || IsRegBase(curArch);
 }
 
 static inline const std::initializer_list<op::DataType>& GetDtypeSupportList()
@@ -229,11 +230,11 @@ static bool CheckDtypeAndChannelCanTranspose(const aclTensor* input, int64_t pad
         deterministicValue = 0;
         OP_LOGD("Unable to get system param deterministic = %ld.", deterministicValue);
     }
-    bool regbaseTranspose = (curArch == NpuArch::DAV_3510 || Is960SocVersion(curArch)) &&
+    bool regbaseTranspose = (curArch == Ops::Base::DAV_3510 || Is960SocVersion(curArch)) &&
                             input->GetDataType() == op::DataType::DT_FLOAT && deterministicValue == 0 &&
                             (channel >= REGBASE_MAX_CHANNEL_NUM && paddingMode == BORDER ||
                              channel >= REGBASE_BIG_CHANNEL_NUM && paddingMode == REFLECTION);
-    bool transposeArch = curArch != NpuArch::DAV_1001 && curArch != NpuArch::DAV_3510 && !Is960SocVersion(curArch);
+    bool transposeArch = curArch != Ops::Base::DAV_1001 && curArch != Ops::Base::DAV_3510 && !Is960SocVersion(curArch);
     return (input->GetDataType() != op::DataType::DT_DOUBLE && transposeArch || regbaseTranspose) &&
            channel <= MAX_CHANNEL_SIZE;
 }
@@ -335,7 +336,7 @@ aclnnStatus aclnnGridSampler2DBackwardGetWorkspaceSize(const aclTensor* gradOutp
     int64_t dimSize = static_cast<int64_t>(inputContiguous->GetViewShape().GetDimNum());
     bool transposeFlag = CheckDtypeAndChannelCanTranspose(input, paddingMode);
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
-    bool castFlag = input->GetDataType() == op::DataType::DT_FLOAT16 && curArch == NpuArch::DAV_1001;
+    bool castFlag = input->GetDataType() == op::DataType::DT_FLOAT16 && curArch == Ops::Base::DAV_1001;
     std::tuple<aclTensor*, aclTensor*> gridSampler2DBackwardOut;
     if (transposeFlag) {
         std::vector<int64_t> perm = {0, 2, 3, 1};
@@ -361,7 +362,7 @@ aclnnStatus aclnnGridSampler2DBackwardGetWorkspaceSize(const aclTensor* gradOutp
             gridContiguous = l0op::Cast(gridContiguous, op::DataType::DT_FLOAT, uniqueExecutor.get());
             CHECK_RET(gridContiguous != nullptr, ACLNN_ERR_INNER_NULLPTR);
         }
-        if ((curArch == NpuArch::DAV_3510 || Is960SocVersion(curArch)) &&
+        if ((curArch == Ops::Base::DAV_3510 || Is960SocVersion(curArch)) &&
             input->GetDataType() != op::DataType::DT_DOUBLE) {
             gridSampler2DBackwardOut = l0op::GridSamplerGrad(gradOutputContiguous, inputContiguous, gridContiguous,
                                                              interpolationMode, paddingMode, alignCorners,

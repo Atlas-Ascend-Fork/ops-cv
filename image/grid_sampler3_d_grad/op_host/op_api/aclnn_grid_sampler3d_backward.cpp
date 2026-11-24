@@ -13,6 +13,7 @@
 #include "opdev/op_dfx.h"
 #include "opdev/op_executor.h"
 #include "opdev/op_log.h"
+#include "op_common/op_host/util/op_const_def.h"
 #ifndef OP_LOG_LIBOPAPI_ONLY
 #define OP_LOG_LIBOPAPI_ONLY
 #endif
@@ -299,7 +300,7 @@ static bool CheckTranspose(const aclTensor* input, int64_t channel)
         deterministicValue = 0;
         OP_LOGD("Unable to get system param deterministic = %ld.", deterministicValue);
     }
-    bool transposeArch = curArch != NpuArch::DAV_1001 && !IsRegBase(curArch);
+    bool transposeArch = curArch != Ops::Base::DAV_1001 && !IsRegBase(curArch);
     bool regbaseTranspose = IsRegBase(curArch) && deterministicValue == 0 && channel >= REGBASE_MAX_CHANNEL_NUM;
     if ((input->GetStorageFormat() == op::Format::FORMAT_NCDHW || input->GetStorageFormat() == op::Format::FORMAT_ND) &&
         (channel <= AICORE_CHANNEL_LIMIT) && (transposeArch || regbaseTranspose)) {
