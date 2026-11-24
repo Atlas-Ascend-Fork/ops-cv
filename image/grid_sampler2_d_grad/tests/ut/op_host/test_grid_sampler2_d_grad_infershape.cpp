@@ -25,6 +25,64 @@ protected:
     static void TearDownTestCase() { std::cout << "grid_sampler2d_grad TearDown" << std::endl; }
 };
 
+class GridSampler2DGradMissingShapes : public testing::TestWithParam<int> {};
+
+TEST_P(GridSampler2DGradMissingShapes, rejects_missing_context_or_shape)
+{
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    auto impl = registry->GetOpImpl("GridSampler2DGrad");
+    ASSERT_NE(impl, nullptr);
+    ASSERT_NE(impl->infer_shape, nullptr);
+    const int scenario = GetParam();
+    SCOPED_TRACE(scenario);
+    if (scenario == 0) {
+        EXPECT_EQ(impl->infer_shape(nullptr), ge::GRAPH_FAILED);
+        return;
+    }
+
+    gert::Tensor grad({{2, 3, 8, 8}, {2, 3, 8, 8}},
+                      gert::StorageFormat(ge::FORMAT_ND, ge::FORMAT_ND, gert::ExpandDimsType()),
+                      gert::TensorPlacement::kOnHost, ge::DT_FLOAT, nullptr);
+    gert::Tensor x({{2, 3, 16, 16}, {2, 3, 16, 16}},
+                   gert::StorageFormat(ge::FORMAT_ND, ge::FORMAT_ND, gert::ExpandDimsType()),
+                   gert::TensorPlacement::kOnHost, ge::DT_FLOAT, nullptr);
+    gert::Tensor grid({{2, 8, 8, 2}, {2, 8, 8, 2}},
+                      gert::StorageFormat(ge::FORMAT_ND, ge::FORMAT_ND, gert::ExpandDimsType()),
+                      gert::TensorPlacement::kOnHost, ge::DT_FLOAT, nullptr);
+    auto holder = gert::InferShapeContextFaker()
+                      .SetOpType("GridSampler2DGrad")
+                      .NodeIoNum(3, 2)
+                      .InputTensors({&grad, &x, &grid})
+                      .NodeOutputTd(0, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND)
+                      .NodeOutputTd(1, ge::DT_FLOAT, ge::FORMAT_ND, ge::FORMAT_ND)
+                      .Build();
+    auto context = holder.GetContext();
+    ASSERT_NE(context, nullptr);
+    ASSERT_NE(context->GetInputShape(0), nullptr);
+    ASSERT_NE(context->GetInputShape(1), nullptr);
+    ASSERT_NE(context->GetInputShape(2), nullptr);
+    ASSERT_NE(context->GetOutputShape(0), nullptr);
+    ASSERT_NE(context->GetOutputShape(1), nullptr);
+
+    // Clear one framework-owned slot after constructing an otherwise valid context.
+    auto kernelContext = reinterpret_cast<gert::KernelContext*>(context);
+    if (scenario <= 3) {
+        auto input = kernelContext->MutableInput(scenario - 1);
+        ASSERT_NE(input, nullptr);
+        input->Set(nullptr, nullptr);
+        ASSERT_EQ(context->GetInputShape(scenario - 1), nullptr);
+    } else {
+        auto output = kernelContext->GetOutput(scenario - 4);
+        ASSERT_NE(output, nullptr);
+        output->Set(nullptr, nullptr);
+        ASSERT_EQ(context->GetOutputShape(scenario - 4), nullptr);
+    }
+    EXPECT_EQ(impl->infer_shape(context), ge::GRAPH_FAILED);
+}
+
+INSTANTIATE_TEST_SUITE_P(MissingFrameworkInputs, GridSampler2DGradMissingShapes, testing::Range(0, 6));
+
 TEST_F(grid_sampler2d_grad, grid_sampler2d_grad_infershape_fp16)
 {
     int n = 3;

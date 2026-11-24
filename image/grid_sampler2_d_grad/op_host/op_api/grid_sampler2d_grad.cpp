@@ -74,7 +74,7 @@ const std::tuple<aclTensor*, aclTensor*> GridSampler2DGrad(const aclTensor* grad
     auto inputGrad = executor->AllocTensor(input->GetViewShape(), input->GetDataType(), input->GetStorageFormat());
     auto gridGrad = executor->AllocTensor(grid->GetViewShape(), grid->GetDataType(), grid->GetStorageFormat());
     if (inputGrad == nullptr || gridGrad == nullptr) {
-        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "alloc gridGrad or inputGrad tensor failed");
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "alloc gridGrad or inputGrad tensor failed.");
         return std::tie(inputGrad, gridGrad);
     }
 
@@ -84,8 +84,7 @@ const std::tuple<aclTensor*, aclTensor*> GridSampler2DGrad(const aclTensor* grad
         OP_INPUT(gradOutput, input, grid), OP_OUTPUT(inputGrad, gridGrad),
         OP_ATTR(GetInterpolationModeStr(interpolationMode), GetPaddingModeStr(paddingMode), alignCorners));
     if (ret != ACLNN_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "GridSampler2DGrad AiCpu ADD_TO_LAUNCHER_LIST_AICPU failed; propagate "
-                                                "the first error reported by the failing stage");
+        OP_LOGE_WITHOUT_REPORT(ret, "GridSampler2DGrad AiCpu ADD_TO_LAUNCHER_LIST_AICPU failed.");
         return std::tuple<aclTensor*, aclTensor*>(nullptr, nullptr);
     }
 
@@ -106,15 +105,14 @@ const std::tuple<aclTensor*, aclTensor*> GridSamplerGrad(const aclTensor* gradOu
     auto inputGrad = executor->AllocTensor(input->GetViewShape(), input->GetDataType(), input->GetStorageFormat());
     auto gridGrad = executor->AllocTensor(grid->GetViewShape(), grid->GetDataType(), grid->GetStorageFormat());
     if (inputGrad == nullptr || gridGrad == nullptr) {
-        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "alloc gridGrad or inputGrad tensor failed");
+        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER_NULLPTR, "alloc gridGrad or inputGrad tensor failed.");
         return std::tie(inputGrad, gridGrad);
     }
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(
         GridSampler2DGrad, OP_INPUT(gradOutput, input, grid), OP_OUTPUT(inputGrad, gridGrad),
         OP_ATTR(GetInterpolationModeStr(interpolationMode), GetPaddingModeStr(paddingMode), alignCorners));
     if (ret != ACL_SUCCESS) {
-        OP_LOGE_WITHOUT_REPORT(ACLNN_ERR_INNER, "GridSamplerGrad AiCore ADD_TO_LAUNCHER_LIST_AICORE failed; propagate "
-                                                "the first error reported by the failing stage");
+        OP_LOGE_WITHOUT_REPORT(ret, "GridSamplerGrad AiCore ADD_TO_LAUNCHER_LIST_AICORE failed.");
         return std::tuple<aclTensor*, aclTensor*>(nullptr, nullptr);
     }
     return std::tie(inputGrad, gridGrad);

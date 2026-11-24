@@ -26,6 +26,49 @@
 using namespace op;
 using namespace std;
 
+class GridSampler2DApiErrors : public testing::TestWithParam<int> {};
+
+TEST_P(GridSampler2DApiErrors, parameter_diagnostic)
+{
+    const int scenario = GetParam();
+    vector<int64_t> gradShape = {1, 1, 3, 3}, inputShape = {1, 1, 5, 8}, gridShape = {1, 3, 3, 2};
+    if (scenario == 5)
+        inputShape = {1, 5, 8};
+    if (scenario == 6)
+        gridShape = {1, 3, 2};
+    if (scenario == 7)
+        gradShape = {1, 3, 3};
+    if (scenario == 10)
+        inputShape[0] = 2;
+    if (scenario == 11)
+        inputShape[1] = 2;
+    if (scenario == 12)
+        inputShape[2] = 0;
+    if (scenario == 13)
+        gridShape[1] = 2;
+    if (scenario == 14)
+        gridShape[3] = 3;
+    auto inputGradShape = inputShape, gridGradShape = gridShape;
+    if (scenario == 15)
+        inputGradShape[2] = 4;
+    if (scenario == 16)
+        gridGradShape[1] = 2;
+    const aclDataType dtype = scenario == 4 ? ACL_INT32 : ACL_FLOAT;
+    auto grad = TensorDesc(gradShape, scenario == 0 ? ACL_FLOAT16 : dtype, ACL_FORMAT_ND);
+    auto input = TensorDesc(inputShape, dtype, ACL_FORMAT_ND);
+    auto grid = TensorDesc(gridShape, scenario == 1 ? ACL_FLOAT16 : dtype, ACL_FORMAT_ND);
+    auto dx = TensorDesc(inputGradShape, scenario == 2 ? ACL_FLOAT16 : dtype, ACL_FORMAT_ND);
+    auto dg = TensorDesc(gridGradShape, scenario == 3 ? ACL_FLOAT16 : dtype, ACL_FORMAT_ND);
+    auto mask = BoolArrayDesc(scenario == 17 ? vector<bool>{true} : vector<bool>{true, true});
+    auto ut = OP_API_UT(aclnnGridSampler2DBackward,
+                        INPUT(grad, input, grid, scenario == 8 ? 3 : 0, scenario == 9 ? 3 : 0, false, mask),
+                        OUTPUT(dx, dg));
+    uint64_t workspace = 0;
+    EXPECT_EQ(ut.TestGetWorkspaceSize(&workspace), ACLNN_ERR_PARAM_INVALID);
+}
+
+INSTANTIATE_TEST_SUITE_P(NegativeParameters, GridSampler2DApiErrors, testing::Range(0, 18));
+
 class l2_grid_sampler2d_backward_test : public testing::Test {
 protected:
     static void SetUpTestCase() { std::cout << "grid_sampler2d_backward_test SetUp" << std::endl; }

@@ -1728,3 +1728,100 @@ TEST_F(GridSampler2DGradTiling, grid_sampler_grad_tiling_regbase_nhwc_label_with
 //     auto tiling_key = tiling_context->GetTilingKey();
 //     ASSERT_EQ(tiling_key, 6);
 // }
+
+// ============================================================================
+// Regression tests for parameter and platform failures.
+// ErrorManager output is checked separately with the native validation runner.
+// ============================================================================
+
+TEST_F(GridSampler2DGradTiling, err_grad_dtype_mismatch_ez0021)
+{
+    // grad 用 FLOAT16, x/grid 用 FLOAT -> 输入 dtype 一致性检查 (EZ0021)
+    gert::StorageShape grad = {{2, 8, 8, 3}, {2, 8, 8, 3}};
+    gert::StorageShape x = {{2, 16, 16, 3}, {2, 16, 16, 3}};
+    gert::StorageShape grid = {{2, 8, 8, 2}, {2, 8, 8, 2}};
+    gert::StorageShape output1 = {{2, 16, 16, 3}, {2, 16, 16, 3}};
+    gert::StorageShape output2 = {{2, 8, 8, 2}, {2, 8, 8, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {48, 196608, false};
+    gert::TilingContextPara tilingContextPara(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT16, ge::FORMAT_ND}, {x, ge::DT_FLOAT, ge::FORMAT_ND}, {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{output1, ge::DT_FLOAT, ge::FORMAT_ND}, {output2, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("zeros")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(GridSampler2DGradTiling, err_dx_dtype_mismatch_ez0021)
+{
+    // dx 输出 dtype 与 grad 不一致 -> 输出 dtype 匹配检查 (EZ0021)
+    gert::StorageShape grad = {{2, 8, 8, 3}, {2, 8, 8, 3}};
+    gert::StorageShape x = {{2, 16, 16, 3}, {2, 16, 16, 3}};
+    gert::StorageShape grid = {{2, 8, 8, 2}, {2, 8, 8, 2}};
+    gert::StorageShape output1 = {{2, 16, 16, 3}, {2, 16, 16, 3}};
+    gert::StorageShape output2 = {{2, 8, 8, 2}, {2, 8, 8, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {48, 196608, false};
+    gert::TilingContextPara tilingContextPara(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT, ge::FORMAT_ND}, {x, ge::DT_FLOAT, ge::FORMAT_ND}, {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{output1, ge::DT_FLOAT16, ge::FORMAT_ND}, {output2, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("zeros")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+TEST_F(GridSampler2DGradTiling, err_core_num_zero_ez1008)
+{
+    gert::StorageShape grad = {{2, 8, 8, 3}, {2, 8, 8, 3}};
+    gert::StorageShape x = {{2, 16, 16, 3}, {2, 16, 16, 3}};
+    gert::StorageShape grid = {{2, 8, 8, 2}, {2, 8, 8, 2}};
+    gert::StorageShape output1 = {{2, 16, 16, 3}, {2, 16, 16, 3}};
+    gert::StorageShape output2 = {{2, 8, 8, 2}, {2, 8, 8, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {0, 196608, false};
+    gert::TilingContextPara tilingContextPara(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT, ge::FORMAT_ND}, {x, ge::DT_FLOAT, ge::FORMAT_ND}, {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{output1, ge::DT_FLOAT, ge::FORMAT_ND}, {output2, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("zeros")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+}
+
+class GridSampler2DGradErrors : public GridSampler2DGradTiling, public testing::WithParamInterface<int> {};
+
+TEST_P(GridSampler2DGradErrors, parameter_diagnostic)
+{
+    const int scenario = GetParam();
+    SCOPED_TRACE(scenario);
+    gert::StorageShape grad = {{2, 8, 8, 3}, {2, 8, 8, 3}};
+    gert::StorageShape x = {{2, 16, 16, 3}, {2, 16, 16, 3}};
+    gert::StorageShape grid = {{2, 8, 8, 2}, {2, 8, 8, 2}};
+    if (scenario == 0)
+        x = {{2, 16, 16}, {2, 16, 16}};
+    if (scenario == 1)
+        grid = {{2, 7, 8, 2}, {2, 7, 8, 2}};
+    GridSampler2DGradCompileInfo compileInfo = {48, scenario == 4 ? 0UL : 196608UL, false};
+    gert::TilingContextPara para(
+        "GridSampler2DGrad",
+        {{grad, ge::DT_FLOAT, ge::FORMAT_ND}, {x, ge::DT_FLOAT, ge::FORMAT_ND}, {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {{x, ge::DT_FLOAT, ge::FORMAT_ND}, {grid, ge::DT_FLOAT, ge::FORMAT_ND}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode",
+                                         Ops::Cv::AnyValue::CreateFrom<string>(scenario == 2 ? "invalid" : "bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode",
+                                         Ops::Cv::AnyValue::CreateFrom<string>(scenario == 3 ? "invalid" : "zeros")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(true))},
+        &compileInfo);
+    if (scenario >= 5) {
+        // Attributes are positional: retain only those preceding the missing attribute.
+        para.attrs_.erase(para.attrs_.begin() + scenario - 5, para.attrs_.end());
+    }
+    ExecuteTestCase(para, ge::GRAPH_FAILED);
+}
+
+INSTANTIATE_TEST_SUITE_P(NegativeParameters, GridSampler2DGradErrors, testing::Range(0, 8));

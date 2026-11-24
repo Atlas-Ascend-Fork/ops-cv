@@ -57,6 +57,17 @@ static const int64_t BILINEAR = 0;
 static const int64_t BORDER = 1;
 static const int64_t REFLECTION = 2;
 
+static bool CheckRequiredPointer(const void* ptr, const char* name)
+{
+    if (ptr != nullptr) {
+        return true;
+    }
+    const std::vector<const char*> keys = {"functionName", "paraName"};
+    const std::vector<const char*> values = {"aclnnGridSampler2DBackwardGetWorkspaceSize", name};
+    REPORT_PREDEFINED_ERR_MSG("EZ1011", keys, values);
+    return false;
+}
+
 // 根据API定义，需要列出所能支持的所有dtype
 static const std::initializer_list<op::DataType> DTYPE_SUPPORT_LIST_910B = {
     op::DataType::DT_FLOAT, op::DataType::DT_FLOAT16, op::DataType::DT_DOUBLE, op::DataType::DT_BF16};
@@ -85,14 +96,26 @@ static bool CheckDtypeValid(const aclTensor* gradOutput, const aclTensor* input,
                             const aclTensor* inputGrad, const aclTensor* gridGrad)
 {
     // 检查输入输出数据类型是否一致
-    OP_CHECK_DTYPE_NOT_MATCH(gradOutput, input->GetDataType(), return false);
-    OP_CHECK_DTYPE_NOT_MATCH(grid, input->GetDataType(), return false);
-    OP_CHECK_DTYPE_NOT_MATCH(inputGrad, input->GetDataType(), return false);
-    OP_CHECK_DTYPE_NOT_MATCH(gridGrad, input->GetDataType(), return false);
+    const aclTensor* tensors[] = {gradOutput, grid, inputGrad, gridGrad};
+    const char* names[] = {"gradOutput,input", "grid,input", "inputGrad,input", "gridGrad,input"};
+    for (size_t i = 0; i < 4; ++i) {
+        OP_CHECK(
+            tensors[i]->GetDataType() == input->GetDataType(),
+            OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON("aclnnGridSampler2DBackward", names[i],
+                                                   (std::string(op::ToString(tensors[i]->GetDataType()).GetString()) +
+                                                    "," + op::ToString(input->GetDataType()).GetString())
+                                                       .c_str(),
+                                                   "the tensor dtype must match input"),
+            return false);
+    }
 
     // 检查input的数据类型是否在gridsampler2dgrad算子的支持列表内
     auto dtypeSupportList = GetDtypeSupportList();
-    OP_CHECK_DTYPE_NOT_SUPPORT(input, dtypeSupportList, return false);
+    OP_CHECK(
+        CheckType(input->GetDataType(), dtypeSupportList),
+        OP_LOGE_FOR_INVALID_DTYPE("aclnnGridSampler2DBackward", "input", op::ToString(input->GetDataType()).GetString(),
+                                  op::ToString(dtypeSupportList).GetString()),
+        return false);
     return true;
 }
 
@@ -100,22 +123,14 @@ static bool CheckAttrValid(int64_t interpolationModeVal, int64_t paddingModeVal)
 {
     // 检查interpolationMode 、paddingMode是否在支持范围内
     if (interpolationModeVal < INTERPOLATION_MODE_MIN_VALUE || interpolationModeVal > INTERPOLATION_MODE_MAX_VALUE) {
-        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-            "aclnnGridSampler2DBackward", "interpolation_mode",
-            (std::to_string(interpolationModeVal) + ", " + std::to_string(INTERPOLATION_MODE_MIN_VALUE) + ", " +
-             std::to_string(INTERPOLATION_MODE_MAX_VALUE))
-                .c_str(),
-            "interpolationMode should be within the supported range");
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnGridSampler2DBackward", "interpolationMode",
+                                              std::to_string(interpolationModeVal).c_str(), "must be in [0, 2]");
         return false;
     }
 
     if (paddingModeVal < PADDING_MODE_MIN_VALUE || paddingModeVal > PADDING_MODE_MAX_VALUE) {
-        OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(
-            "aclnnGridSampler2DBackward", "padding_mode",
-            (std::to_string(paddingModeVal) + ", " + std::to_string(PADDING_MODE_MIN_VALUE) + ", " +
-             std::to_string(PADDING_MODE_MAX_VALUE))
-                .c_str(),
-            "paddingMode should be within the supported range");
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnGridSampler2DBackward", "paddingMode",
+                                              std::to_string(paddingModeVal).c_str(), "must be in [0, 2]");
         return false;
     }
     return true;
@@ -124,13 +139,7 @@ static bool CheckAttrValid(int64_t interpolationModeVal, int64_t paddingModeVal)
 // 检查tuple <values, indices>里的元素是否为非null, true表示为非null，false表示为null
 static bool CheckTupleNullptr(std::tuple<aclTensor*, aclTensor*> tensorTuple)
 {
-    if (std::tuple_size<decltype(tensorTuple)>::value != GRAD_RESULT_SIZE) {
-        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
-            "aclnnGridSampler2DBackward", "grad_result_size", std::to_string(GRAD_RESULT_SIZE).c_str(),
-            "the length of the tuple returned by GridSampler2DGrad does not match the "
-            "expected internal contract size");
-        return false;
-    }
+    static_assert(std::tuple_size<decltype(tensorTuple)>::value == GRAD_RESULT_SIZE);
     return (std::get<0>(tensorTuple) != nullptr) && (std::get<1>(tensorTuple) != nullptr);
 }
 
@@ -140,56 +149,69 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* input, cons
     const auto& gradOutputShape = gradOutput->GetViewShape();
     const auto& inputShape = input->GetViewShape();
     const auto& gridShape = grid->GetViewShape();
-    OP_CHECK_WRONG_DIMENSION(input, SPATIAL_DIM_NUM, return false);
-    OP_CHECK_WRONG_DIMENSION(grid, SPATIAL_DIM_NUM, return false);
-    OP_CHECK_WRONG_DIMENSION(gradOutput, SPATIAL_DIM_NUM, return false);
+    const aclTensor* tensors[] = {input, grid, gradOutput};
+    const char* names[] = {"input", "grid", "gradOutput"};
+    for (size_t i = 0; i < 3; ++i) {
+        OP_CHECK(tensors[i]->GetViewShape().GetDimNum() == SPATIAL_DIM_NUM,
+                 OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnGridSampler2DBackward", names[i],
+                                              std::to_string(tensors[i]->GetViewShape().GetDimNum()).c_str(), "4"),
+                 return false);
+    }
     if (inputShape.GetDim(FIRST_DIM) != gridShape.GetDim(FIRST_DIM) ||
         inputShape.GetDim(FIRST_DIM) != gradOutputShape.GetDim(FIRST_DIM)) {
-        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnGridSampler2DBackward", "input",
-                                               (std::string(op::ToString(inputShape).GetString()) + ", " +
-                                                std::string(op::ToString(gridShape).GetString()) + ", " +
-                                                std::string(op::ToString(gradOutputShape).GetString()))
-                                                   .c_str(),
-                                               "expect input grid and gradOutput to have same batch size");
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+            "aclnnGridSampler2DBackward", "input,grid,gradOutput",
+            (std::string(op::ToString(inputShape).GetString()) + "," + op::ToString(gridShape).GetString() + "," +
+             op::ToString(gradOutputShape).GetString())
+                .c_str(),
+            "batch dimensions must match");
         return false;
     }
     if (inputShape.GetDim(SECOND_DIM) != gradOutputShape.GetDim(SECOND_DIM)) {
-        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnGridSampler2DBackward", "input",
-                                               (std::string(op::ToString(inputShape).GetString()) + ", " +
-                                                std::string(op::ToString(gradOutputShape).GetString()))
-                                                   .c_str(),
-                                               "expect input and gradOutput to have same channel size");
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+            "aclnnGridSampler2DBackward", "input,gradOutput",
+            (std::string(op::ToString(inputShape).GetString()) + "," + op::ToString(gradOutputShape).GetString())
+                .c_str(),
+            "channel dimensions must match");
         return false;
     }
     if (inputShape.GetDim(THIRD_DIM) == 0 || inputShape.GetDim(FOURTH_DIM) == 0) {
         OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnGridSampler2DBackward", "input",
                                               op::ToString(inputShape).GetString(),
-                                              "expect input to have non-empty spatial dimensions");
+                                              "spatial dimensions must be nonzero");
         return false;
     }
     if (gridShape.GetDim(SECOND_DIM) != gradOutputShape.GetDim(THIRD_DIM) ||
         gridShape.GetDim(THIRD_DIM) != gradOutputShape.GetDim(FOURTH_DIM)) {
-        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnGridSampler2DBackward", "grid",
-                                               (std::string(op::ToString(gridShape).GetString()) + ", " +
-                                                std::string(op::ToString(gradOutputShape).GetString()))
-                                                   .c_str(),
-                                               "expect grid and gradOutput to have same H and W size");
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+            "aclnnGridSampler2DBackward", "grid,gradOutput",
+            (std::string(op::ToString(gridShape).GetString()) + "," + op::ToString(gradOutputShape).GetString())
+                .c_str(),
+            "spatial dimensions must match");
         return false;
     }
     if (gridShape.GetDim(FOURTH_DIM) != SPATIAL_GRID_LAST_DIM_SIZE) {
-        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
-            "aclnnGridSampler2DBackward", "grid",
-            (std::to_string(SPATIAL_GRID_LAST_DIM_SIZE) + ", " + std::string(op::ToString(gridShape).GetString()))
-                .c_str(),
-            "expect grid to have size in last dimension");
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON("aclnnGridSampler2DBackward", "grid", op::ToString(gridShape).GetString(),
+                                              "the last dimension must be 2");
         return false;
     }
-    OP_CHECK_SHAPE_NOT_EQUAL(inputGrad, input, return false);
-    OP_CHECK_SHAPE_NOT_EQUAL(gridGrad, grid, return false);
+    OP_CHECK(inputGrad->GetViewShape() == inputShape,
+             OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnGridSampler2DBackward", "inputGrad,input",
+                                                    (std::string(op::ToString(inputGrad->GetViewShape()).GetString()) +
+                                                     "," + op::ToString(inputShape).GetString())
+                                                        .c_str(),
+                                                    "shapes must match"),
+             return false);
+    OP_CHECK(gridGrad->GetViewShape() == gridShape,
+             OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON("aclnnGridSampler2DBackward", "gridGrad,grid",
+                                                    (std::string(op::ToString(gridGrad->GetViewShape()).GetString()) +
+                                                     "," + op::ToString(gridShape).GetString())
+                                                        .c_str(),
+                                                    "shapes must match"),
+             return false);
     if (outputMask->Size() != OUTPUTMASK_MAX_SIZE) {
-        OP_LOGE_FOR_INVALID_SHAPESIZE("aclnnGridSampler2DBackward", "aclnn_grid_sampler2_d_backward",
-                                      std::to_string(outputMask->Size()).c_str(),
-                                      std::to_string(OUTPUTMASK_MAX_SIZE).c_str());
+        OP_LOGE_FOR_INVALID_LISTSIZE("aclnnGridSampler2DBackward", "outputMask",
+                                     std::to_string(outputMask->Size()).c_str(), "2");
         return false;
     }
     return true;
@@ -221,7 +243,11 @@ static aclnnStatus CheckParams(const aclTensor* gradOutput, const aclTensor* inp
                                const aclTensor* gridGrad, const aclBoolArray* outputMask)
 {
     // 1. 检查参数是否为空指针
-    CHECK_RET(CheckNotNull2In1Out(gradOutput, input, grid, inputGrad, gridGrad), ACLNN_ERR_PARAM_NULLPTR);
+    CHECK_RET(CheckRequiredPointer(gradOutput, "gradOutput"), ACLNN_ERR_PARAM_NULLPTR);
+    CHECK_RET(CheckRequiredPointer(input, "input"), ACLNN_ERR_PARAM_NULLPTR);
+    CHECK_RET(CheckRequiredPointer(grid, "grid"), ACLNN_ERR_PARAM_NULLPTR);
+    CHECK_RET(CheckRequiredPointer(inputGrad, "inputGrad"), ACLNN_ERR_PARAM_NULLPTR);
+    CHECK_RET(CheckRequiredPointer(gridGrad, "gridGrad"), ACLNN_ERR_PARAM_NULLPTR);
 
     // 2. 检查输入、输出的数据类型是否在API支持的数据类型范围之内，需要根据api定义校验
     CHECK_RET(CheckDtypeValid(gradOutput, input, grid, inputGrad, gridGrad), ACLNN_ERR_PARAM_INVALID);
@@ -255,7 +281,8 @@ aclnnStatus aclnnGridSampler2DBackwardGetWorkspaceSize(const aclTensor* gradOutp
                                                        aclTensor* gridGrad, uint64_t* workspaceSize,
                                                        aclOpExecutor** executor)
 {
-    OP_CHECK_COMM_INPUT(workspaceSize, executor);
+    CHECK_RET(CheckRequiredPointer(workspaceSize, "workspaceSize"), ACLNN_ERR_PARAM_NULLPTR);
+    CHECK_RET(CheckRequiredPointer(executor, "executor"), ACLNN_ERR_PARAM_NULLPTR);
 
     L2_DFX_PHASE_1(aclnnGridSampler2DBackward,
                    DFX_IN(gradOutput, input, grid, interpolationMode, paddingMode, alignCorners, outputMask),
@@ -265,9 +292,7 @@ aclnnStatus aclnnGridSampler2DBackwardGetWorkspaceSize(const aclTensor* gradOutp
     CHECK_RET(uniqueExecutor.get() != nullptr, ACLNN_ERR_INNER_CREATE_EXECUTOR);
 
     // 输出掩码校验
-    auto outputMaskRet = ACLNN_SUCCESS;
-    OP_CHECK_NULL(outputMask, outputMaskRet = ACLNN_ERR_PARAM_NULLPTR);
-    CHECK_RET(outputMaskRet == ACLNN_SUCCESS, outputMaskRet);
+    CHECK_RET(CheckRequiredPointer(outputMask, "outputMask"), ACLNN_ERR_PARAM_NULLPTR);
 
     // 固定写法，参数检查
     auto ret = CheckParams(gradOutput, input, grid, interpolationMode, paddingMode, inputGrad, gridGrad, outputMask);

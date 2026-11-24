@@ -18,9 +18,24 @@
 #include <vector>
 #include "grid_sampler_2d_grad_tiling_data.h"
 #include "op_host/tiling_util.h"
-#include "op_api/error_report_util.h"
 
 namespace optiling {
+// Tiling阶段框架契约类失败(框架对象为空/平台信息异常/策略失败)统一上报EZ1008, 不再生成EZ9999内部码
+static void ReportTilingStageError(const char* opName, const std::string& reason)
+{
+    const std::vector<const char*> msgKey = {"opName", "reason"};
+    const std::vector<const char*> msgValue = {opName != nullptr ? opName : "GridSampler2DGrad", reason.c_str()};
+    REPORT_PREDEFINED_ERR_MSG("EZ1008", msgKey, msgValue);
+}
+
+// 参数缺失/非法统一上报EZ0037 (cv opbase暂无ARGUMENT_WITH_REASON宏)
+static void ReportMissingArgument(const char* opName, const char* paramName, const char* reason)
+{
+    OP_LOGE_WITHOUT_REPORT(opName, "Parameter %s of operator %s is invalid. Reason: %s.", paramName, opName, reason);
+    const std::vector<const char*> msgKey = {"param_name", "op_name", "reason"};
+    const std::vector<const char*> msgValue = {paramName, opName, reason};
+    REPORT_PREDEFINED_ERR_MSG("EZ0037", msgKey, msgValue);
+}
 
 constexpr size_t INTERPOLATION_MODE_INDEX = 0;
 constexpr size_t PADDING_MODE_INDEX = 1;
@@ -393,35 +408,39 @@ static void PrintTilingData(gert::TilingContext* tilingContext, GridSampler2DGra
 static ge::graphStatus GetNCHWInfo(gert::TilingContext* tilingContext, InputParamsInfo& params)
 {
     const gert::StorageShape* gradShape = tilingContext->GetInputShape(GRAD_INPUT_INDEX);
-    OP_CHECK_IF(
-        (gradShape == nullptr),
-        OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(),
-                               "Get StorageShape Failed; propagate the first error reported by the failing stage"),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF((gradShape == nullptr),
+                ReportMissingArgument(tilingContext->GetNodeName(), "grad",
+                                      "the input shape of grad is missing in the tiling context; check that the graph "
+                                      "node provides all required inputs"),
+                return ge::GRAPH_FAILED);
     const gert::StorageShape* xShape = tilingContext->GetInputShape(X_INPUT_INDEX);
     OP_CHECK_IF((xShape == nullptr),
-                OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(),
-                                       "Get xShape Failed; propagate the first error reported by the failing stage"),
+                ReportMissingArgument(tilingContext->GetNodeName(), "x",
+                                      "the input shape of x is missing in the tiling context; check that the graph "
+                                      "node provides all required inputs"),
                 return ge::GRAPH_FAILED);
     const gert::StorageShape* gridShape = tilingContext->GetInputShape(GRID_INPUT_INDEX);
     OP_CHECK_IF((gridShape == nullptr),
-                OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(),
-                                       "Get gridShape Failed; propagate the first error reported by the failing stage"),
+                ReportMissingArgument(tilingContext->GetNodeName(), "grid",
+                                      "the input shape of grid is missing in the tiling context; check that the graph "
+                                      "node provides all required inputs"),
                 return ge::GRAPH_FAILED);
     if (xShape->GetStorageShape().GetDimNum() != CHECK_DIM_NUM) {
-        OP_LOGD(tilingContext->GetNodeName(), "input dim is not 4, please check input");
+        OP_LOGE_FOR_INVALID_SHAPEDIM(tilingContext->GetNodeName(), "x",
+                                     std::to_string(xShape->GetStorageShape().GetDimNum()).c_str(), "4");
         return ge::GRAPH_FAILED;
     }
-    auto gradTensor = tilingContext->GetInputTensor(DIM_INDEX0);
-    OP_CHECK_NULL_WITH_CONTEXT(tilingContext, gradTensor);
+    auto input = tilingContext->GetInputTensor(DIM_INDEX0);
+    OP_CHECK_IF(input == nullptr,
+                ReportMissingArgument(tilingContext->GetNodeName(), "grad",
+                                      "the input tensor is missing from the tiling context"),
+                return ge::GRAPH_FAILED);
     auto xTensor = tilingContext->GetInputTensor(DIM_INDEX1);
     OP_CHECK_NULL_WITH_CONTEXT(tilingContext, xTensor);
-    auto format = gradTensor->GetFormat().GetStorageFormat();
+    auto format = input->GetFormat().GetStorageFormat();
     auto xFormat = xTensor->GetFormat().GetStorageFormat();
     auto compileInfo = reinterpret_cast<const Tiling4GridSampler2DGradCompileInfo*>(tilingContext->GetCompileInfo());
     params.regBase = compileInfo->regBase;
-    // 布局判定需 grad 与 x 的解析方向一致（NHWC vs 非NHWC）：一侧 NHWC、一侧 NCHW/ND 的真混合
-    // 无法同时按两种布局解析 x，直接拒绝；ND 与 NCHW 均按 NCHW 语义解析，视为一致
     params.isNhwc = (format == ge::FORMAT_NHWC);
     if (params.regBase && params.isNhwc != (xFormat == ge::FORMAT_NHWC)) {
         OP_LOGE(tilingContext->GetNodeName(),
@@ -446,7 +465,11 @@ static ge::graphStatus GetNCHWInfo(gert::TilingContext* tilingContext, InputPara
         params.width = xShape->GetStorageShape().GetDim(DIM_INDEX3);
     }
     if (outH != params.gridH || outW != params.gridW) {
-        OP_LOGW(tilingContext->GetNodeName(), "Please check grad's dims and grid's dims");
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(tilingContext->GetNodeName(), "grad,grid",
+                                               (std::to_string(outH) + "," + std::to_string(outW) + ";" +
+                                                std::to_string(params.gridH) + "," + std::to_string(params.gridW))
+                                                   .c_str(),
+                                               "grad and grid spatial dimensions must match");
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -460,24 +483,41 @@ static ge::graphStatus CheckInputInfo(gert::TilingContext* tilingContext, InputP
     }
 
     const gert::RuntimeAttrs* attrs = tilingContext->GetAttrs();
-    OP_CHECK_IF((attrs == nullptr),
-                OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(),
-                                       "Get attrs Failed; propagate the first error reported by the failing stage"),
-                return ge::GRAPH_FAILED);
-    const string interpolationMode = string(attrs->GetAttrPointer<char>(INTERPOLATION_MODE_INDEX));
+    OP_CHECK_IF(
+        (attrs == nullptr),
+        ReportTilingStageError(tilingContext->GetNodeName(),
+                               "GetShapeAttrsInfo: GetAttrs() returned null; check the TilingContext construction"),
+        return ge::GRAPH_FAILED);
+    const auto* interpolationPtr = attrs->GetAttrPointer<char>(INTERPOLATION_MODE_INDEX);
+    OP_CHECK_IF(
+        interpolationPtr == nullptr,
+        ReportMissingArgument(tilingContext->GetNodeName(), "interpolation_mode", "required attribute is missing"),
+        return ge::GRAPH_FAILED);
+    const string interpolationMode = string(interpolationPtr);
     if (interpolationMode != INTERPOLATION_BILINEAR && interpolationMode != INTERPOLATION_NEAREST &&
         interpolationMode != INTERPOLATION_BICUBIC) {
-        OP_LOGW(tilingContext->GetNodeName(), "%s is not supported", interpolationMode.c_str());
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(tilingContext->GetNodeName(), "interpolation_mode",
+                                              interpolationMode.c_str(), "must be bilinear, nearest or bicubic");
         return ge::GRAPH_FAILED;
     }
-    const string paddingMode = string(attrs->GetAttrPointer<char>(PADDING_MODE_INDEX));
-    bool alignCorners = *tilingContext->GetAttrs()->GetAttrPointer<bool>(ALIGN_CORNERS_INDEX);
+    const auto* paddingPtr = attrs->GetAttrPointer<char>(PADDING_MODE_INDEX);
+    OP_CHECK_IF(paddingPtr == nullptr,
+                ReportMissingArgument(tilingContext->GetNodeName(), "padding_mode", "required attribute is missing"),
+                return ge::GRAPH_FAILED);
+    const string paddingMode = string(paddingPtr);
+    OP_CHECK_IF(PADDING_MODE_MAP.find(paddingMode) == PADDING_MODE_MAP.end(),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(tilingContext->GetNodeName(), "padding_mode", paddingMode.c_str(),
+                                                      "must be zeros, border or reflection"),
+                return ge::GRAPH_FAILED);
+    const auto* alignPtr = attrs->GetAttrPointer<bool>(ALIGN_CORNERS_INDEX);
+    OP_CHECK_IF(alignPtr == nullptr,
+                ReportMissingArgument(tilingContext->GetNodeName(), "align_corners", "required attribute is missing"),
+                return ge::GRAPH_FAILED);
+    bool alignCorners = *alignPtr;
     params.interpolation = INTER_MODE_MAP[interpolationMode];
     params.padding = PADDING_MODE_MAP[paddingMode];
     params.alignCorners = ALIGN_MODE_MAP[alignCorners];
     uint32_t deterministic = tilingContext->GetDeterministic();
-    // SIMD tilingKey(19-21) 派发的 kernel 按 NHWC 布局访存，仅 NHWC 标签输入可用；
-    // channel 上限与 aclnn 转置路径的 MAX_CHANNEL_SIZE 对齐，避免 aclnn 直传时 tiling 仍选 SIMD key
     if (params.regBase && params.isNhwc && params.channel <= MAX_CHANNEL_SIZE &&
         (params.channel >= REGBASE_MAX_CHANNEL_NUM && params.padding == BORDER ||
          params.channel >= REGBASE_BIG_CHANNEL_NUM && params.padding == REFLECTION) &&
@@ -493,7 +533,8 @@ static ge::graphStatus CheckInputInfo(gert::TilingContext* tilingContext, InputP
     }
 
     if (params.padding < ZEROS || params.padding > REFLECTION) {
-        OP_LOGW(tilingContext->GetNodeName(), "paddingMode %d is not supported", params.padding);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(tilingContext->GetNodeName(), "padding_mode", paddingMode.c_str(),
+                                              "must be zeros, border or reflection");
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -596,11 +637,10 @@ static ge::graphStatus GetInputInfo(gert::TilingContext* tilingContext, InputPar
         sysWorkspaceSize += xWorkspaceSize;
     }
     size_t* currentWorkspace = tilingContext->GetWorkspaceSizes(1);
-    OP_CHECK_IF(
-        (currentWorkspace == nullptr),
-        OP_LOGE_WITHOUT_REPORT(tilingContext->GetNodeName(),
-                               "Get currentWorkspace Failed; propagate the first error reported by the failing stage"),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF((currentWorkspace == nullptr),
+                ReportTilingStageError(tilingContext->GetNodeName(),
+                                       "GetWorkspaceSizes returned null; check the TilingContext construction"),
+                return ge::GRAPH_FAILED);
     currentWorkspace[0] = GetCurWorkspaceSize(tilingContext, params, sysWorkspaceSize, coreNum);
     OP_LOGI(tilingContext->GetNodeName(), "sysWorkspaceSize is %zu.", sysWorkspaceSize);
     return ge::GRAPH_SUCCESS;
@@ -617,6 +657,14 @@ static ge::graphStatus Tiling4GridSampler2DGrad(gert::TilingContext* tilingConte
     }
     // get corenum and ubsize
     auto compileInfo = reinterpret_cast<const Tiling4GridSampler2DGradCompileInfo*>(tilingContext->GetCompileInfo());
+    OP_CHECK_IF(compileInfo == nullptr,
+                ReportTilingStageError(tilingContext->GetNodeName(), "compiled information is missing"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(compileInfo->coreNum == 0 || compileInfo->ubSizePlatForm <= RESERVED_UB,
+                ReportTilingStageError(tilingContext->GetNodeName(),
+                                       "invalid platform resources: coreNum=" + std::to_string(compileInfo->coreNum) +
+                                           ", UB bytes=" + std::to_string(compileInfo->ubSizePlatForm)),
+                return ge::GRAPH_FAILED);
     uint64_t ubSizePlatForm = compileInfo->ubSizePlatForm;
     uint32_t ubSize = static_cast<uint32_t>(ubSizePlatForm);
     uint32_t availableUb = ubSize - RESERVED_UB;
@@ -627,53 +675,53 @@ static ge::graphStatus Tiling4GridSampler2DGrad(gert::TilingContext* tilingConte
     auto xDesc = tilingContext->GetInputDesc(X_INPUT_INDEX);
     auto gridDesc = tilingContext->GetInputDesc(GRID_INPUT_INDEX);
     OP_CHECK_IF(gradDesc == nullptr,
-                error_report::ReportTilingStageError(
-                    tilingContext->GetNodeName(),
-                    "gradDesc is null in the tiling context; check the TilingContext construction"),
+                ReportMissingArgument(tilingContext->GetNodeName(), "grad",
+                                      "the input desc of grad is missing in the tiling context; check that the graph "
+                                      "node provides all required inputs"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        xDesc == nullptr,
-        error_report::ReportTilingStageError(
-            tilingContext->GetNodeName(), "xDesc is null in the tiling context; check the TilingContext construction"),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(xDesc == nullptr,
+                ReportMissingArgument(tilingContext->GetNodeName(), "x",
+                                      "the input desc of x is missing in the tiling context; check that the graph node "
+                                      "provides all required inputs"),
+                return ge::GRAPH_FAILED);
     OP_CHECK_IF(gridDesc == nullptr,
-                error_report::ReportTilingStageError(
-                    tilingContext->GetNodeName(),
-                    "gridDesc is null in the tiling context; check the TilingContext construction"),
+                ReportMissingArgument(tilingContext->GetNodeName(), "grid",
+                                      "the input desc of grid is missing in the tiling context; check that the graph "
+                                      "node provides all required inputs"),
                 return ge::GRAPH_FAILED);
     ge::DataType inputDatatype = gradDesc->GetDataType();
     ge::DataType xDatatype = xDesc->GetDataType();
     ge::DataType gridDatatype = gridDesc->GetDataType();
     OP_CHECK_IF(inputDatatype != xDatatype || inputDatatype != gridDatatype,
-                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(tilingContext->GetNodeName(), "dtype",
-                                                       (std::to_string(static_cast<int32_t>(inputDatatype)) + ", " +
-                                                        std::to_string(static_cast<int32_t>(xDatatype)) + ", " +
-                                                        std::to_string(static_cast<int32_t>(gridDatatype)))
-                                                           .c_str(),
-                                                       "dtype of grad [], x [], grid [] must be the same"),
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+                    tilingContext->GetNodeName(), "grad, x and grid",
+                    (Ops::Base::ToString(inputDatatype) + ", " + Ops::Base::ToString(xDatatype) + " and " +
+                     Ops::Base::ToString(gridDatatype))
+                        .c_str(),
+                    "the dtypes of grad, x and grid must be the same"),
                 return ge::GRAPH_FAILED);
     auto dxDesc = tilingContext->GetOutputDesc(DX_INDEX);
     auto dgridDesc = tilingContext->GetOutputDesc(DGRID_INDEX);
-    OP_CHECK_IF(
-        dxDesc == nullptr,
-        error_report::ReportTilingStageError(
-            tilingContext->GetNodeName(), "dxDesc is null in the tiling context; check the TilingContext construction"),
-        return ge::GRAPH_FAILED);
-    OP_CHECK_IF(dgridDesc == nullptr,
-                error_report::ReportTilingStageError(
-                    tilingContext->GetNodeName(),
-                    "dgridDesc is null in the tiling context; check the TilingContext construction"),
+    OP_CHECK_IF(dxDesc == nullptr,
+                ReportTilingStageError(tilingContext->GetNodeName(),
+                                       "the output desc of dx is missing in the tiling context; check that the graph "
+                                       "node provides all required outputs"),
                 return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        dgridDesc == nullptr,
+        ReportTilingStageError(tilingContext->GetNodeName(),
+                               "the output desc of dgrid is missing in the tiling context; check that the graph "
+                               "node provides all required outputs"),
+        return ge::GRAPH_FAILED);
     ge::DataType dxDatatype = dxDesc->GetDataType();
     ge::DataType dgridDatatype = dgridDesc->GetDataType();
     OP_CHECK_IF(dxDatatype != inputDatatype || dgridDatatype != gridDatatype,
-                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(tilingContext->GetNodeName(), "output",
-                                                       (std::to_string(static_cast<int32_t>(dxDatatype)) + ", " +
-                                                        std::to_string(static_cast<int32_t>(inputDatatype)) + ", " +
-                                                        std::to_string(static_cast<int32_t>(dgridDatatype)) + ", " +
-                                                        std::to_string(static_cast<int32_t>(gridDatatype)))
-                                                           .c_str(),
-                                                       "output dtype mismatch: dx [] vs grad [], dgrid [] vs grid []"),
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+                    tilingContext->GetNodeName(), "dx, dgrid, grad and grid",
+                    (Ops::Base::ToString(dxDatatype) + ", " + Ops::Base::ToString(dgridDatatype) + ", " +
+                     Ops::Base::ToString(inputDatatype) + " and " + Ops::Base::ToString(gridDatatype))
+                        .c_str(),
+                    "the dtype of dx must match grad and the dtype of dgrid must match grid"),
                 return ge::GRAPH_FAILED);
     if (inputDatatype != ge::DT_FLOAT && !compileInfo->regBase) {
         coreNum = 1;
@@ -699,8 +747,9 @@ static ge::graphStatus Tiling4GridSampler2DGrad(gert::TilingContext* tilingConte
                                                                                availableUb, deterministic);
     }
     OP_CHECK_IF(tilingData.get_ubFactorElement() <= 0,
-                error_report::ReportInvalidArgument(tilingContext->GetNodeName(), "space",
-                                                    "ub space is insufficient, please check input"),
+                ReportTilingStageError(tilingContext->GetNodeName(),
+                                       "the tiling strategy found no feasible ubFactor for the given shapes and "
+                                       "platform UB size; check the input shapes and the SoC"),
                 return ge::GRAPH_FAILED);
     // set tilingdata
     tilingContext->SetTilingKey(params.tilingKey);
@@ -717,31 +766,34 @@ static ge::graphStatus TilingPrepare4GridSampler2DGrad(gert::TilingParseContext*
 {
     OP_LOGI(context->GetNodeName(), "TilingPrepare4GridSampler2DGrad start.");
     auto compileInfo = context->GetCompiledInfo<Tiling4GridSampler2DGradCompileInfo>();
-    OP_CHECK_IF(
-        compileInfo == nullptr,
-        error_report::ReportTilingStageError(
-            context->GetNodeName(), "compileInfo is null in the tiling context; check the TilingContext construction"),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(compileInfo == nullptr,
+                ReportTilingStageError(
+                    context->GetNodeName(),
+                    "GetCompiledInfo: compile info is null; check the SoC-specific OPP package and its loading logs"),
+                return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
     OP_CHECK_IF(
         platformInfo == nullptr,
-        error_report::ReportTilingStageError(
-            context->GetNodeName(), "platformInfo is null in the tiling context; check the TilingContext construction"),
+        ReportTilingStageError(
+            context->GetNodeName(),
+            "GetPlatformInfo returned null; check the TilingParseContext construction and the platform registration"),
         return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAiv();
     compileInfo->regBase = Ops::Cv::OpTiling::IsRegbaseSocVersion(context);
     OP_CHECK_IF((compileInfo->coreNum <= 0),
-                error_report::ReportTilingStageError(context->GetNodeName(),
-                                                     "failed to get the core num from the platform info"),
+                ReportTilingStageError(context->GetNodeName(), "GetCoreNumAiv returned " +
+                                                                   std::to_string(compileInfo->coreNum) +
+                                                                   "; check the platform info and SoC"),
                 return ge::GRAPH_FAILED);
 
     uint64_t ubSizePlatForm;
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSizePlatForm);
     compileInfo->ubSizePlatForm = ubSizePlatForm;
-    OP_CHECK_IF((compileInfo->ubSizePlatForm == 0),
-                error_report::ReportTilingStageError(context->GetNodeName(),
-                                                     "failed to get the ub size from the platform info"),
+    OP_CHECK_IF((compileInfo->ubSizePlatForm <= 0),
+                ReportTilingStageError(context->GetNodeName(), "GetCoreMemSize(UB) returned " +
+                                                                   std::to_string(compileInfo->ubSizePlatForm) +
+                                                                   "; check the platform info and SoC"),
                 return ge::GRAPH_FAILED);
     OP_LOGI(context->GetNodeName(), "TilingPrepare4GridSampler2DGrad end.");
 
