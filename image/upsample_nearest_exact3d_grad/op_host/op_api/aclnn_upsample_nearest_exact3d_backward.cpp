@@ -150,7 +150,7 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclTensor* gradInp
     // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合
     if (scalesD > 0) {
         double expectDimD = static_cast<double>(inputD) * scalesD;
-        OP_CHECK(static_cast<double>(outD) == std::floor(expectDimD) ||
+        OP_CHECK(outD == static_cast<int64_t>(std::floor(expectDimD)) ||
                      fabs(static_cast<double>(outD) - expectDimD) <= EPSILON,
                  OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                      "aclnnUpsampleNearestExact3dBackward", "scalesD", std::to_string(scalesD).c_str(),
@@ -159,7 +159,7 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclTensor* gradInp
     }
     if (scalesH > 0) {
         double expectDimH = static_cast<double>(inputH) * scalesH;
-        OP_CHECK(static_cast<double>(outH) == std::floor(expectDimH) ||
+        OP_CHECK(outH == static_cast<int64_t>(std::floor(expectDimH)) ||
                      fabs(static_cast<double>(outH) - expectDimH) <= EPSILON,
                  OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                      "aclnnUpsampleNearestExact3dBackward", "scalesH", std::to_string(scalesH).c_str(),
@@ -168,7 +168,7 @@ static bool CheckInputElement(const aclTensor* gradOut, const aclTensor* gradInp
     }
     if (scalesW > 0) {
         double expectDimW = static_cast<double>(inputW) * scalesW;
-        OP_CHECK(static_cast<double>(outW) == std::floor(expectDimW) ||
+        OP_CHECK(outW == static_cast<int64_t>(std::floor(expectDimW)) ||
                      fabs(static_cast<double>(outW) - expectDimW) <= EPSILON,
                  OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                      "aclnnUpsampleNearestExact3dBackward", "scalesW", std::to_string(scalesW).c_str(),

@@ -235,7 +235,7 @@ static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSi
     // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合
     if (scalesH > 0) {
         double expectDimH = static_cast<double>(inputH) * scalesH;
-        OP_CHECK(static_cast<double>(outputH) == std::floor(expectDimH) ||
+        OP_CHECK(outputH == static_cast<int64_t>(std::floor(expectDimH)) ||
                      fabs(static_cast<double>(outputH) - expectDimH) <= EPSILON,
                  OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                      "aclnnUpsampleNearestExact2d", "scalesH", std::to_string(scalesH).c_str(),
@@ -244,7 +244,7 @@ static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSi
     }
     if (scalesW > 0) {
         double expectDimW = static_cast<double>(inputW) * scalesW;
-        OP_CHECK(static_cast<double>(outputW) == std::floor(expectDimW) ||
+        OP_CHECK(outputW == static_cast<int64_t>(std::floor(expectDimW)) ||
                      fabs(static_cast<double>(outputW) - expectDimW) <= EPSILON,
                  OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                      "aclnnUpsampleNearestExact2d", "scalesW", std::to_string(scalesW).c_str(),

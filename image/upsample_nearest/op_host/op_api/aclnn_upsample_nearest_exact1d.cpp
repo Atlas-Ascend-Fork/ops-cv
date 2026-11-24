@@ -197,7 +197,7 @@ static bool CheckInputElement(const aclTensor* self, const aclIntArray* outputSi
         // 资料约束：outputSize = floor(inputSize_L * scales)，非整数乘积时合法值是 floor 而非 ceil；
         // 绝对容差仅覆盖乘积为整数时的浮点表示噪声，不随乘积放大，不放过 off-by-one 的非法组合
         double expectDimL = static_cast<double>(inputL) * scales;
-        OP_CHECK(static_cast<double>(outL) == std::floor(expectDimL) ||
+        OP_CHECK(outL == static_cast<int64_t>(std::floor(expectDimL)) ||
                      fabs(static_cast<double>(outL) - expectDimL) <= EPSILON,
                  OP_LOGE_FOR_INVALID_VALUE_WITH_REASON("aclnnUpsampleNearestExact1d", "scales",
                                                        std::to_string(scales).c_str(),

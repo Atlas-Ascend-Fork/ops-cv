@@ -194,7 +194,7 @@ static bool CheckInputElement(const aclTensor* gradOutput, const aclTensor* out,
     if (scalesH > 0) {
         int64_t outSizeH = (*outputSize)[DIM_ZERO];
         double expectDimH = static_cast<double>(inputH) * scalesH;
-        OP_CHECK(static_cast<double>(outSizeH) == std::floor(expectDimH) ||
+        OP_CHECK(outSizeH == static_cast<int64_t>(std::floor(expectDimH)) ||
                      fabs(static_cast<double>(outSizeH) - expectDimH) <= EPSILON,
                  OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                      "aclnnUpsampleNearestExact2dBackward", "scalesH", std::to_string(scalesH).c_str(),
@@ -204,7 +204,7 @@ static bool CheckInputElement(const aclTensor* gradOutput, const aclTensor* out,
     if (scalesW > 0) {
         int64_t outSizeW = (*outputSize)[DIM_ONE];
         double expectDimW = static_cast<double>(inputW) * scalesW;
-        OP_CHECK(static_cast<double>(outSizeW) == std::floor(expectDimW) ||
+        OP_CHECK(outSizeW == static_cast<int64_t>(std::floor(expectDimW)) ||
                      fabs(static_cast<double>(outSizeW) - expectDimW) <= EPSILON,
                  OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
                      "aclnnUpsampleNearestExact2dBackward", "scalesW", std::to_string(scalesW).c_str(),
