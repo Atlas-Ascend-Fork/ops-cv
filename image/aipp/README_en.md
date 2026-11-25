@@ -294,7 +294,7 @@ English | [简体中文](./README.md)
         <tr>
         <td>var_reci_chn_0 var_reci_chn_1 var_reci_chn_2 var_reci_chn_3</td>
         <td>Optional attr</td>
-        <td>Reciprocal of the variance of each channel. Value range: [-65504,65504].</td>
+        <td>Per-channel normalization scaling factor, configured according to the model's preprocessing requirements. Value range: [-65504,65504].</td>
         <td>FLOAT16</td>
         </tr>
         <tr>

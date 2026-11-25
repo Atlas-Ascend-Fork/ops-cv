@@ -292,7 +292,7 @@
         <tr>
         <td>var_reci_chn_0 var_reci_chn_1 var_reci_chn_2 var_reci_chn_3</td>
         <td>可选属性</td>
-        <td>每个通道方差的倒数，取值范围：[-65504,65504]。</td>
+        <td>每个通道归一化时使用的缩放系数，按模型预处理需求配置。取值范围：[-65504,65504]。</td>
         <td>FLOAT16</td>
         </tr>
         <tr>
