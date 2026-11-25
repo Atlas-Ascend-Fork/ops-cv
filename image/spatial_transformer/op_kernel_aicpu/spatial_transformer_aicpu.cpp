@@ -240,11 +240,12 @@ KernelStatus SpatialTransformerCpuKernel::GetAttrs(const CpuKernelContext& ctx)
                        "[%s] default_theta needs at least %zu elements, but got %zu.", kSpatialTransformer,
                        default_theta_count, theta_.size());
 
-    // get stn original channel
+    // stn_ori_channel is a legacy optional attr (not declared in the op proto): honored when the NodeDef carries
+    // it (RT1.0 models or explicit callers); otherwise derived from x as the channel capacity (NCHW: C, 5D:
+    // C1*C0). The true logical C is unrecoverable from a 5D shape, so the derived value only loses the C==1
+    // specialization, never correctness.
     AttrValue* ori_channel_ptr = ctx.GetAttr("stn_ori_channel");
-    KERNEL_CHECK_NULLPTR(ori_channel_ptr, KERNEL_STATUS_PARAM_INVALID, "[%s] get attr stn_ori_channel fail.",
-                         kSpatialTransformer);
-    stn_ori_channel_ = static_cast<int32_t>(ori_channel_ptr->GetInt());
+    stn_ori_channel_ = (ori_channel_ptr != nullptr) ? static_cast<int32_t>(ori_channel_ptr->GetInt()) : input_c_;
 
     return KERNEL_STATUS_OK;
 }

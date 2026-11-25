@@ -12,6 +12,8 @@
 
 #include <vector>
 
+#include "base/context_builder/op_infer_datatype_context_builder.h"
+#include "base/registry/op_impl_space_registry_v2.h"
 #include "infershape_case_executor.h"
 #include "infershape_context_faker.h"
 
@@ -155,6 +157,22 @@ TEST(SpatialTransformerInfershape, rejects_output_size_below_minus_one)
     ExpectShapeWithAttr({{2, 3, 8, 9}, {2, 3, 8, 9}}, ge::FORMAT_NCHW, ge::GRAPH_FAILED, {}, {-2, 6});
 }
 
+TEST(SpatialTransformerInfershape, output_size_empty_list_uses_input_hw)
+{
+    ExpectShapeWithAttr({{2, 3, 8, 9}, {2, 3, 8, 9}}, ge::FORMAT_NCHW, ge::GRAPH_SUCCESS, {{2, 3, 8, 9}}, {});
+}
+
+TEST(SpatialTransformerInfershape, rejects_output_size_single_element)
+{
+    // RT1.0 rejects a single-element output_size instead of silently using the input H/W.
+    ExpectShapeWithAttr({{2, 3, 8, 9}, {2, 3, 8, 9}}, ge::FORMAT_NCHW, ge::GRAPH_FAILED, {}, {5});
+}
+
+TEST(SpatialTransformerInfershape, output_size_three_elements_uses_first_two)
+{
+    ExpectShapeWithAttr({{2, 3, 8, 9}, {2, 3, 8, 9}}, ge::FORMAT_NCHW, ge::GRAPH_SUCCESS, {{2, 3, 5, 6}}, {5, 6, 7});
+}
+
 TEST(SpatialTransformerInfershape, dynamic_batch_theta_passes)
 {
     // x batch=-1 (dynamic), theta batch=2 → should succeed (skip check)
@@ -191,3 +209,40 @@ TEST(SpatialTransformerInfershape, theta_dynamic_matrix_dim_3d_passes)
 
 // NOTE: origin=NCHW(4D)+storage=NC1HWC0(5D) needs separate origin/storage format which InfershapeContextPara doesn't
 // support. GetOriginFormat fix validated by real GE GEIR e2e.
+
+// ===== InferDataType 推导 =====
+
+TEST(SpatialTransformerInfershape, inferdatatype_rejects_null_context)
+{
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    const auto* opImpl = registry->GetOpImpl("SpatialTransformer");
+    ASSERT_NE(opImpl, nullptr);
+    ASSERT_NE(opImpl->infer_datatype, nullptr);
+
+    EXPECT_EQ(opImpl->infer_datatype(nullptr), ge::GRAPH_FAILED);
+}
+
+TEST(SpatialTransformerInfershape, inferdatatype_preserves_x_dtype)
+{
+    auto registry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();
+    ASSERT_NE(registry, nullptr);
+    const auto* opImpl = registry->GetOpImpl("SpatialTransformer");
+    ASSERT_NE(opImpl, nullptr);
+    ASSERT_NE(opImpl->infer_datatype, nullptr);
+
+    for (const ge::DataType xDtype : {ge::DT_FLOAT, ge::DT_FLOAT16, ge::DT_DOUBLE, ge::DT_INT32, ge::DT_UINT8}) {
+        gert::OpInferDataTypeContextBuilder builder;
+        builder.OpType("SpatialTransformer").OpName("SpatialTransformer").IONum(2, 1);
+        builder.InputTensorDesc(0, xDtype, ge::FORMAT_NCHW, ge::FORMAT_NCHW);
+        builder.InputTensorDesc(1, xDtype, ge::FORMAT_ND, ge::FORMAT_ND);
+        builder.OutputTensorDesc(0, ge::FORMAT_NCHW, ge::FORMAT_NCHW);
+        auto holder = builder.Build();
+        auto* context = holder.GetContext();
+        ASSERT_NE(context, nullptr);
+        context->SetOutputDataType(0, ge::DT_UNDEFINED);
+
+        EXPECT_EQ(opImpl->infer_datatype(context), ge::GRAPH_SUCCESS);
+        EXPECT_EQ(context->GetOutputDataType(0), xDtype);
+    }
+}

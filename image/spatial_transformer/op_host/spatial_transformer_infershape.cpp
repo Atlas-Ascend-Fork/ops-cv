@@ -81,6 +81,13 @@ static ge::graphStatus InferShapeSpatialTransformer(gert::InferShapeContext* con
     const auto* outputSizeList = attrs->GetListInt(0);
     int64_t outputH = kOutputSizeDefault;
     int64_t outputW = kOutputSizeDefault;
+    // Length rules aligned with RT1.0 legacy infershape: empty = use x H/W, single element = invalid,
+    // two or more = use the first two elements.
+    OP_CHECK_IF(outputSizeList != nullptr && outputSizeList->GetSize() == 1U,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+                    context->GetNodeName(), "output_size", "size 1",
+                    "output_size must be empty (use input H/W) or contain [output_h, output_w]"),
+                return ge::GRAPH_FAILED);
     if (outputSizeList != nullptr && outputSizeList->GetSize() >= static_cast<size_t>(kOutputSizeLen)) {
         outputH = outputSizeList->GetData()[0];
         outputW = outputSizeList->GetData()[1];

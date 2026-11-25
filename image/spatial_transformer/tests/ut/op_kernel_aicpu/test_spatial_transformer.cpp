@@ -37,6 +37,16 @@ class TEST_SPATIAL_TRANSFORMER_UT : public testing::Test {};
         .Attr("stn_ori_channel", stn_ori_channel)                                                            \
         .Attr("use_default_theta", use_default_theta)                                                        \
         .Attr("default_theta", default_theta);
+
+// Same as CREATE_NODEDEF but without the legacy stn_ori_channel attr, i.e. the pure RT2 NodeDef.
+#define CREATE_NODEDEF_NO_ORI_CHANNEL(shapes, data_types, datas, format, use_default_theta, default_theta) \
+    auto node_def = CpuKernelUtils::CpuKernelUtils::CreateNodeDef();                                       \
+    NodeDefBuilder(node_def.get(), "SpatialTransformer", "SpatialTransformer")                             \
+        .Input({"x", data_types[0], shapes[0], datas[0], format})                                          \
+        .Input({"theta", data_types[1], shapes[1], datas[1]})                                              \
+        .Output({"y", data_types[2], shapes[2], datas[2], format})                                         \
+        .Attr("use_default_theta", use_default_theta)                                                      \
+        .Attr("default_theta", default_theta);
 namespace {
 constexpr uint64_t kRankValidationBufferSize = 1 * 1 * 2 * 3 * 16;
 void RunRankValidationCase(const vector<vector<int64_t>>& shapes, Format format)
@@ -369,6 +379,90 @@ TEST_F(TEST_SPATIAL_TRANSFORMER_UT, SHARED_THETA_BATCH_MASKED_SUCC)
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, SHARED_THETA_5D_BATCH_SUCC) { RunSharedTheta5DBatchCase(16); }
 
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, SHARED_THETA_5D_C1_BATCH_SUCC) { RunSharedTheta5DBatchCase(1); }
+
+// ===== stn_ori_channel 缺省（纯 RT2 NodeDef，不带 legacy 属性） =====
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, NCHW_WITHOUT_STN_ORI_CHANNEL_SUCC)
+{
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{2, 1, 2, 3}, {2, 3}, {2, 1, 2, 3}};
+    constexpr uint64_t data_size = 2 * 1 * 2 * 3;
+    float input_x[data_size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f};
+    float input_theta[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+    CREATE_NODEDEF_NO_ORI_CHANNEL(shapes, data_types, datas, FORMAT_NCHW, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+
+    EXPECT_TRUE(CompareResult(output, input_x, data_size));
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, NC1HWC0_WITHOUT_STN_ORI_CHANNEL_SUCC)
+{
+    // C1=2: the derived channel capacity (C1*C0=32) classifies as C>1, so the general 5D path runs.
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{1, 2, 2, 3, 16}, {2, 3}, {1, 2, 2, 3, 16}};
+    constexpr uint64_t data_size = 1 * 2 * 2 * 3 * 16;
+    float input_x[data_size] = {0.0f};
+    for (uint64_t i = 0; i < data_size; ++i) {
+        input_x[i] = static_cast<float>(i + 1);
+    }
+    float input_theta[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    float output[data_size] = {0.0f};
+    vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+    CREATE_NODEDEF_NO_ORI_CHANNEL(shapes, data_types, datas, FORMAT_NC1HWC0, use_default_theta, default_theta);
+    RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+
+    EXPECT_TRUE(CompareResult(output, input_x, data_size));
+}
+
+TEST_F(TEST_SPATIAL_TRANSFORMER_UT, NC1HWC0_SINGLE_CHANNEL_FALLBACK_SLOT0_SUCC)
+{
+    // True single channel (C=1) in NC1HWC0: only slot 0 of each C0 group is a real channel, slots 1..15 are
+    // padding. With the attr the C1 fast path writes slot 0 only; without the attr the derived capacity (C0)
+    // conservatively takes the general path. Both must agree on slot 0 of every pixel; padding is don't-care
+    // and is not compared. Buffers are pre-initialized.
+    vector<DataType> data_types = {DT_FLOAT, DT_FLOAT, DT_FLOAT};
+    vector<vector<int64_t>> shapes = {{1, 1, 2, 3, 16}, {2, 3}, {1, 1, 2, 3, 16}};
+    constexpr uint64_t data_size = 1 * 1 * 2 * 3 * 16;
+    constexpr uint64_t c0 = 16;
+    constexpr uint64_t pixelNum = 6;
+    float input_x[data_size] = {0.0f};
+    for (uint64_t pixel = 0; pixel < pixelNum; ++pixel) {
+        input_x[pixel * c0] = static_cast<float>(pixel + 1);
+    }
+    float input_theta[6] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    float output_with_attr[data_size] = {0.0f};
+    float output_no_attr[data_size] = {0.0f};
+    vector<int64_t> use_default_theta;
+    vector<float> default_theta;
+
+    {
+        vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output_with_attr};
+        CREATE_NODEDEF(shapes, data_types, datas, FORMAT_NC1HWC0, 1, use_default_theta, default_theta);
+        RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+    }
+    {
+        vector<void*> datas = {(void*)input_x, (void*)input_theta, (void*)output_no_attr};
+        CREATE_NODEDEF_NO_ORI_CHANNEL(shapes, data_types, datas, FORMAT_NC1HWC0, use_default_theta, default_theta);
+        RUN_KERNEL(node_def, HOST, KERNEL_STATUS_OK);
+    }
+
+    float slot0_expected[pixelNum] = {0.0f};
+    float slot0_with_attr[pixelNum] = {0.0f};
+    float slot0_no_attr[pixelNum] = {0.0f};
+    for (uint64_t pixel = 0; pixel < pixelNum; ++pixel) {
+        slot0_expected[pixel] = input_x[pixel * c0];
+        slot0_with_attr[pixel] = output_with_attr[pixel * c0];
+        slot0_no_attr[pixel] = output_no_attr[pixel * c0];
+    }
+    EXPECT_TRUE(CompareResult(slot0_with_attr, slot0_expected, pixelNum));
+    EXPECT_TRUE(CompareResult(slot0_no_attr, slot0_expected, pixelNum));
+}
 
 TEST_F(TEST_SPATIAL_TRANSFORMER_UT, THETA_BATCH_ONE_MISMATCH_FAIL)
 {
