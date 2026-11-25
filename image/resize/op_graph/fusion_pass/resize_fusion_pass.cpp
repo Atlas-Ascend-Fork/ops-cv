@@ -76,6 +76,9 @@ constexpr size_t kIdxDim4 = 4;
 constexpr int64_t kSliceOffsetValue = 2;
 constexpr int64_t kSliceSize4D = 2;
 constexpr int64_t kSliceSize5D = 3;
+constexpr int32_t kSliceInputIdxData = 0;
+constexpr int32_t kSliceInputIdxOffsets = 1;
+constexpr int32_t kSliceInputIdxSizes = 2;
 const std::string kModeNearest = "nearest";
 const std::string kModeLinear = "linear";
 const std::string kModeCubic = "cubic";
@@ -197,13 +200,13 @@ std::vector<PatternUniqPtr> ResizeFusionPass::Patterns()
     return patternGraphs;
 }
 
-bool ResizeFusionPass::MeetRequirements(const std::unique_ptr<MatchResult>& matchResult)
+bool ResizeFusionPass::MeetRequirements(const std::unique_ptr<MatchResult>& match_result)
 {
     OP_LOGD(kPassName.c_str(), "Enter MeetRequirements for ResizeFusionPass.");
 
     // 1. Get the matched Resize node.
     NodeIo resizeNodeIo;
-    if (matchResult->GetCapturedTensor(kCaptureIdxResizeNode, resizeNodeIo) != SUCCESS) {
+    if (match_result->GetCapturedTensor(kCaptureIdxResizeNode, resizeNodeIo) != SUCCESS) {
         OP_LOGE(kPassName.c_str(), "Failed to get captured resize node.");
         return false;
     }
@@ -327,13 +330,13 @@ static bool IsResizeNearestV2DSupported(const TensorDesc& xDesc, const TensorDes
     return isSupported;
 }
 
-GraphUniqPtr ResizeFusionPass::Replacement(const std::unique_ptr<MatchResult>& matchResult)
+GraphUniqPtr ResizeFusionPass::Replacement(const std::unique_ptr<MatchResult>& match_result)
 {
     OP_LOGD(kPassName.c_str(), "Enter Replacement for ResizeFusionPass.");
 
     // 1. Get the matched Resize node and its input/output descs.
     NodeIo resizeNodeIo;
-    if (matchResult->GetCapturedTensor(kCaptureIdxResizeNode, resizeNodeIo) != SUCCESS) {
+    if (match_result->GetCapturedTensor(kCaptureIdxResizeNode, resizeNodeIo) != SUCCESS) {
         OP_LOGE(kPassName.c_str(), "Failed to get captured resize node.");
         return nullptr;
     }
@@ -460,9 +463,9 @@ GraphUniqPtr ResizeFusionPass::Replacement(const std::unique_ptr<MatchResult>& m
         TensorDesc sliceParamDesc(Shape(std::vector<int64_t>{1}), FORMAT_ND, DT_INT64);
         sliceParamDesc.SetOriginFormat(FORMAT_ND);
         sliceParamDesc.SetOriginShape(Shape(std::vector<int64_t>{1}));
-        (void)sliceNode.UpdateInputDesc(0, sliceInDesc);
-        (void)sliceNode.UpdateInputDesc(1, sliceParamDesc);
-        (void)sliceNode.UpdateInputDesc(2, sliceParamDesc);
+        (void)sliceNode.UpdateInputDesc(kSliceInputIdxData, sliceInDesc);
+        (void)sliceNode.UpdateInputDesc(kSliceInputIdxOffsets, sliceParamDesc);
+        (void)sliceNode.UpdateInputDesc(kSliceInputIdxSizes, sliceParamDesc);
         TensorDesc sliceOutDesc(Shape(std::vector<int64_t>{sliceLen}), lastInputDesc.GetFormat(),
                                 lastInputDesc.GetDataType());
         sliceOutDesc.SetOriginFormat(lastInputDesc.GetOriginFormat());

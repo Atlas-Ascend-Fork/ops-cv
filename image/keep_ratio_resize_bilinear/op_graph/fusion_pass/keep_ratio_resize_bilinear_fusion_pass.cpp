@@ -70,6 +70,7 @@ constexpr size_t kNchwIdxDimH = 2;
 constexpr size_t kNchwIdxDimW = 3;
 // element num of the ResizeBilinearV2 size input
 constexpr int64_t kSizeElementNum = 2;
+constexpr int kDecimalBase = 10;
 const char* kKeepRatioType = "KeepRatioResizeBilinear";
 const char* kAttrMinDimension = "min_dimension";
 const char* kAttrMaxDimension = "max_dimension";
@@ -92,7 +93,7 @@ static NpuArch GetNpuArch()
         OP_LOGW(kPassName.c_str(), "call rtGetSocSpec failed.");
         return NpuArch::DAV_RESV;
     }
-    return static_cast<NpuArch>(std::strtoul(npuArchValStr, nullptr, 10));
+    return static_cast<NpuArch>(std::strtoul(npuArchValStr, nullptr, kDecimalBase));
 }
 
 static bool IsSupportedPlatform()
@@ -211,7 +212,7 @@ std::vector<PatternUniqPtr> KeepRatioResizeBilinearFusion::Patterns()
     return patternGraphs;
 }
 
-bool KeepRatioResizeBilinearFusion::MeetRequirements(const std::unique_ptr<MatchResult>& matchResult)
+bool KeepRatioResizeBilinearFusion::MeetRequirements(const std::unique_ptr<MatchResult>& match_result)
 {
     OP_LOGD(kPassName.c_str(), "Enter MeetRequirements for KeepRatioResizeBilinearFusion.");
 
@@ -224,7 +225,7 @@ bool KeepRatioResizeBilinearFusion::MeetRequirements(const std::unique_ptr<Match
 
     // 2. Get the matched KeepRatioResizeBilinear node.
     NodeIo keepRatioNodeIo;
-    if (matchResult->GetCapturedTensor(kCaptureIdxKeepRatioNode, keepRatioNodeIo) != SUCCESS) {
+    if (match_result->GetCapturedTensor(kCaptureIdxKeepRatioNode, keepRatioNodeIo) != SUCCESS) {
         OP_LOGE(kPassName.c_str(), "Failed to get captured keep_ratio_resize_bilinear node.");
         return false;
     }
@@ -331,13 +332,13 @@ static bool IsResizeBilinearV2DSupported(const TensorDesc& imagesDesc, const Ten
     return isSupported;
 }
 
-GraphUniqPtr KeepRatioResizeBilinearFusion::Replacement(const std::unique_ptr<MatchResult>& matchResult)
+GraphUniqPtr KeepRatioResizeBilinearFusion::Replacement(const std::unique_ptr<MatchResult>& match_result)
 {
     OP_LOGD(kPassName.c_str(), "Enter Replacement for KeepRatioResizeBilinearFusion.");
 
     // 1. Get the matched node and its input/output descs.
     NodeIo keepRatioNodeIo;
-    if (matchResult->GetCapturedTensor(kCaptureIdxKeepRatioNode, keepRatioNodeIo) != SUCCESS) {
+    if (match_result->GetCapturedTensor(kCaptureIdxKeepRatioNode, keepRatioNodeIo) != SUCCESS) {
         OP_LOGE(kPassName.c_str(), "Failed to get captured keep_ratio_resize_bilinear node.");
         return nullptr;
     }
