@@ -158,6 +158,13 @@ static bool CheckOutputSize(const aclTensor* out, const aclIntArray* outputSize)
                                      std::to_string(outputSize->Size()).c_str(), "2");
         return false;
     }
+    if (outputSize->GetData()[ZERO] <= 0 || outputSize->GetData()[ONE] <= 0) {
+        OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(
+            "aclnnUpsampleBilinear2d", "output_size_h,output_size_w",
+            (std::to_string(outputSize->GetData()[ZERO]) + ", " + std::to_string(outputSize->GetData()[ONE])).c_str(),
+            "outputSize elements must be greater than 0");
+        return false;
+    }
     auto outShape = out->GetViewShape();
     const op::Format outFormat = out->GetStorageFormat();
     if (outFormat == op::Format::FORMAT_NCHW) {
