@@ -90,7 +90,9 @@ English | [简体中文](./README.md)
 
 ## Constraints
 
-None
+- The input tensor `x` and output tensor `y` must both be 4D. The `N` and `C` dimensions of `x` must be greater than 0, and the `N` and `C` dimensions of `y` must match those of `x`, respectively.
+- The `H` and `W` dimensions of the input and output must both be greater than 0.
+- `size` must be a 1D INT32 tensor containing 2 elements that specify the output `H` and `W`; both values must be greater than 0.
 
 ## Invocation Description
 
