@@ -214,6 +214,11 @@ int main()
 
     // 调用aclnnThreeInterpolateBackward第二段接口
     ret = aclnnThreeInterpolateBackward(workspaceAddr, workspaceSize, executor, stream);
+    // 第二段接口被调用后executor所有权已转移至CANN侧（CommonOpExecutorRun内部销毁），
+    // 无论返回成败都按"已消费"语义立即置空，使成功与失败路径统一跳过cleanup中的
+    // aclDestroyAclOpExecutor，避免对已销毁对象二次析构（double free）。
+    // 若所用CANN版本在失败路径未销毁executor，此处按"泄漏优于崩溃"取舍。
+    executor = nullptr;
     CHECK_RET(ret == ACL_SUCCESS, LOG_PRINT("aclnnThreeInterpolateBackward failed. ERROR: %d\n", ret); cleanup();
               return ret);
 
