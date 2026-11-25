@@ -864,3 +864,95 @@ TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_out_w_zero)
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
     EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }
+
+// outputSize 的 H 为 0 且与 out 的 H 一致（一致性校验放行）：资料要求各元素均大于零，应返回参数错误
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_output_size_h_zero)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {1, 1, 4, 2};
+    vector<int64_t> output_size = {0, 4};
+    vector<int64_t> out = {1, 1, 0, 4};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// outputSize 的 W 为 0 且与 out 的 W 一致（一致性校验放行）：资料要求各元素均大于零，应返回参数错误
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_output_size_w_zero)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {1, 1, 4, 2};
+    vector<int64_t> output_size = {8, 0};
+    vector<int64_t> out = {1, 1, 8, 0};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// outputSize 含负数且与 out 的 H/W 一致：资料要求各元素均大于零，应返回参数错误
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_output_size_negative)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {1, 1, 4, 2};
+    vector<int64_t> output_size = {-2, 4};
+    vector<int64_t> out = {1, 1, -2, 4};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// NHWC 下 outputSize 的 H 为 0 且与 out 的 H 一致：资料要求各元素均大于零，应返回参数错误
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_output_size_h_zero_nhwc)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {1, 4, 2, 2};
+    vector<int64_t> output_size = {0, 4};
+    vector<int64_t> out = {1, 0, 4, 2};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NHWC);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NHWC);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
