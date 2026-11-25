@@ -12,9 +12,10 @@
  * \file add_example_pypto_tiling.cpp
  * \brief AddExamplePypto算子的tiling实现
  *
- * 注意：本文件不显式include PyPTO生成的头文件。enable_pypto_kernel(add_example_pypto)在configure阶段
- * 生成 AddExamplePyptoTilingKey_tilingkey.h 与 AddExamplePyptoTiling_tiling.h，并由cmake以
- * -include 的方式强制包含到本文件（顺序：tilingkey在前，tiling在后）。因此下面可以直接使用
+ * 注意：本文件显式include PyPTO生成的头文件。enable_pypto_kernel(add_example_pypto)在configure阶段
+ * 生成 AddExamplePyptoTilingKey_tilingkey.h 与 AddExamplePyptoTiling_tiling.h（位于build目录
+ * PYPTO_GEN_DIR），cmake通过 target_include_directories 将该目录加入tiling目标的include路径
+ * （CMake 3.16 兼容，不依赖 3.18 的 -include 强制包含）。因此下面可以直接使用
  * AddExamplePyptoTiling —— 它就是op_kernel/add_example_pypto.py中的同名dataclass，host与kernel
  * 共享同一份tiling布局，无需手写副本。
  */
@@ -26,6 +27,9 @@
 #include "register/op_def_registry.h"
 #include "register/tilingdata_base.h"
 #include "log/log.h"
+// PyPTO 生成的头文件（顺序：tilingkey在前，tiling在后），路径由 pypto_include_tiling_gen() 注入
+#include "AddExamplePyptoTilingKey_tilingkey.h"
+#include "AddExamplePyptoTiling_tiling.h"
 
 namespace optiling {
 

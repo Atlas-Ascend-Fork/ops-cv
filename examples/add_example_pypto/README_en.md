@@ -56,3 +56,29 @@ The codegen arch of PyPTO is automatically derived by the platform (`a2`/`a3`/`a
 automatically derived by the current toolkit. When compiling the kernel binary, cmake exports `PYPTO_JIT_ARCH` based on the soc being compiled
 (`ascend910b`/`ascend910_93` → `a3`, `ascend950` → `a5`). This prevents `pypto_compile_op` from falling back to the default `a5`
 and generating instructions not supported by the target chip.
+
+## Run Verification
+
+Test command invocation method: [build.sh](../../docs/zh/invocation/quick_op_invocation.md)
+
+<table>
+    <th>Directory</th><th>Description</th>
+    <tr>
+        <td><a href="./examples/test_aclnn_add_example_pypto.cpp"> test_aclnn_add_example_pypto.cpp</a></td><td>Invokes the AddExamplePypto operator through the aclnn API.</td>
+    </tr>
+</table>
+
+Compile, install, and run the sample:
+
+```bash
+# Compile (only ascend950 is supported)
+bash build.sh --pkg --soc=ascend950 --ops=add_example_pypto -j16
+
+# Install
+./build_out/cann-ops-cv-*linux*.run
+
+# Run the sample (the running method is the same as that of a standard operator)
+bash build.sh --run_example add_example_pypto eager cust --vendor_name=custom --soc=ascend950
+```
+
+Expected output: when `first input` is 1 and `second input` is 2, `result` is 3, indicating that the operator has been successfully deployed and executed correctly.

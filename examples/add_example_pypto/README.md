@@ -33,13 +33,16 @@ add_modules_sources(OPTYPE add_example_pypto ACLNNTYPE aclnn)
 | --- | --- |
 | `<Tiling>_tiling.h` | tiling 结构体，host 侧 tiling 直接使用 |
 | `<TilingKey>_tilingkey.h` | `ASCENDC_TPL` tiling key 声明 |
-| `<op_file>_pypto_infer.cpp` | 供 `.i` infer 使用的自包含源码 |
+| `<op_file>_pypto_infer.cpp` | 供 `.i` infer 使用的自包含源码（build 阶段产出，configure 阶段不生成） |
 
-上面两个头文件会以 `-include` 的方式**强制包含**到本算子的 `*_tiling*.cpp`（顺序：tilingkey 在前，tiling 在后），
-因此 host 侧 tiling 无需显式 include，即可直接使用 `.py` 中定义的 tiling 结构体：
+tiling 的 codegen 目录会以 `target_include_directories` 注入 tiling 目标的 include 路径（CMake 3.16 兼容），
+`*_tiling*.cpp` 需**显式 include** 生成的头文件（顺序：tilingkey 在前，tiling 在后）：
 
 ```cpp
-// AddExamplePyptoTiling 来自 op_kernel/add_example_pypto.py，经 force-include 可见
+// 显式 include configure 阶段生成的头文件
+#include "AddExamplePyptoTilingKey_tilingkey.h"
+#include "AddExamplePyptoTiling_tiling.h"
+// AddExamplePyptoTiling 来自 op_kernel/add_example_pypto.py
 AddExamplePyptoTiling* tilingData = context->GetTilingData<AddExamplePyptoTiling>();
 ```
 
@@ -50,7 +53,53 @@ host 与 kernel 因此共享同一份 tiling 布局与 tiling key 位分配，�
 
 ## 芯片与 arch
 
-PyPTO 的 codegen arch 由平台自动推导（`a2`/`a3`/`a5`）。本算子只注册了 `ascend950`(a5)，与当前 toolkit
-自动推导的 arch 一致。编译 kernel 二进制时，cmake 会按所编 soc 导出 `PYPTO_JIT_ARCH`
-（`ascend910b`/`ascend910_93` → `a3`，`ascend950` → `a5`），避免 `pypto_compile_op` 回退到默认的 `a5`
-而产生目标芯片不支持的指令。
+PyPTO 的 codegen arch 由平台自动推导，pypto-pro 仅支持 `dav-3510` arch（canonical token 为
+`__NPU_ARCH__` 版本号 `3510`）。本算子只注册了 `ascend950`，与当前 toolkit 自动推导的 arch 一致。
+编译 kernel 二进制时，cmake 会按所编 soc 导出 `PYPTOPRO_JIT_ARCH`（`ascend950` → `3510`），
+将 codegen arch 显式固定为目标芯片。
+
+## 调用说明
+
+AddExamplePypto 的 aclnn 接口由算子定义自动生成，**无需在 `op_host/op_api` 目录下手写源码**；生成的头文件为
+`aclnn_add_example_pypto.h`，两段式接口为 `aclnnAddExamplePyptoGetWorkspaceSize` 与 `aclnnAddExamplePypto`。
+
+<table><thead>
+  <tr>
+    <th>调用方式</th>
+    <th>调用样例</th>
+    <th>说明</th>
+  </tr></thead>
+<tbody>
+  <tr>
+    <td>aclnn调用</td>
+    <td><a href="./examples/test_aclnn_add_example_pypto.cpp">test_aclnn_add_example_pypto</a></td>
+    <td>参见<a href="../../docs/zh/invocation/quick_op_invocation.md">算子调用</a>完成算子编译和验证。</td>
+  </tr>
+</tbody>
+</table>
+
+## 运行验证
+
+测试命令调用方式：[build.sh](../../docs/zh/invocation/quick_op_invocation.md)
+
+<table>
+    <th>目录</th><th>描述</th>
+    <tr>
+        <td><a href="./examples/test_aclnn_add_example_pypto.cpp"> test_aclnn_add_example_pypto.cpp</a></td><td>通过aclnn调用的方式调用AddExamplePypto算子。</td>
+    </tr>
+</table>
+
+编译、安装并运行该样例：
+
+```bash
+# 编译（仅支持ascend950）
+bash build.sh --pkg --soc=ascend950 --ops=add_example_pypto -j16
+
+# 安装
+./build_out/cann-ops-cv-*linux*.run
+
+# 运行样例（运行方式与标准算子一致）
+bash build.sh --run_example add_example_pypto eager cust --vendor_name=custom --soc=ascend950
+```
+
+预期输出：`first input` 为 1、`second input` 为 2，则 `result` 为 3，表明算子已成功部署并正确执行。

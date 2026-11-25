@@ -439,8 +439,9 @@ macro(add_modules_sources)
   file(GLOB OPTILING_SRCS ${SOURCE_DIR}/*_tiling*.cpp)
   if(OPTILING_SRCS)
     add_tiling_modules()
+    # 注入 PyPTO codegen 头文件的 include 路径（CMake 3.16 兼容；源文件显式 include）
+    pypto_include_tiling_gen()
     target_sources(${OPHOST_NAME}_tiling_obj PRIVATE ${OPTILING_SRCS})
-    pypto_force_include_tiling("${OPTILING_SRCS}")
   endif()
 
   file(GLOB AICPU_SRCS ${SOURCE_DIR}/*_aicpu.cpp)
@@ -669,7 +670,7 @@ function(enable_pypto_kernel op_file)
 
   # Same op selection as add_modules_sources / add_all_modules_sources: an empty ASCEND_OP_NAME means
   # build everything. Bail out before the codegen for an op this build did not ask for, so an unrelated
-  # --ops=... build neither pays for the codegen nor picks up --pypto-ops / PYPTO_JIT_ARCH.
+  # --ops=... build neither pays for the codegen nor picks up --pypto-ops / PYPTOPRO_JIT_ARCH.
   list(FIND ASCEND_OP_NAME ${_op_name} _op_index)
   if(NOT "${ASCEND_OP_NAME}" STREQUAL "" AND _op_index EQUAL -1)
     return()
@@ -710,14 +711,12 @@ endfunction()
 # pypto_soc_to_arch(<soc> <out_var>)
 #   Map an ASCEND_COMPUTE_UNIT to the pypto codegen arch token, mirroring _ARCH_MAP in
 #   scripts/util/pypto_codegen.py. Sets <out_var> to the empty string for an unmapped soc, which leaves
-#   pypto on its own default.
+#   pypto on its own default. pypto-pro only supports dav-3510 ("3510").
 # ------------------------------------------------------------------------------------------------------------
 function(pypto_soc_to_arch soc out_var)
   string(TOLOWER "${soc}" _soc)
-  if(_soc STREQUAL "ascend910b" OR _soc STREQUAL "ascend910c")
-    set(${out_var} "a3" PARENT_SCOPE)
-  elseif(_soc STREQUAL "ascend950")
-    set(${out_var} "a5" PARENT_SCOPE)
+  if(_soc STREQUAL "ascend950")
+    set(${out_var} "3510" PARENT_SCOPE)
   else()
     set(${out_var} "" PARENT_SCOPE)
   endif()
@@ -725,9 +724,9 @@ endfunction()
 
 # ------------------------------------------------------------------------------------------------------------
 # pypto_jit_arch_env(<soc> <out_var>)
-#   Build the `export PYPTO_JIT_ARCH=<arch> &&` prefix for the kernel-compile commands of ops marked by
-#   enable_pypto_kernel. pypto_compile_op() reads PYPTO_JIT_ARCH in the opc process and otherwise defaults
-#   to a5, which emits instructions the other socs cannot assemble. Sets <out_var> to the empty string when
+#   Build the `export PYPTOPRO_JIT_ARCH=<arch> &&` prefix for the kernel-compile commands of ops marked by
+#   enable_pypto_kernel. pypto_compile_op() reads PYPTOPRO_JIT_ARCH in the opc process and otherwise defaults
+#   to dav-3510, which emits instructions the other socs cannot assemble. Sets <out_var> to the empty string when
 #   no pypto op is being built or the soc has no mapping (non-pypto ops never read the variable).
 # ------------------------------------------------------------------------------------------------------------
 function(pypto_jit_arch_env soc out_var)
@@ -738,40 +737,27 @@ function(pypto_jit_arch_env soc out_var)
   endif()
   pypto_soc_to_arch("${soc}" _arch)
   if(NOT _arch)
-    message(WARNING "pypto: no arch mapping for soc '${soc}'; leaving PYPTO_JIT_ARCH unset.")
+    message(WARNING "pypto: no arch mapping for soc '${soc}'; leaving PYPTOPRO_JIT_ARCH unset.")
     return()
   endif()
-  set(${out_var} export PYPTO_JIT_ARCH=${_arch} && PARENT_SCOPE)
+  set(${out_var} export PYPTOPRO_JIT_ARCH=${_arch} && PARENT_SCOPE)
 endfunction()
 
 # ------------------------------------------------------------------------------------------------------------
-# pypto_force_include_tiling(<tiling_srcs>)
-#   The op was marked by enable_pypto_kernel (which set PYPTO_GEN_DIR): force-include the generated headers
-#   into this op's tiling cpp, so the source needs no explicit include. Scoped by file list, so it only hits
-#   this op's tiling sources and does not leak onto other operators sharing ${OPHOST_NAME}_tiling_obj.
-#   Order: *_tilingkey.h first (its template_argument.h pulls <cstdint>), *_tiling.h after (it uses int64_t).
+# pypto_include_tiling_gen()
+#   将 PyPTO codegen 目录(PYPTO_GEN_DIR)以 target_include_directories 的方式注入
+#   tiling 目标的 include 路径。目标级 include 跨目录安全（CMake targets 全局可见），
+#   仅要求 CMake 3.16；tiling 源文件需显式 include 生成的 *_tilingkey.h / *_tiling.h。
+#   替代旧方案（set_source_files_properties + TARGET_DIRECTORY，需 CMake >= 3.18）。
 # ------------------------------------------------------------------------------------------------------------
-function(pypto_force_include_tiling tiling_srcs)
+function(pypto_include_tiling_gen)
   if(NOT DEFINED PYPTO_GEN_DIR)
     return()
   endif()
-  if(CMAKE_VERSION VERSION_LESS 3.18)
-    message(WARNING "pypto force-include of generated tiling headers needs CMake >= 3.18 "
-                    "(TARGET_DIRECTORY); got ${CMAKE_VERSION}. Tiling sources must include them explicitly.")
+  if(NOT TARGET ${OPHOST_NAME}_tiling_obj)
     return()
   endif()
-  file(GLOB _pypto_key_h ${PYPTO_GEN_DIR}/*_tilingkey.h)
-  file(GLOB _pypto_data_h ${PYPTO_GEN_DIR}/*_tiling.h)
-  set(_pypto_force_opts "")
-  foreach(_h ${_pypto_key_h} ${_pypto_data_h})
-    list(APPEND _pypto_force_opts -include ${_h})
-  endforeach()
-  if(NOT _pypto_force_opts)
-    return()
-  endif()
-  set_source_files_properties(${tiling_srcs}
-                              TARGET_DIRECTORY ${OPHOST_NAME}_tiling_obj
-                              PROPERTIES COMPILE_OPTIONS "${_pypto_force_opts}")
+  target_include_directories(${OPHOST_NAME}_tiling_obj PRIVATE ${PYPTO_GEN_DIR})
 endfunction()
 
 function(add_tiling_sources tiling_dir disable_in_opp)
@@ -794,8 +780,9 @@ function(add_tiling_sources tiling_dir disable_in_opp)
 
   if(OPTILING_SRCS)
     add_tiling_modules()
+    # 注入 PyPTO codegen 头文件的 include 路径（CMake 3.16 兼容；源文件显式 include）
+    pypto_include_tiling_gen()
     target_sources(${OPHOST_NAME}_tiling_obj PRIVATE ${OPTILING_SRCS})
-    pypto_force_include_tiling("${OPTILING_SRCS}")
   endif()
 endfunction()
 

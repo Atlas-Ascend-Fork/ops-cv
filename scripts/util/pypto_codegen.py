@@ -41,11 +41,10 @@ def _disable_bytecode_writes():
     sys.dont_write_bytecode = True
 
 
-# soc (ASCEND_COMPUTE_UNIT, lowercased) -> pypto arch token used by PYPTO_JIT_ARCH.
+# soc (ASCEND_COMPUTE_UNIT, lowercased) -> pypto arch token used by PYPTOPRO_JIT_ARCH.
+# pypto-pro only supports the dav-3510 arch; its canonical token is "3510".
 _ARCH_MAP = {
-    "ascend910b": "a3",
-    "ascend910c": "a3",
-    "ascend950": "a5",
+    "ascend950": "3510",
 }
 
 
@@ -83,7 +82,7 @@ def main():
     soc = args.soc.strip().lower()
     arch = _ARCH_MAP.get(soc)
     if arch:
-        os.environ["PYPTO_JIT_ARCH"] = arch  # pypto reads this during compile
+        os.environ["PYPTOPRO_JIT_ARCH"] = arch  # pypto reads this during compile
     else:
         logging.warning("unknown soc '%s', letting pypto auto-detect arch", soc)
 

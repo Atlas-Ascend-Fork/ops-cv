@@ -23,6 +23,11 @@
 │   │   ├── op_graph               # 算子构图相关目录
 │   │   ├── op_host                # 算子信息库、InferShape相关实现
 │   │   └── op_kernel_aicpu        # 算子kernel目录
+│   ├── add_example_pypto          # PyPTO算子名（使用PyPTO DSL开发kernel）
+│   │   ├── CMakeLists.txt         # 算子编译配置文件，保留原文件即可
+│   │   ├── examples               # 算子使用示例
+│   │   ├── op_host                # 算子信息库、Tiling、InferShape相关实现
+│   │   └── op_kernel              # 算子kernel目录（PyPTO DSL编写的Python文件）
 │   ├── CMakeLists.txt             # 算子编译配置文件，保留原文件即可
 │   └── README.md                  # 算子说明文档
 
@@ -34,4 +39,5 @@
 |---|------------------|---|---|
 |  add_example  |  实现两个张量相加功能的算子。  |  算子端到端开发过程参见[AI Core算子开发指南](../docs/zh/develop/aicore_develop_guide.md)  |  调用参见[README](add_example/README.md)  |
 |  add_example_aicpu  |  实现两个张量相加功能的算子。  |  算子端到端开发过程参见[AI CPU算子开发指南](../docs/zh/develop/aicpu_develop_guide.md)  |  调用参见[README](add_example_aicpu/README.md)  |
+|  add_example_pypto  |  实现两个张量相加功能的算子，kernel使用PyPTO DSL开发方式。  |  PyPTO算子接入方式参见[README](add_example_pypto/README.md)  |  调用参见[README](add_example_pypto/README.md)  |
 |  fast_kernel_launch_example  |  实现一种PyTorch场景下快速端到端开发算子的样例。  |  算子端到端开发过程参见[PyTorch算子快速开发指南](./fast_kernel_launch_example/README.md)  |  调用参见[README](fast_kernel_launch_example/README.md)  |

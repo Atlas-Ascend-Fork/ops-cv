@@ -63,8 +63,7 @@ public:
             // opFile.value必须与PyPTO kernel文件名(op_kernel/add_example_pypto.py)以及
             // enable_pypto_kernel(add_example_pypto)保持一致
             .ExtendCfgInfo("opFile.value", "add_example_pypto");
-        // 仅注册ascend950。PyPTO按平台自动推导arch(本toolkit下为a5/dav-c310)，与ascend950匹配；
-        // 若需支持a3(ascend910b/ascend910_93)，需在@pl.jit中显式指定arch并确认kernel指令集可用。
+        // 仅注册ascend950。pypto-pro仅支持dav-3510 arch，与ascend950匹配。
         this->AICore().AddConfig("ascend950", aicoreConfig);
     }
 };

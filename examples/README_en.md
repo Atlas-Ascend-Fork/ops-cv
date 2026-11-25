@@ -25,6 +25,11 @@ This project provides development and invocation samples for AI Core operators a
 │   │   ├── op_graph               # Directory related to operator graph construction
 │   │   ├── op_host                # Operator information library and InferShape implementations
 │   │   └── op_kernel_aicpu        # Operator kernel directory
+│   ├── add_example_pypto          # PyPTO operator name (kernel developed using the PyPTO DSL)
+│   │   ├── CMakeLists.txt         # Operator compilation configuration file. Retain the original file
+│   │   ├── examples               # Operator usage examples
+│   │   ├── op_host                # Operator information library, Tiling, and InferShape implementations
+│   │   └── op_kernel              # Operator kernel directory (Python files written in the PyPTO DSL)
 │   ├── CMakeLists.txt             # Operator compilation configuration file. Retain the original file
 │   └── README.md                  # Operator description document
 
@@ -36,4 +41,5 @@ This project provides development and invocation samples for AI Core operators a
 |---|------------------|---|---|
 |  add_example  |  An operator that adds two tensors.  |  For the end-to-end operator development process, refer to the [AI Core Operator Development Guide](../docs/zh/develop/aicore_develop_guide.md)  |  For the invocation, refer to [README](add_example/README_en.md)  |
 |  add_example_aicpu  |  An operator that adds two tensors.  |  For the end-to-end operator development process, refer to the [AI CPU Operator Development Guide](../docs/zh/develop/aicpu_develop_guide.md)  |  For the invocation, refer to [README](add_example_aicpu/README_en.md)  |
+|  add_example_pypto  |  An operator that adds two tensors, with the kernel developed using the PyPTO DSL.  |  For the PyPTO operator integration method, refer to [README](add_example_pypto/README_en.md)  |  For the invocation, refer to [README](add_example_pypto/README_en.md)  |
 |  fast_kernel_launch_example  |  A sample for fast end-to-end operator development in the PyTorch scenario.  |  For the end-to-end operator development process, refer to the [PyTorch Operator Quick Development Guide](./fast_kernel_launch_example/README_en.md)  |  For the invocation, refer to [README](fast_kernel_launch_example/README_en.md)  |
