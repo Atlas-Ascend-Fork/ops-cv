@@ -312,7 +312,7 @@ static bool CheckTranspose(const aclTensor* input, int64_t channel)
 }
 
 // 空tensor场景kernel不会写输出，用Fill生成全0值tensor，再ViewCopy到输出上（参考roi_align_v2_backward同款处理）
-static const aclTensor* GetOutTensorWithValueZero(aclTensor* output, aclOpExecutor* executor)
+static const aclTensor* GetOutTensorWithValueZero(const aclTensor* output, aclOpExecutor* executor)
 {
     aclScalar* scalar = executor->AllocScalar(0);
     CHECK_RET(scalar != nullptr, nullptr);
