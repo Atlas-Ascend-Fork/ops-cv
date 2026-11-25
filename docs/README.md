@@ -26,6 +26,10 @@ Docs目录结构说明如下：
 │    ├── menu_aclnn_api.md                  # 全量aclnn接口索引文件
 │    ├── op_api_list.md                     # aclnn接口列表
 │    ├── op_list.md                         # 全量算子列表
+├── en                                   # 英文文档，结构与 zh 对应
+│    ├── context                            # 公共文档，如术语、基础概念等
+│    ├── figures                            # 图片目录
+│    ├── op_api_list.md                     # aclnn接口列表（英文版）
 ├── CONTRIBUTING_DOCS.md                 # 文档贡献说明
 ├── QUICKSTART.md                        # 快速入门
 └── README.md
