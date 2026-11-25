@@ -140,7 +140,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>self (aclTensor*)</td>
       <td>Input</td>
       <td>Represents the input tensor for upsampling, corresponding to `self` in the formula.</td>
-      <td><ul><li>Empty tensors are not supported.</li><li>When the data type is DOUBLE, only the NHWC format is supported.</li></ul></td>
+      <td><ul><li>Empty tensors are supported only when the batch (N) dimension is 0; the C, H, and W dimensions must be greater than 0.</li><li>When the data type is DOUBLE, only the NHWC format is supported.</li></ul></td>
       <td>FLOAT32, BFLOAT16, FLOAT16, DOUBLE</td>
       <td>NCHW, NHWC</td>
       <td>4</td>
@@ -190,7 +190,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>out (aclTensor*)</td>
       <td>Output</td>
       <td>Represents the output tensor after sampling, corresponding to `out` in the formula.</td>
-      <td><ul><li>Empty tensors are not supported.</li><li>The data type and data format must be consistent with those of the input `self`.</li><li>When the data type is DOUBLE, only the NHWC format is supported.</li><li>The shape supports only 4 dimensions, and the N and C axes must be consistent with those of the input `self` shape.</li></ul></td>
+      <td><ul><li>Empty tensors are supported only when the batch (N) dimension is 0; the H and W dimensions must be greater than 0.</li><li>The data type and data format must be consistent with those of the input `self`.</li><li>When the data type is DOUBLE, only the NHWC format is supported.</li><li>The shape supports only 4 dimensions, and the N and C axes must be consistent with those of the input `self` shape.</li></ul></td>
       <td>FLOAT32, BFLOAT16, FLOAT16, DOUBLE</td>
       <td>NCHW, NHWC</td>
       <td>4</td>
@@ -250,8 +250,8 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>Internal API validation error, typically caused by input data or attribute specifications being outside the supported range.</td>
     </tr>
     <tr>
-      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="4">161002</td>
+      <td rowspan="5">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="5">161002</td>
       <td>The data type of self is not within the supported range.</td>
     </tr>
     <tr>
@@ -262,6 +262,9 @@ aclnnStatus aclnnUpsampleBilinear2d(
     </tr>
     <tr>
       <td>The value of scalesH or scalesW is negative.</td>
+    </tr>
+    <tr>
+      <td>The C/H/W dimension of self or the H/W dimension of out is 0 (empty tensors are supported only when the batch (N) dimension is 0).</td>
     </tr>
   </tbody></table>
 

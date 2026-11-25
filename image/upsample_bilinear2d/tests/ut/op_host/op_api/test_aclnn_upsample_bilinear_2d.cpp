@@ -308,47 +308,51 @@ TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_ScalesValid002)
     EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }
 
-// check double and NCHW
-// TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_double)
+// double 类型仅支持 NHWC 格式：double + NCHW 应在 CheckFormat 被拦截
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_double_nchw)
+{
+    const double_t scalesH = 2.0;
+    const double_t scalesW = 2.0;
+    bool alignCorners = false;
+    vector<int64_t> inpDims = {1, 3, 3, 3}; // NCHW: N=1, C=3, H=3, W=3
+    vector<int64_t> outputSize = {6, 6};    // 输出 H=6, W=6
+    vector<int64_t> out = {1, 3, 6, 6};     // NCHW: N=1, C=3, H=6, W=6
+
+    auto selfDesc = TensorDesc(inpDims, ACL_DOUBLE, ACL_FORMAT_NCHW);
+    auto outputSizeDesc = IntArrayDesc(outputSize);
+    auto outputDesc = TensorDesc(out, ACL_DOUBLE, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(selfDesc, outputSizeDesc, alignCorners, scalesH, scalesW), // host api输入
+                        OUTPUT(outputDesc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// double 类型仅支持 NHWC 格式：double + NHWC 为合法路径，走 AICPU。
+// 但 UT 环境无 AICPU kernel 注册（TestGetWorkspaceSize 直连真实 GetWorkspaceSize，
+// 无 AICPU mock），l0op::ResizeBilinearV2 的 AICPU 分支 ADD_TO_LAUNCHER_LIST_AICPU
+// 必然失败返回 ACLNN_ERR_INNER_NULLPTR(561103)，正向路径只能在真机环境验证。
+// 与 upsample_nearest3d/trilinear3d/grid_sampler2d 等 AICPU 路径用例的注释处理保持一致。
+// TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_double_nhwc)
 // {
-//     const double_t scalesH = 1.0;
-//     const double_t scalesW = 1.0;
+//     const double_t scalesH = 2.0;
+//     const double_t scalesW = 2.0;
 //     bool alignCorners = false;
-//     vector<int64_t> inpDims = {1, 3, 3, 1};
-//     vector<int64_t> outputSize = {1, 6, 6, 1};
-//     vector<int64_t> out = {1, 6, 6, 1};
-
-//     auto selfDesc = TensorDesc(inpDims, ACL_DOUBLE, ACL_FORMAT_NCHW);
-//     auto outputSizeDesc = IntArrayDesc(outputSize);
-//     auto outputDesc = TensorDesc(out, ACL_DOUBLE, ACL_FORMAT_NCHW);
-
-//     auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
-//         INPUT(selfDesc, outputSizeDesc, alignCorners, scalesW, scalesH),  // host api输入
-//         OUTPUT(outputDesc));
-
-//     uint64_t workspaceSize = 0;
-//     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
-//     EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
-// }
-
-// check double
-// TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_double1)
-// {
-//     const double_t scalesH = 1.0;
-//     const double_t scalesW = 1.0;
-//     bool alignCorners = false;
-//     vector<int64_t> inpDims = {1, 3, 3, 1};
-//     vector<int64_t> outputSize = {1, 6, 6, 1};
-//     vector<int64_t> out = {1, 6, 6, 1};
-
+//     vector<int64_t> inpDims = {1, 3, 3, 1}; // NHWC: N=1, H=3, W=3, C=1
+//     vector<int64_t> outputSize = {6, 6};    // 输出 H=6, W=6
+//     vector<int64_t> out = {1, 6, 6, 1};     // NHWC: N=1, H=6, W=6, C=1
+//
 //     auto selfDesc = TensorDesc(inpDims, ACL_DOUBLE, ACL_FORMAT_NHWC);
 //     auto outputSizeDesc = IntArrayDesc(outputSize);
 //     auto outputDesc = TensorDesc(out, ACL_DOUBLE, ACL_FORMAT_NHWC);
-
+//
 //     auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
-//         INPUT(selfDesc, outputSizeDesc, alignCorners, scalesW, scalesH),  // host api输入
-//         OUTPUT(outputDesc));
-
+//                         INPUT(selfDesc, outputSizeDesc, alignCorners, scalesH, scalesW), // host api输入
+//                         OUTPUT(outputDesc));
+//
 //     uint64_t workspaceSize = 0;
 //     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
 //     EXPECT_EQ(getWorkspaceResult, ACLNN_SUCCESS);
@@ -721,8 +725,8 @@ TEST_F(l2_upsamplebilinear2d_test, Ascend950PR_9599_l2_upsamplebilinear2d_test_0
     EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
 }
 
-// self 为空（H==0 且 W==0）且 out 非空（64 个元素）：第一段应成功，
-// Fill+ViewCopy 会把 out 清零，不能把未初始化内存返回给用户
+// 对标 torch CPU：self 的 H/W 为 0 不支持（torch 报 "Input and output sizes should be greater than 0"）。
+// self 为空（H==0 且 W==0）且 out 非空：第一段应返回 ACLNN_ERR_PARAM_INVALID。
 TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_self_nonempty_out)
 {
     const double_t scales_h = 2.0;
@@ -742,10 +746,10 @@ TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_self_nonempt
 
     uint64_t workspaceSize = 0;
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
-    EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }
 
-// self 仅 W==0、out 非空：第一段应成功，out 清零
+// 对标 torch CPU：self 的 W 为 0 不支持。self 仅 W==0、out 非空：第一段应返回 ACLNN_ERR_PARAM_INVALID。
 TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_self_w_zero_nonempty_out)
 {
     const double_t scales_h = 2.0;
@@ -765,7 +769,7 @@ TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_self_w_zero_
 
     uint64_t workspaceSize = 0;
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
-    EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }
 
 // N==0 时 out 也为空：没有元素可写，早退成功且不需要 workspace
@@ -790,4 +794,73 @@ TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_out)
     aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
     EXPECT_EQ(getWorkspaceResult, ACL_SUCCESS);
     EXPECT_EQ(workspaceSize, 0);
+}
+
+// 对标 torch CPU：self 的 C 为 0 不支持（torch 报 "Non-empty 4D data tensor expected"）。
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_self_c_zero)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {2, 0, 4, 4};
+    vector<int64_t> output_size = {8, 8};
+    vector<int64_t> out = {2, 0, 8, 8};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// 对标 torch CPU：输出 H 为 0 不支持（torch 报 "Input and output sizes should be greater than 0"）。
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_out_h_zero)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {2, 3, 4, 4};
+    vector<int64_t> output_size = {0, 8};
+    vector<int64_t> out = {2, 3, 0, 8};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
+}
+
+// 对标 torch CPU：输出 W 为 0 不支持（torch 报 "Input and output sizes should be greater than 0"）。
+TEST_F(l2_upsamplebilinear2d_test, l2_upsamplebilinear2d_test_empty_out_w_zero)
+{
+    const double_t scales_h = 2.0;
+    const double_t scales_w = 2.0;
+    bool align_corners = false;
+    vector<int64_t> inp_dims = {2, 3, 4, 4};
+    vector<int64_t> output_size = {8, 0};
+    vector<int64_t> out = {2, 3, 8, 0};
+
+    auto self_desc = TensorDesc(inp_dims, ACL_FLOAT, ACL_FORMAT_NCHW);
+    auto output_size_desc = IntArrayDesc(output_size);
+    auto output_desc = TensorDesc(out, ACL_FLOAT, ACL_FORMAT_NCHW);
+
+    auto ut = OP_API_UT(aclnnUpsampleBilinear2d,
+                        INPUT(self_desc, output_size_desc, align_corners, scales_h, scales_w), // host api输入
+                        OUTPUT(output_desc));
+
+    uint64_t workspaceSize = 0;
+    aclnnStatus getWorkspaceResult = ut.TestGetWorkspaceSize(&workspaceSize);
+    EXPECT_EQ(getWorkspaceResult, ACLNN_ERR_PARAM_INVALID);
 }

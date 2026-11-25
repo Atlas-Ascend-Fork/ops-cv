@@ -17,7 +17,6 @@
 #include "aclnn_kernels/transdata.h"
 #include "aclnn_kernels/transpose.h"
 #include "aclnn_kernels/reshape.h"
-#include "level0/fill.h"
 #include "aclnn/aclnn_base.h"
 #include "aclnn_kernels/common/op_error_check.h"
 #include "opdev/common_types.h"
@@ -179,6 +178,36 @@ static bool CheckOutputSize(const aclTensor* out, const aclIntArray* outputSize)
     return true;
 }
 
+// 对标 torch CPU：空 tensor 仅支持 batch(N) 维为 0。
+// 输入 C/H/W 任一为 0、或输出 H/W 任一为 0 均不支持（torch 对应报错：
+// "Non-empty 4D data tensor expected" / "Input and output sizes should be greater than 0"）。
+static bool CheckEmptyTensorDims(const aclTensor* self, const aclTensor* out)
+{
+    const op::Format format = self->GetStorageFormat();
+    const auto selfShape = self->GetViewShape();
+    const auto outShape = out->GetViewShape();
+    // NCHW: {N, C, H, W}; NHWC: {N, H, W, C}
+    const int64_t selfC = (format == op::Format::FORMAT_NHWC) ? selfShape.GetDim(DIM_THREE) : selfShape.GetDim(DIM_ONE);
+    const int64_t selfH = (format == op::Format::FORMAT_NHWC) ? selfShape.GetDim(DIM_ONE) : selfShape.GetDim(DIM_TWO);
+    const int64_t selfW = (format == op::Format::FORMAT_NHWC) ? selfShape.GetDim(DIM_TWO) : selfShape.GetDim(DIM_THREE);
+    const int64_t outH = (format == op::Format::FORMAT_NHWC) ? outShape.GetDim(DIM_ONE) : outShape.GetDim(DIM_TWO);
+    const int64_t outW = (format == op::Format::FORMAT_NHWC) ? outShape.GetDim(DIM_TWO) : outShape.GetDim(DIM_THREE);
+
+    if (selfC == 0 || selfH == 0 || selfW == 0) {
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(
+            "aclnnUpsampleBilinear2d", "self", op::ToString(selfShape).GetString(),
+            "empty tensor is only supported on the batch(N) dimension; the C/H/W dims of self must be greater than 0");
+        return false;
+    }
+    if (outH == 0 || outW == 0) {
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(
+            "aclnnUpsampleBilinear2d", "out", op::ToString(outShape).GetString(),
+            "empty tensor is only supported on the batch(N) dimension; the H/W dims of out must be greater than 0");
+        return false;
+    }
+    return true;
+}
+
 static aclnnStatus CheckParams(const aclTensor* selfRef, const aclTensor* out, const double scalesW,
                                const double scalesH, const aclIntArray* outputSize)
 {
@@ -203,6 +232,9 @@ static aclnnStatus CheckParams(const aclTensor* selfRef, const aclTensor* out, c
 
     // 7.校验outputSize与out的HW轴是否一致
     CHECK_RET(CheckOutputSize(out, outputSize), ACLNN_ERR_PARAM_INVALID);
+
+    // 8.校验空tensor维度：对标竞品，仅支持 batch(N) 维为 0，C/H/W 与输出 H/W 必须大于 0
+    CHECK_RET(CheckEmptyTensorDims(selfRef, out), ACLNN_ERR_PARAM_INVALID);
     return ACLNN_SUCCESS;
 }
 
@@ -393,17 +425,6 @@ static const aclTensor* GoUpsampleBilinear2DAICORE(const aclTensor* selfRefConti
     return castOut;
 }
 
-// self 为空（H==0 或 W==0）时没有有效输入可插值。aclnn 早退不写输出会把未初始化内存返回给用户。
-static const aclTensor* GetOutTensorWithValueZero(aclTensor* out, aclOpExecutor* executor)
-{
-    aclScalar* scalar = executor->AllocScalar(0);
-    auto valueTensor = executor->ConvertToTensor(scalar, out->GetDataType());
-    auto outDims = op::ToShapeVector(out->GetViewShape());
-    aclIntArray* dimArray = executor->AllocIntArray(outDims.data(), outDims.size());
-    auto dimTensor = executor->ConvertToTensor(dimArray, op::DataType::DT_INT64);
-    return l0op::Fill(dimTensor, valueTensor, dimArray, executor);
-}
-
 aclnnStatus aclnnUpsampleBilinear2dGetWorkspaceSize(const aclTensor* self, const aclIntArray* outputSize,
                                                     const bool alignCorners, const double scalesH, const double scalesW,
                                                     aclTensor* out, uint64_t* workspaceSize, aclOpExecutor** executor)
@@ -417,20 +438,10 @@ aclnnStatus aclnnUpsampleBilinear2dGetWorkspaceSize(const aclTensor* self, const
     auto ret = CheckParams(self, out, scalesW, scalesH, outputSize);
     CHECK_RET(ret == ACLNN_SUCCESS, ret);
 
-    // IndexPut算子的空tensor在kernel中支持，对标竞品根据算子实际情况补充
+    // 对标 torch CPU：空 tensor 仅支持 batch(N) 维为 0（CheckEmptyTensorDims 已拦截 C/H/W 与输出 H/W 为 0 的情况），
+    // 此时 self 与 out 均无元素可写，早退成功且无需 workspace。
     if (self->IsEmpty() || out->IsEmpty()) {
-        // 输出为空（如 N==0 或 C==0）时没有元素可写，直接成功。
-        // 输出非空（self 的 H==0 或 W==0，但 out 各维均大于 0）时必须写成全 0，避免把未初始化内存返回给用户。
-        if (out->IsEmpty()) {
-            *workspaceSize = 0;
-            uniqueExecutor.ReleaseTo(executor);
-            return ACLNN_SUCCESS;
-        }
-        auto fillOut = GetOutTensorWithValueZero(out, uniqueExecutor.get());
-        CHECK_RET(fillOut != nullptr, ACLNN_ERR_INNER_NULLPTR);
-        auto viewCopyResult = l0op::ViewCopy(fillOut, out, uniqueExecutor.get());
-        CHECK_RET(viewCopyResult != nullptr, ACLNN_ERR_INNER_NULLPTR);
-        *workspaceSize = uniqueExecutor->GetWorkspaceSize();
+        *workspaceSize = 0;
         uniqueExecutor.ReleaseTo(executor);
         return ACLNN_SUCCESS;
     }

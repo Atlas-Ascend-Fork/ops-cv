@@ -146,7 +146,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>self(aclTensor*)</td>
       <td>输入</td>
       <td>表示进行上采样的输入张量，对应公式中的`self`。</td>
-      <td><ul><li>不支持空Tensor。</li><li>当数据类型为DOUBLE时，仅支持NHWC格式。</li></ul></td>
+      <td><ul><li>支持batch（N）维为0的空Tensor；C、H、W维必须大于0。</li><li>当数据类型为DOUBLE时，仅支持NHWC格式。</li></ul></td>
       <td>FLOAT32、BFLOAT16、FLOAT16、DOUBLE</td>
       <td>NCHW、NHWC</td>
       <td>4</td>
@@ -196,7 +196,7 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>out(aclTensor*)</td>
       <td>输出</td>
       <td>表示采样后的输出张量，对应公式中的`out`。</td>
-      <td><ul><li>不支持空Tensor。</li><li>数据类型和数据格式与入参`self`的数据类型和数据格式保持一致。</li><li>当数据类型为DOUBLE时，仅支持NHWC格式。</li><li>shape仅支持4维，且N轴和C轴与输入self shape的N轴和C轴保持一致。</li></ul></td>
+      <td><ul><li>支持batch（N）维为0的空Tensor；H、W维必须大于0。</li><li>数据类型和数据格式与入参`self`的数据类型和数据格式保持一致。</li><li>当数据类型为DOUBLE时，仅支持NHWC格式。</li><li>shape仅支持4维，且N轴和C轴与输入self shape的N轴和C轴保持一致。</li></ul></td>
       <td>FLOAT32、BFLOAT16、FLOAT16、DOUBLE</td>
       <td>NCHW、NHWC</td>
       <td>4</td>
@@ -256,8 +256,8 @@ aclnnStatus aclnnUpsampleBilinear2d(
       <td>API内部校验错误，通常由于输入数据或属性的规格不在支持的范围之内导致。</td>
     </tr>
     <tr>
-      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="4">161002</td>
+      <td rowspan="5">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="5">161002</td>
       <td>self的数据类型不在支持的范围之内。</td>
     </tr>
     <tr>
@@ -268,6 +268,9 @@ aclnnStatus aclnnUpsampleBilinear2d(
     </tr>
     <tr>
       <td>scalesH或scalesW的值为负值。</td>
+    </tr>
+    <tr>
+      <td>self的C/H/W维或out的H/W维为0（空Tensor仅支持batch（N）维为0）。</td>
     </tr>
   </tbody></table>
 
