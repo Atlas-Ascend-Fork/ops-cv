@@ -34,9 +34,11 @@
 
             ```text
             | Y |   | matrix_r0c0 matrix_r0c1 matrix_r0c2 | | R |        | output_bias_0 |
-            | U | = | matrix_r1c0 matrix_r1c1 matrix_r1c2 | | G | >> 8 + | output_bias_1 |
+            | U | = | matrix_r1c0 matrix_r1c1 matrix_r1c2 | | G |        | output_bias_1 |
             | V |   | matrix_r2c0 matrix_r2c1 matrix_r2c2 | | B |        | output_bias_2 |
             ```
+
+            其中，每行矩阵乘积记为`sum`。RGB转YUV时，CSC按`roundf((2 * sum + 1) / 512)`对每行舍入，再加对应`output_bias`，并将结果裁剪到UINT8范围`[0,255]`。该UINT8 CSC结果随后进入数据类型转换（DTC）。
 
     3. 对数据进行归一化，计算公式如下：
 

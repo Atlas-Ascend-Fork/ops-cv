@@ -36,9 +36,11 @@ English | [简体中文](./README.md)
 
             ```text
             | Y |   | matrix_r0c0 matrix_r0c1 matrix_r0c2 | | R |        | output_bias_0 |
-            | U | = | matrix_r1c0 matrix_r1c1 matrix_r1c2 | | G | >> 8 + | output_bias_1 |
+            | U | = | matrix_r1c0 matrix_r1c1 matrix_r1c2 | | G |        | output_bias_1 |
             | V |   | matrix_r2c0 matrix_r2c1 matrix_r2c2 | | B |        | output_bias_2 |
             ```
+
+            Let `sum` be each matrix row's dot product. For RGB-to-YUV conversion, CSC rounds each row with `roundf((2 * sum + 1) / 512)`, then adds the corresponding `output_bias` and clips the result to the UINT8 range `[0,255]`. This UINT8 CSC result then enters data type conversion (DTC).
 
     3. The operator normalizes the data. The formula is as follows:
 
