@@ -22,6 +22,29 @@
 #include <gtest/gtest.h>
 #include "tiling_context_faker.h"
 #include "tiling_case_executor.h"
+
+#include <map>
+#include <string>
+#include "experiment/metadef/common/util/error_manager/error_manager.h"
+
+namespace {
+namespace errmsg_test {
+inline void ClearErrorMessages() { (void)ErrorManager::GetInstance().GetRawErrorMessages(); }
+
+inline void ExpectFirstError(const std::string& expectedCode, const std::map<std::string, std::string>& expectedArgs)
+{
+    auto errors = ErrorManager::GetInstance().GetRawErrorMessages();
+    ASSERT_FALSE(errors.empty());
+    EXPECT_EQ(errors.front().error_id, expectedCode);
+    for (const auto& expected : expectedArgs) {
+        const auto actual = errors.front().args_map.find(expected.first);
+        ASSERT_NE(actual, errors.front().args_map.end());
+        EXPECT_EQ(actual->second, expected.second);
+    }
+}
+} // namespace errmsg_test
+} // namespace
+
 #include "../../../../op_kernel/arch35/points_in_polygons_tiling_data.h"
 
 using namespace std;
@@ -380,4 +403,79 @@ TEST_F(PointsInPolygonsTiling, nvec_one_polygon_avoids_tiny_parallel_tiles)
     EXPECT_EQ(td->tileNVec, 256);
     EXPECT_EQ(td->totalTiles, 1u);
     EXPECT_EQ(td->realCoreNum, 1u);
+}
+
+// ============================================================================
+// 错误码负向用例: 校验 E*9*** 整改后上报的结构化错误码
+// ============================================================================
+
+TEST_F(PointsInPolygonsTiling, errmsg_dtype_not_float_ez0021)
+{
+    struct CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "PointsInPolygons",
+        {
+            {{{4, 2}, {4, 2}}, ge::DT_FLOAT16, ge::FORMAT_ND}, // points fp16 不合法
+            {{{8, 2}, {8, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{4, 2}, {4, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {}, &compileInfo, "Ascend950", 48, 253952, 4096);
+    errmsg_test::ClearErrorMessages();
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_FALSE(tilingOk);
+    errmsg_test::ExpectFirstError("EZ0021", {{"param_names", "points, polygons"},
+                                             {"op_name", "PointsInPolygons"},
+                                             {"incorrect_dtypes", "DT_FLOAT16, DT_FLOAT"},
+                                             {"reason", "points and polygons must be DT_FLOAT"}});
+}
+
+TEST_F(PointsInPolygonsTiling, errmsg_rank_not_2_ez0013)
+{
+    struct CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara(
+        "PointsInPolygons",
+        {
+            {{{4, 2, 1}, {4, 2, 1}}, ge::DT_FLOAT, ge::FORMAT_ND}, // points rank 3 不合法
+            {{{8, 2}, {8, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{4, 2}, {4, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {}, &compileInfo, "Ascend950", 48, 253952, 4096);
+    errmsg_test::ClearErrorMessages();
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_FALSE(tilingOk);
+    errmsg_test::ExpectFirstError("EZ0013", {{"param_names", "points, polygons"},
+                                             {"op_name", "PointsInPolygons"},
+                                             {"incorrect_dims", "3, 2"},
+                                             {"reason", "rank of points and polygons must be 2"}});
+}
+
+TEST_F(PointsInPolygonsTiling, errmsg_format_not_nd_ez0018)
+{
+    struct CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("PointsInPolygons",
+                                              {
+                                                  {{{4, 2}, {4, 2}}, ge::DT_FLOAT, ge::FORMAT_NCHW}, // 非 ND 不合法
+                                                  {{{8, 2}, {8, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{4, 2}, {4, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {}, &compileInfo, "Ascend950", 48, 253952, 4096);
+    errmsg_test::ClearErrorMessages();
+    TilingInfo tilingInfo;
+    bool tilingOk = ExecuteTiling(tilingContextPara, tilingInfo);
+    EXPECT_FALSE(tilingOk);
+    errmsg_test::ExpectFirstError("EZ0018", {{"param_names", "points, polygons, output"},
+                                             {"op_name", "PointsInPolygons"},
+                                             {"incorrect_formats", "NCHW, ND, ND"},
+                                             {"reason", "all formats must be ND"}});
 }

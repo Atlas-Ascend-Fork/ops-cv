@@ -15,6 +15,12 @@ if(UT_TEST_ALL OR OP_HOST_UT)
         add_modules_ut_sources(UT_NAME ${OP_TILING_MODULE_NAME} MODE PRIVATE DIR ${CMAKE_CURRENT_SOURCE_DIR}/arch35)
     endif()
     add_modules_ut_sources(UT_NAME ${OP_INFERSHAPE_MODULE_NAME} MODE PRIVATE DIR ${CMAKE_CURRENT_SOURCE_DIR})
+    # errmsg negative UT cases read raw messages from liberror_manager.so; guard the
+    # shared cases target the same way as rgb2_yuv422 (see 7adc110e) so single-op UT
+    # mode does not configure-fail when this op is not in ASCEND_OP_NAME.
+    if("${ASCEND_OP_NAME}" STREQUAL "" OR "yolox_bounding_box_decode" IN_LIST ASCEND_OP_NAME)
+        target_link_libraries(${OP_INFERSHAPE_MODULE_NAME}_cases_obj PUBLIC error_manager)
+    endif()
 endif()
 foreach(SUB_DIR ${CURRENT_DIRS})
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${SUB_DIR}/CMakeLists.txt")

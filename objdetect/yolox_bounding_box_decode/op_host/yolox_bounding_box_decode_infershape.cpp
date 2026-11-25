@@ -45,7 +45,10 @@ static ge::graphStatus InferShapeYoloxBoundingBoxDecode(gert::InferShapeContext*
     const auto* bboxesDesc = context->GetInputDesc(IDX_1);
     OP_CHECK_NULL_WITH_CONTEXT(context, bboxesDesc);
     if (priorsDesc->GetDataType() != bboxesDesc->GetDataType()) {
-        OP_LOGE(context, "priors.dtype must equal bboxes.dtype, only same-dtype supported");
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+            context->GetNodeName(), "priors, bboxes",
+            Ops::Base::ToString(priorsDesc->GetDataType()) + ", " + Ops::Base::ToString(bboxesDesc->GetDataType()),
+            "priors.dtype must equal bboxes.dtype, only same-dtype supported");
         return GRAPH_FAILED;
     }
 
@@ -62,21 +65,28 @@ static ge::graphStatus InferShapeYoloxBoundingBoxDecode(gert::InferShapeContext*
     const bool bboxesHasUnknownDim = Ops::Base::IsUnknownShape(*bboxesShape);
 
     if (priorsShape->GetDimNum() != PRIORS_RANK || bboxesShape->GetDimNum() != BBOXES_RANK) {
-        OP_LOGE(context, "priors rank must be 2, bboxes rank must be 3, got %zu/%zu", priorsShape->GetDimNum(),
-                bboxesShape->GetDimNum());
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+            context->GetNodeName(), "priors, bboxes",
+            std::to_string(priorsShape->GetDimNum()) + ", " + std::to_string(bboxesShape->GetDimNum()),
+            "priors rank must be 2 and bboxes rank must be 3");
         return GRAPH_FAILED;
     }
     if (!priorsHasUnknownDim && !bboxesHasUnknownDim && priorsShape->GetDim(0) != bboxesShape->GetDim(1)) {
-        OP_LOGE(context, "priors[0] must equal bboxes[1], got %ld vs %ld", priorsShape->GetDim(0),
-                bboxesShape->GetDim(1));
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+            context->GetNodeName(), "priors, bboxes",
+            Ops::Base::ToString(*priorsShape) + ", " + Ops::Base::ToString(*bboxesShape),
+            "priors.shape[0] must equal bboxes.shape[1]");
         return GRAPH_FAILED;
     }
     if (!priorsHasUnknownDim && priorsShape->GetDim(1) != BOX_PARAM_NUM) {
-        OP_LOGE(context, "last dim must be 4, priors[1]=%ld", priorsShape->GetDim(1));
+        OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "priors",
+                                                  std::to_string(priorsShape->GetDim(1)), "priors.shape[1] must be 4");
         return GRAPH_FAILED;
     }
     if (!bboxesHasUnknownDim && bboxesShape->GetDim(BBOXES_LAST_DIM_INDEX) != BOX_PARAM_NUM) {
-        OP_LOGE(context, "last dim must be 4, bboxes[2]=%ld", bboxesShape->GetDim(BBOXES_LAST_DIM_INDEX));
+        OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "bboxes",
+                                                  std::to_string(bboxesShape->GetDim(BBOXES_LAST_DIM_INDEX)),
+                                                  "bboxes.shape[2] must be 4");
         return GRAPH_FAILED;
     }
 

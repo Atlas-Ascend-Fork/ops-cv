@@ -26,13 +26,17 @@ static ge::graphStatus InferDataTypeForPointsInPolygons(gert::InferDataTypeConte
     const ge::DataType polygonsDataType = context->GetInputDataType(1);
 
     if (pointsDataType != ge::DT_FLOAT || polygonsDataType != ge::DT_FLOAT) {
-        OP_LOGE("PointsInPolygons", "dtype must be float32, got points=%d, polygons=%d",
-                static_cast<int32_t>(pointsDataType), static_cast<int32_t>(polygonsDataType));
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+            "PointsInPolygons", "points, polygons",
+            Ops::Base::ToString(pointsDataType) + ", " + Ops::Base::ToString(polygonsDataType),
+            "points and polygons must be DT_FLOAT");
         return ge::GRAPH_FAILED;
     }
     if (pointsDataType != polygonsDataType) {
-        OP_LOGE("PointsInPolygons", "dtype mismatch: points=%d, polygons=%d", static_cast<int32_t>(pointsDataType),
-                static_cast<int32_t>(polygonsDataType));
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+            "PointsInPolygons", "points, polygons",
+            Ops::Base::ToString(pointsDataType) + ", " + Ops::Base::ToString(polygonsDataType),
+            "points and polygons must have the same dtype");
         return ge::GRAPH_FAILED;
     }
 

@@ -47,24 +47,24 @@ static ge::graphStatus ValidateDtypes(gert::TilingContext* context)
     const auto isSupported = [](ge::DataType dtype) { return dtype == ge::DT_FLOAT16 || dtype == ge::DT_FLOAT; };
 
     OP_CHECK_IF(!isSupported(dyDtype),
-                OP_LOGE(context, "Input dy has dtype %d; allowed dtypes are DT_FLOAT16 and DT_FLOAT",
-                        static_cast<int32_t>(dyDtype)),
+                OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "dy", Ops::Base::ToString(dyDtype).c_str(),
+                                          "DT_FLOAT16 or DT_FLOAT"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(!isSupported(bboxesDtype),
-                OP_LOGE(context, "Input bboxes has dtype %d; allowed dtypes are DT_FLOAT16 and DT_FLOAT",
-                        static_cast<int32_t>(bboxesDtype)),
+                OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "bboxes", Ops::Base::ToString(bboxesDtype).c_str(),
+                                          "DT_FLOAT16 or DT_FLOAT"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(!isSupported(gtboxesDtype),
-                OP_LOGE(context, "Input gtboxes has dtype %d; allowed dtypes are DT_FLOAT16 and DT_FLOAT",
-                        static_cast<int32_t>(gtboxesDtype)),
+                OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "gtboxes", Ops::Base::ToString(gtboxesDtype).c_str(),
+                                          "DT_FLOAT16 or DT_FLOAT"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        dyDtype != bboxesDtype || dyDtype != gtboxesDtype,
-        OP_LOGE(context,
-                "Inputs dy/bboxes/gtboxes have dtypes %d/%d/%d; allowed combinations are all DT_FLOAT16 or "
-                "all DT_FLOAT",
-                static_cast<int32_t>(dyDtype), static_cast<int32_t>(bboxesDtype), static_cast<int32_t>(gtboxesDtype)),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(dyDtype != bboxesDtype || dyDtype != gtboxesDtype,
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+                    context->GetNodeName(), "dy, bboxes, gtboxes",
+                    Ops::Base::ToString(dyDtype) + ", " + Ops::Base::ToString(bboxesDtype) + ", " +
+                        Ops::Base::ToString(gtboxesDtype),
+                    "dtypes of dy, bboxes and gtboxes must be identical and all DT_FLOAT16 or all DT_FLOAT"),
+                return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 

@@ -63,8 +63,9 @@ static ge::graphStatus InferShapeYuv4442yuv422(gert::InferShapeContext* context)
     int64_t height = xShape->GetDim(0);
     int64_t width = xShape->GetDim(1);
     if ((height < 0 && height != ge::UNKNOWN_DIM) || (width < 0 && width != ge::UNKNOWN_DIM)) {
-        OP_LOGE(context->GetNodeName(), "the H/W dims of x must be non-negative or unknown(-1), but got H=%ld, W=%ld",
-                height, width);
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "x",
+                                              std::to_string(height) + ", " + std::to_string(width),
+                                              "the H/W dims of x must be non-negative or unknown(-1)");
         return GRAPH_FAILED;
     }
 
