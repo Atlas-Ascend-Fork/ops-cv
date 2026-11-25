@@ -57,16 +57,21 @@ static ge::graphStatus ValidateInputShapes(gert::TilingContext* context, const g
 {
     // 合法性校验（spec shape_constraints / boundary_conditions）
     OP_CHECK_IF(boxShape.GetDimNum() != 3,
-                OP_LOGE(context, "ToAbsoluteBBox: normalized_boxes rank must be 3, got %zu", boxShape.GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPEDIM_WITH_REASON(context->GetNodeName(), "normalized_boxes",
+                                                         std::to_string(boxShape.GetDimNum()), "rank must be 3"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(hwShape.GetDimNum() != 1 || hwShape.GetDim(0) != SHAPE_HW_LEN,
-                OP_LOGE(context, "ToAbsoluteBBox: shape_hw must be shape (4,)"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "shape_hw", Ops::Base::ToString(hwShape),
+                                                      "shape_hw must be shape (4,)"),
+                return ge::GRAPH_FAILED);
 
     // 坐标维必须 == 4（false: 末轴 shape[2]；true: 次轴 shape[1]）；num 为另一非坐标非 batch 维
     *coordAxis = reversedBox ? boxShape.GetDim(1) : boxShape.GetDim(2);
     *num = reversedBox ? boxShape.GetDim(2) : boxShape.GetDim(1);
     OP_CHECK_IF(*coordAxis != COORD_AXIS_LEN,
-                OP_LOGE(context, "ToAbsoluteBBox: coord axis must be 4, got %ld", *coordAxis), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "normalized_boxes",
+                                                          std::to_string(*coordAxis), "coord axis must be 4"),
+                return ge::GRAPH_FAILED);
 
     return ge::GRAPH_SUCCESS;
 }
@@ -166,7 +171,8 @@ static ge::graphStatus ToAbsoluteBBoxTilingFunc(gert::TilingContext* context)
     OP_CHECK_NULL_WITH_CONTEXT(context, inputDesc);
     ge::DataType dtype = inputDesc->GetDataType();
     OP_CHECK_IF(dtype != ge::DT_FLOAT16 && dtype != ge::DT_FLOAT,
-                OP_LOGE(context, "ToAbsoluteBBox: unsupported dtype %d", static_cast<int>(dtype)),
+                OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "normalized_boxes",
+                                          Ops::Base::ToString(dtype).c_str(), "DT_FLOAT16 or DT_FLOAT"),
                 return ge::GRAPH_FAILED);
 
     auto attrs = context->GetAttrs();
@@ -181,7 +187,9 @@ static ge::graphStatus ToAbsoluteBBoxTilingFunc(gert::TilingContext* context)
                 OP_LOGE(context, "ValidateInputShapes error"), return ge::GRAPH_FAILED);
 
     int64_t dim0 = boxShape.GetShapeSize();
-    OP_CHECK_IF(dim0 <= 0, OP_LOGE(context, "ToAbsoluteBBox: empty tensor is not supported (shape_mismatch)"),
+    OP_CHECK_IF(dim0 <= 0,
+                OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(context->GetNodeName(), "normalized_boxes",
+                                                          std::to_string(dim0), "empty tensor is not supported"),
                 return ge::GRAPH_FAILED);
 
     // 4. 计算 Tiling 参数

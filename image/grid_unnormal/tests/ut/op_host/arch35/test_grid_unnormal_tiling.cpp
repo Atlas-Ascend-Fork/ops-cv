@@ -12,6 +12,29 @@
 #include <gtest/gtest.h>
 #include "tiling_context_faker.h"
 #include "tiling_case_executor.h"
+
+#include <map>
+#include <string>
+#include "experiment/metadef/common/util/error_manager/error_manager.h"
+
+namespace {
+namespace errmsg_test {
+inline void ClearErrorMessages() { (void)ErrorManager::GetInstance().GetRawErrorMessages(); }
+
+inline void ExpectFirstError(const std::string& expectedCode, const std::map<std::string, std::string>& expectedArgs)
+{
+    auto errors = ErrorManager::GetInstance().GetRawErrorMessages();
+    ASSERT_FALSE(errors.empty());
+    EXPECT_EQ(errors.front().error_id, expectedCode);
+    for (const auto& expected : expectedArgs) {
+        const auto actual = errors.front().args_map.find(expected.first);
+        ASSERT_NE(actual, errors.front().args_map.end());
+        EXPECT_EQ(actual->second, expected.second);
+    }
+}
+} // namespace errmsg_test
+} // namespace
+
 #include "any_value.h"
 #include "../../../../op_kernel/arch35/grid_unnormal_tiling_data.h"
 
@@ -335,4 +358,28 @@ TEST_F(GridUnnormalTiling, tiling_rejects_zero_ub)
                                               {}, &compileInfo, "Ascend950", 48, 0, 4096);
     TilingInfo info;
     EXPECT_FALSE(ExecuteTiling(tilingContextPara, info));
+}
+
+// grid rank != 4 → shape error
+TEST_F(GridUnnormalTiling, errmsg_grid_rank_wrong)
+{
+    struct GridUnnormalCompileInfo {
+    } compileInfo;
+    // rank-3 grid: the check reports EZ0010 (SHAPE family)
+    gert::TilingContextPara tilingContextPara("GridUnnormal",
+                                              {
+                                                  {{{2, 4, 4}, {2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{2, 4, 4}, {2, 4, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{2, 4}, {2, 4}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                                  {{{2, 4}, {2, 4}}, ge::DT_INT32, ge::FORMAT_ND},
+                                              },
+                                              {}, &compileInfo, "Ascend950", 48, 262144, 4096);
+    errmsg_test::ClearErrorMessages();
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(tilingContextPara, info));
+    auto errors = ErrorManager::GetInstance().GetRawErrorMessages();
+    ASSERT_FALSE(errors.empty());
+    EXPECT_EQ(errors.front().error_id, std::string("EZ0010"));
 }

@@ -15,5 +15,11 @@ if(UT_TEST_ALL OR OP_HOST_UT)
 
     if("${ASCEND_COMPUTE_UNIT}" STREQUAL "ascend950")
         add_modules_ut_sources(UT_NAME ${OP_TILING_MODULE_NAME} MODE PRIVATE DIR ${CMAKE_CURRENT_SOURCE_DIR}/arch35)
+        # errmsg negative UT cases (arch35 only) read raw messages from liberror_manager.so;
+        # the tiling cases target is created just above inside this branch, so the link is
+        # self-consistent for any SoC / ASCEND_OP_NAME combination.
+        if("${ASCEND_OP_NAME}" STREQUAL "" OR "g_io_u_grad" IN_LIST ASCEND_OP_NAME)
+            target_link_libraries(${OP_TILING_MODULE_NAME}_cases_obj PUBLIC error_manager)
+        endif()
     endif()
 endif()

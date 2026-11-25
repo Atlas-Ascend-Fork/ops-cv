@@ -14,6 +14,29 @@
 #include <gtest/gtest.h>
 #include "tiling_context_faker.h"
 #include "tiling_case_executor.h"
+
+#include <map>
+#include <string>
+#include "experiment/metadef/common/util/error_manager/error_manager.h"
+
+namespace {
+namespace errmsg_test {
+inline void ClearErrorMessages() { (void)ErrorManager::GetInstance().GetRawErrorMessages(); }
+
+inline void ExpectFirstError(const std::string& expectedCode, const std::map<std::string, std::string>& expectedArgs)
+{
+    auto errors = ErrorManager::GetInstance().GetRawErrorMessages();
+    ASSERT_FALSE(errors.empty());
+    EXPECT_EQ(errors.front().error_id, expectedCode);
+    for (const auto& expected : expectedArgs) {
+        const auto actual = errors.front().args_map.find(expected.first);
+        ASSERT_NE(actual, errors.front().args_map.end());
+        EXPECT_EQ(actual->second, expected.second);
+    }
+}
+} // namespace errmsg_test
+} // namespace
+
 #include "../../../../op_kernel/arch35/g_io_u_grad_tiling_data.h"
 
 using namespace std;
@@ -239,4 +262,31 @@ TEST_F(GIoUGradTiling, g_io_u_grad_neg_gtboxes_bf16)
 TEST_F(GIoUGradTiling, g_io_u_grad_neg_mixed_float16_float)
 {
     ExecuteDtypeTestCase(ge::DT_FLOAT16, ge::DT_FLOAT, ge::DT_FLOAT16, ge::GRAPH_FAILED);
+}
+
+// ============================================================================
+// 错误码负向用例: 校验 E*9*** 整改后上报的结构化错误码
+// ============================================================================
+
+// 单输入 dtype 非法 → EZ0019
+TEST_F(GIoUGradTiling, errmsg_dy_dtype_unsupported_ez0019)
+{
+    errmsg_test::ClearErrorMessages();
+    ExecuteDtypeTestCase(ge::DT_INT32, ge::DT_FLOAT, ge::DT_FLOAT, ge::GRAPH_FAILED);
+    errmsg_test::ExpectFirstError("EZ0019", {{"param_name", "dy"},
+                                             {"op_name", "GIoUGrad"},
+                                             {"incorrect_dtype", "DT_INT32"},
+                                             {"correct_dtype", "DT_FLOAT16 or DT_FLOAT"}});
+}
+
+// 输入 dtype 组合不一致 → EZ0021
+TEST_F(GIoUGradTiling, errmsg_dtype_combination_mismatch_ez0021)
+{
+    errmsg_test::ClearErrorMessages();
+    ExecuteDtypeTestCase(ge::DT_FLOAT16, ge::DT_FLOAT, ge::DT_FLOAT16, ge::GRAPH_FAILED);
+    errmsg_test::ExpectFirstError("EZ0021", {{"param_names", "dy, bboxes, gtboxes"},
+                                             {"op_name", "GIoUGrad"},
+                                             {"incorrect_dtypes", "DT_FLOAT16, DT_FLOAT, DT_FLOAT16"},
+                                             {"reason", "dtypes of dy, bboxes and gtboxes must be identical and all "
+                                                        "DT_FLOAT16 or all DT_FLOAT"}});
 }

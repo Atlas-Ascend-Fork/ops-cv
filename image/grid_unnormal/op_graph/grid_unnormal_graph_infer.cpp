@@ -49,13 +49,14 @@ static ge::graphStatus InferDataTypeGridUnnormal(gert::InferDataTypeContext* con
     const ge::DataType gridDtype = context->GetInputDataType(kInputGridIdx);
     const ge::DataType assistDtype = context->GetInputDataType(kInputAssistIdx);
     if (gridDtype != assistDtype) {
-        OP_LOGE(context->GetNodeName(), "grid and assist must have the same dtype, grid=%d, assist=%d",
-                static_cast<int32_t>(gridDtype), static_cast<int32_t>(assistDtype));
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "grid, assist",
+                                               Ops::Base::ToString(gridDtype) + ", " + Ops::Base::ToString(assistDtype),
+                                               "grid and assist must have the same dtype");
         return GRAPH_FAILED;
     }
     if (!IsSupportedGridDtype(gridDtype)) {
-        OP_LOGE(context->GetNodeName(), "grid dtype must be float16 or float32, grid=%d",
-                static_cast<int32_t>(gridDtype));
+        OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "grid", Ops::Base::ToString(gridDtype).c_str(),
+                                  "DT_FLOAT16 or DT_FLOAT");
         return GRAPH_FAILED;
     }
     if (context->SetOutputDataType(kOutputDiffIdx, gridDtype) != ge::GRAPH_SUCCESS) {

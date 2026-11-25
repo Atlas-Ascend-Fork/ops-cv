@@ -49,8 +49,9 @@ static ge::graphStatus TilingFuncPointsInPolygons(gert::TilingContext* context)
     ge::DataType pointsDtype = pointsDesc->GetDataType();
     ge::DataType polygonsDtype = polygonsDesc->GetDataType();
     if (pointsDtype != ge::DT_FLOAT || polygonsDtype != ge::DT_FLOAT) {
-        OP_LOGE(opName, "dtype must be float32, got points=%d, polygons=%d", static_cast<int32_t>(pointsDtype),
-                static_cast<int32_t>(polygonsDtype));
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+            opName, "points, polygons", Ops::Base::ToString(pointsDtype) + ", " + Ops::Base::ToString(polygonsDtype),
+            "points and polygons must be DT_FLOAT");
         return ge::GRAPH_FAILED;
     }
 
@@ -62,16 +63,21 @@ static ge::graphStatus TilingFuncPointsInPolygons(gert::TilingContext* context)
         outputFmt = outputDesc->GetStorageFormat();
     }
     if (pointsFmt != ge::FORMAT_ND || polygonsFmt != ge::FORMAT_ND || outputFmt != ge::FORMAT_ND) {
-        OP_LOGE(opName, "format must be ND, got points=%d, polygons=%d, output=%d", static_cast<int32_t>(pointsFmt),
-                static_cast<int32_t>(polygonsFmt), static_cast<int32_t>(outputFmt));
+        OP_LOGE_FOR_INVALID_FORMATS_WITH_REASON(opName, "points, polygons, output",
+                                                Ops::Base::ToString(pointsFmt) + ", " +
+                                                    Ops::Base::ToString(polygonsFmt) + ", " +
+                                                    Ops::Base::ToString(outputFmt),
+                                                "all formats must be ND");
         return ge::GRAPH_FAILED;
     }
 
     const gert::Shape& ptsDims = pointsShp->GetStorageShape();
     const gert::Shape& plyDims = polygonsShp->GetStorageShape();
     if (ptsDims.GetDimNum() != 2 || plyDims.GetDimNum() != 2) {
-        OP_LOGE(opName, "shape_mismatch: rank must be 2, got points=%zu, polygons=%zu", ptsDims.GetDimNum(),
-                plyDims.GetDimNum());
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+            opName, "points, polygons",
+            std::to_string(ptsDims.GetDimNum()) + ", " + std::to_string(plyDims.GetDimNum()),
+            "rank of points and polygons must be 2");
         return ge::GRAPH_FAILED;
     }
 
@@ -80,7 +86,9 @@ static ge::graphStatus TilingFuncPointsInPolygons(gert::TilingContext* context)
 
     // Tiling consumes concrete runtime shapes; dynamic placeholders belong to InferShape.
     if (N < 0 || M < 0 || ptsDims.GetDim(1) < 0 || plyDims.GetDim(0) < 0) {
-        OP_LOGE(opName, "runtime dimensions must be nonnegative");
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(opName, "points, polygons",
+                                               Ops::Base::ToString(ptsDims) + ", " + Ops::Base::ToString(plyDims),
+                                               "runtime dimensions must be nonnegative");
         return ge::GRAPH_FAILED;
     }
     bool isEmpty = (N == 0 || M == 0);
@@ -95,11 +103,13 @@ static ge::graphStatus TilingFuncPointsInPolygons(gert::TilingContext* context)
 
     if (!isEmpty) {
         if (ptsDims.GetDim(1) != 2) {
-            OP_LOGE(opName, "shape_mismatch: points.shape[1] must be 2, got %ld", ptsDims.GetDim(1));
+            OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(opName, "points", std::to_string(ptsDims.GetDim(1)),
+                                                      "points.shape[1] must be 2");
             return ge::GRAPH_FAILED;
         }
         if (plyDims.GetDim(0) != 8) {
-            OP_LOGE(opName, "shape_mismatch: polygons.shape[0] must be 8, got %ld", plyDims.GetDim(0));
+            OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(opName, "polygons", std::to_string(plyDims.GetDim(0)),
+                                                      "polygons.shape[0] must be 8");
             return ge::GRAPH_FAILED;
         }
     }
@@ -111,7 +121,9 @@ static ge::graphStatus TilingFuncPointsInPolygons(gert::TilingContext* context)
         // arch35 GM DMA row strides are encoded in 40 bits (in bytes).
         constexpr int64_t maxRowElements = ((1LL << 40) - 1) / sizeof(float);
         if (N > maxElements / 2 || M > maxElements / 8 || N > maxElements / M || M > maxRowElements) {
-            OP_LOGE(opName, "shape exceeds the supported tensor size or DMA stride range");
+            OP_LOGE_FOR_INVALID_SHAPESIZE_WITH_REASON(opName, "points, polygons",
+                                                      std::to_string(N) + ", " + std::to_string(M),
+                                                      "shape exceeds the supported tensor size or DMA stride range");
             return ge::GRAPH_FAILED;
         }
         if (ubSize > std::numeric_limits<uint32_t>::max()) {

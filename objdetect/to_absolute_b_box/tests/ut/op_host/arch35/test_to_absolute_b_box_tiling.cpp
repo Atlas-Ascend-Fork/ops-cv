@@ -28,6 +28,29 @@
 #include <gtest/gtest.h>
 #include "tiling_context_faker.h"
 #include "tiling_case_executor.h"
+
+#include <map>
+#include <string>
+#include "experiment/metadef/common/util/error_manager/error_manager.h"
+
+namespace {
+namespace errmsg_test {
+inline void ClearErrorMessages() { (void)ErrorManager::GetInstance().GetRawErrorMessages(); }
+
+inline void ExpectFirstError(const std::string& expectedCode, const std::map<std::string, std::string>& expectedArgs)
+{
+    auto errors = ErrorManager::GetInstance().GetRawErrorMessages();
+    ASSERT_FALSE(errors.empty());
+    EXPECT_EQ(errors.front().error_id, expectedCode);
+    for (const auto& expected : expectedArgs) {
+        const auto actual = errors.front().args_map.find(expected.first);
+        ASSERT_NE(actual, errors.front().args_map.end());
+        EXPECT_EQ(actual->second, expected.second);
+    }
+}
+} // namespace errmsg_test
+} // namespace
+
 #include "../../../../op_kernel/arch35/to_absolute_b_box_tiling_data.h"
 
 namespace ToAbsoluteBBoxUT {
@@ -289,4 +312,50 @@ TEST_F(ToAbsoluteBBoxTiling, tiling_reject_invalid_dtype)
     EXPECT_FALSE(ExecuteTiling(MakePara({2, 8, 4}, false, 64, 262144, ge::DT_INT32), info));
 }
 
+} // namespace ToAbsoluteBBoxUT
+
+// ============================================================================
+// 错误码负向用例: 校验 E*9*** 整改后上报的结构化错误码
+// ============================================================================
+
+namespace ToAbsoluteBBoxUT {
+
+// normalized_boxes rank != 3 → EZ0012
+TEST_F(ToAbsoluteBBoxTiling, errmsg_box_rank_not_3_ez0012)
+{
+    auto para = MakePara({2, 8}, false); // rank 2 不合法
+    errmsg_test::ClearErrorMessages();
+    TilingInfo info;
+    ASSERT_FALSE(ExecuteTiling(para, info));
+    errmsg_test::ExpectFirstError("EZ0012", {{"param_name", "normalized_boxes"},
+                                             {"op_name", "ToAbsoluteBBox"},
+                                             {"incorrect_dim", "2"},
+                                             {"reason", "rank must be 3"}});
+}
+
+// dtype 非法 → EZ0019
+TEST_F(ToAbsoluteBBoxTiling, errmsg_dtype_unsupported_ez0019)
+{
+    auto para = MakePara({2, 8, 4}, false, 64, 262144, ge::DT_INT32); // dtype 非法
+    errmsg_test::ClearErrorMessages();
+    TilingInfo info;
+    ASSERT_FALSE(ExecuteTiling(para, info));
+    errmsg_test::ExpectFirstError("EZ0019", {{"param_name", "normalized_boxes"},
+                                             {"op_name", "ToAbsoluteBBox"},
+                                             {"incorrect_dtype", "DT_INT32"},
+                                             {"correct_dtype", "DT_FLOAT16 or DT_FLOAT"}});
+}
+
+// 空 tensor → EZ0015
+TEST_F(ToAbsoluteBBoxTiling, errmsg_empty_tensor_ez0015)
+{
+    auto para = MakePara({0, 8, 4}, false); // dim0 = 0 → 空 tensor
+    errmsg_test::ClearErrorMessages();
+    TilingInfo info;
+    ASSERT_FALSE(ExecuteTiling(para, info));
+    errmsg_test::ExpectFirstError("EZ0015", {{"param_name", "normalized_boxes"},
+                                             {"op_name", "ToAbsoluteBBox"},
+                                             {"incorrect_size", "0"},
+                                             {"reason", "empty tensor is not supported"}});
+}
 } // namespace ToAbsoluteBBoxUT

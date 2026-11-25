@@ -78,20 +78,25 @@ static ge::graphStatus GetShapeInfo(gert::TilingContext* context, int64_t& h, in
     h = storageShape.GetDim(0);
     w = storageShape.GetDim(1);
     if (h < 0 || w < 0) {
-        OP_LOGE(context, "the H/W dims of x must be non-negative in tiling, but got H=%ld, W=%ld", h, w);
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "x", std::to_string(h) + ", " + std::to_string(w),
+                                              "the H/W dims of x must be non-negative in tiling");
         return ge::GRAPH_FAILED;
     }
 
     int64_t wPairs = w / 2;
     if (wPairs > 0 && h > std::numeric_limits<int64_t>::max() / wPairs) {
-        OP_LOGE(context, "totalPairs overflow: H=%ld, W=%ld, wPairs=%ld", h, w, wPairs);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x",
+                                              "H=" + std::to_string(h) + ", W=" + std::to_string(w),
+                                              "the derived totalPairs overflows int64");
         return ge::GRAPH_FAILED;
     }
     totalPairs = h * wPairs;
     // Odd-width processing appends one orphan item per row in the kernel.
     // Keep the derived total representable before serializing tiling data.
     if ((w & 1) != 0 && h > std::numeric_limits<int64_t>::max() - totalPairs) {
-        OP_LOGE(context, "totalPairsAll overflow: H=%ld, W=%ld, totalPairs=%ld", h, w, totalPairs);
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "x",
+                                              "H=" + std::to_string(h) + ", W=" + std::to_string(w),
+                                              "the odd-width derived pair count overflows int64");
         return ge::GRAPH_FAILED;
     }
 

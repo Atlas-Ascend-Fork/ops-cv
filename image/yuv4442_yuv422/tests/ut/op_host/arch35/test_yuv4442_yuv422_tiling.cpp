@@ -15,6 +15,29 @@
 #include <gtest/gtest.h>
 #include "tiling_context_faker.h"
 #include "tiling_case_executor.h"
+
+#include <map>
+#include <string>
+#include "experiment/metadef/common/util/error_manager/error_manager.h"
+
+namespace {
+namespace errmsg_test {
+inline void ClearErrorMessages() { (void)ErrorManager::GetInstance().GetRawErrorMessages(); }
+
+inline void ExpectFirstError(const std::string& expectedCode, const std::map<std::string, std::string>& expectedArgs)
+{
+    auto errors = ErrorManager::GetInstance().GetRawErrorMessages();
+    ASSERT_FALSE(errors.empty());
+    EXPECT_EQ(errors.front().error_id, expectedCode);
+    for (const auto& expected : expectedArgs) {
+        const auto actual = errors.front().args_map.find(expected.first);
+        ASSERT_NE(actual, errors.front().args_map.end());
+        EXPECT_EQ(actual->second, expected.second);
+    }
+}
+} // namespace errmsg_test
+} // namespace
+
 #include "../../../../op_kernel/arch35/yuv4442_yuv422_tiling_data.h"
 
 using namespace std;
@@ -307,4 +330,25 @@ TEST_F(Yuv4442yuv422Tiling, yuv4442_yuv422_odd_width_representable)
     const string expectTilingData = "2 2 3 1 ";
     const std::vector<size_t> expectWorkspaces = {16777216};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// Negative case: assert the first structured error id reported by error_manager.
+TEST_F(Yuv4442yuv422Tiling, errmsg_h_dim_negative_ez0009)
+{
+    struct Yuv4442yuv422CompileInfo {
+    } compileInfo;
+    gert::TilingContextPara tilingContextPara("YUV4442YUV422",
+                                              {
+                                                  {{{-1, 4, 4}, {-1, 4, 4}}, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {{{2, 4, 2}, {2, 4, 2}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                              },
+                                              {}, &compileInfo, "Ascend950", 64, 262144, 4096);
+    errmsg_test::ClearErrorMessages();
+    ExecuteTestCase(tilingContextPara, ge::GRAPH_FAILED);
+    errmsg_test::ExpectFirstError("EZ0009", {{"param_name", "x"},
+                                             {"op_name", "YUV4442YUV422"},
+                                             {"incorrect_shape", "-1, 4"},
+                                             {"reason", "the H/W dims of x must be non-negative in tiling"}});
 }
