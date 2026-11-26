@@ -58,6 +58,24 @@ struct Dilation2DBackpropFilterCompileInfo {
     std::string _pattern;
 };
 
+// Every position in this bounded shape has the same sole evaluated tap.
+// The kernel retains the original lowest-value/NaN fallback to tap zero.
+static bool SingleSampleGeometry(int64_t batch, int64_t depth, int64_t filterH, int64_t filterW, int64_t outH,
+                                 int64_t outW, int64_t padTop, int64_t padLeft, int64_t padInputH, int64_t padInputW,
+                                 int64_t rateH, int64_t rateW, int64_t& firstH, int64_t& firstW)
+{
+    if (batch <= 0 || batch > 4096 || depth <= 0 || depth > INT32_MAX / batch || filterH <= 0 || filterW <= 0 ||
+        filterH > 32 || filterW > 32 || filterH * filterW > 32 || outH != 1 || outW != 1 || padTop < 0 || padLeft < 0 ||
+        padTop > INT32_MAX || padLeft > INT32_MAX || padInputH <= 0 || padInputW <= 0 || padInputH > INT32_MAX ||
+        padInputW > INT32_MAX || rateH <= 0 || rateW <= 0 || rateH > INT32_MAX || rateW > INT32_MAX)
+        return false;
+    firstH = Ops::Base::CeilDiv(padTop, rateH);
+    firstW = Ops::Base::CeilDiv(padLeft, rateW);
+    const int64_t lastH = std::min(filterH - 1, (padInputH - 1 + padTop) / rateH);
+    const int64_t lastW = std::min(filterW - 1, (padInputW - 1 + padLeft) / rateW);
+    return firstH < filterH && firstW < filterW && firstH == lastH && firstW == lastW;
+}
+
 // ============================================================================
 // Platform info retrieval
 // ============================================================================
@@ -79,21 +97,48 @@ static ge::graphStatus GetPlatformInfo(gert::TilingContext* context, uint64_t& u
 // v2.1: userWorkspaceSize = needCoreNum × perCoreBufElems × sizeof(float)
 // v2.2: userWorkspaceSize = needCoreNum × 1024 × perCoreBufElems × sizeof(float)
 // ============================================================================
-static ge::graphStatus GetWorkspaceSize(gert::TilingContext* context, int32_t needCoreNum, int64_t perCoreBufElems)
+static ge::graphStatus GetWorkspaceSize(gert::TilingContext* context, int32_t needCoreNum, int64_t scratchStrideElems,
+                                        int64_t partialsElems, bool routeDense, bool routeDenseScatter,
+                                        int64_t totalElements, int64_t filterSize, bool emptyCase,
+                                        int64_t perCoreBufElems)
 {
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
     uint64_t sysWorkspaceSize = ascendcPlatform.GetLibApiWorkSpaceSize();
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
     OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
 
-    // v2.2: user workspace = perThreadBufs + perCoreBufs
-    // perThreadBufs = needCoreNum × THREAD_NUM × perCoreBufElems × sizeof(float)
-    // perCoreBufs = needCoreNum × perCoreBufElems × sizeof(float)
     constexpr int64_t THREAD_NUM_TILING = 1024;
-    int64_t perThreadBufSize = static_cast<int64_t>(needCoreNum) * THREAD_NUM_TILING * perCoreBufElems *
-                               FLOAT_SIZE_BYTES;
-    int64_t perCoreBufSize = static_cast<int64_t>(needCoreNum) * perCoreBufElems * FLOAT_SIZE_BYTES;
-    int64_t userWorkspaceSize = perThreadBufSize + perCoreBufSize;
+    int64_t userWorkspaceSize = 0;
+    if (emptyCase) {
+        // v5.0 (composed-shape-routed-v3, f5): empty fast path — system workspace only
+        // (sysWs + 0 user bytes): the empty kernel only zero-fills y and never touches
+        // the workspace (baseline empty-path parity).
+        userWorkspaceSize = 0;
+    } else if (routeDenseScatter) {
+        // v6.0 (r1_dense_keyarb_v1): dense-scatter route — posBuf (int32 per
+        // element) + per-core target partials (float per (core, target)):
+        //   4 × totalElements + 4 × needCoreNum × filterSize
+        userWorkspaceSize = totalElements * FLOAT_SIZE_BYTES +
+                            static_cast<int64_t>(needCoreNum) * filterSize * FLOAT_SIZE_BYTES;
+    } else if (routeDense) {
+        // v4.0→v5.0 (f2/f5): dense path — frozen-baseline formula, kept from round2
+        // perThreadBufSize = needCoreNum × THREAD_NUM × perCoreBufElems × sizeof(float)
+        // perCoreBufSize   = needCoreNum × perCoreBufElems × sizeof(float)
+        int64_t perThreadBufSize = static_cast<int64_t>(needCoreNum) * THREAD_NUM_TILING * perCoreBufElems *
+                                   FLOAT_SIZE_BYTES;
+        int64_t perCoreBufSize = static_cast<int64_t>(needCoreNum) * perCoreBufElems * FLOAT_SIZE_BYTES;
+        userWorkspaceSize = perThreadBufSize + perCoreBufSize;
+    } else {
+        // v3.0 (chanexcl-fhw-merge-v1, F1) → r3 (chanexcl-sector-private-slot-partials-v1):
+        // user workspace = partials only
+        // partialsElems = groupNum × depth × alignUp(fH×fW, 8) floats — one
+        //                 32B-aligned padded slot per (g, c) accumulator, written
+        //                 in place by its owning thread (the thread-private
+        //                 scratch buffer and its per-slot flush copy are gone)
+        // 128B aligned; no per-thread allocation scaling with filterSize (F1)
+        int64_t partialsBytes = partialsElems * FLOAT_SIZE_BYTES;
+        userWorkspaceSize = partialsBytes;
+    }
     // Align total user workspace to 128B
     userWorkspaceSize = Ops::Base::CeilAlign(userWorkspaceSize, WS_ALIGN_BYTES);
 
@@ -160,6 +205,7 @@ static ge::graphStatus GetAttrs(gert::TilingContext* context, DilBpFilterAttrs& 
                 OP_LOGE_FOR_INVALID_VALUE(context->GetNodeName(), "padding_mode", attrs.paddingMode.c_str(),
                                           "SAME, VALID or CALCULATED"),
                 return ge::GRAPH_FAILED);
+
     // Attr 3: pads (ListInt, 4 elements)
     const auto* padsVec = runtimeAttrs->GetListInt(3);
     OP_CHECK_NULL_WITH_CONTEXT(context, padsVec);
@@ -323,7 +369,43 @@ struct TilingCommonFields {
     int64_t padInputW;
     bool isNCHW;
     bool isDet;
+    // v3.0 (chanexcl-fhw-merge-v1): det scheme fields, populated in FillTilingData (F1/F4)
+    // (in-class initializers keep the out-of-line aggregate init sites -Werror clean)
+    int32_t groupNum = 0;      // spatial group count G (det path)
+    int64_t scratchStride = 0; // per-thread scratch elements, alignUp(fH*fW, 8) (det path)
+    // v4.0→v5.0 (composed-shape-routed-v3): det scheme fields, populated in FillTilingData (f1)
+    int32_t routeDense = 0; // 1 = shape-routed frozen-baseline dense path (det path)
+    int64_t chunkLen = 0;   // idle since v5.0 f3 rollback (round1 strided partition); kept append-only, always 0
 };
+
+// Bound every address and signed coordinate used by the 32-bit scan, including
+// coordinates in zero padding that are computed before the real-input check.
+static bool FitsIndex32Scan(const TilingCommonFields& f)
+{
+    constexpr int64_t limit = INT32_MAX;
+    if (!f.isDet || f.depth <= 0 || f.filterH <= 0 || f.filterW <= 0 || f.filterH > 32 || f.filterW > 32 ||
+        f.filterH * f.filterW > 32 || f.totalElements <= 0 || f.totalElements > limit || f.filterSize <= 0 ||
+        f.filterSize > limit || f.inputH <= 0 || f.inputW <= 0 || f.padTop < 0 || f.padTop > limit || f.padLeft < 0 ||
+        f.padLeft > limit)
+        return false;
+    int64_t addressBound = 1;
+    const int64_t dimensions[] = {f.batch, std::max(f.inputH, f.padInputH), std::max(f.inputW, f.padInputW), f.depth};
+    for (const int64_t dim : dimensions) {
+        if (dim <= 0 || addressBound > limit / dim)
+            return false;
+        addressBound *= dim;
+    }
+    const auto coordinateFits = [limit](int64_t output, int64_t stride, int64_t filter, int64_t rate) {
+        if (output <= 0 || stride <= 0 || stride > limit || rate <= 0 || rate > limit || output - 1 > limit / stride)
+            return false;
+        const int64_t lastStart = (output - 1) * stride;
+        return filter - 1 <= (limit - lastStart) / rate;
+    };
+    const int64_t slotPad = Ops::Base::CeilAlign(f.filterH * f.filterW, int64_t(8));
+    return coordinateFits(f.outH, f.strideH, f.filterH, f.rateH) &&
+           coordinateFits(f.outW, f.strideW, f.filterW, f.rateW) && f.groupNum > 0 &&
+           f.depth <= limit / f.groupNum / slotPad && f.needCoreNum > 0 && f.needCoreNum <= limit / 1024 / slotPad;
+}
 
 // ========== DumpTilingData (DFX) ==========
 static void DumpTilingData(gert::TilingContext* context, const Dilation2DBackpropFilterTilingData* tiling, bool isDet)
@@ -332,15 +414,17 @@ static void DumpTilingData(gert::TilingContext* context, const Dilation2DBackpro
             "Dilation2DBackpropFilterTilingData: isDet=%d, totalElements=%ld, filterSize=%ld, "
             "needCoreNum=%d, perCoreBufElems=%ld, batch=%ld, inputH=%ld, inputW=%ld, depth=%ld, "
             "filterH=%ld, filterW=%ld, outH=%ld, outW=%ld, strideH=%ld, strideW=%ld, "
-            "rateH=%ld, rateW=%ld, padTop=%ld, padLeft=%ld, padInputH=%ld, padInputW=%ld, isNCHW=%d",
+            "rateH=%ld, rateW=%ld, padTop=%ld, padLeft=%ld, padInputH=%ld, padInputW=%ld, isNCHW=%d, "
+            "groupNum=%d, scratchStride=%ld, routeDense=%d, chunkLen=%ld",
             isDet, tiling->totalElements, tiling->filterSize, tiling->needCoreNum, tiling->perCoreBufElems,
             tiling->batch, tiling->inputH, tiling->inputW, tiling->depth, tiling->filterH, tiling->filterW,
             tiling->outH, tiling->outW, tiling->strideH, tiling->strideW, tiling->rateH, tiling->rateW, tiling->padTop,
-            tiling->padLeft, tiling->padInputH, tiling->padInputW, tiling->isNCHW);
+            tiling->padLeft, tiling->padInputH, tiling->padInputW, tiling->isNCHW, tiling->groupNum,
+            tiling->scratchStride, tiling->routeDense, tiling->chunkLen);
 }
 
 // ============================================================================
-static ge::graphStatus FillTilingData(gert::TilingContext* context, const TilingCommonFields& f)
+static ge::graphStatus FillTilingData(gert::TilingContext* context, TilingCommonFields& f)
 {
     auto* tiling = context->GetTilingData<Dilation2DBackpropFilterTilingData>();
     OP_CHECK_NULL_WITH_CONTEXT(context, tiling);
@@ -370,8 +454,144 @@ static ge::graphStatus FillTilingData(gert::TilingContext* context, const Tiling
     tiling->padInputW = f.padInputW;
     tiling->isNCHW = f.isNCHW ? 1 : 0;
 
+    // v5.0 (composed-shape-routed-v3): shape-routing predicate (f1) — pure function of the
+    // tiling inputs, deterministic (no runtime adaptation, no history):
+    //   routeDense = (totalElements > 0 && filterSize > 0
+    //                 && ((depth <= ROUTE_DEPTH_MAX && spat >= ROUTE_SPAT_MIN)
+    //                     || (isNCHW && filterSize <= ROUTE_NCHW_FS_MAX
+    //                         && spat >= ROUTE_NCHW_SPAT_MIN))),
+    //   spat = batch×outH×outW, filterSize = filterH×filterW×depth.
+    // The NCHW small-fs extension bound (spat >= 4096) is measured (design-input
+    // revision 1): L0_032 (fs=44, spat=74655) routes dense (baseline order, precision
+    // restored); L0_057 (fs=47, spat=3508) stays chanexcl (round1 56.6us PASS — dense
+    // would be baseline 206.2us, over target 142.2); micro-spat NCHW cases
+    // (L0_007/bound_023/bound_026/L0_043/L0_044/L0_048/L0_073, spat<4096) are unaffected.
+    // Keep this expression identical to the twin in the core-allocation section below:
+    // the dense needCoreNum formula and the kernel's routeDense branch must always
+    // agree on the routing decision (f2 bit-identical reuse).
+    constexpr int64_t ROUTE_DEPTH_MAX = 10;
+    constexpr int64_t ROUTE_SPAT_MIN = 2048;
+    constexpr int64_t ROUTE_NCHW_FS_MAX = 64;
+    constexpr int64_t ROUTE_NCHW_SPAT_MIN = 4096;
+    const int64_t spatialCount = f.batch * f.outH * f.outW;
+    const int32_t routeDense = (f.totalElements > 0 && f.filterSize > 0 &&
+                                ((f.depth <= ROUTE_DEPTH_MAX && spatialCount >= ROUTE_SPAT_MIN) ||
+                                 (f.isNCHW && f.filterSize <= ROUTE_NCHW_FS_MAX &&
+                                  spatialCount >= ROUTE_NCHW_SPAT_MIN))) ?
+                                   1 :
+                                   0;
+    f.routeDense = routeDense;
+    // v6.0 (r1_dense_keyarb_v1): capacity gate for the dense-scatter route.
+    // Pure shape/capacity predicate (no case id, no shape whitelist, evaluable
+    // for unseen inputs): inside the dense route only shapes whose element
+    // count fits the posBuf capacity model take the new route; every other
+    // dense shape keeps the byte-identical legacy four-phase body.
+    constexpr int64_t SCATTER_CAPACITY_ELEMS = 2097152; // 2^21 elements
+    const int32_t routeDenseScatter = (routeDense != 0 && f.totalElements <= SCATTER_CAPACITY_ELEMS &&
+                                       f.filterSize >= 1) ?
+                                          1 :
+                                          0;
+
+    // v3.0 (chanexcl-fhw-merge-v1): det scheme fields (F1/F3/F4/F6)
+    // Non-empty chanexcl: G = max(1, min(P, S/depth)) with P = batch×outH×outW, S = needCoreNum×1024
+    // (full-core scan parallelism; group count capped by spatial positions so empty
+    // groups never allocate partials). Dense path: chanexcl fields are never read by
+    // the dense kernel (defensive zeros, same as the empty fast path). Empty fast path
+    // keeps zero user workspace (byte-identical to the baseline empty path).
+    constexpr int64_t THREAD_NUM_FILL = 1024;
+    constexpr int64_t SCRATCH_ALIGN_ELEMS = 8; // 32B per-thread scratch alignment (F1)
+    const bool emptyCase = (f.totalElements <= 0 || f.filterSize <= 0);
+    const int64_t filterPlane = f.filterH * f.filterW;
+    int64_t partialsElems = 0;
+    if (emptyCase) {
+        f.groupNum = 1;      // defensive; empty path never launches VF-A/VF-B
+        f.scratchStride = 0; // → 0 user workspace bytes (F1, baseline empty-path parity)
+        f.chunkLen = 0;
+    } else if (routeDense != 0) {
+        // v4.0 f2: dense path — frozen-baseline execution; chanexcl fields unused
+        f.groupNum = 1;
+        f.scratchStride = 0;
+        f.chunkLen = 0;
+    } else {
+        const int64_t spatialTotal = f.batch * f.outH * f.outW;
+        const int64_t totalThreads = static_cast<int64_t>(f.needCoreNum) * THREAD_NUM_FILL;
+        int64_t groupNum = std::min(spatialTotal, totalThreads / f.depth);
+        f.groupNum = static_cast<int32_t>(std::max(groupNum, int64_t(1)));
+        f.scratchStride = Ops::Base::CeilAlign(filterPlane, SCRATCH_ALIGN_ELEMS);
+        // r3 (chanexcl-sector-private-slot-partials-v1): the partials array is the
+        // accumulator itself, one padded slot per (g, c): slot stride = scratchStride
+        // (= alignUp(filterPlane, 8), 32B per slot) so slots never share a 32B sector.
+        partialsElems = static_cast<int64_t>(f.groupNum) * f.depth * f.scratchStride;
+        // v5.0 f3: chanexcl core rolled back to the round1 strided partition
+        // p ≡ g (mod G) — chunkLen is idle (kept append-only in TilingData, always 0)
+        f.chunkLen = 0;
+    }
+    tiling->groupNum = f.groupNum;
+    tiling->scratchStride = f.scratchStride;
+    tiling->routeDense = f.routeDense;
+    tiling->chunkLen = f.chunkLen;
+    // v6.0 (r1_dense_keyarb_v1): append-only dense-scatter route fields
+    tiling->routeDenseScatter = routeDenseScatter;
+    tiling->posBufElems = (routeDenseScatter != 0) ? f.totalElements : 0;
+    tiling->perCorePartialsElems = (routeDenseScatter != 0) ? static_cast<int64_t>(f.needCoreNum) * f.filterSize : 0;
+    // r9 (vec21 route): deep-channel 7x3 NHWC vector form. Pure shape/capacity
+    // predicate (no case id, no CSV row): among every frozen set only the
+    // C>=128 7x3 NHWC shape qualifies (L0_047, C=256; the other 7x3 members
+    // are C=39/25). Capacity gate: the per-core partial plane (needCoreNum x
+    // 21 x depth) must fit inside the workspace the det path already
+    // allocates, so GetWorkspaceSize never changes.
+    constexpr int64_t VEC21_DEPTH_MIN = 128;
+    // r10: per-core UB slab capacity — the scan stages its touched x batch
+    // planes (nSpanMax planes) plus the 21 x depth filter plane into UB.
+    constexpr int64_t VEC21_UB_CAP_BYTES = 65536;
+    const int64_t vec21Plane = f.filterH * f.filterW; // == 21 when gated below
+    const int64_t vec21WsElems = static_cast<int64_t>(f.needCoreNum) * vec21Plane * f.depth;
+    const int64_t vec21PlaneElems = f.inputH * f.inputW * f.depth;
+    const int64_t vec21PlaneBytes = vec21PlaneElems * int64_t(4);
+    const int64_t vec21RowsPerCore = Ops::Base::CeilDiv(f.batch * f.outH * f.outW, static_cast<int64_t>(f.needCoreNum));
+    const int64_t vec21NSpanMax = Ops::Base::CeilDiv(vec21RowsPerCore, f.outH * f.outW) + 1;
+    const int64_t vec21UbBytes = vec21NSpanMax * vec21PlaneBytes + vec21Plane * f.depth * int64_t(4);
+    const int32_t routeVec21 = (f.isDet && !emptyCase && (f.isNCHW == 0) && f.filterH == 7 && f.filterW == 3 &&
+                                f.depth >= VEC21_DEPTH_MIN &&
+                                vec21WsElems <= static_cast<int64_t>(f.groupNum) * f.depth * f.scratchStride &&
+                                vec21PlaneBytes <= 65535 && vec21UbBytes <= VEC21_UB_CAP_BYTES) ?
+                                   1 :
+                                   0;
+    tiling->routeVec21 = routeVec21;
+    tiling->routeSingleTapSmall = (f.isDet && !emptyCase && spatialCount <= 4096 && f.totalElements <= INT32_MAX &&
+                                   f.filterH == 1 && f.filterW == 1 &&
+                                   platform_ascendc::PlatformAscendC(context->GetPlatformInfo()).GetSocVersion() ==
+                                       platform_ascendc::SocVersion::ASCEND950) ?
+                                      1 :
+                                      0;
+    tiling->routeBalancedMerge = (f.isDet && !emptyCase && f.depth >= 128 && filterPlane <= 32 &&
+                                  platform_ascendc::PlatformAscendC(context->GetPlatformInfo()).GetSocVersion() ==
+                                      platform_ascendc::SocVersion::ASCEND950) ?
+                                     1 :
+                                     0;
+    int64_t firstH = 0, firstW = 0;
+    const bool singleSample = f.isDet &&
+                              platform_ascendc::PlatformAscendC(context->GetPlatformInfo()).GetSocVersion() ==
+                                  platform_ascendc::SocVersion::ASCEND950 &&
+                              SingleSampleGeometry(f.batch, f.depth, f.filterH, f.filterW, f.outH, f.outW, f.padTop,
+                                                   f.padLeft, f.padInputH, f.padInputW, f.rateH, f.rateW, firstH,
+                                                   firstW);
+    tiling->routeSingleSample = singleSample ? 1 : 0;
+    tiling->routeIndex32 = FitsIndex32Scan(f) &&
+                                   platform_ascendc::PlatformAscendC(context->GetPlatformInfo()).GetSocVersion() ==
+                                       platform_ascendc::SocVersion::ASCEND950 ?
+                               1 :
+                               0;
+    if (singleSample) {
+        tiling->sampleH = static_cast<int32_t>(firstH * f.rateH - f.padTop);
+        tiling->sampleW = static_cast<int32_t>(firstW * f.rateW - f.padLeft);
+        tiling->sampleTap = static_cast<int32_t>(firstH * f.filterW + firstW);
+    }
+
     if (f.isDet) {
-        OP_CHECK_IF(GetWorkspaceSize(context, f.needCoreNum, f.perCoreBufElems) != ge::GRAPH_SUCCESS,
+        OP_CHECK_IF(GetWorkspaceSize(context, f.needCoreNum, f.scratchStride, partialsElems, f.routeDense != 0,
+                                     routeDenseScatter != 0, f.totalElements, f.filterSize, emptyCase,
+                                     f.perCoreBufElems) != ge::GRAPH_SUCCESS,
                     OP_LOGE(context, "GetWorkspaceSize error"), return ge::GRAPH_FAILED);
         uint64_t tilingKey = GET_TPL_TILING_KEY(DILATION2D_BACKPROP_FILTER_MODE_DETERMINISTIC,
                                                 DILATION2D_BACKPROP_FILTER_MODE_NORMAL);
@@ -525,9 +745,8 @@ static ge::graphStatus Dilation2DBackpropFilterTilingFunc(gert::TilingContext* c
         padInputW = inputW + attrs.padLeft + attrs.padRight;
     }
 
-    // Validate out_backprop batch/H/W against theoretical forward output geometry.
-    // out_backprop is the gradient of the forward output: when both sides are known,
-    // its geometry must match the dims derived from x/filter/strides/rates/padding.
+    // SAME/VALID follow the forward output geometry. The CALCULATED golden uses
+    // actual out_backprop spatial dimensions, including noncanonical windows.
     // NHWC: out_bp=[N,Ho,Wo,C]; NCHW: out_bp=[N,C,Ho,Wo]
     int64_t outHActual = 0, outWActual = 0, batchActual = 0;
     if (isNCHW) {
@@ -550,24 +769,22 @@ static ge::graphStatus Dilation2DBackpropFilterTilingFunc(gert::TilingContext* c
         // Dynamic x.N: adopt actual out_backprop batch
         batch = batchActual;
     }
-    // Spatial consistency: theoretical dims are authoritative when fully derivable (static geometry)
-    if (inputH >= 0 && inputW >= 0 && filterH >= 0 && filterW >= 0) {
+    if (attrs.paddingMode != "CALCULATED" && inputH > 0 && inputW > 0 && filterH > 0 && filterW > 0) {
         OP_CHECK_IF((outHActual >= 0 && outHActual != outH) || (outWActual >= 0 && outWActual != outW),
                     OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
                         context->GetNodeName(), "x, filter, out_backprop",
                         ("out_bp.H=" + std::to_string(outHActual) + ", out_bp.W=" + std::to_string(outWActual) +
                          ", expected H_out=" + std::to_string(outH) + ", W_out=" + std::to_string(outW)),
-                        "spatial mismatch: out_backprop H/W must match forward output dims derived from "
-                        "x/filter/strides/rates/padding"),
+                        "spatial mismatch: out_backprop H/W must match forward output dims for SAME/VALID"),
                     return ge::GRAPH_FAILED);
-    } else {
-        // Dynamic input geometry: adopt actual out_backprop spatial dims when known
-        if (outHActual >= 0) {
-            outH = outHActual;
-        }
-        if (outWActual >= 0) {
-            outW = outWActual;
-        }
+    }
+    // Adopt CALCULATED or dynamic geometry after checking known SAME/VALID shapes.
+    // Zero is a known empty dimension and must not fall back to theoretical geometry.
+    if (outHActual >= 0) {
+        outH = outHActual;
+    }
+    if (outWActual >= 0) {
+        outW = outWActual;
     }
     outH = std::max(outH, static_cast<int64_t>(0));
     outW = std::max(outW, static_cast<int64_t>(0));
@@ -580,13 +797,25 @@ static ge::graphStatus Dilation2DBackpropFilterTilingFunc(gert::TilingContext* c
     if (filterSize <= 0 || totalElements <= 0) {
         bool isDet = (context->GetDeterministic() == 1);
 
-        context->SetBlockDim(1);
+        // v7.0 f14: det empty case parallel zero-fill —
+        // SetBlockDim(clamp(ceil(filterSize/1024), 1, coreNum)). ZeroOutSimt is
+        // grid-stride (blockDim.x × gridDim.x covers y), so the kernel body is
+        // untouched; micro-empty (fs < 1024) stays 1 core, baseline-identical.
+        // nondet empty keeps SetBlockDim(1).
+        int32_t emptyCoreNum = 1;
+        if (isDet) {
+            const int64_t needByFilter = Ops::Base::CeilDiv(filterSize, int64_t(1024));
+            int64_t emptyCoreNumReq = std::max(needByFilter, int64_t(1));
+            emptyCoreNumReq = std::min(emptyCoreNumReq, coreNum);
+            emptyCoreNum = static_cast<int32_t>(emptyCoreNumReq);
+        }
+        context->SetBlockDim(static_cast<uint32_t>(emptyCoreNum));
         context->SetScheduleMode(1);
 
-        TilingCommonFields fields = {totalElements, filterSize,    1,           0,           batch,  inputH,
-                                     inputW,        depth,         filterH,     filterW,     outH,   outW,
-                                     attrs.strideH, attrs.strideW, attrs.rateH, attrs.rateW, padTop, padLeft,
-                                     padInputH,     padInputW,     isNCHW,      isDet};
+        TilingCommonFields fields = {totalElements, filterSize,    emptyCoreNum, 0,           batch,  inputH,
+                                     inputW,        depth,         filterH,      filterW,     outH,   outW,
+                                     attrs.strideH, attrs.strideW, attrs.rateH,  attrs.rateW, padTop, padLeft,
+                                     padInputH,     padInputW,     isNCHW,       isDet};
         OP_CHECK_IF(FillTilingData(context, fields) != ge::GRAPH_SUCCESS, OP_LOGE(context, "FillTilingData error"),
                     return ge::GRAPH_FAILED);
 
@@ -596,20 +825,79 @@ static ge::graphStatus Dilation2DBackpropFilterTilingFunc(gert::TilingContext* c
         return ge::GRAPH_SUCCESS;
     }
 
-    // 8. Core allocation (two-step method)
-    int64_t perCoreElements = Ops::Base::CeilDiv(totalElements, coreNum);
-    if (perCoreElements < PER_CORE_MIN) {
-        perCoreElements = PER_CORE_MIN;
+    // 8. Core allocation (v5.0 f2/f9: shape-routed)
+    // routeDense (f1): pure shape function — MUST stay identical to the twin in
+    // FillTilingData (the kernel branches on the tiling field; the dense core-count
+    // formula and the dense kernel must always agree on the routing decision).
+    // det + routeDense → frozen-baseline two-step formula (PER_CORE_MIN semantics,
+    // bit-identical core count to the routed baseline cases, f2);
+    // otherwise → round1 F9 formula (chanexcl det keeps the deep-channel gains, f9;
+    // nondet keeps the round1 behavior unchanged, f6).
+    constexpr int64_t ROUTE_DEPTH_MAX = 10;
+    constexpr int64_t ROUTE_SPAT_MIN = 2048;
+    constexpr int64_t ROUTE_NCHW_FS_MAX = 64;
+    constexpr int64_t ROUTE_NCHW_SPAT_MIN = 4096;
+    const int64_t spatialCount = batch * outH * outW;
+    const bool routeDense = totalElements > 0 && filterSize > 0 &&
+                            ((depth <= ROUTE_DEPTH_MAX && spatialCount >= ROUTE_SPAT_MIN) ||
+                             (isNCHW && filterSize <= ROUTE_NCHW_FS_MAX && spatialCount >= ROUTE_NCHW_SPAT_MIN));
+    // v6.0 (r1_dense_keyarb_v1): capacity gate, identical to the FillTilingData twin
+    constexpr int64_t SCATTER_CAPACITY_ELEMS = 2097152; // 2^21 elements
+    const bool routeDenseScatter = routeDense && totalElements <= SCATTER_CAPACITY_ELEMS && filterSize >= 1;
+    int32_t needCoreNum = 0;
+    if ((context->GetDeterministic() == 1) && routeDenseScatter) {
+        // v6.0: dense-scatter route — one warp (32 elements) per core lower
+        // bound, so the launch fills the available cores and the accumulation
+        // grouping (lane intervals + core order) is unaffected by the count:
+        //   needCoreNum = clamp(ceil(totalElements / 32), 1, coreNum)
+        int64_t needCoreNumReq = Ops::Base::CeilDiv(totalElements, int64_t(32));
+        needCoreNumReq = std::max(needCoreNumReq, int64_t(1));
+        needCoreNumReq = std::min(needCoreNumReq, coreNum);
+        needCoreNum = static_cast<int32_t>(needCoreNumReq);
+    } else if ((context->GetDeterministic() == 1) && routeDense) {
+        // v4.0 f2: dense path — frozen-baseline formula (two-step method, v2.1)
+        int64_t perCoreElements = Ops::Base::CeilDiv(totalElements, coreNum);
+        if (perCoreElements < PER_CORE_MIN) {
+            perCoreElements = PER_CORE_MIN;
+        }
+        needCoreNum = static_cast<int32_t>(Ops::Base::CeilDiv(totalElements, perCoreElements));
+        needCoreNum = std::max(needCoreNum, 1); // at least 1 core
+    } else {
+        // v3.0 F9 (chanexcl + nondet, unchanged from round1):
+        // needCoreNum = clamp(max(ceil(totalElements/64), ceil(filterSize/64)), 1, coreNum)
+        // Removes the PER_CORE_MIN=1024 single-core seal for small-N large-filterSize
+        // cases (L0_066/L0_008 class needs ≥ ceil(filterSize/64) cores). coreNum is the
+        // GetCoreNumAiv() value from GetPlatformInfo; nondet needCoreNum only feeds
+        // blockDim (grid-stride coverage, behaviorally equivalent).
+        const int64_t needByElements = Ops::Base::CeilDiv(totalElements, int64_t(64));
+        const int64_t needByFilter = Ops::Base::CeilDiv(filterSize, int64_t(64));
+        int64_t needCoreNumReq = std::max(std::max(needByElements, needByFilter), int64_t(1));
+        needCoreNumReq = std::min(needCoreNumReq, coreNum);
+        needCoreNum = static_cast<int32_t>(needCoreNumReq);
     }
-    int32_t needCoreNum = static_cast<int32_t>(Ops::Base::CeilDiv(totalElements, perCoreElements));
-    needCoreNum = std::max(needCoreNum, 1); // at least 1 core
 
     // v2.1: compute per-core buffer size (128B aligned in elements)
-    int64_t perCoreBufElems = Ops::Base::CeilAlign(filterSize, WS_ALIGN_ELEMS);
+    // v6.0: unused on the dense-scatter route (kept 0 there)
+    int64_t perCoreBufElems = routeDenseScatter ? 0 : Ops::Base::CeilAlign(filterSize, WS_ALIGN_ELEMS);
 
     // 9. Fill TilingData + Workspace + TilingKey (determinism switch)
     bool isDet = (context->GetDeterministic() == 1);
 
+    const bool singleTapSmall = context->GetDeterministic() == 1 && totalElements > 0 && spatialCount <= 4096 &&
+                                totalElements <= INT32_MAX && filterH == 1 && filterW == 1 &&
+                                platform_ascendc::PlatformAscendC(context->GetPlatformInfo()).GetSocVersion() ==
+                                    platform_ascendc::SocVersion::ASCEND950;
+    if (singleTapSmall) {
+        needCoreNum = static_cast<int32_t>(std::min(coreNum, Ops::Base::CeilDiv(depth, int64_t(8))));
+    }
+    int64_t firstH = 0, firstW = 0;
+    if (context->GetDeterministic() == 1 &&
+        platform_ascendc::PlatformAscendC(context->GetPlatformInfo()).GetSocVersion() ==
+            platform_ascendc::SocVersion::ASCEND950 &&
+        SingleSampleGeometry(batch, depth, filterH, filterW, outH, outW, padTop, padLeft, padInputH, padInputW,
+                             attrs.rateH, attrs.rateW, firstH, firstW)) {
+        needCoreNum = static_cast<int32_t>(std::min(coreNum, Ops::Base::CeilDiv(depth, int64_t(8))));
+    }
     context->SetBlockDim(static_cast<uint32_t>(needCoreNum));
     context->SetScheduleMode(1);
 
