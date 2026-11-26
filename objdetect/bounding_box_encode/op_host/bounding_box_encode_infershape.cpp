@@ -34,12 +34,13 @@ static ge::graphStatus CheckBoxShape(gert::InferShapeContext* context, const ger
         return ge::GRAPH_SUCCESS;
     }
     if (shape.GetDimNum() != RANK_2) {
-        OP_LOGE(context->GetNodeName(), "%s rank must be 2 (shape (N, 4)), but got rank %zu.", name, shape.GetDimNum());
+        OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), name, std::to_string(shape.GetDimNum()).c_str(), "2");
         return ge::GRAPH_FAILED;
     }
     int64_t lastDim = shape.GetDim(LAST_DIM_IDX);
     if (lastDim != ge::UNKNOWN_DIM && lastDim != BOX_COORD_NUM) {
-        OP_LOGE(context->GetNodeName(), "%s last dim must be 4 (x1,y1,x2,y2), but got %ld.", name, lastDim);
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), name, std::to_string(lastDim).c_str(),
+                                              "last dim must be 4 (x1,y1,x2,y2)");
         return ge::GRAPH_FAILED;
     }
     return ge::GRAPH_SUCCESS;
@@ -61,8 +62,11 @@ static ge::graphStatus InferShape4BoundingBoxEncode(gert::InferShapeContext* con
     const auto* gtDesc = context->GetInputDesc(IDX_GT);
     OP_CHECK_NULL_WITH_CONTEXT(context, gtDesc);
     if (anchorDesc->GetDataType() != gtDesc->GetDataType()) {
-        OP_LOGE(context->GetNodeName(), "anchor_box dtype (%d) and ground_truth_box dtype (%d) must be the same.",
-                static_cast<int>(anchorDesc->GetDataType()), static_cast<int>(gtDesc->GetDataType()));
+        OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+            context->GetNodeName(), "anchor_box, ground_truth_box",
+            (Ops::Base::ToString(anchorDesc->GetDataType()) + " and " + Ops::Base::ToString(gtDesc->GetDataType()))
+                .c_str(),
+            "anchor_box and ground_truth_box must have the same dtype");
         return ge::GRAPH_FAILED;
     }
 
@@ -77,18 +81,20 @@ static ge::graphStatus InferShape4BoundingBoxEncode(gert::InferShapeContext* con
     // 2b: anchor_box and ground_truth_box shapes must be exactly the same (compare known dims only).
     if (!Ops::Base::IsUnknownRank(*anchorShape) && !Ops::Base::IsUnknownRank(*gtShape)) {
         if (anchorShape->GetDimNum() != gtShape->GetDimNum()) {
-            OP_LOGE(context->GetNodeName(), "anchor_box rank (%zu) and ground_truth_box rank (%zu) must be the same.",
-                    anchorShape->GetDimNum(), gtShape->GetDimNum());
+            OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+                context->GetNodeName(), "anchor_box, ground_truth_box",
+                (std::to_string(anchorShape->GetDimNum()) + " and " + std::to_string(gtShape->GetDimNum())).c_str(),
+                "anchor_box and ground_truth_box ranks must be the same");
             return ge::GRAPH_FAILED;
         }
         for (size_t i = 0; i < anchorShape->GetDimNum(); ++i) {
             int64_t aDim = anchorShape->GetDim(i);
             int64_t gDim = gtShape->GetDim(i);
             if (aDim != ge::UNKNOWN_DIM && gDim != ge::UNKNOWN_DIM && aDim != gDim) {
-                OP_LOGE(context->GetNodeName(),
-                        "anchor_box and ground_truth_box shapes must be exactly the same, but dim[%zu] differs "
-                        "(%ld vs %ld).",
-                        i, aDim, gDim);
+                OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+                    context->GetNodeName(), "anchor_box, ground_truth_box",
+                    ("dim[" + std::to_string(i) + "] " + std::to_string(aDim) + " vs " + std::to_string(gDim)).c_str(),
+                    "anchor_box and ground_truth_box shapes must be exactly the same");
                 return ge::GRAPH_FAILED;
             }
         }
