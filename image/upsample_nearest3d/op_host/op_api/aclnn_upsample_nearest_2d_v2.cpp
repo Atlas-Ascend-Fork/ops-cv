@@ -342,7 +342,7 @@ const aclTensor* upsampleNearest2dAiCoreCompute(const aclTensor* selfContiguous,
 } // namespace
 
 // self 为空但 out 非空时，输出仍有元素待写，按 kernel 语义清零，避免早退返回未初始化内存。
-static const aclTensor* GetOutTensorWithValueZero(aclTensor* out, aclOpExecutor* executor)
+static const aclTensor* GetOutTensorWithValueZero(const aclTensor* out, aclOpExecutor* executor)
 {
     aclScalar* scalar = executor->AllocScalar(0);
     auto valueTensor = executor->ConvertToTensor(scalar, out->GetDataType());

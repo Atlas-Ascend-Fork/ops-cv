@@ -454,7 +454,7 @@ aclnnStatus aclnnUpsampleBicubic2dBackwardGetWorkspaceSize(const aclTensor* grad
         int64_t castFp32Condition = 0;
         int64_t deterministicValue = 1;
         aclError retRts = aclrtCtxGetSysParamOpt(ACL_OPT_DETERMINISTIC, &deterministicValue);
-        if (retRts != ACL_ERROR_NONE) {
+        if (retRts != ACL_SUCCESS) {
             deterministicValue = 0;
             OP_LOGD("Unable to get system param deterministic = %ld.", deterministicValue);
         }
