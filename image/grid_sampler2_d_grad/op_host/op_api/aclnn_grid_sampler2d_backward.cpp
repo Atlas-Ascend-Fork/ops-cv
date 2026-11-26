@@ -42,6 +42,8 @@ static const size_t FIRST_DIM = 0;
 static const size_t SECOND_DIM = 1;
 static const size_t FOURTH_DIM = 3;
 static const size_t THIRD_DIM = 2;
+static constexpr size_t DTYPE_CHECK_TENSOR_SIZE = 4;
+static constexpr size_t SHAPE_CHECK_TENSOR_SIZE = 3;
 
 static const int64_t INTERPOLATION_MODE_MIN_VALUE = 0;
 static const int64_t INTERPOLATION_MODE_MAX_VALUE = 2;
@@ -99,7 +101,7 @@ static bool CheckDtypeValid(const aclTensor* gradOutput, const aclTensor* input,
     // 检查输入输出数据类型是否一致
     const aclTensor* tensors[] = {gradOutput, grid, inputGrad, gridGrad};
     const char* names[] = {"gradOutput,input", "grid,input", "inputGrad,input", "gridGrad,input"};
-    for (size_t i = 0; i < 4; ++i) {
+    for (size_t i = 0; i < DTYPE_CHECK_TENSOR_SIZE; ++i) {
         OP_CHECK(
             tensors[i]->GetDataType() == input->GetDataType(),
             OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON("aclnnGridSampler2DBackward", names[i],
@@ -152,7 +154,7 @@ static bool CheckShape(const aclTensor* gradOutput, const aclTensor* input, cons
     const auto& gridShape = grid->GetViewShape();
     const aclTensor* tensors[] = {input, grid, gradOutput};
     const char* names[] = {"input", "grid", "gradOutput"};
-    for (size_t i = 0; i < 3; ++i) {
+    for (size_t i = 0; i < SHAPE_CHECK_TENSOR_SIZE; ++i) {
         OP_CHECK(tensors[i]->GetViewShape().GetDimNum() == SPATIAL_DIM_NUM,
                  OP_LOGE_FOR_INVALID_SHAPEDIM("aclnnGridSampler2DBackward", names[i],
                                               std::to_string(tensors[i]->GetViewShape().GetDimNum()).c_str(), "4"),
@@ -226,7 +228,7 @@ static bool CheckDtypeAndChannelCanTranspose(const aclTensor* input, int64_t pad
                                                                           inputShape.GetDim(SECOND_DIM);
     int64_t deterministicValue = 0;
     aclError retRts = aclrtCtxGetSysParamOpt(ACL_OPT_DETERMINISTIC, &deterministicValue);
-    if (retRts != ACL_ERROR_NONE) {
+    if (retRts != ACL_SUCCESS) {
         deterministicValue = 0;
         OP_LOGD("Unable to get system param deterministic = %ld.", deterministicValue);
     }

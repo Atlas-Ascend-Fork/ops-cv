@@ -296,7 +296,7 @@ static bool CheckTranspose(const aclTensor* input, int64_t channel)
     auto curArch = GetCurrentPlatformInfo().GetCurNpuArch();
     int64_t deterministicValue = 0;
     aclError retRts = aclrtCtxGetSysParamOpt(ACL_OPT_DETERMINISTIC, &deterministicValue);
-    if (retRts != ACL_ERROR_NONE) {
+    if (retRts != ACL_SUCCESS) {
         deterministicValue = 0;
         OP_LOGD("Unable to get system param deterministic = %ld.", deterministicValue);
     }
