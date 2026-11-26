@@ -813,6 +813,12 @@ __aicore__ inline void BatchMultiClassNonMaxSuppressionKernel<T>::MergeBatch(int
         static_cast<uint64_t>(tilingData_->classesNum), static_cast<uint64_t>(tilingData_->maxSizePerClass),
         static_cast<uint64_t>(tilingData_->maxTotalSize), tilingData_->transposeBox != 0U);
 
+    // MergeClassOutput publishes GM results from the SIMT VF task. Ensure the
+    // scalar side observes those writes before launching the consumer VF task.
+    const event_t mergeDone = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::V_S));
+    SetFlag<HardEvent::V_S>(mergeDone);
+    WaitFlag<HardEvent::V_S>(mergeDone);
+
     asc_vf_call<GatherMergedOutput<T>>(
         dim3{kMergeThreadNum}, (__gm__ float*)classBoxesGm_.GetPhyAddr(), (__gm__ float*)mergeScoresGm_.GetPhyAddr(),
         (__gm__ int32_t*)mergeIndicesGm_.GetPhyAddr(), (__gm__ T*)nmsedBoxesGm_.GetPhyAddr(),
