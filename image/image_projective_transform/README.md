@@ -53,7 +53,7 @@
     result = (y_{ceil} - y_{in}) \cdot v_{yfloor} + (y_{in} - y_{floor}) \cdot v_{yceil}
     $$
 
-    当源坐标超出输入图像边界时，使用填充值（默认为0）代替越界像素值。当变换矩阵分母（$a_6 \cdot x_{out} + a_7 \cdot y_{out} + 1$）为0时，该像素输出填充值0（浮点与整数类型一致）。当分母非0、但映射得到的坐标 $x_{in}$ 或 $y_{in}$ 为NaN/Inf时：BILINEAR模式下浮点类型输出NaN、INT32输出INT_MIN、UINT8输出0；NEAREST模式下输出填充值0。
+    当 `fill_mode="CONSTANT"`（默认）时，超出输入图像边界的源坐标使用填充值（默认为0）代替越界像素值；当 `fill_mode` 为 "NEAREST"、"REFLECT" 或 "WRAP" 时，有限越界坐标先按所选填充模式重映射到有效范围内再参与插值，不使用填充值。当变换矩阵分母（$a_6 \cdot x_{out} + a_7 \cdot y_{out} + 1$）为0时，该像素输出填充值0（浮点与整数类型一致，各fill_mode下均如此）。当分母非0、但映射得到的坐标 $x_{in}$ 或 $y_{in}$ 为NaN/Inf时：若坐标含NaN或fill_mode不为"NEAREST"，BILINEAR模式下浮点类型输出NaN、INT32输出INT_MIN、UINT8输出0，NEAREST模式下输出填充值0；若fill_mode="NEAREST"且坐标仅含Inf（不含NaN），则Inf坐标先夹取到输入边界（x方向为[0, W-1]，y方向为[0, H-1]）后继续正常插值。
 
   - **NEAREST（最近邻插值）**：
 
@@ -61,7 +61,7 @@
     x_i = \text{round}(x_{in}), \quad y_i = \text{round}(y_{in})
     $$
 
-    当源坐标超出输入图像边界时，使用填充值（默认为0）。
+    越界与NaN/Inf坐标的处理方式与上述BILINEAR说明一致：`fill_mode="CONSTANT"`（默认）时越界坐标使用填充值（默认为0）；其余填充模式下有限越界坐标先重映射到有效范围，再取最近邻像素；当fill_mode="NEAREST"且坐标仅含Inf（不含NaN）时，Inf坐标夹取到输入边界后继续采样。
 
 ## 参数说明
 
