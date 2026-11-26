@@ -288,10 +288,15 @@ ge::graphStatus TilingCheckOutputMs(gert::TilingContext* context)
     return ge::GRAPH_SUCCESS;
 }
 
-void SaveTilingDataToBuffer(gert::TilingContext* context, ThreeInterpolateBackwardTilingData& tiling_host)
+ge::graphStatus SaveTilingDataToBuffer(gert::TilingContext* context, ThreeInterpolateBackwardTilingData& tiling_host)
 {
-    tiling_host.SaveToBuffer(context->GetRawTilingData()->GetData(), context->GetRawTilingData()->GetCapacity());
-    context->GetRawTilingData()->SetDataSize(tiling_host.GetDataSize());
+    // GetRawTilingData() 在异常上下文（TilingContext 未设置 TilingData）下
+    // 返回空指针，链式 GetData()/GetCapacity()/SetDataSize 前必须判空
+    gert::TilingData* rawTilingData = context->GetRawTilingData();
+    OP_CHECK_NULL_WITH_CONTEXT(context, rawTilingData);
+    tiling_host.SaveToBuffer(rawTilingData->GetData(), rawTilingData->GetCapacity());
+    rawTilingData->SetDataSize(tiling_host.GetDataSize());
+    return ge::GRAPH_SUCCESS;
 }
 
 ge::graphStatus TilingMainProcess(ThreeInterpolateBackwardTilingData& tiling_host,
@@ -407,10 +412,16 @@ static ge::graphStatus Tiling4ThreeInterpolateBackward(gert::TilingContext* cont
                 return ge::GRAPH_FAILED);
 
     size_t sysWorkspaceSize = WORKSPACE_16MBYTE_SIZE;
+    // GetWorkspaceSizes(1) 在异常上下文（TilingContext 未设置 Workspace）下
+    // 返回空指针，写入 currentWorkspace[0] 前必须判空
     size_t* currentWorkspace = context->GetWorkspaceSizes(1);
+    OP_CHECK_NULL_WITH_CONTEXT(context, currentWorkspace);
     currentWorkspace[0] = sysWorkspaceSize;
 
-    SaveTilingDataToBuffer(context, tiling_host);
+    OP_CHECK_IF(
+        SaveTilingDataToBuffer(context, tiling_host) != ge::GRAPH_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(context->GetNodeName(), "SaveTilingDataToBuffer failed; raw tiling data is unavailable"),
+        return ge::GRAPH_FAILED);
     context->SetBlockDim(tiling_host.get_used_core_num());
     TilingDebugPrint(context, tiling_host);
     OP_LOGD(context, "Tiling4ThreeInterpolateBackward running end");

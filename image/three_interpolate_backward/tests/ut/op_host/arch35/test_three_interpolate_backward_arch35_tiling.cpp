@@ -141,3 +141,33 @@ TEST_F(ThreeInterpolateBackwardTilingArch35, bc_mode_switch_at_2p31_boundary)
     EXPECT_EQ(overData->totalElements, 2147549184LL);
     EXPECT_NE(atBound.tilingKey, overBound.tilingKey);
 }
+
+// attrs 容器存在但第 0 号 int64 属性 m 缺失时，GetAttrPointer<int64_t>(0)
+// 返回 nullptr。tiling 须先判空属性指针并以 GRAPH_FAILED 拒绝，而非直接解引用崩溃。
+// 修复前该用例触发 SIGSEGV（nullptr 解引用），修复后返回 false。
+TEST_F(ThreeInterpolateBackwardTilingArch35, missing_attr_m_rejected_not_crash)
+{
+    struct ThreeInterpolateBackwardCompileInfo {
+    } compileInfo;
+    gert::StorageShape gradXShape = {{2, 3, 4}, {2, 3, 4}};
+    gert::StorageShape idxShape = {{2, 4, 3}, {2, 4, 3}};
+    gert::StorageShape weightShape = {{2, 4, 3}, {2, 4, 3}};
+    gert::StorageShape gradYShape = {{2, 3, 6}, {2, 3, 6}};
+
+    // attrs 为空列表：GetAttrs() 非空，attr[0] 缺失
+    gert::TilingContextPara tilingContextPara("ThreeInterpolateBackward",
+                                              {
+                                                  {gradXShape, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                                  {idxShape, ge::DT_INT32, ge::FORMAT_ND},
+                                                  {weightShape, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                              },
+                                              {
+                                                  {gradYShape, ge::DT_FLOAT16, ge::FORMAT_ND},
+                                              },
+                                              {}, &compileInfo, "Ascend950",
+                                              64,     // coreNum
+                                              262144, // ubSize
+                                              4096);  // tilingDataSize
+    TilingInfo tilingInfo;
+    EXPECT_FALSE(ExecuteTiling(tilingContextPara, tilingInfo));
+}

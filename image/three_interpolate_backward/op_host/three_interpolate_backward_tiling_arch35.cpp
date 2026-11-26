@@ -123,7 +123,11 @@ ge::graphStatus Tiling4ThreeInterpolateBackwardRegbase(gert::TilingContext* cont
     //    否则 m = 2^32+1 等值会回绕为 1 等正数，绕过 m<=0 检查）
     auto attrs = context->GetAttrs();
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
-    int64_t mRaw = *(attrs->GetAttrPointer<int64_t>(0));
+    // 构图节点缺失属性 m 时 GetAttrPointer<int64_t>(0) 返回 nullptr，
+    // 解引用前必须判空，否则空指针崩溃
+    const int64_t* mPtr = attrs->GetAttrPointer<int64_t>(0);
+    OP_CHECK_NULL_WITH_CONTEXT(context, mPtr);
+    int64_t mRaw = *mPtr;
     OP_CHECK_IF(mRaw <= 0 || mRaw > INT32_MAX,
                 OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "m", std::to_string(mRaw).c_str(),
                                                       "attr m must be in (0, INT32_MAX]"),

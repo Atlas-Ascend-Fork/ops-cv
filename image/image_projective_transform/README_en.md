@@ -55,7 +55,7 @@ English | [简体中文](./README.md)
     result = (y_{ceil} - y_{in}) \cdot v_{yfloor} + (y_{in} - y_{floor}) \cdot v_{yceil}
     $$
 
-    When the source coordinates exceed the input image boundaries, the fill value (the default is 0) is used to replace the out-of-bounds pixel values. When the denominator of the transformation matrix ($a_6 \cdot x_{out} + a_7 \cdot y_{out} + 1$) is 0, the pixel outputs the fill value 0 (for both floating-point and integer types). When the denominator is non-zero but the mapped coordinate $x_{in}$ or $y_{in}$ is NaN/Inf: in BILINEAR mode, floating-point types output NaN, INT32 outputs INT_MIN, and UINT8 outputs 0; in NEAREST mode, the fill value 0 is output.
+    When `fill_mode="CONSTANT"` (the default), source coordinates outside the input image boundaries are replaced with the fill value (the default is 0); when `fill_mode` is "NEAREST", "REFLECT", or "WRAP", finite out-of-bounds coordinates are first remapped into the valid range according to the selected fill mode before interpolation, and no fill value is used. When the denominator of the transformation matrix ($a_6 \cdot x_{out} + a_7 \cdot y_{out} + 1$) is 0, the pixel outputs the fill value 0 (for both floating-point and integer types, under every fill mode). When the denominator is non-zero but the mapped coordinate $x_{in}$ or $y_{in}$ is NaN/Inf: if the coordinates contain NaN or fill_mode is not "NEAREST", in BILINEAR mode floating-point types output NaN, INT32 outputs INT_MIN, and UINT8 outputs 0, and in NEAREST mode the fill value 0 is output; if fill_mode="NEAREST" and the coordinates contain only Inf (no NaN), the Inf coordinates are first clamped to the input boundaries (x to [0, W-1], y to [0, H-1]) and interpolation then proceeds normally.
 
   - **NEAREST (nearest-neighbor interpolation)**:
 
@@ -63,7 +63,7 @@ English | [简体中文](./README.md)
     x_i = \text{round}(x_{in}), \quad y_i = \text{round}(y_{in})
     $$
 
-    When the source coordinates exceed the input image boundaries, the fill value (the default is 0) is used.
+    Out-of-bounds and NaN/Inf coordinates are handled in the same way as described for BILINEAR above: with `fill_mode="CONSTANT"` (the default), out-of-bounds coordinates use the fill value (the default is 0); with the other fill modes, finite out-of-bounds coordinates are first remapped into the valid range before the nearest neighbor is sampled; with fill_mode="NEAREST" and coordinates containing only Inf (no NaN), the Inf coordinates are clamped to the input boundaries before sampling.
 
 ## Parameter Description
 
