@@ -46,6 +46,27 @@ struct Dilation2DBackpropFilterTilingData {
     int64_t padInputH = 0;       // padded input H (inputH + padTop + padBottom), v2.3
     int64_t padInputW = 0;       // padded input W (inputW + padLeft + padRight), v2.3
     int32_t isNCHW = 0;          // 0=NHWC, 1=NCHW (v2.5: NCHW support)
+    // v3.0 (chanexcl-fhw-merge-v1): det scheme fields, append-only; nondet branch never reads them
+    int32_t groupNum = 0;      // det: number of spatial groups G (scan/merge split, F4/F6)
+    int64_t scratchStride = 0; // det: per-thread scratch elements = alignUp(filterH*filterW, 8) (F1/F3)
+    // v4.0 (shape-routed-chanexcl-v2): det scheme fields, append-only; nondet branch never reads them
+    int32_t routeDense = 0; // det: 1 = shape-routed frozen-baseline dense path (f1/f2, 0/1 flag semantics)
+    int64_t chunkLen = 0;   // det: idle since v5.0 f3 rollback (round1 strided partition restored); kept append-only,
+                            // always 0
+    // v6.0 (r1_dense_keyarb_v1): det dense-scatter route fields, append-only; nondet branch never reads them
+    int32_t
+        routeDenseScatter = 0; // det: 1 = capacity-gated dense-scatter route (elementwise argmax + target ownership)
+    int64_t posBufElems = 0;   // det: posBuf elements (= totalElements when the scatter route is active, else 0)
+    int64_t perCorePartialsElems = 0; // det: per-core target partials elements (= needCoreNum × filterSize when active)
+    // r9 (vec21 route): det vector form for deep-channel 7x3 NHWC shapes, append-only; nondet never reads it
+    int32_t routeVec21 = 0;          // det: 1 = vector-form argmax scan + per-core partial reduce
+    int32_t routeSingleTapSmall = 0; // det: one filter tap, bounded spatial reduction
+    int32_t routeBalancedMerge = 0;  // det: fixed warp tree for deep, small filter planes
+    int32_t routeSingleSample = 0;   // det: a single output window with one evaluated tap
+    int32_t sampleH = 0;
+    int32_t sampleW = 0;
+    int32_t sampleTap = 0;
+    int32_t routeIndex32 = 0; // proven bounds include padded-coordinate intermediates
     // v2.0: fp32AccumOffset removed (T=float, direct accumulation on yGm)
 };
 
