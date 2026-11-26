@@ -678,16 +678,6 @@
   </tr>
   <tr>
     <td>objdetect</td>
-    <td><a href="../../objdetect/rotated_feature_align/README.md">rotated_feature_align</a></td>
-    <td>&check;</td>
-    <td>&check;</td>
-    <td>&cross;</td>
-    <td>&check;</td>
-    <td>AI Core</td>
-    <td>旋转目标检测中的特征对齐算子，根据旋转框参数对输入特征图进行双线性插值采样，将旋转区域特征对齐并叠加到原特征上。</td>
-  </tr>
-  <tr>
-    <td>objdetect</td>
     <td><a href="../../objdetect/batch_multi_class_non_max_suppression/README.md">batch_multi_class_non_max_suppression</a></td>
     <td>&check;</td>
     <td>&check;</td>
