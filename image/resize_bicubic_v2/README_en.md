@@ -15,7 +15,9 @@ English | [简体中文](./README.md)
 - Operator function: resizes an image to the specified size using bicubic interpolation.
 - Calculation formula:
 
-  Pixel positions of the surrounding 16 points:
+  For the output pixel at $(X,Y)$ (row $Y$, column $X$), the coordinate mapping rule (determined by the `align_corners` attribute, consistent with PyTorch `upsample_bicubic2d`) maps it to the source coordinate $(h,w)$ in the input image. Taking $(h,w)$ as the reference point, the 4×4 (16 in total) neighboring pixels of the input image are selected: the neighbor at row $i$, column $j$ has coordinates $h_i = \lfloor h \rfloor - 1 + i$ and $w_j = \lfloor w \rfloor - 1 + j$ ($i, j \in \{0,1,2,3\}$), whose pixel value is denoted as $a_{ij}$. The distances from the source coordinate to the neighboring pixels are defined as $d_i = |h - h_i|$ and $d_j = |w - w_j|$ (i.e. the arguments of the W function, in the range [0, 2)).
+
+  The cubic interpolation weight function (coefficient $a = -0.75$):
 
   $$
   W(x) = \begin{cases}
@@ -25,9 +27,9 @@ English | [简体中文](./README.md)
   \end{cases}
   $$
 
-  Pixel values:
+  Output pixel value (weighted sum of the 16 neighboring pixels by row/column distance):
   $$
-  B(X,Y) = \sum_{i=0}^3 \sum_{j=0}^3a_{ij} \times W(i) \times W(j)
+  B(X,Y) = \sum_{i=0}^3 \sum_{j=0}^3a_{ij} \times W(d_i) \times W(d_j)
   $$
 
 ## Parameter Description
@@ -60,7 +62,7 @@ English | [简体中文](./README.md)
     <tr>
       <td>size</td>
       <td>Input</td>
-      <td>Height and width of the output image.</td>
+      <td>Height and width of the output image. A 1D tensor with 2 elements, each greater than 0; the values must be consistent with the H and W of the output y inferred by the format.</td>
       <td>INT32</td>
       <td>ND</td>
     </tr>
@@ -74,14 +76,14 @@ English | [简体中文](./README.md)
     <tr>
       <td>align_corners</td>
       <td>Attr</td>
-      <td>Specifies whether to align the centers of the four corner pixels of the input and output tensors to preserve the corner pixel values. Default value: false.</td>
+      <td>Specifies whether to align the centers of the four corner pixels of the input and output tensors to preserve the corner pixel values, which determines the source coordinate mapping rule. Default value: false.</td>
       <td>Bool</td>
       <td>-</td>
     </tr>
     <tr>
       <td>scales</td>
       <td>Attr</td>
-      <td>Scaling coefficients of the spatial dimensions (height and width). Default value: {0.0, 0.0}.</td>
+      <td>Scaling coefficients of the spatial dimensions (height and width), with 2 elements: the output-to-input size ratio along the height and width respectively. Default value: {0.0, 0.0} (not specified; in this case the scaling coefficients are derived from the input and output sizes).</td>
       <td>ListFloat</td>
       <td>-</td>
     </tr>
@@ -96,5 +98,5 @@ None
 
 | Invocation Method | Sample Code | Description |
 | ---- | ---- |----|
-| aclnn interface | [test_aclnn_resize_bicubic_v2](examples/test_aclnn_bicubic_v2.cpp) | Call the ResizeBicubicV2 operator through the [aclnnUpsampleBicubic2d](../upsample_bicubic2d/docs/aclnnUpsampleBicubic2d_en.md) interface. |
+| aclnn interface | [test_aclnn_bicubic_v2](examples/test_aclnn_bicubic_v2.cpp) | Call the ResizeBicubicV2 operator through the [aclnnUpsampleBicubic2d](../upsample_bicubic2d/docs/aclnnUpsampleBicubic2d_en.md) interface. |
 | Graph mode | -  | Call the ResizeBicubicV2 operator by building a graph through [operator IR](op_graph/resize_bicubic_v2_proto.h). |
