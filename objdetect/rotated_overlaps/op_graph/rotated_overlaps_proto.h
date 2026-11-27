@@ -42,10 +42,12 @@ namespace ge {
 * Supports GE IR dynamic shape. Runtime tiling uses the instantiated concrete
 * shape.
 
-* @attention Constraints:
-* Invalid boxes (non-finite coordinates or non-positive width/height) may appear
-* at any position; each pair containing one produces zero overlap.
-*/
+ * @attention Constraints:
+ * Invalid boxes (non-finite coordinates or non-positive width/height) may appear
+ * at any position; each pair containing one produces zero overlap.
+ * "B", "N" and "K" must be positive, and "K" (query_boxes.shape[2]) must not
+ * exceed 2000 in the first-release implementation.
+ */
 #ifndef OPS_PROTO_DEF_ROTATEDOVERLAPS
 #define OPS_PROTO_DEF_ROTATEDOVERLAPS
 REG_OP(RotatedOverlaps)
