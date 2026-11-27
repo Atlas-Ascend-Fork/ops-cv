@@ -143,6 +143,26 @@ TEST_F(BoundingBoxEncodeInfershape, bbe_rejects_mismatched_dtype)
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
 }
 
+TEST_F(BoundingBoxEncodeInfershape, bbe_rejects_rank_one)
+{
+    gert::InfershapeContextPara infershapeContextPara(
+        "BoundingBoxEncode",
+        {
+            {{{8}, {8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+            {{{8}, {8}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            {{{}, {}}, ge::DT_FLOAT, ge::FORMAT_ND},
+        },
+        {
+            gert::InfershapeContextPara::OpAttr(
+                "means", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({0.0f, 0.0f, 0.0f, 0.0f})),
+            gert::InfershapeContextPara::OpAttr(
+                "stds", Ops::Cv::AnyValue::CreateFrom<std::vector<float>>({1.0f, 1.0f, 1.0f, 1.0f})),
+        });
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_FAILED, {});
+}
+
 // 部分未知shape（-1）场景：输出透传anchor
 TEST_F(BoundingBoxEncodeInfershape, bbe_partial_unknown_dim)
 {

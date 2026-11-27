@@ -15,6 +15,7 @@
 
 #include "register/op_def_registry.h"
 #include "op_common/log/log.h"
+#include "op_api/error_report_util.h"
 #include "op_common/op_host/util/math_util.h"
 #include "op_common/op_host/util/platform_util.h"
 #include "../../op_kernel/arch35/bounding_box_encode_tiling_data.h"
@@ -57,15 +58,23 @@ static ge::graphStatus ParseMeansStds(gert::TilingContext* context, BoundingBoxE
                 return ge::GRAPH_FAILED);
     // 3a/3b: means and stds length must be exactly 4. Check before reading [0..3] to avoid OOB read.
     OP_CHECK_IF(meansList->GetSize() != MEANS_STDS_LEN,
-                OP_LOGE(context, "means length must be 4, but got %zu", meansList->GetSize()), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(stdsList->GetSize() != MEANS_STDS_LEN,
-                OP_LOGE(context, "stds length must be 4, but got %zu", stdsList->GetSize()), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_LISTSIZE_WITH_REASON(context->GetNodeName(), "means",
+                                                         std::to_string(meansList->GetSize()).c_str(),
+                                                         "the size of means must be 4"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        stdsList->GetSize() != MEANS_STDS_LEN,
+        OP_LOGE_FOR_INVALID_LISTSIZE_WITH_REASON(
+            context->GetNodeName(), "stds", std::to_string(stdsList->GetSize()).c_str(), "the size of stds must be 4"),
+        return ge::GRAPH_FAILED);
     const float* means = meansList->GetData();
     const float* stds = stdsList->GetData();
     OP_CHECK_IF(means == nullptr || stds == nullptr, OP_LOGE(context, "means or stds data is null"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(stds[0] == 0.0f || stds[1] == 0.0f || stds[2] == 0.0f || stds[3] == 0.0f,
-                OP_LOGE(context, "stds element is 0, division by 0"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "stds", "0",
+                                                      "stds must not contain zero elements"),
+                return ge::GRAPH_FAILED);
 
     tiling->means0 = means[0];
     tiling->means1 = means[1];
@@ -105,36 +114,44 @@ static ge::graphStatus CheckInputsConsistency(gert::TilingContext* context)
 
     // 1b: dtype consistency
     OP_CHECK_IF(anchorDesc->GetDataType() != gtDesc->GetDataType(),
-                OP_LOGE(context, "anchor_box dtype (%d) and ground_truth_box dtype (%d) must be the same",
-                        static_cast<int>(anchorDesc->GetDataType()), static_cast<int>(gtDesc->GetDataType())),
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(context->GetNodeName(), "anchor_box, ground_truth_box",
+                                                       (Ops::Base::ToString(anchorDesc->GetDataType()) + " and " +
+                                                        Ops::Base::ToString(gtDesc->GetDataType()))
+                                                           .c_str(),
+                                                       "anchor_box and ground_truth_box must have the same dtype"),
                 return ge::GRAPH_FAILED);
 
     // 2c: rank == 2 (both inputs)
     OP_CHECK_IF(anchorShape.GetDimNum() != RANK_2,
-                OP_LOGE(context, "anchor_box rank must be 2 (shape (N, 4)), but got rank %zu", anchorShape.GetDimNum()),
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "anchor_box",
+                                             std::to_string(anchorShape.GetDimNum()).c_str(), "2"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(
-        gtShape.GetDimNum() != RANK_2,
-        OP_LOGE(context, "ground_truth_box rank must be 2 (shape (N, 4)), but got rank %zu", gtShape.GetDimNum()),
-        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(gtShape.GetDimNum() != RANK_2,
+                OP_LOGE_FOR_INVALID_SHAPEDIM(context->GetNodeName(), "ground_truth_box",
+                                             std::to_string(gtShape.GetDimNum()).c_str(), "2"),
+                return ge::GRAPH_FAILED);
 
     // 2a: last dim == 4 (both inputs)
-    OP_CHECK_IF(
-        anchorShape.GetDim(LAST_DIM_IDX) != BOX_DIM,
-        OP_LOGE(context, "anchor_box last dim must be 4 (x1,y1,x2,y2), but got %ld", anchorShape.GetDim(LAST_DIM_IDX)),
-        return ge::GRAPH_FAILED);
-    OP_CHECK_IF(gtShape.GetDim(LAST_DIM_IDX) != BOX_DIM,
-                OP_LOGE(context, "ground_truth_box last dim must be 4 (x1,y1,x2,y2), but got %ld",
-                        gtShape.GetDim(LAST_DIM_IDX)),
+    OP_CHECK_IF(anchorShape.GetDim(LAST_DIM_IDX) != BOX_DIM,
+                OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "anchor_box",
+                                                      Ops::Base::ToString(anchorShape).c_str(),
+                                                      "last dim must be 4 (x1,y1,x2,y2)"),
                 return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        gtShape.GetDim(LAST_DIM_IDX) != BOX_DIM,
+        OP_LOGE_FOR_INVALID_SHAPE_WITH_REASON(context->GetNodeName(), "ground_truth_box",
+                                              Ops::Base::ToString(gtShape).c_str(), "last dim must be 4 (x1,y1,x2,y2)"),
+        return ge::GRAPH_FAILED);
 
     // 2b: shape exactly equal (rank already both 2)
     for (size_t i = 0; i < RANK_2; ++i) {
         OP_CHECK_IF(anchorShape.GetDim(i) != gtShape.GetDim(i),
-                    OP_LOGE(context,
-                            "anchor_box and ground_truth_box shapes must be exactly the same, but dim[%zu] "
-                            "differs (%ld vs %ld)",
-                            i, anchorShape.GetDim(i), gtShape.GetDim(i)),
+                    OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+                        context->GetNodeName(), "anchor_box, ground_truth_box",
+                        ("dim[" + std::to_string(i) + "] " + std::to_string(anchorShape.GetDim(i)) + " vs " +
+                         std::to_string(gtShape.GetDim(i)))
+                            .c_str(),
+                        "anchor_box and ground_truth_box shapes must be exactly the same"),
                     return ge::GRAPH_FAILED);
     }
     return ge::GRAPH_SUCCESS;
@@ -219,10 +236,8 @@ static ge::graphStatus BoundingBoxEncodeTilingFunc(gert::TilingContext* context)
 
     const std::set<ge::DataType> supportedDtype = {ge::DT_FLOAT16, ge::DT_FLOAT};
     OP_CHECK_IF(supportedDtype.count(dataType) == 0,
-                OP_LOGE(context,
-                        "unsupported dtype of input[0], ge::DataType[%d], only DT_FLOAT16 and DT_FLOAT are "
-                        "supported",
-                        static_cast<int32_t>(dataType)),
+                OP_LOGE_FOR_INVALID_DTYPE(context->GetNodeName(), "anchor_box", Ops::Base::ToString(dataType).c_str(),
+                                          "float16 or float32"),
                 return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(CheckInputsConsistency(context) != ge::GRAPH_SUCCESS, OP_LOGE(context, "CheckInputsConsistency error"),
@@ -244,7 +259,9 @@ static ge::graphStatus BoundingBoxEncodeTilingFunc(gert::TilingContext* context)
     int64_t usedCoreNum = 0;
     OP_CHECK_IF(
         CalcUbSizing(context, tiling, boxNum, dataType, ubSize, coreNum, vecRegLen, &usedCoreNum) != ge::GRAPH_SUCCESS,
-        OP_LOGE(context, "CalcUbSizing error"), return ge::GRAPH_FAILED);
+        error_report::ReportTilingStageError(context->GetNodeName(),
+                                             "CalcUbSizing failed for this input configuration"),
+        return ge::GRAPH_FAILED);
 
     context->SetBlockDim(usedCoreNum);
     return ge::GRAPH_SUCCESS;
