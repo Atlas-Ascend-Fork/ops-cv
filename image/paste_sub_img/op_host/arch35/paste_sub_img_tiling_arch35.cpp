@@ -189,16 +189,23 @@ static void MultiCoreSplit(uint64_t totalCount, uint32_t coreNum, MultiCoreSplit
     result.realCoreNum = static_cast<uint64_t>(realCore);
 }
 
-static ge::graphStatus ReadCoordValue(gert::TilingContext* context, uint64_t inputIdx, int64_t* out, size_t count)
+static ge::graphStatus ReadCoordValue(gert::TilingContext* context, uint64_t inputIdx, const char* paramName,
+                                      int64_t* out, size_t count)
 {
     auto tensor = context->GetInputTensor(inputIdx);
-    OP_CHECK_NULL_WITH_CONTEXT(context, tensor);
+    OP_CHECK_IF(tensor == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), paramName),
+                return ge::GRAPH_FAILED);
     const int32_t* data = tensor->GetData<int32_t>();
     if (data != nullptr) {
         for (size_t i = 0; i < count; i++)
             out[i] = static_cast<int64_t>(data[i]);
         return ge::GRAPH_SUCCESS;
     }
+    REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                              (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                        (std::string("failed to read ") + paramName +
+                                                         " tensor data at tiling stage; Tiling cannot continue")
+                                                            .c_str()}));
     return ge::GRAPH_FAILED;
 }
 
@@ -207,22 +214,41 @@ static ge::graphStatus PasteSubImgTilingFunc(gert::TilingContext* context)
     OP_LOGI(context->GetNodeName(), "Begin to do PasteSubImgTilingFunc");
 
     auto platformInfo = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfo);
+    OP_CHECK_IF(
+        platformInfo == nullptr,
+        REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                  (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                            "GetPlatformInfo is null; Tiling cannot continue"})),
+        return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     uint32_t coreNum = ascendcPlatform.GetCoreNumAiv();
-    OP_CHECK_IF(coreNum == 0, OP_LOGE(context, "coreNum is 0"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        coreNum == 0,
+        REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                  (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                            "GetCoreNumAiv returned 0; Tiling cannot continue"})),
+        return ge::GRAPH_FAILED);
     uint64_t ubSize = 0;
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, ubSize);
-    OP_CHECK_IF(ubSize == 0, OP_LOGE(context, "ubSize is 0"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        ubSize == 0,
+        REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                  (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                            "GetCoreMemSize(UB) returned 0; Tiling cannot continue"})),
+        return ge::GRAPH_FAILED);
 
     auto patchShape = context->GetInputShape(IDX_PATCH_IMG);
-    OP_CHECK_NULL_WITH_CONTEXT(context, patchShape);
+    OP_CHECK_IF(patchShape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "patch_img"),
+                return ge::GRAPH_FAILED);
     auto patchCoordShape = context->GetInputShape(IDX_PATCH_COORD);
-    OP_CHECK_NULL_WITH_CONTEXT(context, patchCoordShape);
+    OP_CHECK_IF(patchCoordShape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "patch_coord"),
+                return ge::GRAPH_FAILED);
     auto coreAreaCoordShape = context->GetInputShape(IDX_CORE_AREA_COORD);
-    OP_CHECK_NULL_WITH_CONTEXT(context, coreAreaCoordShape);
+    OP_CHECK_IF(coreAreaCoordShape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "core_area_coord"),
+                return ge::GRAPH_FAILED);
     auto combineShape = context->GetInputShape(IDX_COMBINE_IMG);
-    OP_CHECK_NULL_WITH_CONTEXT(context, combineShape);
+    OP_CHECK_IF(combineShape == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "combine_img"),
+                return ge::GRAPH_FAILED);
 
     auto patchSS = patchShape->GetStorageShape();
     auto patchCoordSS = patchCoordShape->GetStorageShape();
@@ -230,48 +256,87 @@ static ge::graphStatus PasteSubImgTilingFunc(gert::TilingContext* context)
     auto combineSS = combineShape->GetStorageShape();
 
     OP_CHECK_IF(patchSS.GetDimNum() != EXPECTED_RANK_3D || combineSS.GetDimNum() != EXPECTED_RANK_3D,
-                OP_LOGE(context, "patch_img and combine_img must be 3D"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(patchCoordSS.GetDimNum() != EXPECTED_RANK_1D || coreAreaCoordSS.GetDimNum() != EXPECTED_RANK_1D,
-                OP_LOGE(context, "patch_coord and core_area_coord must be 1D"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+                    context->GetNodeName(), "patch_img, combine_img",
+                    (std::to_string(patchSS.GetDimNum()) + ", " + std::to_string(combineSS.GetDimNum())).c_str(),
+                    "the dim num of patch_img and combine_img must be 3"),
+                return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        patchCoordSS.GetDimNum() != EXPECTED_RANK_1D || coreAreaCoordSS.GetDimNum() != EXPECTED_RANK_1D,
+        OP_LOGE_FOR_INVALID_SHAPEDIMS_WITH_REASON(
+            context->GetNodeName(), "patch_coord, core_area_coord",
+            (std::to_string(patchCoordSS.GetDimNum()) + ", " + std::to_string(coreAreaCoordSS.GetDimNum())).c_str(),
+            "the dim num of patch_coord and core_area_coord must be 1"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(patchCoordSS.GetDim(0) != COORD_LEN || coreAreaCoordSS.GetDim(0) != COORD_LEN,
-                OP_LOGE(context, "patch_coord and core_area_coord length must be 4"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "patch_coord, core_area_coord",
+                    (std::to_string(patchCoordSS.GetDim(0)) + ", " + std::to_string(coreAreaCoordSS.GetDim(0))).c_str(),
+                    "the length of patch_coord and core_area_coord must be 4"),
+                return ge::GRAPH_FAILED);
 
     auto patchTensor = context->GetInputTensor(IDX_PATCH_IMG);
-    OP_CHECK_NULL_WITH_CONTEXT(context, patchTensor);
+    OP_CHECK_IF(patchTensor == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "patch_img"),
+                return ge::GRAPH_FAILED);
     auto combineTensor = context->GetInputTensor(IDX_COMBINE_IMG);
-    OP_CHECK_NULL_WITH_CONTEXT(context, combineTensor);
+    OP_CHECK_IF(combineTensor == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "combine_img"),
+                return ge::GRAPH_FAILED);
     ge::DataType patchDtype = patchTensor->GetDataType();
     ge::DataType combineDtype = combineTensor->GetDataType();
     OP_CHECK_IF(!IsComputeDtype(patchDtype) || !IsComputeDtype(combineDtype),
-                OP_LOGE(context, "unsupported dtype, patch_img ge::DataType[%d], combine_img ge::DataType[%d]",
-                        static_cast<int32_t>(patchDtype), static_cast<int32_t>(combineDtype)),
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+                    context->GetNodeName(), "patch_img, combine_img",
+                    (Ops::Base::ToString(patchDtype) + ", " + Ops::Base::ToString(combineDtype)).c_str(),
+                    "the dtype of patch_img and combine_img must be uint8, float16 or float"),
                 return ge::GRAPH_FAILED);
-    OP_CHECK_IF(patchDtype != combineDtype, OP_LOGE(context, "patch_img and combine_img dtype must be the same"),
+    OP_CHECK_IF(patchDtype != combineDtype,
+                OP_LOGE_FOR_INVALID_DTYPES_WITH_REASON(
+                    context->GetNodeName(), "patch_img, combine_img",
+                    (Ops::Base::ToString(patchDtype) + ", " + Ops::Base::ToString(combineDtype)).c_str(),
+                    "the dtype of patch_img and combine_img must be the same"),
                 return ge::GRAPH_FAILED);
 
     auto attrs = context->GetAttrs();
-    OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
+    OP_CHECK_IF(attrs == nullptr,
+                REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                          (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                                    "GetAttrs is null; Tiling cannot continue"})),
+                return ge::GRAPH_FAILED);
 
     int64_t patchCoordArr[4] = {};
     int64_t coreAreaCoordArr[4] = {};
-    OP_CHECK_IF(ReadCoordValue(context, IDX_PATCH_COORD, patchCoordArr, 4) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "failed to read patch_coord tensor data"), return ge::GRAPH_FAILED);
-    OP_CHECK_IF(ReadCoordValue(context, IDX_CORE_AREA_COORD, coreAreaCoordArr, 4) != ge::GRAPH_SUCCESS,
-                OP_LOGE(context, "failed to read core_area_coord tensor data"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(ReadCoordValue(context, IDX_PATCH_COORD, "patch_coord", patchCoordArr, 4) != ge::GRAPH_SUCCESS,
+                OP_LOGE_WITHOUT_REPORT(context, "failed to read patch_coord tensor data"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        ReadCoordValue(context, IDX_CORE_AREA_COORD, "core_area_coord", coreAreaCoordArr, 4) != ge::GRAPH_SUCCESS,
+        OP_LOGE_WITHOUT_REPORT(context, "failed to read core_area_coord tensor data"), return ge::GRAPH_FAILED);
 
     const float* scalePtr = attrs->GetAttrPointer<float>(ATTR_IDX_SCALE);
-    OP_CHECK_NULL_WITH_CONTEXT(context, scalePtr);
+    OP_CHECK_IF(scalePtr == nullptr, OP_LOGE_WITH_INVALID_INPUT(context->GetNodeName(), "scale"),
+                return ge::GRAPH_FAILED);
     float scale = *scalePtr;
-    OP_CHECK_IF(!(scale >= SCALE_MIN && scale <= SCALE_MAX), OP_LOGE(context, "scale must be in [0.0, 256.0]"),
+    OP_CHECK_IF(!(scale >= SCALE_MIN && scale <= SCALE_MAX),
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "scale", std::to_string(scale).c_str(),
+                                                      "scale must be in [0.0, 256.0]"),
                 return ge::GRAPH_FAILED);
 
     int64_t px1 = patchCoordArr[0], py1 = patchCoordArr[1];
     int64_t cx1 = coreAreaCoordArr[0], cy1 = coreAreaCoordArr[1], cx2 = coreAreaCoordArr[2], cy2 = coreAreaCoordArr[3];
-    OP_CHECK_IF(cx2 <= cx1 || cy2 <= cy1, OP_LOGE(context, "core_area_coord must satisfy cx2>cx1 and cy2>cy1"),
+    OP_CHECK_IF(cx2 <= cx1 || cy2 <= cy1,
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "core_area_coord",
+                                                      (std::to_string(cx1) + ", " + std::to_string(cy1) + ", " +
+                                                       std::to_string(cx2) + ", " + std::to_string(cy2))
+                                                          .c_str(),
+                                                      "core_area_coord must satisfy cx2>cx1 and cy2>cy1"),
                 return ge::GRAPH_FAILED);
 
     OP_CHECK_IF(cx1 < 0 || cy1 < 0 || cx1 + px1 < 0 || cy1 + py1 < 0,
-                OP_LOGE(context, "source and destination coordinates must be non-negative"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "core_area_coord",
+                                                      (std::to_string(cx1) + ", " + std::to_string(cy1) + ", " +
+                                                       std::to_string(cx1 + px1) + ", " + std::to_string(cy1 + py1))
+                                                          .c_str(),
+                                                      "source and destination coordinates must be non-negative"),
+                return ge::GRAPH_FAILED);
 
     int64_t patchH = patchSS.GetDim(DIM_H);
     int64_t patchW = patchSS.GetDim(DIM_W);
@@ -279,35 +344,72 @@ static ge::graphStatus PasteSubImgTilingFunc(gert::TilingContext* context)
     int64_t combineH = combineSS.GetDim(DIM_H);
     int64_t combineW = combineSS.GetDim(DIM_W);
     int64_t combineC = combineSS.GetDim(DIM_C);
-    OP_CHECK_IF(patchC != combineC, OP_LOGE(context, "C dimension must match"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        patchC != combineC,
+        OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(context->GetNodeName(), "patch_img, combine_img",
+                                               (std::to_string(patchC) + ", " + std::to_string(combineC)).c_str(),
+                                               "the C dimension of patch_img and combine_img must be the same"),
+        return ge::GRAPH_FAILED);
     OP_CHECK_IF(patchH <= 0 || patchW <= 0 || patchC <= 0 || combineH <= 0 || combineW <= 0 || combineC <= 0,
-                OP_LOGE(context, "tensor dimensions must be positive"), return ge::GRAPH_FAILED);
+                OP_LOGE_FOR_INVALID_SHAPES_WITH_REASON(
+                    context->GetNodeName(), "patch_img, combine_img",
+                    (std::to_string(patchH) + "x" + std::to_string(patchW) + "x" + std::to_string(patchC) + ", " +
+                     std::to_string(combineH) + "x" + std::to_string(combineW) + "x" + std::to_string(combineC))
+                        .c_str(),
+                    "the dimensions of patch_img and combine_img must be positive"),
+                return ge::GRAPH_FAILED);
 
     CoordBudget coord{};
     ComputeCoordBudget(px1, py1, cx1, cy1, cx2, cy2, scale, patchH, patchW, patchC, combineH, combineW, coord);
     if (coord.activeH == 0 || coord.activeW == 0) {
         OP_LOGI(context->GetNodeName(), "active region is empty, skip as no-op");
         PasteSubImgTilingData* tdNoop = context->GetTilingData<PasteSubImgTilingData>();
-        OP_CHECK_NULL_WITH_CONTEXT(context, tdNoop);
-        OP_CHECK_IF(memset_s(tdNoop, sizeof(PasteSubImgTilingData), 0, sizeof(PasteSubImgTilingData)) != EOK,
-                    OP_LOGE(context, "memset tiling data failed"), return ge::GRAPH_FAILED);
+        OP_CHECK_IF(
+            tdNoop == nullptr,
+            REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                      (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                                "GetTilingData is null; Tiling cannot continue"})),
+            return ge::GRAPH_FAILED);
+        auto memsetNoopRet = memset_s(tdNoop, sizeof(PasteSubImgTilingData), 0, sizeof(PasteSubImgTilingData));
+        OP_CHECK_IF(memsetNoopRet != EOK,
+                    REPORT_PREDEFINED_ERR_MSG(
+                        "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                        (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                  (std::string("Failed to memset tiling data, ret is ") +
+                                                   std::to_string(memsetNoopRet) + "; Tiling cannot continue")
+                                                      .c_str()})),
+                    return ge::GRAPH_FAILED);
         tdNoop->rank = RANK_MERGED;
         tdNoop->bufferSize = 32;
         tdNoop->dtypeBytes = static_cast<uint8_t>(GetSizeByDataType(patchDtype));
         context->SetBlockDim(1);
         context->SetTilingKey(GET_TPL_TILING_KEY(static_cast<uint64_t>(PASTE_SUB_IMG_KEY_UBAXIS_C)));
         size_t* workspacesNoop = context->GetWorkspaceSizes(1);
-        OP_CHECK_NULL_WITH_CONTEXT(context, workspacesNoop);
+        OP_CHECK_IF(workspacesNoop == nullptr,
+                    REPORT_PREDEFINED_ERR_MSG(
+                        "EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                        (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                  "GetWorkspaceSizes(1) is null; Tiling cannot continue"})),
+                    return ge::GRAPH_FAILED);
         workspacesNoop[0] = 0;
         return ge::GRAPH_SUCCESS;
     }
 
     int64_t sCy2Pre = static_cast<int64_t>(static_cast<double>(cy2) * static_cast<double>(scale));
     int64_t sCx2Pre = static_cast<int64_t>(static_cast<double>(cx2) * static_cast<double>(scale));
-    OP_CHECK_IF(sCy2Pre > patchH || sCx2Pre > patchW, OP_LOGE(context, "coord*scale out of patch_img bounds"),
-                return ge::GRAPH_FAILED);
-    OP_CHECK_IF(coord.dCy1 + coord.activeH > combineH || coord.dCx1 + coord.activeW > combineW,
-                OP_LOGE(context, "dest region out of combine_img bounds"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        sCy2Pre > patchH || sCx2Pre > patchW,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(context->GetNodeName(), "core_area_coord",
+                                              (std::to_string(sCy2Pre) + ", " + std::to_string(sCx2Pre)).c_str(),
+                                              "coord*scale is out of patch_img bounds"),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        coord.dCy1 + coord.activeH > combineH || coord.dCx1 + coord.activeW > combineW,
+        OP_LOGE_FOR_INVALID_VALUE_WITH_REASON(
+            context->GetNodeName(), "core_area_coord",
+            (std::to_string(coord.dCy1 + coord.activeH) + ", " + std::to_string(coord.dCx1 + coord.activeW)).c_str(),
+            "dest region is out of combine_img bounds"),
+        return ge::GRAPH_FAILED);
 
     uint32_t dtypeBytes = static_cast<uint32_t>(GetSizeByDataType(patchDtype));
     uint32_t ubBlockSize = Ops::Base::GetUbBlockSize(context);
@@ -322,9 +424,20 @@ static ge::graphStatus PasteSubImgTilingFunc(gert::TilingContext* context)
     MultiCoreSplit(split.totalCount, coreNum, mc);
 
     PasteSubImgTilingData* td = context->GetTilingData<PasteSubImgTilingData>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, td);
-    OP_CHECK_IF(memset_s(td, sizeof(PasteSubImgTilingData), 0, sizeof(PasteSubImgTilingData)) != EOK,
-                OP_LOGE(context, "memset tiling data failed"), return ge::GRAPH_FAILED);
+    OP_CHECK_IF(td == nullptr,
+                REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                          (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                                    "GetTilingData is null; Tiling cannot continue"})),
+                return ge::GRAPH_FAILED);
+    auto memsetRet = memset_s(td, sizeof(PasteSubImgTilingData), 0, sizeof(PasteSubImgTilingData));
+    OP_CHECK_IF(
+        memsetRet != EOK,
+        REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                  (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                            (std::string("Failed to memset tiling data, ret is ") +
+                                                             std::to_string(memsetRet) + "; Tiling cannot continue")
+                                                                .c_str()})),
+        return ge::GRAPH_FAILED);
 
     td->rank = RANK_MERGED;
     td->inShape[0] = coord.activeH;
@@ -353,7 +466,12 @@ static ge::graphStatus PasteSubImgTilingFunc(gert::TilingContext* context)
     context->SetTilingKey(GET_TPL_TILING_KEY(static_cast<uint64_t>(split.tilingKey)));
 
     size_t* workspaces = context->GetWorkspaceSizes(1);
-    OP_CHECK_NULL_WITH_CONTEXT(context, workspaces);
+    OP_CHECK_IF(
+        workspaces == nullptr,
+        REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                  (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                            "GetWorkspaceSizes(1) is null; Tiling cannot continue"})),
+        return ge::GRAPH_FAILED);
     workspaces[0] = 0;
 
     OP_LOGI(context->GetNodeName(),
@@ -368,9 +486,19 @@ static ge::graphStatus PasteSubImgTilingFunc(gert::TilingContext* context)
 static ge::graphStatus TilingPrepareForPasteSubImg(gert::TilingParseContext* context)
 {
     auto compileInfo = context->GetCompiledInfo<PasteSubImgCompileInfo>();
-    OP_CHECK_NULL_WITH_CONTEXT(context, compileInfo);
+    OP_CHECK_IF(
+        compileInfo == nullptr,
+        REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                  (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                            "GetCompiledInfo is null; TilingParse cannot continue"})),
+        return ge::GRAPH_FAILED);
     auto platformInfo = context->GetPlatformInfo();
-    OP_CHECK_NULL_WITH_CONTEXT(context, platformInfo);
+    OP_CHECK_IF(
+        platformInfo == nullptr,
+        REPORT_PREDEFINED_ERR_MSG("EZ1008", (std::vector<const char*>{"opName", "reason"}),
+                                  (std::vector<const char*>{Ops::Base::GetOpInfo(context).c_str(),
+                                                            "GetPlatformInfo is null; Tiling cannot continue"})),
+        return ge::GRAPH_FAILED);
     auto ascendcPlatform = platform_ascendc::PlatformAscendC(platformInfo);
     compileInfo->coreNum = ascendcPlatform.GetCoreNumAiv();
     ascendcPlatform.GetCoreMemSize(platform_ascendc::CoreMemType::UB, compileInfo->ubSize);
