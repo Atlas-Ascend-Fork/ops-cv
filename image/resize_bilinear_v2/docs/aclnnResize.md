@@ -99,7 +99,7 @@ aclnnStatus aclnnResize(
       <td>scales(aclFloatArray*)</td>
       <td>输入</td>
       <td>指定self张量调整的倍数，对应公式中的`scales`。</td>
-      <td><ul><li>长度和self维度相同。</li><li>当前仅支持调整self的H与W维，scales其他的N与C维度需保持为1。</li></ul></td>
+      <td><ul><li>长度固定为4，与self的维度数相同；长度不为4直接返回161002。</li><li>当前仅支持调整self的H与W维，scales其他的N与C维度需保持为1。</li><li>元素按与self相同的轴序解释：self为NCHW时H、W系数位于下标2、3，为NHWC时位于下标1、2。</li><li>H、W系数的数值域：须为正值，且使`floor(self_dimension * scales)`落在`[1, INT64_MAX]`内；接口按`out_dimension`与`self_dimension * scales`在EPSILON容差内是否一致做校验，不要求scales为整数，非整数倍率按floor截断。</li></ul></td>
       <td>FloatArray</td>
       <td>-</td>
       <td>-</td>
@@ -179,8 +179,8 @@ aclnnStatus aclnnResize(
       <td>传入的self、scales、mode、out中有空指针。</td>
     </tr>
     <tr>
-      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="4">161002</td>
+      <td rowspan="5">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="5">161002</td>
       <td>mode不在支持列表之内。</td>
     </tr>
     <tr>
@@ -189,9 +189,14 @@ aclnnStatus aclnnResize(
     <tr>
       <td>out与self的数据格式或者数据类型不一致。</td></tr>
     <tr>
+      <td>scales的长度不等于4。</td>
+    </tr>
+    <tr>
       <td>shape不满足要求：<ol><li>self和out的shape必须为4维。</li><li>self和out的N维和C维必须相同。</li><li>out在H维的size必须等于self的H维size乘以scales对应H维的值。</li><li>out在W维的size必须等于self的W维size乘以scales对应W维的值。</li></ol></td>
     </tr>
   </tbody></table>
+
+> 说明：上表只列出本接口入参校验阶段显式返回的错误码。`self`与`out`虽然都不支持空Tensor，但入参校验阶段**没有**专门的空Tensor判断分支，因此空Tensor不会在此阶段返回特定错误码；该约束由下游Tiling校验拒绝（返回`GRAPH_FAILED`），表现为执行期失败而非入参校验失败。
 
 ## aclnnResize
 

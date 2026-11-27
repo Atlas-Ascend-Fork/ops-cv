@@ -54,7 +54,7 @@
       <td>输入</td>
       <td>输入图像的四维Tensor，对应公式中x。</td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
-      <td>ND</td>
+      <td>NCHW、NHWC</td>
     </tr>
     <tr>
       <td>size</td>
@@ -94,16 +94,20 @@
     <tr>
       <td>y</td>
       <td>输出</td>
-      <td>双线性插值调整后图像，对应公式中y。</td>
+      <td>双线性插值调整后图像，对应公式中y。数据格式与x一致。</td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
-      <td>ND</td>
+      <td>NCHW、NHWC</td>
     </tr>
   </tbody></table>
 
 ## 约束说明
 
 - `align_corners`和`half_pixel_centers`不能同时为true。
-- `scales`设置时应提供H、W两个缩放系数；默认值为`[0.0, 0.0]`。
+- `scales`语义与合法域：必须恰为2个元素，依次为H、W方向的缩放系数（输出长度与输入长度之比），默认值`[0.0, 0.0]`表示不覆盖。它**不改变输出shape**——`y`的H、W恒由`size`经shape推导得出，`size`不会被忽略；`scales`只覆盖坐标映射所用的缩放系数：某一元素大于0.0时该方向按`1/scales`映射，否则回退为`H_in/H_out`（W方向同理）。`align_corners`为true时该覆盖不生效，缩放系数固定为`(H_in-1)/(H_out-1)`。元素个数不等于2时Tiling校验失败。
+- 固定shape约束：`x`与`y`均必须为4维Tensor，且`y`的N、C维与`x`相同，数据格式须一致（同为NCHW或同为NHWC）。
+- 空Tensor约束：`x`与`y`均不支持空Tensor。当任一元素数为0时，Tiling阶段校验失败并返回`GRAPH_FAILED`。需注意aclnn直调通路（aclnnResize）的入参校验**不含**专门的空Tensor分支，因此不会返回特定的L2错误码，空Tensor最终在Tiling阶段被拒绝、表现为执行期失败。
+- `size`为值依赖输入，必须是1维、2元素的INT32 Tensor，依次为输出的高（new_height）与宽（new_width），且两元素均须为正。
+- 非连续Tensor：GE图模式下`x`、`y`要求为连续Tensor；aclnn直调通路（aclnnResize）支持非连续输入输出，接口内部会先做连续化转换，详见[aclnnResize](docs/aclnnResize.md)。
 
 ## 调用说明
 

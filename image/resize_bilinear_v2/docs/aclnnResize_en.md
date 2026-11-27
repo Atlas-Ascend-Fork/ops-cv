@@ -98,7 +98,7 @@ aclnnStatus aclnnResize(
       <td>scales (aclFloatArray*)</td>
       <td>Input</td>
       <td>Specifies the multiples by which the self tensor is scaled, corresponding to `scales` in the formula.</td>
-      <td><ul><li>The length is the same as the self dimension.</li><li>Currently, only the H and W dimensions of self are supported for adjustment. The other N and C dimensions of scales must remain 1.</li></ul></td>
+      <td><ul><li>The length is fixed to 4, the same as the self dimension count; a length other than 4 returns 161002 directly.</li><li>Currently, only the H and W dimensions of self are supported for adjustment. The other N and C dimensions of scales must remain 1.</li><li>Elements are interpreted in the same axis order as self: for NCHW, the H and W factors are at indices 2 and 3; for NHWC, they are at indices 1 and 2.</li><li>Numeric domain of the H and W factors: they must be positive and make floor(self_dimension * scales) fall within [1, INT64_MAX]; the interface validates whether out_dimension matches self_dimension * scales within an EPSILON tolerance, does not require scales to be an integer, and non-integer factors are truncated by floor.</li></ul></td>
       <td>FloatArray</td>
       <td>-</td>
       <td>-</td>
@@ -178,8 +178,8 @@ aclnnStatus aclnnResize(
       <td>A null pointer is passed among self, scales, mode, and out.</td>
     </tr>
     <tr>
-      <td rowspan="4">ACLNN_ERR_PARAM_INVALID</td>
-      <td rowspan="4">161002</td>
+      <td rowspan="5">ACLNN_ERR_PARAM_INVALID</td>
+      <td rowspan="5">161002</td>
       <td>mode is not in the supported list.</td>
     </tr>
     <tr>
@@ -188,9 +188,14 @@ aclnnStatus aclnnResize(
     <tr>
       <td>The data format or data type of out is inconsistent with that of self.</td></tr>
     <tr>
+      <td>The length of scales is not equal to 4.</td>
+    </tr>
+    <tr>
       <td>The shape does not meet the requirements: <ol><li>The shapes of self and out must be 4-dimensional.</li><li>The N and C dimensions of self and out must be the same.</li><li>The size of out in the H dimension must equal the size of self in the H dimension multiplied by the value of scales in the corresponding H dimension.</li><li>The size of out in the W dimension must equal the size of self in the W dimension multiplied by the value of scales in the corresponding W dimension.</li></ol></td>
     </tr>
   </tbody></table>
+
+> Note: The table above only lists the error codes explicitly returned during the input parameter validation phase of this interface. Although neither `self` nor `out` supports empty tensors, the input parameter validation phase has **no** dedicated empty-tensor branch, so an empty tensor does not return a specific error code at this phase; the constraint is enforced by downstream Tiling validation (returning `GRAPH_FAILED`), manifesting as an execution-time failure rather than an input-validation failure.
 
 ## aclnnResize
 
