@@ -29,12 +29,22 @@ static ge::graphStatus InferShapeLbpFeature(gert::InferShapeContext* context)
     gert::Shape* outputShape = context->GetOutputShape(0);
     OP_CHECK_NULL_WITH_CONTEXT(context, outputShape);
 
+    const auto* inputDesc = context->GetInputDesc(0);
+    OP_CHECK_NULL_WITH_CONTEXT(context, inputDesc);
+    if (inputDesc->GetDataType() != ge::DT_UINT8 && inputDesc->GetDataType() != ge::DT_FLOAT) {
+        OP_LOGE(context->GetNodeName(), "Input x dtype must be uint8 or float32, but got %d",
+                static_cast<int>(inputDesc->GetDataType()));
+        return ge::GRAPH_FAILED;
+    }
+
     // 获取 attrs 中的 radius 属性
     auto attrs = context->GetAttrs();
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
 
     // 兼容属性指针获取
-    int64_t radius = 0;
+    // Keep InferShape aligned with the OpDef optional default and tiling:
+    // omitted radius means one-pixel border cropping.
+    int64_t radius = 1;
     const int64_t* radiusPtr = attrs->GetAttrPointer<int64_t>(0); // 第 0 个属性是 radius
     if (radiusPtr != nullptr) {
         radius = *radiusPtr;

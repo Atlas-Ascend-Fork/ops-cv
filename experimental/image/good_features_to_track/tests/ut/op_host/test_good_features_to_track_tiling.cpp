@@ -257,6 +257,24 @@ TEST_F(GoodFeaturesToTrackTiling, fp32_max_corners_zero_capacity)
     ExpectTilingOk(para);
 }
 
+// Kernel stores two coordinates per corner and uses uint32_t loop bounds;
+// max_corners=2^31 makes 2*outputCapacity wrap to zero.
+TEST_F(GoodFeaturesToTrackTiling, invalid_max_corners_coordinate_capacity_overflow)
+{
+    CompileInfo compileInfo;
+    gert::TilingContextPara para("GoodFeaturesToTrack",
+                                 {
+                                     {{{1, 64, 64}, {1, 64, 64}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                 },
+                                 {
+                                     {{{1, 2147483648LL, 2}, {1, 2147483648LL, 2}}, ge::DT_FLOAT, ge::FORMAT_ND},
+                                     {{{1}, {1}}, ge::DT_INT32, ge::FORMAT_ND},
+                                 },
+                                 GFT_ATTRS(2147483648LL, kQuality, kMinDistance, kBlockSize, false, kK), &compileInfo,
+                                 "Ascend910B", 64, 262144, 4096);
+    ExecuteTestCase(para, ge::GRAPH_FAILED);
+}
+
 // 自定义属性组合：block_size=5、max_corners=10、min_distance=10、quality_level=0.1
 TEST_F(GoodFeaturesToTrackTiling, fp32_custom_attrs)
 {

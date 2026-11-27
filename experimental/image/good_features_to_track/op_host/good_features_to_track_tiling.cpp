@@ -66,6 +66,15 @@ static ge::graphStatus GoodFeaturesToTrackTilingFunc(gert::TilingContext* contex
     OP_CHECK_NULL_WITH_CONTEXT(context, attrs);
     const int64_t maxCorners = attrs->GetInt(kMaxCornersAttr) == nullptr ? kDefaultMaxCorners :
                                                                            *attrs->GetInt(kMaxCornersAttr);
+    // Kernel output indexing stores 2 coordinates per corner in uint32_t-sized
+    // loop bounds.  TopKBuildMeta also advances a 2048-float fill chunk with
+    // `done + fillChunk`, so leave that addition representable as well.
+    constexpr uint32_t kCornerFillChunk = 2048U;
+    constexpr int64_t kMaxOutputCapacity = static_cast<int64_t>((UINT32_MAX - kCornerFillChunk) / 2U);
+    OP_CHECK_IF(
+        maxCorners > kMaxOutputCapacity,
+        OP_LOGE(context, "max_corners %ld exceeds uint32 coordinate capacity %ld", maxCorners, kMaxOutputCapacity),
+        return ge::GRAPH_FAILED);
     const float quality = attrs->GetFloat(kQualityLevelAttr) == nullptr ? kDefaultQualityLevel :
                                                                           *attrs->GetFloat(kQualityLevelAttr);
     const float minDistance = attrs->GetFloat(kMinDistanceAttr) == nullptr ? kDefaultMinDistance :

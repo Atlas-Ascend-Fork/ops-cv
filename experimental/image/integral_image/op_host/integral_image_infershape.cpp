@@ -24,6 +24,7 @@
  *   - sqsum / tilted 为 OPTIONAL 输出，传 nullptr 时跳过其 shape 设置（不报错）
  */
 
+#include <limits>
 #include "register/op_impl_registry.h"
 #include "log/log.h"
 #include "util/shape_util.h"
@@ -75,6 +76,10 @@ static ge::graphStatus InferShapeIntegralImage(gert::InferShapeContext* context)
         int64_t dim = inputShape->GetDim(i);
         // 第 0/1 维是 H、W，各 +1（HWC：C 在最后一维，不变）；动态维度保持未知
         if ((i == 0 || i == 1) && dim != ge::UNKNOWN_DIM) {
+            if (dim == std::numeric_limits<int64_t>::max()) {
+                OP_LOGE(context, "IntegralImage spatial dimension cannot be incremented");
+                return GRAPH_FAILED;
+            }
             dim += 1;
         }
         outputShape->SetDim(i, dim);

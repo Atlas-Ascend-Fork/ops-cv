@@ -182,3 +182,24 @@ TEST_F(IntegralImageInfershape, integral_image_infershape_optional_no_tilted)
     std::vector<std::vector<int64_t>> expectOutputShape = {{5, 7, 3}, {5, 7, 3}};
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
 }
+
+// H+1 and W+1 must remain representable as int64 values.
+TEST(IntegralImageInfershapeBoundary, rejects_int64_max_spatial_dimension)
+{
+    const int64_t max = std::numeric_limits<int64_t>::max();
+    gert::InfershapeContextPara p(
+        "IntegralImage", {{{{max, 2}, {max, 2}}, ge::DT_UINT8, ge::FORMAT_ND}},
+        {{{{}, {}}, ge::DT_INT32, ge::FORMAT_ND}},
+        {gert::InfershapeContextPara::OpAttr("sdepth", Ops::Cv::AnyValue::CreateFrom<int64_t>(-1))});
+    ExecuteTestCase(p, ge::GRAPH_FAILED);
+}
+
+TEST(IntegralImageInfershapeBoundary, accepts_max_representable_output_dimension)
+{
+    const int64_t max = std::numeric_limits<int64_t>::max();
+    gert::InfershapeContextPara p(
+        "IntegralImage", {{{{max - 1, 2}, {max - 1, 2}}, ge::DT_UINT8, ge::FORMAT_ND}},
+        {{{{}, {}}, ge::DT_INT32, ge::FORMAT_ND}},
+        {gert::InfershapeContextPara::OpAttr("sdepth", Ops::Cv::AnyValue::CreateFrom<int64_t>(-1))});
+    ExecuteTestCase(p, ge::GRAPH_SUCCESS, {{max, 3}});
+}

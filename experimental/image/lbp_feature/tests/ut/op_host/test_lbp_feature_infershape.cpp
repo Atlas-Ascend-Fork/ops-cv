@@ -22,6 +22,24 @@ protected:
     static void TearDownTestCase() { std::cout << "LbpFeatureInfershape TearDown" << std::endl; }
 };
 
+// The public op definition declares radius=1 and neighbors=8 as optional
+// defaults.  InferShape must therefore agree with tiling when callers omit
+// both attributes.
+TEST_F(LbpFeatureInfershape, lbp_feature_infershape_omitted_attrs_use_schema_defaults)
+{
+    gert::InfershapeContextPara infershapeContextPara("LbpFeature",
+                                                      {
+                                                          {{{6, 70}, {6, 70}}, ge::DT_UINT8, ge::FORMAT_ND},
+                                                      },
+                                                      {
+                                                          {{{}, {}}, ge::DT_INT32, ge::FORMAT_ND},
+                                                      },
+                                                      std::vector<gert::InfershapeContextPara::OpAttr>{});
+
+    // Schema default radius=1 crops each spatial dimension by two.
+    ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, std::vector<std::vector<int64_t>>{{4, 68}});
+}
+
 // ════════════════════════════════════════════════════════════
 // 用例1：4D 输入，radius=1，非对齐尺寸
 //   N=2偶, C=3奇, H=63奇, W=65奇
@@ -53,6 +71,16 @@ TEST_F(LbpFeatureInfershape, lbp_feature_infershape_test1)
 
     // 调用接口执行用例
     ExecuteTestCase(infershapeContextPara, ge::GRAPH_SUCCESS, expectOutputShape);
+}
+
+TEST_F(LbpFeatureInfershape, lbp_feature_infershape_rejects_unsupported_input_dtype)
+{
+    gert::InfershapeContextPara context(
+        "LbpFeature", {{{{6, 70}, {6, 70}}, ge::DT_FLOAT16, ge::FORMAT_ND}}, {{{{}, {}}, ge::DT_INT32, ge::FORMAT_ND}},
+        {gert::InfershapeContextPara::OpAttr("radius", AnyValue::CreateFrom<int64_t>(1)),
+         gert::InfershapeContextPara::OpAttr("neighbors", AnyValue::CreateFrom<int64_t>(8))});
+
+    ExecuteTestCase(context, ge::GRAPH_FAILED, {});
 }
 
 // ════════════════════════════════════════════════════════════

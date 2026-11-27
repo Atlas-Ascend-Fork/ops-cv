@@ -198,3 +198,11 @@ TEST_F(GaussianFilter3DTilingTest, gaussian_filter_3_d_tiling_rank2_fail)
     TilingInfo info;
     EXPECT_FALSE(ExecuteTiling(para, info)) << "rank2 should fail";
 }
+
+TEST_F(GaussianFilter3DTilingTest, gaussian_filter_3_d_tiling_element_count_overflow_fail)
+{
+    GaussianFilter3DCompileInfo compileInfo;
+    auto para = MakeTilingPara({4294967296LL, 4294967296LL, 1LL}, ge::DT_FLOAT, 1.0, "REFLECT", &compileInfo);
+    TilingInfo info;
+    EXPECT_FALSE(ExecuteTiling(para, info)) << "element count overflow must fail";
+}

@@ -130,12 +130,16 @@ static ge::graphStatus Tiling4GaussianFilter3D(gert::TilingContext* context)
     for (size_t i = 0; i + 3 < rank; i++) {
         batch *= static_cast<uint64_t>(shape.GetDim(i));
     }
-    OP_CHECK_IF(w == 0 || h == 0 || d == 0 || batch == 0, OP_LOGE(context, "Input x dim should not be 0."),
-                return ge::GRAPH_FAILED);
-    uint64_t elemCnt = batch * d * h * w;
-    OP_CHECK_IF(elemCnt > static_cast<uint64_t>(INT32_MAX),
-                OP_LOGE(context, "Total element count %lu exceeds INT32_MAX.", static_cast<unsigned long>(elemCnt)),
-                return ge::GRAPH_FAILED);
+    uint64_t elemCnt = 1;
+    for (size_t i = 0; i < rank; ++i) {
+        const int64_t dim = shape.GetDim(i);
+        OP_CHECK_IF(dim <= 0, OP_LOGE(context, "Input x dimensions must be positive."), return ge::GRAPH_FAILED);
+        const uint64_t uDim = static_cast<uint64_t>(dim);
+        OP_CHECK_IF(elemCnt > static_cast<uint64_t>(INT32_MAX) / uDim,
+                    OP_LOGE(context, "Total element count %lu exceeds INT32_MAX.", static_cast<unsigned long>(elemCnt)),
+                    return ge::GRAPH_FAILED);
+        elemCnt *= uDim;
+    }
 
     // ---------- dtype ----------
     auto dataType = context->GetInputDesc(X_INDEX)->GetDataType();

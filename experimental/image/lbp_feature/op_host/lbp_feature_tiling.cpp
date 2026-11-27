@@ -18,8 +18,8 @@
 #include "op_host/tiling_util.h"
 #include "op_host/tiling_templates_registry.h"
 #include "register/tilingdata_base.h"
-#include "lbp_feature_tiling_data.h"
-#include "lbp_feature_tiling_key.h"
+#include "../op_kernel/lbp_feature_tiling_data.h"
+#include "../op_kernel/lbp_feature_tiling_key.h"
 #include "tiling/platform/platform_ascendc.h"
 #include <algorithm>
 #include <vector>
