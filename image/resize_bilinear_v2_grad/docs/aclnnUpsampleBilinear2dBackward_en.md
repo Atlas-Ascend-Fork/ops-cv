@@ -181,7 +181,7 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
       <td>scalesH (double)</td>
       <td>Input</td>
       <td>Represents the height dimensional multiplier of the output `out`, corresponding to `scalesH` in the formula.</td>
-      <td>-</td>
+      <td>A finite non-negative value is recommended. It takes effect when greater than 0, in which case scaleH is 1/scalesH; when it is 0 (the recommended default point, equivalent to not specifying it) or negative it does not take effect and scaleH is derived from inputSize and outputSize. It participates in the computation only when alignCorners is false, and is ignored when alignCorners is true. The interface does not validate inf or nan; results for such values are undefined and callers must not rely on them.</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -191,7 +191,7 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
       <td>scalesW (double)</td>
       <td>Input</td>
       <td>Represents the width dimensional multiplier of the output `out`, corresponding to `scalesW` in the corresponding formula.</td>
-      <td>-</td>
+      <td>A finite non-negative value is recommended. It takes effect when greater than 0, in which case scaleW is 1/scalesW; when it is 0 (the recommended default point, equivalent to not specifying it) or negative it does not take effect and scaleW is derived from inputSize and outputSize. It participates in the computation only when alignCorners is false, and is ignored when alignCorners is true. The interface does not validate inf or nan; results for such values are undefined and callers must not rely on them.</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -346,6 +346,8 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
   aclnnStatus: returns a status code. For details, see [aclnn_return_code](../../../docs/en/context/aclnn_return_code.md).
 
 ## Constraints
+
+- Empty tensor restriction: neither `gradOut` nor `out` supports empty tensors, and callers must not pass tensors containing a 0 dimension. The current implementation handles empty inputs differently per dimension: when the H or W extent described by `inputSize` / `outputSize` is non-positive, the interface returns 161002 during parameter validation; when the N or C dimension is 0, parameter validation passes and the interface returns ACLNN_SUCCESS from the empty-tensor branch without producing any computed output, leaving the contents of `out` unchanged.
 
 - Parameters inputSize, outputSize, scalesH, and scalesW must satisfy the following constraints:
 

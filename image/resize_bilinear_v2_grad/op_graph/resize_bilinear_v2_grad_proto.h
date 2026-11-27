@@ -42,12 +42,25 @@ original_image.
 *@li half_pixel_centers: An optional bool. If true, the center of pixels locate in [0.5, 0.5]. Defaults to false.
 *@li scales: An optional listfloat which has two elements. The first element represents the ratio of the H axis
      subscripts of pixels in grads to the H axis subscripts of pixels in y, only takes effect when align_corners is
-     false and the value is greater than 0. The second element represents the ratio of the W axis subscripts of pixels
-in grads to the W axis subscripts of pixels in y, only takes effect when align_corners is false and the value is greater
-than 0.0f. Defaults to {0.0f, 0.0f}.
+     false and the value is greater than 0.0f. The second element represents the ratio of the W axis subscripts of
+     pixels in grads to the W axis subscripts of pixels in y, only takes effect when align_corners is false and the
+     value is greater than 0.0f. When align_corners is true, both elements are ignored and the scaling ratio is derived
+     from the H/W extents of grads and y. Defaults to {0.0f, 0.0f}.
+*@li Note: align_corners and half_pixel_centers must not be true at the same time, otherwise the operator reports an
+     invalid-value error.
+
+*@par Restrictions:
+*@li Empty tensors are not supported. The N, H and W extents of grads and y must all be greater than zero; a
+     non-positive N, H or W extent is rejected during tiling with a shape error.
+*@li Dynamic shape and dynamic rank are declared as supported at registration (DynamicShapeSupportFlag,
+     DynamicRankSupportFlag), so -1 (unknown dimension) and -2 (unknown rank) placeholders are accepted at compile
+     time; at execution time the real shape must be a determined 4-D shape satisfying the restrictions above.
 
 *@par Third-party framework compatibility
-*Compatible with tensorflow and pytorch ResizeBilinearV2Grad operator.
+*The operator interface follows the semantics of the tensorflow ResizeBilinearGrad and pytorch
+*upsample_bilinear2d_backward operators. The delivered runtime binding of this repository covers the GE graph mode
+*(this IR) and the aclnn entry aclnnUpsampleBilinear2dBackward only; no TensorFlow or PyTorch end-to-end adapter is
+*delivered here.
 */
 REG_OP(ResizeBilinearV2Grad)
     .INPUT(grads, TensorType({DT_FLOAT, DT_FLOAT16, DT_BF16}))

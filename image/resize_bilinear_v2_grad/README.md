@@ -76,16 +76,16 @@
     <tr>
       <td>grads</td>
       <td>输入</td>
-      <td>正向resize的输出的梯度Tensor，对应公式中grads。</td>
+      <td>正向resize的输出的梯度Tensor，对应公式中grads。四维Tensor，数据格式与original_image保持一致。</td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
-      <td>ND</td>
+      <td>NCHW、NHWC</td>
     </tr>
     <tr>
       <td>original_image</td>
       <td>输入</td>
-      <td>正向resize的输入Tensor。</td>
+      <td>正向resize的输入Tensor，仅其shape与数据类型参与计算。四维Tensor，N、C维度必须与grads相同。grads为FLOAT16或BFLOAT16时，数据类型必须与grads一致；grads为FLOAT32时，数据类型可以是FLOAT32、FLOAT16或BFLOAT16。</td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
-      <td>ND</td>
+      <td>NCHW、NHWC</td>
     </tr>
     <tr>
       <td>align_corners</td>
@@ -111,9 +111,9 @@
     <tr>
       <td>y</td>
       <td>输出</td>
-      <td>正向resize的输入的梯度Tensor，对应公式中y。</td>
+      <td>正向resize的输入的梯度Tensor，对应公式中y。shape、数据类型与数据格式均与original_image保持一致。</td>
       <td>FLOAT16、FLOAT32、BFLOAT16</td>
-      <td>ND</td>
+      <td>NCHW、NHWC</td>
     </tr>
   </tbody></table>
 
@@ -121,6 +121,11 @@
 
 - `align_corners`和`half_pixel_centers`不能同时为true。
 - `scales`设置时应提供H、W两个缩放系数；默认值为`[0.0, 0.0]`。
+- 数据格式约束：grads、original_image与y的数据格式必须一致，且只支持NCHW与NHWC；不支持ND等其他格式。
+- 空Tensor约束：不支持空Tensor。grads与y在N、H、W方向的长度必须大于0；非正的N、H、W在tiling阶段被拒绝并上报shape非法错误。
+- 动态shape与动态rank：算子注册声明支持动态shape与动态rank（DynamicShapeSupportFlag、DynamicRankSupportFlag），即编译期允许shape中出现-1（维度未知）、rank为-2（rank未知）的占位标记；但执行期要求真实shape为确定的四维且满足上述约束，占位标记必须在执行前完成推导。
+- 数据类型组合：grads与y的数据类型可以不同。grads为FLOAT16或BFLOAT16时，y的数据类型必须与grads一致；grads为FLOAT32时，y可以是FLOAT32、FLOAT16或BFLOAT16。
+- scales生效条件：仅当align_corners为false且scales对应元素大于0时生效；align_corners为true时scales被忽略，缩放比由grads与y的H、W长度推导。
 
 ## 调用说明
 

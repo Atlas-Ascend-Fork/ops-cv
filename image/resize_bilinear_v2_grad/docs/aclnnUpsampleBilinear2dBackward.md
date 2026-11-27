@@ -183,7 +183,7 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
       <td>scalesH(double)</td>
       <td>输入</td>
       <td>表示输出`out`的height维度乘数，对应公式中的`scalesH`。</td>
-      <td>-</td>
+      <td>建议取有限非负值。大于0时生效，此时scaleH取1/scalesH；取0（推荐的默认取值点，等价于不指定）或负值时不生效，scaleH由inputSize与outputSize推导。仅在alignCorners为false时参与计算，alignCorners为true时该参数被忽略。接口未对inf、nan做校验，传入这两类取值的计算结果为未定义行为，调用方不应依赖。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -193,7 +193,7 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
       <td>scalesW(double)</td>
       <td>输入</td>
       <td>表示输出`out`的width维度乘数，对应公式中的`scalesW`。</td>
-      <td>-</td>
+      <td>建议取有限非负值。大于0时生效，此时scaleW取1/scalesW；取0（推荐的默认取值点，等价于不指定）或负值时不生效，scaleW由inputSize与outputSize推导。仅在alignCorners为false时参与计算，alignCorners为true时该参数被忽略。接口未对inf、nan做校验，传入这两类取值的计算结果为未定义行为，调用方不应依赖。</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -348,6 +348,8 @@ aclnnStatus aclnnUpsampleBilinear2dBackward(
   aclnnStatus：返回状态码，具体参见[aclnn返回码](../../../docs/zh/context/aclnn_return_code.md)。
 
 ## 约束说明
+
+- 空Tensor约束：`gradOut`与`out`均不支持空Tensor，调用方不应传入含0维度的Tensor。当前实现对空输入的处置按维度区分：`inputSize`、`outputSize`所描述的H、W维度为非正值时，接口在入参校验阶段返回161002；N或C维度为0时入参校验通过，接口在空Tensor分支直接返回ACLNN_SUCCESS且不产生计算输出，`out`的内容保持调用前状态。
 
 - 参数inputSize、outputSize、scalesH、scalesW需要满足如下约束：
 
