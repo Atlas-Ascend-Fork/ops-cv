@@ -9,6 +9,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <cstring>
 #include <iostream>
 #include <vector>
 #include "../../../op_host/grid_sampler3_d_grad_tiling.h"
@@ -309,10 +310,11 @@ TEST_F(GridSampler3DGradTiling, grid_sampler3_d_grad_tiling_test_float32_case11)
 
 TEST_F(GridSampler3DGradTiling, grid_sampler3_d_grad_tiling_test_float32_case12)
 {
-    gert::StorageShape grad = {{2, 8, 8, 8, 3}, {2, 8, 8, 8, 3}};
-    gert::StorageShape x = {{2, 16, 16, 16, 3}, {2, 16, 16, 16, 3}};
+    // regbase 下 ND 与 NCDHW 同族，均按 (N, C, D, H, W) 语义解析，此处按 NCDHW 排布构造
+    gert::StorageShape grad = {{2, 3, 8, 8, 8}, {2, 3, 8, 8, 8}};
+    gert::StorageShape x = {{2, 3, 16, 16, 16}, {2, 3, 16, 16, 16}};
     gert::StorageShape grid = {{2, 8, 8, 8, 3}, {2, 8, 8, 8, 3}};
-    gert::StorageShape dx = {{2, 16, 16, 16, 3}, {2, 16, 16, 16, 3}};
+    gert::StorageShape dx = {{2, 3, 16, 16, 16}, {2, 3, 16, 16, 16}};
     gert::StorageShape dgrid = {{2, 8, 8, 8, 3}, {2, 8, 8, 8, 3}};
     GridSampler3DGradCompileInfo compileInfo = {48, 196608, true};
     gert::TilingContextPara tilingContextPara(
@@ -327,6 +329,61 @@ TEST_F(GridSampler3DGradTiling, grid_sampler3_d_grad_tiling_test_float32_case12)
     string expectTilingData = "12884901890 68719476752 34359738384 34359738376 1 51539607553 0 6597069766688 0 ";
     std::vector<size_t> expectWorkspaces = {0};
     ExecuteTestCase(tilingContextPara, ge::GRAPH_SUCCESS, expectTilingKey, expectTilingData, expectWorkspaces);
+}
+
+// regbase 下 ND 与 NCDHW 同族，须按同一 (N, C, D, H, W) 语义取维。用非对称 shape（C=3、gridD=2）构造：
+// 若 ND 被误当作 NDHWC 解读会得到 outD=dim1=3 与 gridD=2 不符而失败，修复后两者必须产出相同的 tiling 数据
+static gert::TilingContextPara MakeRegBaseFormatPara(ge::Format inputFormat, const gert::StorageShape& grad,
+                                                     const gert::StorageShape& x, const gert::StorageShape& grid,
+                                                     GridSampler3DGradCompileInfo* compileInfo)
+{
+    auto dx = x;
+    auto dgrid = grid;
+    return gert::TilingContextPara(
+        "GridSampler3DGrad",
+        {{grad, ge::DT_FLOAT, inputFormat}, {x, ge::DT_FLOAT, inputFormat}, {grid, ge::DT_FLOAT, inputFormat}},
+        {{dx, ge::DT_FLOAT, inputFormat}, {dgrid, ge::DT_FLOAT, inputFormat}},
+        {gert::TilingContextPara::OpAttr("interpolation_mode", Ops::Cv::AnyValue::CreateFrom<string>("bilinear")),
+         gert::TilingContextPara::OpAttr("padding_mode", Ops::Cv::AnyValue::CreateFrom<string>("zeros")),
+         gert::TilingContextPara::OpAttr("align_corners", Ops::Cv::AnyValue::CreateFrom<bool>(false))},
+        compileInfo);
+}
+
+TEST_F(GridSampler3DGradTiling, grid_sampler3_d_grad_tiling_regbase_nd_equals_ncdhw)
+{
+    GridSampler3DGradCompileInfo compileInfo = {48, 196608, true};
+    // (N, C, D, H, W) = (1, 3, 2, 2, 2)，grid 为 (1, 2, 2, 2, 3)：C 与 D/H/W 均不对称
+    gert::StorageShape grad = {{1, 3, 2, 2, 2}, {1, 3, 2, 2, 2}};
+    gert::StorageShape x = {{1, 3, 2, 2, 2}, {1, 3, 2, 2, 2}};
+    gert::StorageShape grid = {{1, 2, 2, 2, 3}, {1, 2, 2, 2, 3}};
+
+    TilingInfo ndInfo;
+    ASSERT_TRUE(ExecuteTiling(MakeRegBaseFormatPara(ge::FORMAT_ND, grad, x, grid, &compileInfo), ndInfo));
+    TilingInfo ncdhwInfo;
+    ASSERT_TRUE(ExecuteTiling(MakeRegBaseFormatPara(ge::FORMAT_NCDHW, grad, x, grid, &compileInfo), ncdhwInfo));
+
+    EXPECT_EQ(ndInfo.tilingKey, ncdhwInfo.tilingKey);
+    EXPECT_EQ(ndInfo.blockNum, ncdhwInfo.blockNum);
+    ASSERT_EQ(ndInfo.tilingDataSize, ncdhwInfo.tilingDataSize);
+    EXPECT_EQ(std::memcmp(ndInfo.tilingData.get(), ncdhwInfo.tilingData.get(), ndInfo.tilingDataSize), 0);
+}
+
+TEST_F(GridSampler3DGradTiling, grid_sampler3_d_grad_tiling_regbase_ndhwc_still_channel_last)
+{
+    GridSampler3DGradCompileInfo compileInfo = {48, 196608, true};
+    // NDHWC 排布 (N, D, H, W, C) = (1, 2, 2, 2, 3)，C 维度必须仍按末维解析
+    gert::StorageShape grad = {{1, 2, 2, 2, 3}, {1, 2, 2, 2, 3}};
+    gert::StorageShape x = {{1, 2, 2, 2, 3}, {1, 2, 2, 2, 3}};
+    gert::StorageShape grid = {{1, 2, 2, 2, 3}, {1, 2, 2, 2, 3}};
+
+    TilingInfo nhwcInfo;
+    ASSERT_TRUE(ExecuteTiling(MakeRegBaseFormatPara(ge::FORMAT_NDHWC, grad, x, grid, &compileInfo), nhwcInfo));
+
+    const auto* tilingData = reinterpret_cast<const uint32_t*>(nhwcInfo.tilingData.get());
+    EXPECT_EQ(tilingData[1], 3U); // channel 取末维
+    EXPECT_EQ(tilingData[2], 2U); // xD
+    EXPECT_EQ(tilingData[3], 2U); // xH
+    EXPECT_EQ(tilingData[4], 2U); // xW
 }
 
 TEST_F(GridSampler3DGradTiling, grid_sampler3_d_grad_tiling_test_float16_case1)

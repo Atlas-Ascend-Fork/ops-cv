@@ -302,10 +302,12 @@ static ge::graphStatus CheckShapes(gert::TilingContext* tilingContext, InputPara
     auto input = tilingContext->GetInputTensor(DIM_INDEX0);
     auto format = input->GetFormat().GetStorageFormat();
 
+    // op_api 将 ND 与 NCDHW 视作同族并按 (N,C,D,H,W) 解读，只有 NDHWC 才是通道在后，
+    // 因此此处必须按“非 NDHWC”判定，否则 ND 会被误当作 NDHWC 取维
     uint32_t outD = gradShape->GetStorageShape().GetDim(DIM_INDEX1);
     uint32_t outH = gradShape->GetStorageShape().GetDim(DIM_INDEX2);
     uint32_t outW = gradShape->GetStorageShape().GetDim(DIM_INDEX3);
-    if (params.regBase && format == ge::FORMAT_NCDHW) {
+    if (params.regBase && format != ge::FORMAT_NDHWC) {
         outD = gradShape->GetStorageShape().GetDim(DIM_INDEX2);
         outH = gradShape->GetStorageShape().GetDim(DIM_INDEX3);
         outW = gradShape->GetStorageShape().GetDim(DIM_INDEX4);
@@ -335,7 +337,7 @@ static ge::graphStatus CheckShapes(gert::TilingContext* tilingContext, InputPara
 
     // grad 与 x 的 C 必须一致，与 GetInputInfo 中 x 的 C 维解析条件保持一致
     const uint32_t gradC = gradShape->GetStorageShape().GetDim(
-        params.regBase && format == ge::FORMAT_NCDHW ? DIM_INDEX1 : DIM_INDEX4);
+        params.regBase && format != ge::FORMAT_NDHWC ? DIM_INDEX1 : DIM_INDEX4);
     if (gradC != params.channel) {
         OP_LOGE_FOR_INVALID_VALUES_WITH_REASON(tilingContext->GetNodeName(), "expect",
                                                (std::to_string(gradC) + ", " + std::to_string(params.channel)).c_str(),
@@ -393,7 +395,7 @@ static ge::graphStatus GetInputInfo(gert::TilingContext* tilingContext, InputPar
     auto compileInfo = reinterpret_cast<const Tiling4GridSampler3DGradCompileInfo*>(tilingContext->GetCompileInfo());
     params.regBase = compileInfo->regBase;
     params.batch = xShape->GetStorageShape().GetDim(DIM_INDEX0);
-    if (params.regBase && format == ge::FORMAT_NCDHW) {
+    if (params.regBase && format != ge::FORMAT_NDHWC) {
         params.channel = xShape->GetStorageShape().GetDim(DIM_INDEX1);
         params.xD = xShape->GetStorageShape().GetDim(DIM_INDEX2);
         params.xH = xShape->GetStorageShape().GetDim(DIM_INDEX3);
