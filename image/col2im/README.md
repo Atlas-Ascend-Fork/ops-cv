@@ -53,7 +53,7 @@
       <td>输入</td>
       <td>反向输入，对应公式中的output。</td>
       <td>BFLOAT16、FLOAT16、FLOAT</td>
-      <td>5HD</td>
+      <td>ND</td>
     </tr>
     <tr>
       <td>inputSize</td>
@@ -95,7 +95,7 @@
       <td>输出</td>
       <td>梯度计算结果，对应公式中的input。数据类型和数据格式需要与`gradOutput`的数据类型和数据格式一致。</td>
       <td>BFLOAT16、FLOAT16、FLOAT</td>
-      <td>5HD</td>
+      <td>ND</td>
     </tr>
   </tbody></table>
 

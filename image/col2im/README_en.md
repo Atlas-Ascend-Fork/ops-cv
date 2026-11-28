@@ -55,7 +55,7 @@ English | [简体中文](./README.md)
       <td>Input</td>
       <td>Backward input. It corresponds to output in the formula.</td>
       <td>BFLOAT16, FLOAT16, FLOAT</td>
-      <td>5HD</td>
+      <td>ND</td>
     </tr>
     <tr>
       <td>inputSize</td>
@@ -97,7 +97,7 @@ English | [简体中文](./README.md)
       <td>Output</td>
       <td>Gradient computation result. It corresponds to input in the formula. Its data type and data format must be the same as those of `gradOutput`.</td>
       <td>BFLOAT16, FLOAT16, FLOAT</td>
-      <td>5HD</td>
+      <td>ND</td>
     </tr>
   </tbody></table>
 
