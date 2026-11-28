@@ -306,19 +306,22 @@ aclnnStatus aclnnUpsampleNearest3d(
 
 ## 约束说明
 
-- 当输入scalesD、scalesH、scalesW的取值均大于0时，参数self、outputSize、scalesD需要满足如下约束：
+<!-- npu="A3,910b,310p" id10 -->
+- <term>Atlas A3系列产品</term>、<term>Atlas A2系列产品</term>、<term>Atlas推理系列产品</term>：
+  - 当输入scalesD、scalesH、scalesW的取值均大于0时，参数self、outputSize、scalesD需要满足如下约束：
 
-  $$
-  outputSize\_D = floor(self\_D * scalesD)
-  $$
+    $$
+    outputSize\_D = floor(self\_D * scalesD)
+    $$
 
-  $$
-  outputSize\_H = floor(self\_H * scalesH)
-  $$
+    $$
+    outputSize\_H = floor(self\_H * scalesH)
+    $$
 
-  $$
-  outputSize\_W = floor(self\_W * scalesW)
-  $$
+    $$
+    outputSize\_W = floor(self\_W * scalesW)
+    $$
+<!-- end id10 -->
 
 - 确定性计算：
   - aclnnUpsampleNearest3d默认确定性实现。
