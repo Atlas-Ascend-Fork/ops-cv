@@ -34,11 +34,12 @@ GFT_DUMP_CORNERS=1 bash build.sh --run_example good_features_to_track eager cust
     --experimental --vendor_name=custom --soc=ascend910b | tee /tmp/gft_ex.log
 
 # 2) 从日志导入算子输出，并与 OpenCV 对拍（需要 opencv-python；无 OpenCV 时加 --no-opencv）
-python3 tests/opencv_crosscheck/run_crosscheck.py --import-dump /tmp/gft_ex.log
-python3 tests/opencv_crosscheck/run_crosscheck.py
+#    以下脚本路径相对于仓库根目录。
+python3 experimental/image/good_features_to_track/tests/opencv_crosscheck/run_crosscheck.py --import-dump /tmp/gft_ex.log
+python3 experimental/image/good_features_to_track/tests/opencv_crosscheck/run_crosscheck.py
 
 # 3) 换 OpenCV 版本复现时刷新 golden
-python3 tests/opencv_crosscheck/run_crosscheck.py --write-golden
+python3 experimental/image/good_features_to_track/tests/opencv_crosscheck/run_crosscheck.py --write-golden
 ```
 
 > OpenCV 版本会影响结果（不同版本的阈值/局部极大判据有差异）。已提交的 golden 由
